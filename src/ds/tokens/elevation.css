@@ -1,13 +1,13 @@
 :root {
   /* Navy-tinted, never black. Cards carry a hairline, not a shadow. */
   --tk-shadow-none: none;
-  --tk-shadow-card:  0 1px 2px rgba(0, 8, 36, .04);
-  --tk-shadow-raised:0 4px 12px rgba(0, 8, 36, .06);
-  --tk-shadow-menu:  0 12px 32px rgba(0, 8, 36, .14);
-  --tk-shadow-modal: 0 24px 60px rgba(0, 8, 36, .22);
-  --tk-shadow-blue:  0 6px 16px rgba(2, 65, 232, .24);
-  --tk-shadow-orange:0 6px 16px rgba(253, 83, 1, .24);
-  --tk-focus-ring:   0 0 0 3px rgba(2, 65, 232, .16);
-  --tk-focus-ring-danger: 0 0 0 3px rgba(224, 43, 34, .16);
-  --tk-scrim: rgba(0, 8, 36, .48);
+  --tk-shadow-card: 0 1px 2px rgba(0, 8, 36, 0.04);
+  --tk-shadow-raised: 0 4px 12px rgba(0, 8, 36, 0.06);
+  --tk-shadow-menu: 0 12px 32px rgba(0, 8, 36, 0.14);
+  --tk-shadow-modal: 0 24px 60px rgba(0, 8, 36, 0.22);
+  --tk-shadow-blue: 0 6px 16px rgba(2, 65, 232, 0.24);
+  --tk-shadow-orange: 0 6px 16px rgba(253, 83, 1, 0.24);
+  --tk-focus-ring: 0 0 0 3px rgba(2, 65, 232, 0.16);
+  --tk-focus-ring-danger: 0 0 0 3px rgba(224, 43, 34, 0.16);
+  --tk-scrim: rgba(0, 8, 36, 0.48);
 }

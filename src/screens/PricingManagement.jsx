@@ -294,7 +294,7 @@ export function PricingManagement() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gridTemplateColumns: "repeat(3, 1fr)",
           gap: "var(--tk-space-4)",
         }}
       >

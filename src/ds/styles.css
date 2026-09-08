@@ -1,11 +1,104 @@
 /* Trukkas Admin Design System — global entry point.
    Consumers link this one file. Imports only. */
-@import "tokens/fonts.css";
-@import "tokens/colors.css";
-@import "tokens/typography.css";
-@import "tokens/radius.css";
-@import "tokens/elevation.css";
-@import "tokens/spacing.css";
-@import "tokens/controls.css";
-@import "tokens/motion.css";
-@import "tokens/layout.css";
+@import "tailwindcss";
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/radius.css";
+@import "./tokens/elevation.css";
+@import "./tokens/spacing.css";
+@import "./tokens/controls.css";
+@import "./tokens/motion.css";
+@import "./tokens/layout.css";
+
+/* Tailwind theme — aliases Tailwind's utility classes to the --tk-* design
+   tokens above, so `bg-tk-blue`, `rounded-tk-lg`, `gap-tk-5` etc. stay driven
+   by the same source of truth as the rest of the design system. */
+@theme {
+  --color-tk-blue: var(--tk-blue);
+  --color-tk-blue-hover: var(--tk-blue-hover);
+  --color-tk-blue-press: var(--tk-blue-press);
+  --color-tk-blue-soft: var(--tk-blue-soft);
+  --color-tk-blue-ink: var(--tk-blue-ink);
+  --color-tk-orange: var(--tk-orange);
+  --color-tk-orange-hover: var(--tk-orange-hover);
+  --color-tk-orange-soft: var(--tk-orange-soft);
+  --color-tk-orange-ink: var(--tk-orange-ink);
+  --color-tk-navy: var(--tk-navy);
+  --color-tk-navy-raised: var(--tk-navy-raised);
+  --color-tk-ink-900: var(--tk-ink-900);
+  --color-tk-ink-700: var(--tk-ink-700);
+  --color-tk-ink-500: var(--tk-ink-500);
+  --color-tk-ink-400: var(--tk-ink-400);
+  --color-tk-ink-300: var(--tk-ink-300);
+  --color-tk-surface: var(--tk-surface);
+  --color-tk-surface-page: var(--tk-surface-page);
+  --color-tk-surface-sunk: var(--tk-surface-sunk);
+  --color-tk-surface-cool: var(--tk-surface-cool);
+  --color-tk-line: var(--tk-line);
+  --color-tk-line-strong: var(--tk-line-strong);
+  --color-tk-success: var(--tk-success);
+  --color-tk-success-soft: var(--tk-success-soft);
+  --color-tk-warning: var(--tk-warning);
+  --color-tk-warning-soft: var(--tk-warning-soft);
+  --color-tk-danger: var(--tk-danger);
+  --color-tk-danger-solid: var(--tk-danger-solid);
+  --color-tk-danger-soft: var(--tk-danger-soft);
+  --color-tk-info: var(--tk-info);
+  --color-tk-info-soft: var(--tk-info-soft);
+  --color-tk-neutral: var(--tk-neutral);
+  --color-tk-neutral-soft: var(--tk-neutral-soft);
+  --color-tk-purple: var(--tk-purple);
+  --color-tk-purple-soft: var(--tk-purple-soft);
+  --color-tk-teal: var(--tk-teal);
+  --color-tk-teal-soft: var(--tk-teal-soft);
+
+  --font-tk-sans: var(--tk-font-sans);
+  --font-tk-mono: var(--tk-font-mono);
+
+  --text-tk-display: var(--tk-display-size);
+  --text-tk-display--line-height: var(--tk-display-lh);
+  --text-tk-metric: var(--tk-metric-size);
+  --text-tk-metric--line-height: var(--tk-metric-lh);
+  --text-tk-title: var(--tk-title-size);
+  --text-tk-title--line-height: var(--tk-title-lh);
+  --text-tk-section: var(--tk-section-size);
+  --text-tk-section--line-height: var(--tk-section-lh);
+  --text-tk-body: var(--tk-body-size);
+  --text-tk-body--line-height: var(--tk-body-lh);
+  --text-tk-label: var(--tk-label-size);
+  --text-tk-label--line-height: var(--tk-label-lh);
+  --text-tk-meta: var(--tk-meta-size);
+  --text-tk-meta--line-height: var(--tk-meta-lh);
+  --text-tk-micro: var(--tk-micro-size);
+  --text-tk-micro--line-height: var(--tk-micro-lh);
+
+  --radius-tk-xs: var(--tk-r-xs);
+  --radius-tk-sm: var(--tk-r-sm);
+  --radius-tk-md: var(--tk-r-md);
+  --radius-tk-lg: var(--tk-r-lg);
+  --radius-tk-xl: var(--tk-r-xl);
+  --radius-tk-2xl: var(--tk-r-2xl);
+  --radius-tk-pill: var(--tk-r-pill);
+
+  --shadow-tk-card: var(--tk-shadow-card);
+  --shadow-tk-raised: var(--tk-shadow-raised);
+  --shadow-tk-menu: var(--tk-shadow-menu);
+  --shadow-tk-modal: var(--tk-shadow-modal);
+  --shadow-tk-focus: var(--tk-focus-ring);
+
+  --spacing-tk-1: var(--tk-space-1);
+  --spacing-tk-2: var(--tk-space-2);
+  --spacing-tk-3: var(--tk-space-3);
+  --spacing-tk-4: var(--tk-space-4);
+  --spacing-tk-5: var(--tk-space-5);
+  --spacing-tk-6: var(--tk-space-6);
+  --spacing-tk-7: var(--tk-space-7);
+  --spacing-tk-8: var(--tk-space-8);
+  --spacing-tk-9: var(--tk-space-9);
+  --spacing-tk-card-pad: var(--tk-card-pad);
+  --spacing-tk-card-pad-tight: var(--tk-card-pad-tight);
+  --spacing-tk-grid-gap: var(--tk-grid-gap);
+  --spacing-tk-section-gap: var(--tk-section-gap);
+  --spacing-tk-page-gutter: var(--tk-page-gutter);
+}

@@ -1,76 +1,82 @@
 :root {
   /* ---- Brand ---------------------------------------------------------- */
-  --tk-blue:            #0241E8;   /* primary action, active nav pill, links */
-  --tk-blue-hover:      #0234BF;
-  --tk-blue-press:      #02299A;
-  --tk-blue-soft:       #E6EDFD;   /* soft fill: tags, icon tiles */
-  --tk-blue-ink:        #0237B8;   /* text on soft blue */
+  --tk-blue: #0241e8; /* primary action, active nav pill, links */
+  --tk-blue-hover: #0234bf;
+  --tk-blue-press: #02299a;
+  --tk-blue-soft: #e6edfd; /* soft fill: tags, icon tiles */
+  --tk-blue-ink: #0237b8; /* text on soft blue */
 
-  --tk-orange:          #FD5301;   /* accent CTA + active nav on the navy shell */
-  --tk-orange-hover:    #E04600;
-  --tk-orange-soft:     #FEF4EB;
-  --tk-orange-ink:      #E53510;
+  --tk-orange: #fd5301; /* accent CTA + active nav on the navy shell */
+  --tk-orange-hover: #e04600;
+  --tk-orange-soft: #fef4eb;
+  --tk-orange-ink: #e53510;
 
-  --tk-navy:            #000822;   /* display headings, tooltips, the wallet card */
-  --tk-navy-raised:     #0B1738;
+  --tk-navy: #000822; /* display headings, tooltips, the wallet card */
+  --tk-navy-raised: #0b1738;
 
   /* ---- Ink ------------------------------------------------------------ */
-  --tk-ink-900:         #000824;   /* page titles, table primary cell */
-  --tk-ink-700:         #0F1A3B;   /* body strong */
-  --tk-ink-500:         #2B3955;   /* body */
-  --tk-ink-400:         #5D6384;   /* secondary / captions */
-  --tk-ink-300:         #8A90A8;   /* placeholder, disabled ink */
-  --tk-ink-on-navy:     #FFFFFF;
-  --tk-ink-on-navy-dim: #9AA2BE;   /* on the navy wallet card and tooltips */
+  --tk-ink-900: #000824; /* page titles, table primary cell */
+  --tk-ink-700: #0f1a3b; /* body strong */
+  --tk-ink-500: #2b3955; /* body */
+  --tk-ink-400: #5d6384; /* secondary / captions */
+  --tk-ink-300: #8a90a8; /* placeholder, disabled ink */
+  --tk-ink-on-navy: #ffffff;
+  --tk-ink-on-navy-dim: #9aa2be; /* on the navy wallet card and tooltips */
 
   /* ---- Surfaces ------------------------------------------------------- */
-  --tk-surface:         #FFFFFF;   /* cards */
-  --tk-surface-page:    #F8FAFD;   /* app canvas */
-  --tk-surface-sunk:    #F4F6FA;   /* nested blocks, table zebra, tips card */
-  --tk-surface-cool:    #EFF4FE;   /* selected row, info strip */
+  --tk-surface: #ffffff; /* cards */
+  --tk-surface-page: #f8fafd; /* app canvas */
+  --tk-surface-sunk: #f4f6fa; /* nested blocks, table zebra, tips card */
+  --tk-surface-cool: #eff4fe; /* selected row, info strip */
 
   /* ---- Lines ---------------------------------------------------------- */
-  --tk-line:            #EFF1F6;   /* hairline: card border, row rule */
-  --tk-line-strong:     #E2E6EF;   /* input border, divider under toolbars */
-  --tk-line-navy:       rgba(255,255,255,.10);   /* hairline on a navy surface */
+  --tk-line: #eff1f6; /* hairline: card border, row rule */
+  --tk-line-strong: #e2e6ef; /* input border, divider under toolbars */
+  --tk-line-navy: rgba(255, 255, 255, 0.1); /* hairline on a navy surface */
 
   /* ---- Status --------------------------------------------------------- */
-  --tk-success:         #12833B;
-  --tk-success-soft:    #E3F6EE;
-  --tk-warning:         #F27602;
-  --tk-warning-soft:    #FFF5D8;
-  --tk-danger:          #CB0611;
-  --tk-danger-solid:    #E02B22;
-  --tk-danger-soft:     #FEEEEE;
-  --tk-info:            #0241E8;
-  --tk-info-soft:       #E6EDFD;
-  --tk-neutral:         #5D6384;
-  --tk-neutral-soft:    #F1F2F6;
-  --tk-purple:          #4C16AC;
-  --tk-purple-soft:     #F1EDFD;
-  --tk-teal:            #0E7C86;
-  --tk-teal-soft:       #E2F5F6;
+  --tk-success: #12833b;
+  --tk-success-soft: #e3f6ee;
+  --tk-warning: #f27602;
+  --tk-warning-soft: #fff5d8;
+  --tk-danger: #cb0611;
+  --tk-danger-solid: #e02b22;
+  --tk-danger-soft: #feeeee;
+  --tk-info: #0241e8;
+  --tk-info-soft: #e6edfd;
+  --tk-neutral: #5d6384;
+  --tk-neutral-soft: #f1f2f6;
+  --tk-purple: #4c16ac;
+  --tk-purple-soft: #f1edfd;
+  --tk-teal: #0e7c86;
+  --tk-teal-soft: #e2f5f6;
 
   /* ---- Data viz (donuts, lines, bars — in series order) ---------------- */
-  --tk-viz-1: #0241E8;
-  --tk-viz-2: #12A150;
-  --tk-viz-3: #F5A524;
-  --tk-viz-4: #E02B22;
-  --tk-viz-5: #7C3AED;
-  --tk-viz-6: #0E7C86;
-  --tk-viz-track: #EDEFF5;
+  --tk-viz-1: #0241e8;
+  --tk-viz-2: #12a150;
+  --tk-viz-3: #f5a524;
+  --tk-viz-4: #e02b22;
+  --tk-viz-5: #7c3aed;
+  --tk-viz-6: #0e7c86;
+  --tk-viz-track: #edeff5;
 
   /* ---- Semantic aliases ------------------------------------------------ */
-  --text-heading:  var(--tk-ink-900);
-  --text-body:     var(--tk-ink-500);
-  --text-muted:    var(--tk-ink-400);
-  --text-link:     var(--tk-blue);
-  --surface-card:  var(--tk-surface);
-  --surface-app:   var(--tk-surface-page);
+  --text-heading: var(--tk-ink-900);
+  --text-body: var(--tk-ink-500);
+  --text-muted: var(--tk-ink-400);
+  --text-link: var(--tk-blue);
+  --surface-card: var(--tk-surface);
+  --surface-app: var(--tk-surface-page);
   --border-hairline: var(--tk-line);
   --action-primary: var(--tk-blue);
-  --action-accent:  var(--tk-orange);
+  --action-accent: var(--tk-orange);
 }
 
-a { color: var(--text-link); text-decoration: none; }
-a:hover { color: var(--tk-blue-hover); text-decoration: underline; }
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--tk-blue-hover);
+  text-decoration: underline;
+}

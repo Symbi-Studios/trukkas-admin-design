@@ -17,7 +17,6 @@ import {
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
 import { updateDemurrage } from "../mock/api.js";
-import "./Demurrage.css";
 const money = (n) =>
   "₦" + Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
 function download(name, text) {
@@ -87,7 +86,7 @@ export function DemurrageDetail() {
     notify("Dispute raised");
   }
   return (
-    <div className="dem-page">
+    <div className="grid grid-cols-1 gap-tk-section-gap min-w-0">
       <Button
         variant="outline"
         icon="arrow-left"
@@ -191,7 +190,7 @@ export function DemurrageDetail() {
         }
       />
       <Card pad="none">
-        <div className="dem-detail-head">
+        <div className="grid grid-cols-6 py-4 max-[1200px]:grid-cols-3 max-[1200px]:gap-4 max-[1200px]:[&>*:nth-child(3)]:border-r-0 max-[760px]:grid-cols-2 max-[760px]:[&>*:nth-child(3)]:border-r max-[760px]:[&>*:nth-child(2n)]:border-r-0 max-[480px]:grid-cols-1">
           <Head
             label="Demurrage ID"
             value={r.id}
@@ -229,8 +228,8 @@ export function DemurrageDetail() {
           <Head label="Customer" value={r.customer} sub={r.customerType} />
         </div>
       </Card>
-      <div className="dem-layout">
-        <div className="dem-main">
+      <div className="grid grid-cols-[minmax(0,1fr)_310px] gap-4 items-start max-[1200px]:grid-cols-1">
+        <div className="grid grid-cols-1 gap-3.5 content-start min-w-0">
           <Tabs
             value={tab}
             onChange={setTab}
@@ -243,7 +242,7 @@ export function DemurrageDetail() {
           />
           {tab === "Overview" ? (
             <>
-              <div className="dem-overview">
+              <div className="grid grid-cols-3 gap-3.5 max-[1200px]:grid-cols-2 max-[760px]:grid-cols-1">
                 <SectionCard title="Container & Voyage" icon="inbox">
                   <Row label="Container No." value={r.container} />
                   <Row label="Size / Type" value={r.size} />
@@ -293,7 +292,7 @@ export function DemurrageDetail() {
                   />
                   <Row label="Subtotal" value={money(subtotal)} />
                   <Row label="VAT (7.5%)" value={money(vat)} />
-                  <div className="dem-total">
+                  <div className="mt-2.25 -mx-tk-card-pad -mb-tk-card-pad px-tk-card-pad py-3 bg-tk-blue-soft text-tk-blue text-[11px] font-bold flex justify-between">
                     <span>Total Charge</span>
                     <b>{money(r.charge)}</b>
                   </div>
@@ -345,7 +344,7 @@ export function DemurrageDetail() {
                 </SectionCard>
                 <SectionCard title="Admin Notes">
                   <textarea
-                    className="dem-note"
+                    className="w-full box-border min-h-18 p-2.25 border border-tk-line-strong rounded-[7px] outline-none resize-y font-tk-sans text-tk-meta focus:border-tk-blue focus:shadow-tk-focus"
                     placeholder="Add a note about this demurrage (visible to admins only)..."
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
@@ -454,7 +453,7 @@ export function DemurrageDetail() {
             />
           )}
         </div>
-        <div className="dem-rail">
+        <div className="grid grid-cols-1 gap-3.5 content-start min-w-0 max-[1200px]:grid-cols-2 max-[760px]:grid-cols-1">
           <SectionCard title="Demurrage Timeline">
             {[
               [
@@ -519,7 +518,7 @@ export function DemurrageDetail() {
               }
             />
             <button
-              className="dem-danger-button"
+              className="w-full h-9 border-0 rounded-[7px] bg-[#e8224e] text-white text-[11px] font-semibold font-tk-sans cursor-pointer hover:bg-[#c91840]"
               onClick={() => setDispute(true)}
             >
               <Icon name="shield-alert" size={13} /> Raise Dispute
@@ -563,22 +562,25 @@ export function DemurrageDetail() {
           placeholder="Describe the issue..."
         />
       </Modal>
-      {toast && <div className="dem-toast">{toast}</div>}
+      {toast && (
+        <div className="fixed right-6 bottom-6 z-100 bg-tk-ink-900 text-white rounded-[9px] px-4 py-3 shadow-tk-menu text-xs font-medium font-tk-sans">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
 function Head({ label, value, sub, link, danger }) {
   return (
-    <div className="dem-head-fact">
-      <label>{label}</label>
+    <div className="px-4.5 border-r border-tk-line last:border-r-0 max-[480px]:border-r-0! max-[480px]:border-b max-[480px]:border-tk-line max-[480px]:px-4 max-[480px]:py-2">
+      <label className="block text-tk-meta text-tk-ink-400 mb-1.75">
+        {label}
+      </label>
       <strong
-        style={{
-          color: danger
-            ? "var(--tk-danger)"
-            : link
-              ? "var(--tk-blue)"
-              : undefined,
-        }}
+        className={
+          "block text-[14px] text-tk-ink-900 whitespace-nowrap " +
+          (danger ? "text-tk-danger" : link ? "text-tk-blue" : "")
+        }
       >
         {value}
       </strong>
@@ -588,30 +590,34 @@ function Head({ label, value, sub, link, danger }) {
 }
 function Row({ label, value }) {
   return (
-    <div className="dem-card-row">
+    <div className="flex justify-between gap-2.5 py-1.75 text-tk-meta text-tk-ink-500">
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong className="text-right text-tk-ink-900">{value}</strong>
     </div>
   );
 }
 function Timeline({ icon, title, date, detail, danger }) {
   return (
-    <div className="dem-timeline-item">
+    <div className="grid grid-cols-[25px_1fr] gap-2.25 relative py-2 after:content-[''] after:absolute after:left-3 after:top-8.5 after:-bottom-2.5 after:border-l after:border-dashed after:border-tk-blue last:after:hidden">
       <span
-        className="node"
-        style={
-          danger
-            ? { background: "var(--tk-danger-soft)", color: "var(--tk-danger)" }
-            : {}
+        className={
+          "w-6.25 h-6.25 rounded-full grid place-items-center z-1 " +
+          (danger
+            ? "bg-tk-danger-soft text-tk-danger"
+            : "bg-tk-blue-soft text-tk-blue")
         }
       >
         <Icon name={icon} size={12} />
       </span>
       <span>
-        <strong style={danger ? { color: "var(--tk-danger)" } : {}}>
+        <strong
+          className={
+            "text-tk-meta " + (danger ? "text-tk-danger" : "text-tk-blue")
+          }
+        >
           {title}
         </strong>
-        <small>
+        <small className="block text-tk-micro text-tk-ink-400 leading-3.5 mt-0.75">
           {date}
           <br />
           {detail}
