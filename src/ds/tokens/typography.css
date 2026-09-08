@@ -1,0 +1,27 @@
+:root {
+  --tk-font-sans: "Satoshi", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --tk-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* size / line-height / weight / tracking, transcribed from the console screens */
+  --tk-display-size: 28px;  --tk-display-lh: 34px;  --tk-display-weight: 700; --tk-display-track: -0.4px;
+  --tk-metric-size:  28px;  --tk-metric-lh:  34px;  --tk-metric-weight:  700; --tk-metric-track: -0.6px;
+  --tk-title-size:   20px;  --tk-title-lh:   26px;  --tk-title-weight:   600;
+  --tk-section-size: 16px;  --tk-section-lh: 22px;  --tk-section-weight: 600;
+  --tk-body-size:    14px;  --tk-body-lh:    20px;  --tk-body-weight:    400;
+  --tk-body-strong-weight: 600;
+  --tk-label-size:   13px;  --tk-label-lh:   18px;  --tk-label-weight:   500;
+  --tk-meta-size:    12px;  --tk-meta-lh:    16px;  --tk-meta-weight:    400;
+  --tk-micro-size:   11px;  --tk-micro-lh:   14px;  --tk-micro-weight:   600; --tk-micro-track: 0.6px;
+}
+
+.tk-display { font: var(--tk-display-weight) var(--tk-display-size)/var(--tk-display-lh) var(--tk-font-sans); letter-spacing: var(--tk-display-track); color: var(--tk-ink-900); margin: 0; }
+.tk-metric  { font: var(--tk-metric-weight) var(--tk-metric-size)/var(--tk-metric-lh) var(--tk-font-sans); letter-spacing: var(--tk-metric-track); color: var(--tk-ink-900); }
+.tk-title   { font: var(--tk-title-weight) var(--tk-title-size)/var(--tk-title-lh) var(--tk-font-sans); color: var(--tk-ink-900); margin: 0; }
+.tk-section { font: var(--tk-section-weight) var(--tk-section-size)/var(--tk-section-lh) var(--tk-font-sans); color: var(--tk-ink-900); margin: 0; }
+.tk-body    { font: var(--tk-body-weight) var(--tk-body-size)/var(--tk-body-lh) var(--tk-font-sans); color: var(--tk-ink-500); }
+.tk-label   { font: var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans); color: var(--tk-ink-500); }
+.tk-meta    { font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-sans); color: var(--tk-ink-400); }
+/* Sidebar group headings: 11px, uppercase, tracked, blue on the light shell */
+.tk-eyebrow { font: var(--tk-micro-weight) var(--tk-micro-size)/var(--tk-micro-lh) var(--tk-font-sans); letter-spacing: var(--tk-micro-track); text-transform: uppercase; color: var(--tk-blue); }
+/* Machine facts: IDs, references, plate numbers, timestamps */
+.tk-mono    { font: 400 var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-mono); color: var(--tk-ink-400); }

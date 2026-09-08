@@ -1,0 +1,11 @@
+:root {
+  --tk-ease: cubic-bezier(.2, 0, 0, 1);
+  --tk-dur-fast: 120ms;
+  --tk-dur:      160ms;
+  --tk-dur-slow: 240ms;
+  --tk-transition: all var(--tk-dur) var(--tk-ease);
+}
+@keyframes tk-spin { to { transform: rotate(360deg); } }
+@keyframes tk-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tk-menu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes tk-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }

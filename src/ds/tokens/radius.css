@@ -1,0 +1,9 @@
+:root {
+  --tk-r-xs:   6px;   /* status badge, tag */
+  --tk-r-sm:   8px;   /* small button, chip, icon tile 32px */
+  --tk-r-md:  10px;   /* button, input, select, sidebar nav pill */
+  --tk-r-lg:  12px;   /* inner block, dropdown menu, KPI icon tile */
+  --tk-r-xl:  14px;   /* card, panel, KPI card */
+  --tk-r-2xl: 18px;   /* modal / dialog */
+  --tk-r-pill: 999px; /* avatar, dot, progress track */
+}

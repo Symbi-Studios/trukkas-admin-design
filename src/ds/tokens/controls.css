@@ -1,0 +1,23 @@
+:root {
+  --tk-h-btn-lg: 44px;
+  --tk-h-btn:    38px;   /* default page-header button */
+  --tk-h-btn-sm: 30px;   /* inline row action */
+  --tk-h-input:  40px;
+  --tk-h-search: 40px;   /* global search in the top bar */
+  --tk-h-filter: 40px;   /* filter select in a toolbar */
+  --tk-h-badge:  22px;   /* status badge */
+  --tk-h-tag:    20px;
+  --tk-h-tab:    44px;
+  --tk-h-row:    56px;   /* table row */
+  --tk-h-nav-item: 38px;
+  --tk-h-topbar: 64px;
+  --tk-w-sidebar: 232px;
+  --tk-w-sidebar-collapsed: 72px;
+  --tk-w-rail: 320px;    /* right-hand insight rail */
+  --tk-icon-sm: 16px;
+  --tk-icon:    18px;
+  --tk-icon-lg: 20px;
+  --tk-avatar-sm: 28px;
+  --tk-avatar:    36px;
+  --tk-avatar-lg: 44px;
+}

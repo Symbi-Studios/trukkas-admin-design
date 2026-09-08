@@ -1,0 +1,5 @@
+/* Satoshi (Fontshare) is the Trukkas typeface, confirmed by the team.
+   IBM Plex Mono carries machine facts — IDs, references, timestamps.
+   If you self-host Satoshi, drop the files in assets/fonts/ and replace the @import. */
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap");

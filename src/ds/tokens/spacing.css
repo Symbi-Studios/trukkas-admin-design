@@ -1,0 +1,19 @@
+:root {
+  --tk-space-1:  4px;
+  --tk-space-2:  6px;
+  --tk-space-3:  8px;
+  --tk-space-4: 12px;
+  --tk-space-5: 16px;
+  --tk-space-6: 20px;
+  --tk-space-7: 24px;
+  --tk-space-8: 32px;
+  --tk-space-9: 40px;
+
+  --tk-card-pad:      20px;   /* card padding */
+  --tk-card-pad-tight:16px;
+  --tk-grid-gap:      16px;   /* gap between cards in the dashboard grid */
+  --tk-section-gap:   20px;   /* gap between stacked page sections */
+  --tk-page-gutter:   28px;   /* content gutter inside the shell */
+  --tk-row-pad-y:     14px;   /* table cell vertical padding */
+  --tk-row-pad-x:     16px;
+}

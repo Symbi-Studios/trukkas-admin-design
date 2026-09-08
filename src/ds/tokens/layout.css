@@ -1,0 +1,12 @@
+/* App-shell resets. Scoped to the shell so consumers can opt in. */
+.tk-app {
+  font-family: var(--tk-font-sans);
+  color: var(--tk-ink-500);
+  background: var(--tk-surface-page);
+  -webkit-font-smoothing: antialiased;
+}
+.tk-app *, .tk-app *::before, .tk-app *::after { box-sizing: border-box; }
+.tk-app button { font-family: inherit; }
+.tk-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.tk-scroll::-webkit-scrollbar-thumb { background: #D9DEE9; border-radius: 999px; }
+.tk-scroll::-webkit-scrollbar-track { background: transparent; }
