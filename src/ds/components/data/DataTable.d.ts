@@ -4,7 +4,7 @@ import * as React from 'react';
  */
 export interface DataTableColumn<T = any> {
   key: string;
-  header: React.ReactNode;
+  header?: React.ReactNode;
   width?: number | string;
   align?: 'left' | 'right' | 'center';
   render?: (row: T) => React.ReactNode;
@@ -14,6 +14,8 @@ export interface DataTableProps<T = any> {
   rows: T[];
   /** adds the leading checkbox column */
   selectable?: boolean;
+  /** tints the entire header row with the info-soft background */
+  coloredHeader?: boolean;
   selected?: Array<string | number>;
   onSelect?: (keys: Array<string | number>) => void;
   onRowClick?: (row: T) => void;

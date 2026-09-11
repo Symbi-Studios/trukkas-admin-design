@@ -28,6 +28,7 @@
   --tk-surface-page: #f8fafd; /* app canvas */
   --tk-surface-sunk: #f4f6fa; /* nested blocks, table zebra, tips card */
   --tk-surface-cool: #eff4fe; /* selected row, info strip */
+  --tk-surface-soft: #f6f9ff; /* soft background, e.g. for a modal */
 
   /* ---- Lines ---------------------------------------------------------- */
   --tk-line: #eff1f6; /* hairline: card border, row rule */

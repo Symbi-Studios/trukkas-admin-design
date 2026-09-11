@@ -6,7 +6,7 @@
 }
 .triangulation-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--tk-grid-gap);
 }
 .triangulation-main {
@@ -32,6 +32,16 @@
   cursor: pointer;
   color: var(--tk-ink-500);
   font-size: 15px;
+}
+.triangulation-activity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.2fr);
+  gap: var(--tk-grid-gap);
+}
+.triangulation-impact-cards{
+  display: flex;
+  flex-direction: column;
+  gap:6px;
 }
 
 @media (max-width: 1300px) {

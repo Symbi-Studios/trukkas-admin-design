@@ -4,6 +4,7 @@ import * as React from 'react';
  */
 export interface SectionCardProps {
   title: React.ReactNode;
+  description: React.ReactNode;
   /** Lucide glyph shown before the title */
   icon?: string;
   /** blue pill count beside the title, e.g. 68 opportunities */
@@ -12,7 +13,7 @@ export interface SectionCardProps {
   action?: React.ReactNode;
   /** centred footer link under a hairline, e.g. "View all events" */
   footer?: React.ReactNode;
-  pad?: 'none' | 'md';
+  pad?: "none" | "md";
   children?: React.ReactNode;
   style?: React.CSSProperties;
 }
