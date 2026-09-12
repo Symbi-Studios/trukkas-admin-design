@@ -5,6 +5,8 @@
   --tk-blue-press: #02299a;
   --tk-blue-soft: #e6edfd; /* soft fill: tags, icon tiles */
   --tk-blue-ink: #0237b8; /* text on soft blue */
+  --tk-blue-light: #95b0f7; /* light blue */
+
 
   --tk-orange: #fd5301; /* accent CTA + active nav on the navy shell */
   --tk-orange-hover: #e04600;

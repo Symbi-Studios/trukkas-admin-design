@@ -104,7 +104,7 @@ export function StatCard({
               {caption && (
                 <span
                   style={{
-                    font: "400 11px/15px var(--tk-font-sans)",
+                    font: "400 13px/15px var(--tk-font-sans)",
                     color: "var(--tk-ink-400)",
                   }}
                 >

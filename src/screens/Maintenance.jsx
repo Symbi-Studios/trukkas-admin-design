@@ -18,21 +18,23 @@ import {
   Select,
   Textarea,
   DropdownMenu,
+  ListRow,
 } from "../ds.js";
+import { ProgressBar } from "../ds/components/data/ProgressBar.jsx";
 import { useCollection } from "../mock/useCollection.js";
 import { createMaintenance, updateMaintenance } from "../mock/api.js";
 import "./Maintenance.css";
 const PAGE_SIZE = 10,
   STATUSES = [
-    "All",
+    "All Statuses",
     "Scheduled",
     "In Progress",
     "Completed",
     "Overdue",
     "Cancelled",
   ],
-  PRIORITIES = ["All", "High", "Medium", "Low"],
-  TYPES = ["All", "Preventive", "Repair", "Inspection", "Breakdown"];
+  PRIORITIES = ["All Priorities", "High", "Medium", "Low"],
+  TYPES = ["All Types", "Preventive", "Repair", "Inspection", "Breakdown"];
 const STATUS_TONE = {
     Scheduled: "info",
     "In Progress": "warning",
@@ -51,6 +53,29 @@ const STATUS_TONE = {
     Medium: "var(--tk-warning)",
     Low: "var(--tk-success)",
   };
+const maintenanceApprovals = [
+  {
+    id: 1,
+    icon: "bell",
+    iconTint: "green",
+    count: 5,
+    title: "Repair requests",
+  },
+  {
+    id: 2,
+    icon: "wrench",
+    iconTint: "amber",
+    count: 4,
+    title: "Preventive maintenance requests",
+  },
+  {
+    id: 3,
+    icon: "triangle-alert",
+    iconTint: "red",
+    count: 3,
+    title: "Major repair requests",
+  },
+];
 function csv(rows) {
   const s = [
     [
@@ -89,9 +114,9 @@ export function Maintenance() {
     trucks = useCollection("trucks") || [];
   const [tab, setTab] = useState("All Maintenance"),
     [q, setQ] = useState(""),
-    [status, setStatus] = useState("All"),
-    [priority, setPriority] = useState("All"),
-    [type, setType] = useState("All"),
+    [status, setStatus] = useState("All Statuses"),
+    [priority, setPriority] = useState("All Priorities"),
+    [type, setType] = useState("All Types"),
     [date, setDate] = useState(""),
     [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(PAGE_SIZE),
@@ -114,9 +139,9 @@ export function Maintenance() {
       rows.filter(
         (r) =>
           (tab === "All Maintenance" || r.status === tab) &&
-          (status === "All" || r.status === status) &&
-          (priority === "All" || r.priority === priority) &&
-          (type === "All" || r.type === type) &&
+          (status === "All Statuses" || r.status === status) &&
+          (priority === "All Priorities" || r.priority === priority) &&
+          (type === "All Types" || r.type === type) &&
           (!date ||
             r.dueDate.includes(
               new Date(date + "T12:00:00").toLocaleDateString("en-US", {
@@ -155,9 +180,9 @@ export function Maintenance() {
         description="Track, manage and schedule maintenance activities for all fleet assets."
         actions={
           <>
-            <Button icon="plus" onClick={() => setSchedule(true)}>
-              Schedule Maintenance
-            </Button>
+            {/* <Button iconRight="chevron-down" onClick={() => setSchedule(true)}>
+              Review Maintenance
+            </Button> */}
             <Button
               variant="outline"
               icon="download"
@@ -205,114 +230,214 @@ export function Maintenance() {
           </>
         }
       />
+      <div className="maint-stats">
+        <StatCard
+          icon="truck"
+          label="Total Trucks"
+          value="486"
+          caption="312 Trucks · 128 Trailers · 46 Others"
+        />
+        <StatCard
+          icon="wrench"
+          tint="amber"
+          label="In Maintenance"
+          value="36"
+          caption="7.4% of total"
+        />
+        <StatCard
+          icon="calendar-days"
+          label="Due Soon"
+          value="27"
+          caption="Within next 7 days"
+        />
+        <StatCard
+          icon="triangle-alert"
+          tint="red"
+          label="Overdue"
+          value="6"
+          caption="Requires immediate attention"
+        />
+        <StatCard
+          icon="lock-keyhole"
+          tint="red"
+          label="Restricted Assets"
+          value="14"
+          caption="Not eligible for new jobs"
+        />
+        <StatCard
+          icon="file-text"
+          tint="blue"
+          label="Pending Approvals"
+          value="12"
+          caption="Maintenance requests"
+        />
+      </div>
+      <div className="maint-row">
+        <SectionCard title="Maintenance Overview">
+          <div className="maint-chart">
+            <div className="maint-ring" />
+            <div className="maint-legend">
+              {[
+                ["Scheduled", "210 (43.2%)", "var(--tk-blue)"],
+                ["In Progress", "36 (7.4%)", "var(--tk-warning)"],
+                ["Completed", "178 (36.6%)", "var(--tk-success)"],
+                ["Overdue", "6 (12.8%)", "var(--tk-danger)"],
+              ].map((x) => (
+                <span key={x[0]}>
+                  <i style={{ color: x[2] }}>● {x[0]}</i>
+                  <b>{x[1]}</b>
+                </span>
+              ))}
+            </div>
+          </div>
+        </SectionCard>
+        <SectionCard
+          title="Asset Eligibility for Jobs"
+          tooltip="Assets that are currently restricted or in maintenance will not be eligible for new jobs."
+        >
+          {[
+            ["Eligible for jobs", 90.1, "var(--tk-success)", 438],
+            ["Under Maintenance", 7.4, "var(--tk-warning)", 36],
+            ["Pending Inspection", 1.6, "var(--tk-blue)", 8],
+            ["Restricted", 2.9, "var(--tk-danger)", 14],
+          ].map((x) => (
+            <div className="maint-type-row-reverse" key={x[0]}>
+              <ProgressBar
+                value={[x[1]]}
+                label={x[0]}
+                caption={`${x[1]}% (${x[3]})`}
+                color={x[2]}
+              />
+            </div>
+          ))}
+        </SectionCard>
+        <SectionCard
+          title="Maintenance by Type"
+          action={
+            <button
+              style={{
+                border: 0,
+                background: "none",
+                color: "var(--tk-blue)",
+              }}
+              onClick={() => setType("All")}
+            >
+              View all
+            </button>
+          }
+        >
+          {[
+            ["Preventive", 49.8, "var(--tk-blue)"],
+            ["Repair", 34.2, "var(--tk-warning)"],
+            ["Inspection", 11.9, "var(--tk-success)"],
+            ["Breakdown", 4.1, "var(--tk-danger)"],
+          ].map((x) => (
+            <div className="maint-type-row" key={x[0]}>
+              <Icon name="wrench" size={12} />
+
+              <ProgressBar
+                value={[x[1]]}
+                label={x[0]}
+                caption={`${x[1]}%`}
+                color="var(--tk-blue-light)"
+              />
+            </div>
+          ))}
+        </SectionCard>
+        <SectionCard title="Maintenance Approvals" count={12}>
+          {maintenanceApprovals.map((r) => (
+            <ListRow
+              key={r.id}
+              icon={r.icon}
+              iconTint={r.iconTint}
+              title={r.title}
+              value={r.count}
+            />
+          ))}
+
+          <Button
+            iconRight="arrow-right"
+            fullWidth
+            onClick={() => notify("Import template downloaded")}
+          >
+            View Pending Approvals
+          </Button>
+        </SectionCard>
+      </div>
+      <div>
+        <Card pad="none">
+          <div className="maint-toolbar">
+            <SearchField
+              className="search"
+              style={{ flex: 1 }}
+              placeholder="Search by company, asset, maintenance ID, or description..."
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(1);
+              }}
+            />
+            <select
+              className="maint-select"
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+            >
+              {STATUSES.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+            <select
+              className="maint-select"
+              value={priority}
+              onChange={(e) => {
+                setPriority(e.target.value);
+                setPage(1);
+              }}
+            >
+              {PRIORITIES.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+            <select
+              className="maint-select"
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                setPage(1);
+              }}
+            >
+              {TYPES.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+            <input
+              className="maint-select"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+            <Button
+              variant="outline"
+              icon="rotate-ccw"
+              onClick={() => {
+                setQ("");
+                setStatus("All Statuses");
+                setPriority("All Priorities");
+                setType("All Types");
+                setDate("");
+                setPage(1);
+              }}
+            >
+              Reset
+            </Button>
+          </div>
+        </Card>
+      </div>
       <div className="maint-layout">
         <div className="maint-main">
-          <div className="maint-stats">
-            <StatCard
-              icon="truck"
-              label="Total Trucks"
-              value="486"
-              caption="All fleet assets"
-            />
-            <StatCard
-              icon="wrench"
-              tint="amber"
-              label="In Maintenance"
-              value="36"
-              caption="7.4% of total"
-            />
-            <StatCard
-              icon="calendar-days"
-              label="Due Soon"
-              value="27"
-              caption="Within next 7 days"
-            />
-            <StatCard
-              icon="triangle-alert"
-              tint="red"
-              label="Overdue"
-              value="6"
-              caption="Requires immediate attention"
-            />
-            <StatCard
-              icon="circle-check"
-              tint="green"
-              label="Completed (This Month)"
-              value="82"
-              delta="18.4%"
-              caption="vs last month"
-            />
-          </div>
-          <Card pad="none">
-            <div className="maint-toolbar">
-              <SearchField
-                className="search"
-                style={{ flex: 1 }}
-                placeholder="Search by truck no., type, or description..."
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(1);
-                }}
-              />
-              <select
-                className="maint-select"
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {STATUSES.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-              <select
-                className="maint-select"
-                value={priority}
-                onChange={(e) => {
-                  setPriority(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {PRIORITIES.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-              <select
-                className="maint-select"
-                value={type}
-                onChange={(e) => {
-                  setType(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {TYPES.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </select>
-              <input
-                className="maint-select"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-              <Button
-                variant="outline"
-                icon="rotate-ccw"
-                onClick={() => {
-                  setQ("");
-                  setStatus("All");
-                  setPriority("All");
-                  setType("All");
-                  setDate("");
-                  setPage(1);
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          </Card>
           <SectionCard title="" pad="none">
             <Tabs
               value={tab}
@@ -348,6 +473,13 @@ export function Maintenance() {
                   ),
                 },
                 {
+                  key: "company",
+                  header: "Company",
+                  render: (r) => (
+                    <span className="maint-cell">{r.company}</span>
+                  ),
+                },
+                {
                   key: "plate",
                   header: "Truck / Plate No.",
                   render: (r) => (
@@ -373,7 +505,7 @@ export function Maintenance() {
                   key: "description",
                   header: "Description",
                   render: (r) => (
-                    <span style={{ fontSize: 10 }}>{r.description}</span>
+                    <span style={{ fontSize: 12 }}>{r.description}</span>
                   ),
                 },
                 {
@@ -533,57 +665,8 @@ export function Maintenance() {
           </SectionCard>
         </div>
         <div className="maint-rail">
-          <SectionCard title="Maintenance Overview">
-            <div className="maint-chart">
-              <div className="maint-ring" />
-              <div className="maint-legend">
-                {[
-                  ["Scheduled", "210 (43.2%)", "var(--tk-blue)"],
-                  ["In Progress", "36 (7.4%)", "var(--tk-warning)"],
-                  ["Completed", "178 (36.6%)", "var(--tk-success)"],
-                  ["Overdue", "6 (12.8%)", "var(--tk-danger)"],
-                ].map((x) => (
-                  <span key={x[0]}>
-                    <i style={{ color: x[2] }}>● {x[0]}</i>
-                    <b>{x[1]}</b>
-                  </span>
-                ))}
-              </div>
-            </div>
-          </SectionCard>
           <SectionCard
-            title="Maintenance by Type"
-            action={
-              <button
-                style={{
-                  border: 0,
-                  background: "none",
-                  color: "var(--tk-blue)",
-                }}
-                onClick={() => setType("All")}
-              >
-                View all
-              </button>
-            }
-          >
-            {[
-              ["Preventive", 49.8, "var(--tk-blue)"],
-              ["Repair", 34.2, "var(--tk-warning)"],
-              ["Inspection", 11.9, "var(--tk-success)"],
-              ["Breakdown", 4.1, "var(--tk-danger)"],
-            ].map((x) => (
-              <div className="maint-type-row" key={x[0]}>
-                <Icon name="wrench" size={12} />
-                <span>
-                  {x[0]}
-                  <i style={{ "--pct": x[1] + "%", "--color": x[2] }} />
-                </span>
-                <b>{x[1]}%</b>
-              </div>
-            ))}
-          </SectionCard>
-          <SectionCard
-            title="Upcoming Due (Next 7 Days)"
+            title="Upcoming Maintenance (Next 7 Days)"
             action={
               <button
                 style={{
@@ -621,9 +704,11 @@ export function Maintenance() {
                     <strong>
                       {r.plate} ({r.truckType})
                     </strong>
-                    <small>{r.description}</small>
+                    <small>
+                      {r.company} · {r.description}
+                    </small>
                   </span>
-                  <span style={{ fontSize: 9, textAlign: "right" }}>
+                  <span style={{ fontSize: 10, textAlign: "right" }}>
                     {r.dueDate}
                     <small>{r.dueLabel}</small>
                   </span>
@@ -632,9 +717,9 @@ export function Maintenance() {
           </SectionCard>
           <SectionCard title="Quick Actions">
             <Action
-              icon="wrench"
-              title="Schedule Maintenance"
-              hint="Plan and schedule maintenance"
+              icon="building"
+              title="Platform Maintenance Policies"
+              hint="View and manage maintenance requirements"
               onClick={() => setSchedule(true)}
             />
             <Action
@@ -644,9 +729,9 @@ export function Maintenance() {
               onClick={() => notify("Calendar view opened")}
             />
             <Action
-              icon="history"
-              title="Maintenance History"
-              hint="View all maintenance records"
+              icon="file-text"
+              title="Maintenance Reports"
+              hint="Generate and export reports"
               onClick={() => {
                 setTab("Completed");
                 setPage(1);

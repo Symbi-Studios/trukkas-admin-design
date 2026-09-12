@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "../router.js";
 import {
   PageHeader,
@@ -8,25 +8,147 @@ import {
   SectionCard,
   Tabs,
   Badge,
-  Avatar,
   Icon,
   DropdownMenu,
   Modal,
   Textarea,
   DataTable,
-  TextField,
+  ProgressBar,
+  Banner,
+  BarChart,
+  EmptyState,
+  QuickActionsCard,
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
-import { updateMaintenance } from "../mock/api.js";
+import { updateMaintenance, setTruckStatus } from "../mock/api.js";
 import "./Maintenance.css";
-const money = (n) =>
-  n == null
-    ? "—"
-    : "₦" + Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2 });
+import "./MaintenanceDetail.css";
+
+const STATUS_TONE = {
+  Scheduled: "info",
+  "In Progress": "warning",
+  Completed: "success",
+  Overdue: "danger",
+  Cancelled: "neutral",
+};
+const STATUS_ICON = {
+  Scheduled: "calendar-clock",
+  "In Progress": "wrench",
+  Completed: "circle-check",
+  Overdue: "triangle-alert",
+  Cancelled: "circle-x",
+};
+const RECORD_DATE_LABEL = {
+  Scheduled: "Scheduled For",
+  "In Progress": "Started On",
+  Completed: "Date Completed",
+  Overdue: "Was Due",
+  Cancelled: "Cancelled On",
+};
+const ASSET_TYPE = {
+  "40FT Trailer": "Truck (Prime Mover)",
+  "20FT Container": "Truck (Container Chassis)",
+  Flatbed: "Truck (Flatbed)",
+  "40FT High Cube": "Truck (High Cube Trailer)",
+  Tanker: "Truck (Tanker)",
+  "45FT Container": "Truck (Container Chassis)",
+};
+const CHECKLISTS = {
+  Preventive: [
+    "Engine oil & filter replacement",
+    "Air filter replacement",
+    "Fuel filter replacement",
+    "Brake inspection",
+    "General safety inspection",
+  ],
+  Repair: [
+    "Fault diagnosis",
+    "Component replacement",
+    "Function test",
+    "Torque & leak check",
+    "Road test",
+  ],
+  Inspection: [
+    "Document verification",
+    "Brake & tyre check",
+    "Lighting & signals check",
+    "Emissions check",
+    "Roadworthiness sign-off",
+  ],
+  Breakdown: [
+    "On-site diagnosis",
+    "Recovery to service center",
+    "Root cause repair",
+    "Function test",
+    "Return to service",
+  ],
+};
+const PAST_HISTORY = [
+  {
+    date: "Jan 18, 2026",
+    odometer: 365420,
+    serviceType: "Repair",
+    description: "Brake system repair",
+    serviceCenter: "TruckCare Plus",
+    status: "Completed",
+  },
+  {
+    date: "Nov 02, 2025",
+    odometer: 340100,
+    serviceType: "Preventive",
+    description: "Full vehicle inspection",
+    serviceCenter: "AutoCare Lagos",
+    status: "Completed",
+  },
+  {
+    date: "Jul 15, 2025",
+    odometer: 300560,
+    serviceType: "Preventive",
+    description: "Oil change, filter replacement",
+    serviceCenter: "QuickFix Auto",
+    status: "Completed",
+  },
+  {
+    date: "May 03, 2025",
+    odometer: 260210,
+    serviceType: "Inspection",
+    description: "Regulatory inspection",
+    serviceCenter: "Lagos Vehicle Test Centre",
+    status: "Completed",
+  },
+];
+const UPCOMING_TEMPLATE = [
+  {
+    title: "Tyre Rotation & Balancing",
+    type: "Preventive",
+    offsetKm: 15000,
+    hint: "Due shortly after the next service",
+  },
+  {
+    title: "Annual Roadworthiness Inspection",
+    type: "Inspection",
+    offsetKm: null,
+    hint: "Due later in the year",
+  },
+];
+const MONTH_LABELS = ["Apr", "May", "Jun", "Jul", "Aug", "Sep"];
+
+function seed(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+function monthlyKm(plate) {
+  const s = seed(plate);
+  return MONTH_LABELS.map((_, i) => 3800 + ((s >> (i * 3)) % 6) * 750 + i * 90);
+}
+function km(n) {
+  return n == null ? "—" : n.toLocaleString("en-NG") + " km";
+}
 function dl(r) {
   const u = URL.createObjectURL(
     new Blob([
-      `${r.id}\n${r.plate}\n${r.description}\n${money(r.estimatedCost)}`,
+      `${r.id}\n${r.plate}\n${r.description}\nOdometer: ${km(r.currentOdometer)}\nNext due: ${km(r.nextDueOdometer)} or ${r.nextDueDate}`,
     ]),
   );
   const a = document.createElement("a");
@@ -35,59 +157,186 @@ function dl(r) {
   a.click();
   URL.revokeObjectURL(u);
 }
+
 export function MaintenanceDetail() {
   const navigate = useNavigate(),
     { maintenanceId } = useParams(),
     rows = useCollection("maintenance") || [],
     r = rows.find((x) => x.id === maintenanceId),
     [tab, setTab] = useState("Overview"),
-    [menu, setMenu] = useState(false),
-    [noteOpen, setNoteOpen] = useState(false),
-    [note, setNote] = useState(""),
-    [costOpen, setCostOpen] = useState(false),
-    [cost, setCost] = useState(r?.actualCost || ""),
-    [toast, setToast] = useState("");
-  function notify(s) {
-    setToast(s);
-    setTimeout(() => setToast(""), 1600);
+    [menuOpen, setMenuOpen] = useState(false),
+    [flagOpen, setFlagOpen] = useState(false),
+    [flagReason, setFlagReason] = useState(""),
+    [suspendOpen, setSuspendOpen] = useState(false),
+    [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function notify(tone, title) {
+    setToast({ tone, title });
   }
-  if (!r) return <Card>Maintenance record not found.</Card>;
-  const completed = r.status === "Completed";
-  async function addNote() {
+
+  if (!r) {
+    return (
+      <Card>
+        <span className="tk-body">
+          No maintenance record found with ID {maintenanceId}.
+        </span>
+        <div style={{ marginTop: 12 }}>
+          <Button
+            variant="outline"
+            icon="arrow-left"
+            onClick={() => navigate("/maintenance")}
+          >
+            Back to Maintenance
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  const isOverdue = r.status === "Overdue";
+  const isInProgress = r.status === "In Progress";
+  const assetStatus = isInProgress ? "In Maintenance" : "Active";
+  const fitForRoad = !isOverdue;
+  const maintStatusLabel = isOverdue
+    ? "Overdue"
+    : isInProgress
+      ? "Maintenance In Progress"
+      : "Up to Date";
+  const maintStatusTone = isOverdue
+    ? "danger"
+    : isInProgress
+      ? "warning"
+      : "success";
+  const maintStatusDesc = isOverdue
+    ? "This asset has overdue maintenance and requires immediate attention."
+    : isInProgress
+      ? "A maintenance job is currently in progress for this asset."
+      : "This asset has met all required maintenance based on kilometres and time intervals.";
+  const remainingKm =
+    r.nextDueOdometer != null
+      ? Math.max(0, r.nextDueOdometer - r.currentOdometer)
+      : null;
+  const scaleMax = Math.max(
+    600000,
+    Math.ceil(
+      ((r.nextDueOdometer || r.currentOdometer || 100000) * 1.2) / 50000,
+    ) * 50000,
+  );
+  const compliance = [
+    {
+      label: "Maintenance Compliant",
+      hint: "All mandatory maintenance completed",
+      ok: !isOverdue,
+    },
+    {
+      label: "Eligible for Jobs",
+      hint: "This asset can be assigned to new jobs",
+      ok: !isOverdue && !isInProgress,
+    },
+    {
+      label: "No Open Maintenance Issues",
+      hint: "No unresolved maintenance items",
+      ok: !isOverdue && !isInProgress,
+    },
+  ];
+  const checklist = CHECKLISTS[r.type] || CHECKLISTS.Preventive;
+  const historyRows = [
+    {
+      n: 1,
+      date: r.dueDate,
+      odometer: r.currentOdometer,
+      serviceType: r.type,
+      description: r.description,
+      serviceCenter: r.serviceCenter,
+      status: r.status,
+      self: true,
+    },
+    ...PAST_HISTORY.map((h, i) => ({ n: i + 2, ...h, self: false })),
+  ];
+  const upcoming = [
+    {
+      title: `${r.type} Maintenance`,
+      type: r.type,
+      dueDate: r.nextDueDate,
+      dueOdometer: r.nextDueOdometer,
+    },
+    ...UPCOMING_TEMPLATE.map((u) => ({
+      title: u.title,
+      type: u.type,
+      dueOdometer:
+        u.offsetKm != null && r.nextDueOdometer != null
+          ? r.nextDueOdometer + u.offsetKm
+          : null,
+      hint: u.hint,
+    })),
+  ];
+  const monthly = monthlyKm(r.plate);
+  const avgMonthlyKm = Math.round(
+    monthly.reduce((a, b) => a + b, 0) / monthly.length,
+  );
+
+  async function markCompleted() {
+    await updateMaintenance(r.id, { status: "Completed" });
+    setMenuOpen(false);
+    notify("success", "Maintenance marked as completed.");
+  }
+  async function startMaintenance() {
+    await updateMaintenance(r.id, { status: "In Progress" });
+    setMenuOpen(false);
+    notify("info", "Maintenance started.");
+  }
+  async function submitFlag() {
     await updateMaintenance(r.id, {
-      notes: (r.notes ? r.notes + "\n" : "") + note,
+      flagged: true,
+      flagReason: flagReason.trim(),
     });
-    setNote("");
-    setNoteOpen(false);
-    notify("Note added");
+    setFlagOpen(false);
+    setFlagReason("");
+    notify("warning", `${r.id} flagged for review.`);
   }
+  async function confirmSuspend() {
+    await setTruckStatus(r.plate, "Inactive");
+    setSuspendOpen(false);
+    notify("danger", `${r.plate} has been suspended from active duty.`);
+  }
+
   return (
     <div className="maint-page">
       <PageHeader
-        crumbs={["Fleet", "Maintenance", "Maintenance Details"]}
-        title="View Maintenance"
-        description="Detailed information about this maintenance activity."
+        crumbs={["Fleet Management", "Maintenance", r.id]}
+        title="Maintenance Record Details"
+        description="View the complete maintenance record, service history and asset status for compliance and safety oversight."
         actions={
           <>
             <Button
               variant="outline"
-              icon="printer"
-              onClick={() => window.print()}
+              icon="arrow-left"
+              onClick={() => navigate("/maintenance")}
             >
-              Print
+              Back to Maintenance
             </Button>
-            <Button variant="outline" icon="download" onClick={() => dl(r)}>
-              Download
+            <Button
+              variant="outline"
+              icon="truck"
+              onClick={() => navigate("/fleet/" + encodeURIComponent(r.plate))}
+            >
+              View Asset Profile
             </Button>
             <span style={{ position: "relative" }}>
               <Button
                 variant="outline"
                 iconRight="chevron-down"
-                onClick={() => setMenu(!menu)}
+                onClick={() => setMenuOpen((v) => !v)}
               >
-                Actions
+                More Actions
               </Button>
-              {menu && (
+              {menuOpen && (
                 <span
                   style={{
                     position: "absolute",
@@ -97,42 +346,60 @@ export function MaintenanceDetail() {
                   }}
                 >
                   <DropdownMenu
-                    width={220}
+                    width={230}
                     items={[
                       {
-                        label: "Start Maintenance",
-                        icon: "play",
+                        label: "Print Record",
+                        icon: "printer",
                         onClick: () => {
-                          updateMaintenance(r.id, { status: "In Progress" });
-                          setMenu(false);
-                          notify("Maintenance started");
+                          setMenuOpen(false);
+                          window.print();
                         },
                       },
                       {
-                        label: "Mark Completed",
-                        icon: "circle-check",
+                        label: "Download Record",
+                        icon: "download",
                         onClick: () => {
-                          setMenu(false);
-                          setCostOpen(true);
-                        },
-                      },
-                      {
-                        label: "Reschedule",
-                        icon: "calendar-clock",
-                        onClick: () => {
-                          setMenu(false);
-                          notify("Maintenance rescheduled");
+                          setMenuOpen(false);
+                          dl(r);
                         },
                       },
                       { divider: true },
+                      ...(r.status === "Scheduled"
+                        ? [
+                            {
+                              label: "Start Maintenance",
+                              icon: "play",
+                              onClick: startMaintenance,
+                            },
+                          ]
+                        : []),
+                      ...(r.status === "Scheduled" || r.status === "In Progress"
+                        ? [
+                            {
+                              label: "Mark Completed",
+                              icon: "circle-check",
+                              onClick: markCompleted,
+                            },
+                          ]
+                        : []),
+                      { divider: true },
                       {
-                        label: "Cancel Maintenance",
-                        icon: "circle-x",
+                        label: "Flag for Review",
+                        icon: "flag",
                         tone: "danger",
                         onClick: () => {
-                          updateMaintenance(r.id, { status: "Cancelled" });
-                          setMenu(false);
-                          notify("Maintenance cancelled");
+                          setMenuOpen(false);
+                          setFlagOpen(true);
+                        },
+                      },
+                      {
+                        label: "Suspend Asset",
+                        icon: "ban",
+                        tone: "danger",
+                        onClick: () => {
+                          setMenuOpen(false);
+                          setSuspendOpen(true);
                         },
                       },
                     ]}
@@ -143,395 +410,637 @@ export function MaintenanceDetail() {
           </>
         }
       />
-      <div className="maint-detail-grid">
-        <div className="maint-detail-main">
-          <Card pad="none">
-            <div className="maint-entity">
-              <div className="maint-truck-hero">
-                <span className="maint-truck-round">
-                  <Icon name="truck" size={40} />
-                </span>
-                <div>
-                  <div
-                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+
+      {toast && <Banner tone={toast.tone} title={toast.title} />}
+
+      <Card pad="none">
+        <div className="mdet-hero">
+          <div
+            className="mdet-hero-left"
+            style={{
+              flexDirection: "column",
+              alignItems: "stretch",
+              padding: 0,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 20,
+                alignItems: "center",
+                padding: 20,
+              }}
+            >
+              <div className="mdet-photo">
+                <Icon name="truck" size={40} />
+                <span className="mdet-photo-badge">
+                  <Badge
+                    tone={assetStatus === "Active" ? "success" : "warning"}
+                    dot
                   >
-                    <h2>{r.plate}</h2>
-                    <Badge tone="success">Active</Badge>
-                  </div>
-                  <strong style={{ fontSize: 11 }}>{r.truckType}</strong>
-                  <div className="tk-meta" style={{ margin: "7px 0" }}>
-                    {r.truckRef}
-                  </div>
-                  <strong style={{ fontSize: 10 }}>{r.company}</strong>
-                  <div className="tk-meta">{r.companyId}</div>
+                    {assetStatus}
+                  </Badge>
+                </span>
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <h2 className="tk-title" style={{ fontSize: 20 }}>
+                    {r.plate}
+                  </h2>
+                  <Badge
+                    tone={assetStatus === "Active" ? "success" : "warning"}
+                  >
+                    {assetStatus}
+                  </Badge>
+                </div>
+                <div className="tk-meta" style={{ marginTop: 4 }}>
+                  {ASSET_TYPE[r.truckType] || `Truck (${r.truckType})`}
                 </div>
               </div>
-              <Hero label="Maintenance ID" value={r.id} />
-              <Hero label="Status" value={<Badge>{r.status}</Badge>} />
-              <Hero
-                label="Priority"
-                value={
-                  <>
-                    <i
-                      style={{
-                        display: "inline-block",
-                        width: 7,
-                        height: 7,
-                        borderRadius: "50%",
-                        background: "var(--tk-blue)",
-                        marginRight: 6,
-                      }}
-                    />
-                    {r.priority}
-                  </>
-                }
-              />
-              <Hero label="Type" value={<Badge tone="info">{r.type}</Badge>} />
-              <Hero
-                label="Due Date"
-                value={
-                  <>
-                    {r.dueDate}
-                    <Badge
-                      tone="info"
-                      style={{ display: "flex", marginTop: 5 }}
-                    >
-                      {r.dueLabel} left
-                    </Badge>
-                  </>
-                }
-              />
-              <Hero label="Created On" value={r.createdOn} />
-              <Hero
-                label="Created By"
-                value={
-                  <span
-                    style={{ display: "flex", gap: 7, alignItems: "center" }}
-                  >
-                    <Avatar name={r.createdBy} size={27} />
-                    {r.createdBy}
-                  </span>
-                }
-              />
             </div>
-          </Card>
-          <Tabs
-            value={tab}
-            onChange={setTab}
-            items={[
-              "Overview",
-              "Work Details",
-              "Parts & Costs",
-              "Service History",
-              "Documents",
-              "Notes & Logs",
-            ]}
-          />
-          {tab === "Overview" ? (
-            <div className="maint-overview">
-              <div className="maint-left">
-                <SectionCard title="Maintenance Information">
-                  <Info label="Type" value={r.type} />
-                  <Info label="Category" value={r.category} />
-                  <Info label="Description" value={r.description} />
-                  <Info label="Service Center" value={r.serviceCenter} />
-                  <Info label="Location" value={r.location} />
-                  <Info label="Odometer" value={r.odometer} />
-                  <Info label="Engine Hours" value={r.engineHours} />
-                  <Info label="Schedule Based On" value={r.scheduleBasedOn} />
-                  <Info label="Last Maintenance" value={r.lastMaintenance} />
-                  <Info label="Next Maintenance" value={r.nextMaintenance} />
-                </SectionCard>
-                <SectionCard title="Truck Location">
+            <div className="mdet-hero-facts">
+              <div className="mdet-fact">
+                <span className="ico">
+                  <Icon name="building-2" size={16} />
+                </span>
+                <span>
                   <div
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.3fr 1fr",
-                      gap: 12,
-                      alignItems: "center",
+                      font: "600 13px/18px var(--tk-font-sans)",
+                      color: "var(--tk-ink-900)",
                     }}
                   >
-                    <div className="maint-map" />
-                    <div>
-                      <strong style={{ fontSize: 10 }}>Maintenance Hub</strong>
-                      <p className="tk-meta">
-                        Apapa, Lagos State
-                        <br />
-                        Nigeria
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        icon="map-pin"
-                        onClick={() => notify("Map opened")}
-                      >
-                        View on Map
-                      </Button>
-                    </div>
+                    {r.company}
                   </div>
-                </SectionCard>
-                <SectionCard title="Service Checklist" pad="none">
-                  <div style={{ padding: "0 12px 10px" }}>
-                    {r.checklist.slice(0, 4).map((x, i) => (
-                      <button
-                        className="maint-check"
-                        style={{
-                          width: "100%",
-                          borderLeft: 0,
-                          borderRight: 0,
-                          borderTop: 0,
-                          background: "transparent",
-                          textAlign: "left",
-                        }}
-                        key={x}
-                        onClick={() => {
-                          const checked = [...(r.checked || [])];
-                          const next = checked.includes(i)
-                            ? checked.filter((n) => n !== i)
-                            : [...checked, i];
-                          updateMaintenance(r.id, { checked: next });
-                        }}
-                      >
-                        <span
-                          style={{
-                            color: (r.checked || []).includes(i)
-                              ? "var(--tk-success)"
-                              : "var(--tk-ink-700)",
-                          }}
-                        >
-                          <Icon
-                            name={
-                              (r.checked || []).includes(i)
-                                ? "circle-check"
-                                : "circle"
-                            }
-                            size={11}
-                          />{" "}
-                          {x}
-                        </span>
-                        <span>
-                          {(r.checked || []).includes(i)
-                            ? "Completed"
-                            : "Pending"}
-                        </span>
-                      </button>
-                    ))}
-                    <div style={{ marginTop: 8, fontSize: 9 }}>
-                      {(r.checked || []).length} of {r.checklist.length}{" "}
-                      completed{" "}
-                      <span style={{ float: "right" }}>
-                        {Math.round(
-                          ((r.checked || []).length / r.checklist.length) * 100,
-                        )}
-                        %
-                      </span>
-                    </div>
-                  </div>
-                </SectionCard>
+                  <div className="tk-meta">Trucking Company</div>
+                </span>
               </div>
-              <div className="maint-left">
-                <SectionCard title="Status & Progress">
-                  <div className="maint-progress-flow">
-                    {["Scheduled", "In Progress", "Completed", "Verified"].map(
-                      (x, i) => (
-                        <div
-                          className={
-                            "maint-stage " +
-                            (i <=
-                            [
-                              "Scheduled",
-                              "In Progress",
-                              "Completed",
-                              "Verified",
-                            ].indexOf(r.status)
-                              ? "active"
-                              : "")
-                          }
-                          key={x}
-                        >
-                          <i>
-                            <Icon
-                              name={
-                                i === 0
-                                  ? "calendar"
-                                  : i === 1
-                                    ? "wrench"
-                                    : i === 2
-                                      ? "check"
-                                      : "shield-check"
-                              }
-                              size={13}
-                            />
-                          </i>
-                          {x}
-                        </div>
-                      ),
-                    )}
-                  </div>
-                  <hr
-                    style={{ border: 0, borderTop: "1px solid var(--tk-line)" }}
-                  />
-                  <h4 style={{ margin: "10px 0 4px", fontSize: 11 }}>
-                    Timeline
-                  </h4>
-                  {[
-                    ["Maintenance Scheduled", r.createdOn],
-                    [
-                      "Started",
-                      r.status === "Scheduled" ? "Not started" : "Just now",
-                    ],
-                    ["Completed", completed ? "Just now" : "Not completed"],
-                    [
-                      "Verified",
-                      r.status === "Verified" ? "Just now" : "Not verified",
-                    ],
-                  ].map((x, i) => (
-                    <div className="maint-time-row" key={x[0]}>
-                      <i
-                        style={{
-                          background:
-                            i === 0 ? "var(--tk-blue)" : "var(--tk-neutral)",
-                        }}
-                      />
-                      <span>
-                        <strong>{x[0]}</strong>
-                        <small className="tk-meta">{x[1]}</small>
-                      </span>
-                      {i === 0 && (
-                        <span>
-                          {r.createdBy}
-                          <br />
-                          <small>{r.creatorId}</small>
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </SectionCard>
-                <SectionCard
-                  title="Notes"
-                  action={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      icon="plus"
-                      onClick={() => setNoteOpen(true)}
-                    >
-                      Add Note
-                    </Button>
-                  }
-                >
-                  <p
+              <div className="mdet-fact">
+                <span className="ico">
+                  <Icon name="car" size={16} />
+                </span>
+                <span>
+                  <div
                     style={{
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      color: "var(--tk-ink-700)",
-                      whiteSpace: "pre-line",
+                      font: "600 13px/18px var(--tk-font-sans)",
+                      color: "var(--tk-ink-900)",
                     }}
                   >
-                    {r.notes || "No notes added."}
-                  </p>
-                </SectionCard>
+                    {r.makeModel}
+                  </div>
+                  <div className="tk-meta">Make / Model</div>
+                </span>
+              </div>
+              <div className="mdet-fact">
+                <span className="ico">
+                  <Icon name="scan-line" size={16} />
+                </span>
+                <span>
+                  <div
+                    style={{
+                      font: "600 13px/18px var(--tk-font-sans)",
+                      color: "var(--tk-ink-900)",
+                    }}
+                  >
+                    {r.vin}
+                  </div>
+                  <div className="tk-meta">VIN / Chassis No.</div>
+                </span>
+              </div>
+              <div className="mdet-fact">
+                <span className="ico">
+                  <Icon name="badge-check" size={16} />
+                </span>
+                <span>
+                  <div
+                    style={{
+                      font: "600 13px/18px var(--tk-font-sans)",
+                      color: "var(--tk-ink-900)",
+                    }}
+                  >
+                    {r.truckRef}
+                  </div>
+                  <div className="tk-meta">Trukkas Asset ID</div>
+                </span>
               </div>
             </div>
-          ) : (
-            <TabPanel tab={tab} r={r} notify={notify} />
-          )}
-          <div className="maint-driver-due">
-            <span className="maint-driver-icon">
-              <Icon name="clock-3" size={22} />
-            </span>
-            <div>
-              <strong>Driver Due for Maintenance</strong>
-              <small className="tk-meta">
-                This driver has a vehicle due for maintenance.
-              </small>
+          </div>
+          <div className={`mdet-fit ${fitForRoad ? "" : "tone-danger"}`}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <Icon
+                name={fitForRoad ? "circle-check" : "triangle-alert"}
+                size={20}
+                color={fitForRoad ? "var(--tk-success)" : "var(--tk-danger)"}
+              />
+              <div>
+                <div
+                  style={{
+                    font: "700 15px/20px var(--tk-font-sans)",
+                    color: fitForRoad
+                      ? "var(--tk-success)"
+                      : "var(--tk-danger)",
+                  }}
+                >
+                  {fitForRoad ? "Fit for Road" : "Not Fit for Road"}
+                </div>
+                <div
+                  style={{
+                    font: "400 12px/17px var(--tk-font-sans)",
+                    color: "var(--tk-ink-500)",
+                  }}
+                >
+                  {fitForRoad
+                    ? "All required maintenance up to date."
+                    : "Overdue maintenance must be resolved."}
+                </div>
+              </div>
             </div>
             <div>
-              <span className="tk-meta">Driver</span>
-              <br />
-              <strong>{r.driver}</strong>
-              <br />
-              <small>{r.driverId}</small>
+              <div className="mdet-fit-row">
+                <span>Next Due</span>
+                <strong style={{ color: "var(--tk-ink-900)" }}>
+                  {km(r.nextDueOdometer)}
+                </strong>
+              </div>
+              <div className="mdet-fit-row">
+                <span>Estimated</span>
+                <strong style={{ color: "var(--tk-ink-900)" }}>
+                  {r.nextDueDate}
+                </strong>
+              </div>
             </div>
-            <div>
-              <span className="tk-meta">Truck</span>
-              <br />
-              <strong style={{ color: "var(--tk-blue)" }}>{r.plate}</strong>
-              <br />
-              <small>{r.truckType}</small>
-            </div>
-            <div>
-              <span className="tk-meta">Maintenance Due</span>
-              <br />
-              <strong>{r.dueDate}</strong>
-              <br />
-              <Badge tone="info">{r.dueLabel} left</Badge>
-            </div>
-            <div>
-              <span className="tk-meta">Status</span>
-              <br />
-              <Badge>{r.status}</Badge>
-            </div>
-            <Button
-              variant="outline"
-              iconRight="chevron-right"
-              className="w-fit"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            >
-              View Maintenance
-            </Button>
           </div>
         </div>
-        <div className="maint-detail-rail">
-          <SectionCard title="Maintenance Summary">
-            <Info label="Maintenance ID" value={r.id} />
-            <Info label="Status" value={r.status} />
-            <Info label="Priority" value={r.priority} />
-            <Info label="Type" value={r.type} />
-            <Info
-              label="Due Date"
-              value={
-                <span style={{ color: "var(--tk-blue)" }}>
-                  {r.dueDate} ({r.dueLabel} left)
-                </span>
+      </Card>
+
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        items={[
+          "Overview",
+          "Maintenance History",
+          "Upcoming Maintenance",
+          "KM & Usage",
+          "Documents",
+        ]}
+      />
+
+      {tab === "Overview" && (
+        <div className="mdet-layout">
+          <div className="mdet-main">
+            <div className="mdet-row1">
+              <SectionCard title="Asset Information">
+                <InfoRow
+                  icon="file-text"
+                  label="Registration No."
+                  value={r.plate}
+                />
+                <InfoRow
+                  icon="truck"
+                  label="Asset Type"
+                  value={ASSET_TYPE[r.truckType] || r.truckType}
+                />
+                <InfoRow icon="car" label="Make / Model" value={r.makeModel} />
+                <InfoRow
+                  icon="calendar"
+                  label="Year of Manufacture"
+                  value={r.year}
+                />
+                <InfoRow
+                  icon="building-2"
+                  label="Trucking Company"
+                  value={r.company}
+                />
+                <InfoRow
+                  icon="map-pin"
+                  label="Current Location"
+                  value={r.location}
+                />
+                <InfoRow
+                  icon="circle-dot"
+                  label="Status"
+                  value={
+                    <Badge
+                      tone={assetStatus === "Active" ? "success" : "warning"}
+                      dot
+                    >
+                      {assetStatus}
+                    </Badge>
+                  }
+                />
+                <InfoRow
+                  icon="gauge"
+                  label="Odometer (Current)"
+                  value={km(r.currentOdometer)}
+                />
+                <InfoRow
+                  icon="clock-3"
+                  label="Last Updated"
+                  value={r.lastUpdated}
+                />
+              </SectionCard>
+
+              <SectionCard title="Maintenance Status">
+                <Banner tone={maintStatusTone} title={maintStatusLabel}>
+                  {maintStatusDesc}
+                </Banner>
+                <div className="mdet-status-grid">
+                  <div className="mdet-status-box">
+                    <span
+                      className="tk-meta"
+                      style={{ display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                      <Icon name="calendar" size={13} /> Last Maintenance
+                    </span>
+                    <strong
+                      style={{ font: "600 14px/20px var(--tk-font-sans)" }}
+                    >
+                      {PAST_HISTORY[0].date}
+                    </strong>
+                    <span className="tk-meta">
+                      at {km(PAST_HISTORY[0].odometer)}
+                    </span>
+                    <div style={{ marginTop: 4 }}>
+                      <span className="tk-meta">Service Type:</span>{" "}
+                      <Badge tone="info">{PAST_HISTORY[0].serviceType}</Badge>
+                    </div>
+                  </div>
+                  <div className="mdet-status-box">
+                    <span
+                      className="tk-meta"
+                      style={{ display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                      <Icon name="calendar-clock" size={13} /> Next Due
+                    </span>
+                    <strong
+                      style={{ font: "600 14px/20px var(--tk-font-sans)" }}
+                    >
+                      {r.nextDueDate}
+                    </strong>
+                    <span className="tk-meta">at {km(r.nextDueOdometer)}</span>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        color: "var(--tk-success)",
+                        font: "600 12px/17px var(--tk-font-sans)",
+                      }}
+                    >
+                      {r.nextDueDays != null
+                        ? `In ${r.nextDueDays} days / ${km(remainingKm)}`
+                        : "Not yet scheduled"}
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
+
+            <SectionCard title="Recent Maintenance Record">
+              <div className="mdet-record-grid">
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 999,
+                        display: "grid",
+                        placeItems: "center",
+                        background: `var(--tk-${maintStatusTone === "success" ? "success" : maintStatusTone}-soft)`,
+                      }}
+                    >
+                      <Icon
+                        name={STATUS_ICON[r.status]}
+                        size={17}
+                        color={`var(--tk-${maintStatusTone === "success" ? "success" : maintStatusTone})`}
+                      />
+                    </span>
+                    <strong
+                      style={{
+                        font: "600 15px/20px var(--tk-font-sans)",
+                        color: "var(--tk-ink-900)",
+                        flex: 1,
+                      }}
+                    >
+                      {r.type} Maintenance
+                    </strong>
+                    <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
+                  </div>
+                  <InfoRow icon="hash" label="Maintenance ID" value={r.id} />
+                  <InfoRow
+                    icon="building-2"
+                    label="Service Center"
+                    value={r.serviceCenter}
+                  />
+                  <InfoRow
+                    icon="calendar"
+                    label={RECORD_DATE_LABEL[r.status]}
+                    value={r.dueDate}
+                  />
+                  <InfoRow
+                    icon="badge"
+                    label="Service Type"
+                    value={<Badge tone="info">{r.type}</Badge>}
+                  />
+                  <InfoRow
+                    icon="gauge"
+                    label="Odometer Reading"
+                    value={km(r.currentOdometer)}
+                  />
+                  <InfoRow
+                    icon="calendar-clock"
+                    label="Next Due"
+                    value={`${km(r.nextDueOdometer)} or ${r.nextDueDate}`}
+                  />
+                </div>
+                <div>
+                  <span className="tk-meta">Service Items Performed</span>
+                  {checklist.map((c) => (
+                    <div className="mdet-checklist-row" key={c}>
+                      <Icon
+                        name={
+                          r.status === "Completed" || r.status === "In Progress"
+                            ? "circle-check"
+                            : "circle"
+                        }
+                        size={14}
+                        color={
+                          r.status === "Completed"
+                            ? "var(--tk-success)"
+                            : "var(--tk-ink-300)"
+                        }
+                      />
+                      {c}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Maintenance History"
+              action={
+                <button
+                  style={{
+                    border: 0,
+                    background: "none",
+                    color: "var(--tk-blue)",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setTab("Maintenance History")}
+                >
+                  View All
+                </button>
               }
-            />
-            <Info label="Total Estimated Cost" value={money(r.estimatedCost)} />
-            <Info label="Total Actual Cost" value={money(r.actualCost)} />
-            <Info label="Created On" value={r.createdOn} />
-          </SectionCard>
-          <SectionCard title="Cost Summary">
-            <Info label="Estimated Cost" value={money(r.estimatedCost)} />
-            <Info label="Parts Cost (Est.)" value={money(r.partsCost)} />
-            <Info label="Labor Cost (Est.)" value={money(r.laborCost)} />
-            <Info label="Other Cost (Est.)" value={money(r.otherCost)} />
-            <div className="maint-cost-total">
-              <Info
-                label={<b>Total Estimated</b>}
-                value={
-                  <b style={{ color: "var(--tk-blue)" }}>
-                    {money(r.estimatedCost)}
-                  </b>
+              pad="none"
+            >
+              <HistoryTable
+                rows={historyRows}
+                onView={(row) =>
+                  notify(
+                    "info",
+                    row.self
+                      ? "You are viewing this record."
+                      : "Historical record — read only.",
+                  )
                 }
               />
+            </SectionCard>
+          </div>
+
+          <div className="mdet-rail">
+            <SectionCard title="Compliance & Eligibility">
+              {compliance.map((c) => (
+                <div className="mdet-compliance-row" key={c.label}>
+                  <Icon
+                    name={c.ok ? "circle-check" : "circle-x"}
+                    size={18}
+                    color={c.ok ? "var(--tk-success)" : "var(--tk-danger)"}
+                  />
+                  <div>
+                    <strong
+                      style={{
+                        display: "block",
+                        font: "600 13px/18px var(--tk-font-sans)",
+                        color: c.ok ? "var(--tk-success)" : "var(--tk-danger)",
+                      }}
+                    >
+                      {c.label}
+                    </strong>
+                    <span className="tk-meta">{c.hint}</span>
+                  </div>
+                </div>
+              ))}
+            </SectionCard>
+
+            <SectionCard title="KM-Based Maintenance Schedule">
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 8,
+                }}
+              >
+                <span className="tk-meta">
+                  Current:{" "}
+                  <strong style={{ color: "var(--tk-ink-900)" }}>
+                    {km(r.currentOdometer)}
+                  </strong>
+                </span>
+                <span className="tk-meta">
+                  Next Due:{" "}
+                  <strong style={{ color: "var(--tk-ink-900)" }}>
+                    {km(r.nextDueOdometer)}
+                  </strong>
+                </span>
+              </div>
+              <ProgressBar
+                value={r.currentOdometer}
+                max={scaleMax}
+                color="var(--tk-blue)"
+              />
+              <div className="mdet-km-scale">
+                <span>0 km</span>
+                <span>{scaleMax.toLocaleString("en-NG")} km</span>
+              </div>
+              <Banner tone="info" style={{ marginTop: 12 }}>
+                Next maintenance is due at {km(r.nextDueOdometer)} or by{" "}
+                {r.nextDueDate}, whichever comes first.
+              </Banner>
+            </SectionCard>
+
+            <QuickActionsCard
+              title="Quick Actions"
+              items={[
+                {
+                  label: "View Maintenance History",
+                  icon: "history",
+                  onClick: () => setTab("Maintenance History"),
+                },
+                {
+                  label: "View Upcoming Maintenance",
+                  icon: "calendar-clock",
+                  onClick: () => setTab("Upcoming Maintenance"),
+                },
+                {
+                  label: "View Documents",
+                  icon: "file-text",
+                  onClick: () => setTab("Documents"),
+                },
+                {
+                  label: "View Asset Profile",
+                  icon: "truck",
+                  onClick: () =>
+                    navigate("/fleet/" + encodeURIComponent(r.plate)),
+                },
+                {
+                  label: "Flag for Review",
+                  icon: "flag",
+                  tone: "danger",
+                  onClick: () => setFlagOpen(true),
+                },
+                {
+                  label: "Suspend Asset",
+                  icon: "ban",
+                  tone: "danger",
+                  onClick: () => setSuspendOpen(true),
+                },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+
+      {tab === "Maintenance History" && (
+        <SectionCard
+          title="Maintenance History"
+          count={historyRows.length}
+          pad="none"
+        >
+          <HistoryTable
+            rows={historyRows}
+            onView={(row) =>
+              notify(
+                "info",
+                row.self
+                  ? "You are viewing this record."
+                  : "Historical record — read only.",
+              )
+            }
+          />
+        </SectionCard>
+      )}
+
+      {tab === "Upcoming Maintenance" && (
+        <SectionCard title="Upcoming Maintenance">
+          {upcoming.map((u, i) => (
+            <div className="mdet-upcoming-row" key={u.title + i}>
+              <span className="mdet-upcoming-ico">
+                <Icon
+                  name={u.type === "Inspection" ? "shield-check" : "wrench"}
+                  size={16}
+                />
+              </span>
+              <div style={{ flex: 1 }}>
+                <strong
+                  style={{
+                    display: "block",
+                    font: "600 13px/18px var(--tk-font-sans)",
+                    color: "var(--tk-ink-900)",
+                  }}
+                >
+                  {u.title}
+                </strong>
+                <span className="tk-meta">
+                  {u.dueDate ? `Due ${u.dueDate}` : u.hint}
+                  {u.dueOdometer != null ? ` · at ${km(u.dueOdometer)}` : ""}
+                </span>
+              </div>
+              <Badge tone="info">{u.type}</Badge>
+            </div>
+          ))}
+        </SectionCard>
+      )}
+
+      {tab === "KM & Usage" && (
+        <div className="mdet-main">
+          <div className="mdet-stat-row">
+            <StatBox
+              icon="gauge"
+              label="Current Odometer"
+              value={km(r.currentOdometer)}
+            />
+            <StatBox
+              icon="calendar-clock"
+              label="Next Due In"
+              value={r.nextDueDays != null ? `${r.nextDueDays} days` : "—"}
+              caption={km(remainingKm)}
+            />
+            <StatBox
+              icon="trending-up"
+              label="Avg. Monthly Distance"
+              value={km(avgMonthlyKm)}
+            />
+          </div>
+          <SectionCard title="KM-Based Maintenance Schedule">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: 8,
+              }}
+            >
+              <span className="tk-meta">
+                Current:{" "}
+                <strong style={{ color: "var(--tk-ink-900)" }}>
+                  {km(r.currentOdometer)}
+                </strong>
+              </span>
+              <span className="tk-meta">
+                Next Due:{" "}
+                <strong style={{ color: "var(--tk-ink-900)" }}>
+                  {km(r.nextDueOdometer)}
+                </strong>
+              </span>
+            </div>
+            <ProgressBar
+              value={r.currentOdometer}
+              max={scaleMax}
+              color="var(--tk-blue)"
+            />
+            <div className="mdet-km-scale">
+              <span>0 km</span>
+              <span>{scaleMax.toLocaleString("en-NG")} km</span>
             </div>
           </SectionCard>
-          <SectionCard
-            title="Attachments (2)"
-            action={
-              <button
-                style={{
-                  border: 0,
-                  background: "none",
-                  color: "var(--tk-blue)",
-                }}
-                onClick={() => setTab("Documents")}
-              >
-                View all
-              </button>
-            }
-          >
-            {r.attachments.map((x) => (
+          <SectionCard title="Monthly Distance Covered">
+            <BarChart
+              series={[
+                { name: "Distance", color: "var(--tk-blue)", points: monthly },
+              ]}
+              labels={MONTH_LABELS}
+              format={(v) => Math.round(v / 1000) + "k"}
+            />
+          </SectionCard>
+        </div>
+      )}
+
+      {tab === "Documents" && (
+        <SectionCard title={`Documents (${r.attachments.length})`}>
+          {r.attachments.length === 0 ? (
+            <EmptyState
+              icon="file-text"
+              title="No documents"
+              description="No documents have been attached to this maintenance record."
+            />
+          ) : (
+            r.attachments.map((x) => (
               <button
                 className="maint-attachment"
                 style={{
@@ -539,12 +1048,13 @@ export function MaintenanceDetail() {
                   border: 0,
                   background: "transparent",
                   textAlign: "left",
+                  cursor: "pointer",
                 }}
                 key={x[0]}
                 onClick={() => dl({ ...r, id: x[0] })}
               >
                 <span className="ico">
-                  <Icon name="files" size={13} />
+                  <Icon name="file-text" size={13} />
                 </span>
                 <span>
                   <strong>{x[0]}</strong>
@@ -553,183 +1063,149 @@ export function MaintenanceDetail() {
                   </small>
                 </span>
               </button>
-            ))}
-          </SectionCard>
-          <SectionCard title="Related Information">
-            <Action
-              label="Truck"
-              value={`${r.plate} (${r.truckType})`}
-              onClick={() => navigate("/fleet")}
-            />
-            <Action
-              label="Truck Company"
-              value={r.company}
-              onClick={() => navigate("/companies/" + r.companyId)}
-            />
-            <Action
-              label="Driver"
-              value={`${r.driver} (${r.driverId})`}
-              onClick={() => navigate("/drivers/" + r.driverId)}
-            />
-            <Action
-              label="Service Center"
-              value={r.serviceCenter}
-              onClick={() => notify("Service center opened")}
-            />
-          </SectionCard>
-        </div>
-      </div>
+            ))
+          )}
+        </SectionCard>
+      )}
+
       <Modal
-        open={noteOpen}
-        onClose={() => setNoteOpen(false)}
-        title="Add Maintenance Note"
-        width={500}
+        open={flagOpen}
+        onClose={() => setFlagOpen(false)}
+        title="Flag for Review"
+        description={`Flag ${r.id} for compliance review.`}
+        width={480}
         footer={
           <>
-            <Button variant="outline" onClick={() => setNoteOpen(false)}>
+            <Button variant="outline" onClick={() => setFlagOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={!note.trim()} onClick={addNote}>
-              Add Note
+            <Button variant="danger" icon="flag" onClick={submitFlag}>
+              Flag Record
             </Button>
           </>
         }
       >
         <Textarea
-          rows={5}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Add maintenance note..."
+          label="Reason"
+          rows={4}
+          placeholder="Why is this record being flagged for review?"
+          value={flagReason}
+          onChange={(e) => setFlagReason(e.target.value)}
         />
       </Modal>
+
       <Modal
-        open={costOpen}
-        onClose={() => setCostOpen(false)}
-        title="Complete Maintenance"
-        width={480}
+        open={suspendOpen}
+        onClose={() => setSuspendOpen(false)}
+        title="Suspend Asset"
+        description={`Suspend ${r.plate} from active duty? It will no longer be eligible for new jobs until reactivated.`}
+        width={460}
         footer={
           <>
-            <Button variant="outline" onClick={() => setCostOpen(false)}>
+            <Button variant="outline" onClick={() => setSuspendOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={() => {
-                updateMaintenance(r.id, {
-                  status: "Completed",
-                  actualCost: +cost || r.estimatedCost,
-                });
-                setCostOpen(false);
-                notify("Maintenance completed");
-              }}
-            >
-              Complete
+            <Button variant="danger" icon="ban" onClick={confirmSuspend}>
+              Suspend Asset
             </Button>
           </>
         }
-      >
-        <TextField
-          label="Actual Cost"
-          type="number"
-          value={cost}
-          onChange={(e) => setCost(e.target.value)}
-        />
-      </Modal>
-      {toast && <div className="maint-toast">{toast}</div>}
+      />
     </div>
   );
 }
-function Hero({ label, value }) {
+
+function InfoRow({ icon, label, value }) {
   return (
-    <div className="maint-hero-fact">
-      <label>{label}</label>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-function Info({ label, value }) {
-  return (
-    <div className="maint-info">
-      <span className="tk-meta">{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-function Action({ label, value, onClick }) {
-  return (
-    <button className="maint-action" onClick={onClick}>
-      <span style={{ fontSize: 11, color: "var(--tk-ink-400)", width: 70 }}>
+    <div className="maint-info" style={{ alignItems: "center" }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <Icon name={icon} size={13} color="var(--tk-ink-300)" />
         {label}
       </span>
-      <span>
-        <strong style={{ color: "var(--tk-blue)" }}>{value}</strong>
-      </span>
-      <Icon name="chevron-right" size={12} />
-    </button>
+      <strong>{value}</strong>
+    </div>
   );
 }
-function TabPanel({ tab, r, notify }) {
-  if (tab === "Work Details")
-    return (
-      <SectionCard title="Work Details">
-        <Info label="Service Center" value={r.serviceCenter} />
-        <Info label="Description" value={r.description} />
-        <Info label="Current Status" value={<Badge>{r.status}</Badge>} />
-        <Button
-          style={{ marginTop: 10 }}
-          onClick={() => notify("Work order updated")}
-        >
-          Update Work Order
-        </Button>
-      </SectionCard>
-    );
-  if (tab === "Parts & Costs")
-    return (
-      <SectionCard title="Parts & Costs">
-        <Info label="Parts" value={money(r.partsCost)} />
-        <Info label="Labor" value={money(r.laborCost)} />
-        <Info label="Other" value={money(r.otherCost)} />
-        <Info label="Estimated Total" value={money(r.estimatedCost)} />
-      </SectionCard>
-    );
-  if (tab === "Service History")
-    return (
-      <SectionCard title="Service History">
-        <DataTable
-          rows={[
-            {
-              date: "Apr 20, 2026",
-              service: "Preventive maintenance",
-              cost: 175000,
-            },
-            { date: "Jan 12, 2026", service: "Tyre replacement", cost: 220000 },
-          ]}
-          columns={[
-            { key: "date", header: "Date" },
-            { key: "service", header: "Service" },
-            { key: "cost", header: "Cost", render: (x) => money(x.cost) },
-          ]}
-        />
-      </SectionCard>
-    );
-  if (tab === "Documents")
-    return (
-      <SectionCard title="Documents">
-        {r.attachments.map((x) => (
-          <div className="maint-attachment" key={x[0]}>
-            <Icon name="file-text" />
-            <span>
-              <strong>{x[0]}</strong>
-              <small className="tk-meta">{x[1]}</small>
-            </span>
-          </div>
-        ))}
-      </SectionCard>
-    );
+
+function StatBox({ icon, label, value, caption }) {
   return (
-    <SectionCard title="Notes & Logs">
-      <p style={{ whiteSpace: "pre-line", fontSize: 10 }}>{r.notes}</p>
-      <Info label="Created" value={r.createdOn} />
-      <Info label="Created By" value={r.createdBy} />
-    </SectionCard>
+    <Card style={{ display: "flex", gap: 12, alignItems: "center" }}>
+      <span
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: "var(--tk-r-lg)",
+          background: "var(--tk-blue-soft)",
+          color: "var(--tk-blue)",
+          display: "grid",
+          placeItems: "center",
+          flex: "0 0 auto",
+        }}
+      >
+        <Icon name={icon} size={18} />
+      </span>
+      <span>
+        <span className="tk-meta" style={{ display: "block" }}>
+          {label}
+        </span>
+        <strong
+          style={{
+            font: "700 16px/22px var(--tk-font-sans)",
+            color: "var(--tk-ink-900)",
+          }}
+        >
+          {value}
+        </strong>
+        {caption && (
+          <span className="tk-meta" style={{ display: "block" }}>
+            {caption}
+          </span>
+        )}
+      </span>
+    </Card>
+  );
+}
+
+function HistoryTable({ rows, onView }) {
+  return (
+    <DataTable
+      rows={rows}
+      rowKey={(r) => r.n}
+      columns={[
+        { key: "n", header: "#", width: 32 },
+        { key: "date", header: "Date" },
+        {
+          key: "odometer",
+          header: "Odometer (km)",
+          render: (r) => r.odometer.toLocaleString("en-NG"),
+        },
+        {
+          key: "serviceType",
+          header: "Service Type",
+          render: (r) => <Badge tone="info">{r.serviceType}</Badge>,
+        },
+        { key: "description", header: "Description" },
+        { key: "serviceCenter", header: "Service Center" },
+        {
+          key: "status",
+          header: "Status",
+          render: (r) => <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>,
+        },
+        {
+          key: "actions",
+          header: "Actions",
+          render: (r) => (
+            <Button
+              size="sm"
+              variant="outline"
+              icon="eye"
+              onClick={() => onView(r)}
+            >
+              View
+            </Button>
+          ),
+        },
+      ]}
+    />
   );
 }

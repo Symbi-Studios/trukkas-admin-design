@@ -35,6 +35,7 @@ function Demo() {
       </div>
       <div style={{ display: 'flex', gap: 12 }}>
         <SectionCard title="Rule Details" icon="file-text" style={{ flex: 1 }}
+          tooltip="Applied automatically to every job matching this rule's criteria"
           footer={<a href="#">View full audit log</a>}>
           <LabelValue label="Calculation Type" value="Percentage of Job Value" />
           <Divider />

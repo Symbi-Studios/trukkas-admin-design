@@ -7,6 +7,8 @@ export interface SectionCardProps {
   description: React.ReactNode;
   /** Lucide glyph shown before the title */
   icon?: string;
+  /** Hover explanation shown from an info glyph beside the title */
+  tooltip?: React.ReactNode;
   /** blue pill count beside the title, e.g. 68 opportunities */
   count?: number | string;
   /** right-hand control: a "View all" link, a range Select, a Tabs strip */

@@ -1,12 +1,14 @@
 import React from "react";
 import { Card } from "./Card.jsx";
 import { Icon } from "../../assets/icons/Icon.jsx";
+import { Tooltip } from "../feedback/Tooltip.jsx";
 
 /** Card with the standard 16/600 title row: optional icon, count, right-hand link or control. */
 export function SectionCard({
   title,
   description,
   icon,
+  tooltip,
   count,
   action,
   footer,
@@ -30,8 +32,16 @@ export function SectionCard({
       >
         {icon && <Icon name={icon} size={18} color="var(--tk-blue)" />}
         <div>
-          <h3 className="tk-section" style={{ flex: 1, marginBottom: description ? 4 : 0 }}>
+          <h3
+            className="tk-section"
+            style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: description ? 4 : 0 }}
+          >
             {title}
+            {tooltip && (
+              <Tooltip label={tooltip}>
+                <Icon name="info" size={14} color="var(--tk-ink-300)" />
+              </Tooltip>
+            )}
           </h3>
           <p className="tk-meta">{description}</p>
         </div>

@@ -9,6 +9,7 @@ import { walletSummary, transactions, bankAccounts } from './fixtures/wallet.js'
 import { announcements } from './fixtures/announcements.js';
 import { jobs } from './fixtures/jobs.js';
 import { triangulationMatches } from './fixtures/triangulation.js';
+import { triangulationOpportunities } from './fixtures/triangulationOpportunities.js';
 import { drivers } from './fixtures/drivers.js';
 import { companies } from './fixtures/companies.js';
 import { cargo } from './fixtures/cargo.js';
@@ -56,6 +57,7 @@ seed('bankAccounts', bankAccounts);
 seed('announcements', announcements);
 seed('jobs', jobs);
 seed('triangulation', triangulationMatches);
+seed('triangulationOpportunities', triangulationOpportunities);
 seed('drivers', drivers);
 seed('companies', companies);
 seed('cargo', cargo);
@@ -201,6 +203,57 @@ export async function rejectTriangulationMatch(id) {
   return patchRow('triangulation', 'id', id, {
     status: 'Expired',
     history: [{ text: 'Candidate match rejected by admin', time: 'Just now' }, ...m.history],
+  });
+}
+
+// ---- Triangulation Opportunities (opportunity review / detail page) -------
+export async function createTriangulationOpportunityMatch(id) {
+  await delay();
+  const o = getRow('triangulationOpportunities', 'id', id);
+  return patchRow('triangulationOpportunities', 'id', id, {
+    status: 'Matched',
+    notes: [{ text: 'Match created — current and proposed segments linked into one multi-leg trip.', actor: 'Admin', time: 'Just now' }, ...o.notes],
+  });
+}
+
+export async function proposeOpportunityToTruckingCompany(id) {
+  await delay();
+  const o = getRow('triangulationOpportunities', 'id', id);
+  return patchRow('triangulationOpportunities', 'id', id, {
+    status: 'Awaiting Trucking Company',
+    notes: [{ text: `Proposal sent to ${o.currentSegment.truckingCompany}.`, actor: 'Admin', time: 'Just now' }, ...o.notes],
+  });
+}
+
+export async function proposeOpportunityToForwarder(id) {
+  await delay();
+  const o = getRow('triangulationOpportunities', 'id', id);
+  return patchRow('triangulationOpportunities', 'id', id, {
+    status: 'Awaiting Forwarder',
+    notes: [{ text: `Proposal sent to ${o.proposedSegment.forwarder}.`, actor: 'Admin', time: 'Just now' }, ...o.notes],
+  });
+}
+
+export async function rejectTriangulationOpportunity(id, reason) {
+  await delay();
+  const o = getRow('triangulationOpportunities', 'id', id);
+  return patchRow('triangulationOpportunities', 'id', id, {
+    status: 'Rejected',
+    notes: [{ text: reason ? `Opportunity rejected — ${reason}` : 'Opportunity rejected by admin.', actor: 'Admin', time: 'Just now' }, ...o.notes],
+  });
+}
+
+export async function addOpportunityTag(id, label) {
+  await delay();
+  const o = getRow('triangulationOpportunities', 'id', id);
+  return patchRow('triangulationOpportunities', 'id', id, { tags: [...o.tags, { label, tone: 'neutral' }] });
+}
+
+export async function addOpportunityNote(id, text) {
+  await delay();
+  const o = getRow('triangulationOpportunities', 'id', id);
+  return patchRow('triangulationOpportunities', 'id', id, {
+    notes: [{ text, actor: 'Admin (You)', time: 'Just now' }, ...o.notes],
   });
 }
 
@@ -423,11 +476,10 @@ export async function createMaintenance(draft) {
   return prependRow('maintenance', {
     id, created: 'Just now', truckType: truck?.type || 'Truck', truckRef: truck?.ref || '—',
     company: truck?.company || '—', companyId: truck?.tc || '—', driver: truck?.driver || '—',
-    driverId: truck?.dr || '—', category: 'General Maintenance', odometer: '—', engineHours: '—',
-    scheduleBasedOn: 'Manual schedule', lastMaintenance: '—', nextMaintenance: '—',
-    estimatedCost: Number(draft.estimatedCost || 0), partsCost: 0, laborCost: 0, otherCost: 0,
-    actualCost: null, createdBy: 'Trukkas Admin', creatorId: 'ADM-001', createdOn: 'Just now',
-    attachments: [], notes: draft.notes || '', checklist: ['Inspect vehicle', 'Complete service', 'Road test'],
+    driverId: truck?.dr || '—', makeModel: 'Not specified', year: '—', vin: '—',
+    currentOdometer: 0, nextDueOdometer: null, nextDueDate: '—', nextDueDays: null,
+    lastUpdated: 'Just now', estimatedCost: Number(draft.estimatedCost || 0), actualCost: null,
+    createdBy: 'Trukkas Admin', createdOn: 'Just now', attachments: [],
     status: 'Scheduled', ...draft,
   });
 }

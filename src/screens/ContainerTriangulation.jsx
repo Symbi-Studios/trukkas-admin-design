@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useNavigate } from "../router.js";
 import {
   PageHeader,
   FilterSelect,
@@ -101,6 +102,7 @@ const LEGEND = [
 const OPPORTUNITIES = [
   {
     id: "TRK-2026-0124",
+    oppId: "TRI-00124",
     kind: "match",
     container: "CONT-CLU-8921",
     size: "40ft High Cube",
@@ -115,6 +117,7 @@ const OPPORTUNITIES = [
   },
   {
     id: "TRK-2026-0087",
+    oppId: "TRI-00087",
     kind: "match",
     container: "CONT-MAU-4452",
     size: "20ft Standard",
@@ -129,6 +132,7 @@ const OPPORTUNITIES = [
   },
   {
     id: "TRK-2026-0033",
+    oppId: "TRI-00033",
     kind: "match",
     container: "CONT-TCLU-7710",
     size: "40ft High Cube",
@@ -143,6 +147,7 @@ const OPPORTUNITIES = [
   },
   {
     id: "TRK-2026-0041",
+    oppId: "TRI-00041",
     kind: "match",
     container: "CONT-APZU-2291",
     size: "40ft High Cube",
@@ -157,6 +162,7 @@ const OPPORTUNITIES = [
   },
   {
     id: "TRK-2026-0099",
+    oppId: "TRI-00099",
     kind: "match",
     container: "CONT-CMAU-1182",
     size: "20ft Standard",
@@ -171,6 +177,7 @@ const OPPORTUNITIES = [
   },
   {
     id: "TRK-2026-0099",
+    oppId: "TRI-00099",
     kind: "match",
     container: "CONT-CMAU-1182",
     size: "20ft Standard",
@@ -185,6 +192,7 @@ const OPPORTUNITIES = [
   },
   {
     id: "TRK-2026-0099",
+    oppId: "TRI-00099",
     kind: "match",
     container: "CONT-CMAU-1182",
     size: "20ft Standard",
@@ -207,7 +215,7 @@ const OPPORTUNITIES_TONE = {
 const INITIAL_RECENT = [
   {
     id: "r1",
-    triangulationId: "TRI-2026-0124",
+    triangulationId: "TRI-00124",
     on: "Aug 4, 2026 10:15 AM",
     truck: "TRK-2026-0124",
     company: "Global haulage Co.",
@@ -219,7 +227,7 @@ const INITIAL_RECENT = [
   },
   {
     id: "r2",
-    triangulationId: "TRI-2026-0087",
+    triangulationId: "TRI-00087",
     on: "Aug 4, 2026 09:42 AM",
     truck: "TRK-2026-0087",
     company: "Global haulage Co.",
@@ -231,7 +239,7 @@ const INITIAL_RECENT = [
   },
   {
     id: "r3",
-    triangulationId: "TRI-2026-0033",
+    triangulationId: "TRI-00033",
     on: "Aug 4, 2026 08:21 AM",
     truck: "TRK-2026-0033",
     company: "Transcorp",
@@ -243,7 +251,7 @@ const INITIAL_RECENT = [
   },
   {
     id: "r4",
-    triangulationId: "TRI-2026-0041",
+    triangulationId: "TRI-00041",
     on: "Aug 3, 2026 06:10 PM",
     truck: "TRK-2026-0041",
     company: "Zamani Logistics",
@@ -255,7 +263,7 @@ const INITIAL_RECENT = [
   },
   {
     id: "r5",
-    triangulationId: "TRI-2026-0099",
+    triangulationId: "TRI-00099",
     on: "Aug 3, 2026 02:05 PM",
     company: "Prime Logistics",
     truck: "TRK-2026-0099",
@@ -474,6 +482,7 @@ function TriMap({ zoom }) {
 }
 
 export function ContainerTriangulation() {
+  const navigate = useNavigate();
   const [locationFilter, setLocationFilter] = useState("All Locations");
   const [routeFilter, setRouteFilter] = useState("All Routes");
   const [containerFilter, setContainerFilter] = useState("All Container Types");
@@ -492,7 +501,6 @@ export function ContainerTriangulation() {
   const [scanning, setScanning] = useState(false);
   const [assignTarget, setAssignTarget] = useState(null);
   const [reviewTarget, setReviewTarget] = useState(null);
-  const [viewTarget, setViewTarget] = useState(null);
   const [opportunities, setOpportunities] = useState(OPPORTUNITIES);
   const [recent, setRecent] = useState(INITIAL_RECENT);
   const [toast, setToast] = useState(null);
@@ -835,6 +843,7 @@ across active & upcoming jobs"
           <DataTable
             rows={oppRows}
             rowKey={(r) => r.id}
+            onRowClick={(r) => navigate(`/triangulation/${r.oppId}`)}
             columns={[
               {
                 key: "id",
@@ -920,14 +929,20 @@ across active & upcoming jobs"
                 header: "Action",
                 render: (r) => (
                   <span style={{ display: "grid", gap: 6 }}>
-                    <Button size="sm" onClick={() => setViewTarget(r)}>
+                    <Button
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/triangulation/${r.oppId}`);
+                      }}
+                    >
                       View
                     </Button>
                   </span>
                 ),
               },
               {
-                key: "status",
+                key: "menu",
                 header: "",
                 render: (r) => (
                   <Icon
@@ -977,16 +992,7 @@ across active & upcoming jobs"
             rows={recentRows}
             rowKey={(r) => r.id}
             coloredHeader
-            onRowClick={(r) =>
-              setViewTarget({
-                id: r.truck,
-                route: r.route,
-                revenue: r.revenue,
-                kind: "match",
-                detail: r.on,
-                stops: 2,
-              })
-            }
+            onRowClick={(r) => navigate(`/triangulation/${r.triangulationId}`)}
             columns={[
               { key: "on", header: "Date & Time" },
               {
@@ -1197,36 +1203,6 @@ across active & upcoming jobs"
               valueTone="var(--tk-success)"
             />
             <LabelValue label="Match Score" value={reviewTarget.score + "%"} />
-          </div>
-        )}
-      </Modal>
-
-      <Modal
-        open={!!viewTarget}
-        onClose={() => setViewTarget(null)}
-        title={viewTarget?.id}
-        description="Opportunity details"
-        width={480}
-      >
-        {viewTarget && (
-          <div style={{ display: "grid" }}>
-            <LabelValue label="Route" value={viewTarget.route} />
-            <LabelValue label="Detail" value={viewTarget.detail} />
-            {viewTarget.container && (
-              <LabelValue
-                label="Container"
-                value={`${viewTarget.container} · ${viewTarget.size}`}
-              />
-            )}
-            {viewTarget.cargo && (
-              <LabelValue label="Cargo" value={viewTarget.cargo} />
-            )}
-            <LabelValue label="Stops" value={viewTarget.stops} />
-            <LabelValue
-              label="Est. Revenue"
-              value={naira(viewTarget.revenue)}
-              valueTone="var(--tk-success)"
-            />
           </div>
         )}
       </Modal>

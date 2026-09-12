@@ -23,19 +23,23 @@ export function QuickActionsCard({ title = 'Quick Actions', items = [], layout =
         </div>
       ) : (
         <div style={{ display: 'grid' }}>
-          {items.map((it, i) => (
-            <button key={it.label} type="button" onClick={it.onClick}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 2px',
-                       border: 0, borderTop: i ? '1px solid var(--tk-line)' : 'none',
-                       background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
-              <Icon name={it.icon} size={18} color="var(--tk-blue)" />
-              <span style={{ flex: 1, display: 'grid', gap: 2 }}>
-                <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{it.label}</span>
-                {it.hint && <span className="tk-meta">{it.hint}</span>}
-              </span>
-              <Icon name="chevron-right" size={15} color="var(--tk-ink-300)" />
-            </button>
-          ))}
+          {items.map((it, i) => {
+            const danger = it.tone === 'danger';
+            const fg = danger ? 'var(--tk-danger)' : 'var(--tk-blue)';
+            return (
+              <button key={it.label} type="button" onClick={it.onClick}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 2px',
+                         border: 0, borderTop: i ? '1px solid var(--tk-line)' : 'none',
+                         background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                <Icon name={it.icon} size={18} color={fg} />
+                <span style={{ flex: 1, display: 'grid', gap: 2 }}>
+                  <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: danger ? 'var(--tk-danger)' : 'var(--tk-ink-700)' }}>{it.label}</span>
+                  {it.hint && <span className="tk-meta">{it.hint}</span>}
+                </span>
+                <Icon name="chevron-right" size={15} color="var(--tk-ink-300)" />
+              </button>
+            );
+          })}
         </div>
       )}
     </SectionCard>
