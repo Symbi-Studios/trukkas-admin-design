@@ -7,7 +7,7 @@ export function Pagination({ page = 1, pageCount = 1, pageSize = 10, total, onPa
     border: '1px solid ' + (active ? 'var(--tk-blue)' : 'var(--tk-line-strong)'),
     background: active ? 'var(--tk-blue)' : '#fff',
     color: active ? '#fff' : disabled ? 'var(--tk-ink-300)' : 'var(--tk-ink-500)',
-    font: '500 13px/1 var(--tk-font-sans)', cursor: disabled ? 'not-allowed' : 'pointer',
+    font: 'var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans)', cursor: disabled ? 'not-allowed' : 'pointer',
     display: 'grid', placeItems: 'center',
   });
   const pages = [];
@@ -38,7 +38,7 @@ export function Pagination({ page = 1, pageCount = 1, pageSize = 10, total, onPa
         <select value={pageSize} onChange={e => onPageSize(Number(e.target.value))}
           style={{ height: 32, borderRadius: 'var(--tk-r-sm)', border: '1px solid var(--tk-line-strong)',
                    background: '#fff', color: 'var(--tk-ink-500)', padding: '0 8px',
-                   font: '500 13px/1 var(--tk-font-sans)', cursor: 'pointer' }}>
+                   font: 'var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans)', cursor: 'pointer' }}>
           {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / page</option>)}
         </select>
       )}

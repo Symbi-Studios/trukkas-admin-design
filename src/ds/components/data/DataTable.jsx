@@ -29,7 +29,7 @@ export function DataTable({
           width: "100%",
           borderCollapse: "collapse",
           tableLayout,
-          font: "400 14px/20px var(--tk-font-sans)",
+          font: "var(--tk-body-weight) var(--tk-body-size)/var(--tk-body-lh) var(--tk-font-sans)",
         }}
       >
         <thead>
@@ -55,7 +55,7 @@ export function DataTable({
                   ...cell,
                   width: c.width,
                   textAlign: c.align || "left",
-                  font: "600 13px/16px var(--tk-font-sans)",
+                  font: "var(--tk-body-strong-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans)",
                   color: "var(--tk-ink-400)",
                   whiteSpace: "nowrap",
                   overflow: "hidden",

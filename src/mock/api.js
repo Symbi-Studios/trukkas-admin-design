@@ -185,6 +185,90 @@ export async function cancelJob(jobId) {
   return patchRow('jobs', 'id', jobId, { status: 'Cancelled', etaCountdown: null });
 }
 
+export async function createJob(payload) {
+  await delay(80);
+  const numericIds = (getSnapshot('jobs') || [])
+    .map((job) => Number(String(job.id).match(/\d+$/)?.[0]))
+    .filter(Number.isFinite);
+  const id = `JOB-${Math.max(29825, ...numericIds) + 1}`;
+  const now = new Date();
+  return prependRow('jobs', {
+    id,
+    status: 'Pending Approval',
+    published: now.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+    createdAt: now.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+    updatedAt: 'Just now',
+    requiredTrucks: 1,
+    truckingCompany: null,
+    assignedDriverName: null,
+    assignedTruckPlate: null,
+    ...payload,
+  });
+}
+
+// ---- Job Detail (bidding flow) -------------------------------------------
+function logJobActivity(jobId, entry) {
+  const job = getRow('jobs', 'id', jobId);
+  if (!job) return;
+  patchRow('jobs', 'id', jobId, {
+    activityLog: [{ time: 'Just now', user: 'Super Admin', role: 'Trukkas', ...entry }, ...(job.activityLog || [])],
+    updatedAt: 'Just now',
+  });
+}
+
+export async function approveJob(jobId) {
+  await delay();
+  const job = patchRow('jobs', 'id', jobId, { status: 'Bidding' });
+  logJobActivity(jobId, { action: 'Job Approved', details: 'Job approved and released for bidding.' });
+  return job;
+}
+
+export async function rejectJob(jobId, reason) {
+  await delay();
+  const job = patchRow('jobs', 'id', jobId, { status: 'Rejected' });
+  logJobActivity(jobId, { action: 'Job Rejected', details: reason ? `Job rejected — ${reason}` : 'Job rejected by admin.' });
+  return job;
+}
+
+export async function acceptJobBid(jobId, company) {
+  await delay();
+  const job = getRow('jobs', 'id', jobId);
+  const bid = job?.bids?.find((b) => b.company === company);
+  const updated = patchRow('jobs', 'id', jobId, {
+    status: 'Assigned',
+    truckingCompany: company,
+    biddingCloses: null,
+  });
+  logJobActivity(jobId, { user: company, role: 'Trucking Company', action: 'Assignment Confirmed', details: bid ? `Bid of ₦${bid.amount.toLocaleString('en-NG')} accepted.` : 'Assigned to job.' });
+  return updated;
+}
+
+export async function markJobInTransit(jobId) {
+  await delay();
+  const job = patchRow('jobs', 'id', jobId, { status: 'In Transit' });
+  logJobActivity(jobId, { user: job?.assignedDriverName || 'Driver', role: 'Driver (Trucking Co.)', action: 'Status Update', details: 'Trip marked as In Transit.' });
+  return job;
+}
+
+export async function reviewJobDocument(jobId, docId, approve) {
+  await delay();
+  const job = getRow('jobs', 'id', jobId);
+  if (!job) return null;
+  const doc = (job.documents || []).find((d) => d.id === docId);
+  const documents = (job.documents || []).map((d) => (d.id === docId
+    ? { ...d, status: approve ? 'Approved' : 'Rejected', reviewedBy: 'Super Admin', reviewedOn: 'Just now' }
+    : d));
+  const updated = patchRow('jobs', 'id', jobId, { documents });
+  logJobActivity(jobId, { action: approve ? 'Document Approved' : 'Document Rejected', details: doc ? `${doc.name} ${approve ? 'approved' : 'rejected'}.` : '' });
+  return updated;
+}
+
+export async function addJobNote(jobId, note) {
+  await delay(80);
+  logJobActivity(jobId, { action: 'Note Added', details: note });
+  return getRow('jobs', 'id', jobId);
+}
+
 // ---- Container Triangulation ----------------------------------------------
 export async function approveTriangulationMatch(id) {
   await delay();

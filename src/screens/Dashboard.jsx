@@ -27,6 +27,7 @@ import {
 import { useCollection } from "../mock/useCollection.js";
 import { markJobDelivered, cancelJob } from "../mock/api.js";
 import { formatNaira } from "../mock/format.js";
+import { statusTone } from "./JobDetail.jsx";
 
 const DATE_RANGES = [
   "Today, Aug 4, 2026",
@@ -362,7 +363,7 @@ export function Dashboard() {
               {
                 key: "status",
                 header: "Status",
-                render: (r) => <Badge>{r.status}</Badge>,
+                render: (r) => <Badge tone={statusTone(r.status)} dot>{r.status}</Badge>,
               },
               {
                 key: "amount",

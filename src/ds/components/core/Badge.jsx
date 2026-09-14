@@ -75,6 +75,7 @@ export function Badge({ children, tone, dot = false, style }) {
         color: fg,
         font: "600 12px/1 var(--tk-font-sans)",
         whiteSpace: "nowrap",
+        width: "fit-content",
         ...style,
       }}
     >

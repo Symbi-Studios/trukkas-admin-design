@@ -16,9 +16,9 @@ export function SearchField({ placeholder = 'Search…', variant = 'panel', shor
       <Icon name="search" size={16} color="var(--tk-ink-300)" />
       <input placeholder={placeholder} onFocus={() => setF(true)} onBlur={() => setF(false)} {...rest}
              style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', minWidth: 0,
-                      font: '400 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }} />
+                      font: 'var(--tk-body-weight) var(--tk-body-size)/var(--tk-body-lh) var(--tk-font-sans)', color: 'var(--tk-ink-900)' }} />
       {global && (
-        <kbd style={{ font: '500 11px/1 var(--tk-font-sans)', color: 'var(--tk-ink-400)',
+        <kbd style={{ font: 'var(--tk-micro-weight) var(--tk-micro-size)/var(--tk-micro-lh) var(--tk-font-sans)', color: 'var(--tk-ink-400)',
                       background: '#fff', border: '1px solid var(--tk-line-strong)',
                       borderRadius: 6, padding: '4px 6px' }}>{shortcut}</kbd>
       )}
