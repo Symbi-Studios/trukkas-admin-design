@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -20,8 +20,9 @@ import {
   EmptyState,
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
-import { payoutRequestSummary } from "../mock/fixtures/payouts.js";
 import { formatNaira } from "../mock/format.js";
+import { getCompanyPayoutSummary, normalizePayouts } from "../domain/payouts.js";
+import "./RequestedPayouts.css";
 
 const PAGE_SIZE = 10;
 
@@ -84,17 +85,52 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
   );
 }
 
+function exportPayouts(rows) {
+  const headers = ["Payout ID", "Company / Driver", "Type", "Job IDs", "Trip IDs", "Gross", "Deductions", "Net", "Status", "Eligibility"];
+  const values = rows.map((payout) => [payout.id, payout.party, payout.type, (payout.jobIds || []).join(" | "), (payout.tripIds || []).join(" | "), payout.grossAmount, payout.deductions, payout.netAmount, payout.status, payout.eligibility]);
+  const csv = [headers, ...values].map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "payout-requests.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export function RequestedPayouts() {
   const navigate = useNavigate();
-  const all = useCollection("payoutRequests") || [];
+  const payoutRows = useCollection("payoutRequests") || [];
+  const jobs = useCollection("jobs") || [];
+  const all = useMemo(() => normalizePayouts(payoutRows, jobs), [payoutRows, jobs]);
 
   const [tab, setTab] = useState("All Requests");
   const [q, setQ] = useState("");
   const [type, setType] = useState("All Payout Types");
   const [status, setStatus] = useState("All Statuses");
   const [party, setParty] = useState("All Parties");
+  const [date, setDate] = useState("All Request Dates");
   const [page, setPage] = useState(1);
   const [menuFor, setMenuFor] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const company = params.get("companyId") || params.get("company");
+    const job = params.get("jobId");
+    const trip = params.get("tripId");
+    const requestedStatus = params.get("status");
+    if (company) {
+      setType("Company Payout");
+      setParty("company");
+      setQ(company);
+    } else if (job || trip) setQ(job || trip);
+    if (requestedStatus) setStatus(requestedStatus);
+  }, []);
+
+  const companySummary = useMemo(() => getCompanyPayoutSummary(all), [all]);
+  const totalRequested = useMemo(
+    () => all.filter((p) => p.status !== "Rejected").reduce((sum, p) => sum + Number(p.netAmount ?? p.amount ?? 0), 0),
+    [all],
+  );
 
   const counts = useMemo(
     () => ({
@@ -124,12 +160,13 @@ export function RequestedPayouts() {
           (type === "All Payout Types" || p.type === type) &&
           (status === "All Statuses" || p.status === status) &&
           (party === "All Parties" || p.partyType === party) &&
+          (date === "All Request Dates" || p.dateRequested === date) &&
           (!q ||
-            [p.id, p.jobId, p.party, p.partyId, p.payment?.bank].some(
+            [p.id, p.jobId, ...(p.jobIds || []), ...(p.tripIds || []), p.party, p.partyId, p.companyId, p.payment?.bank].some(
               (v) => v && v.toLowerCase().includes(q.toLowerCase()),
             )),
       ),
-    [tabFiltered, type, status, party, q],
+    [tabFiltered, type, status, party, date, q],
   );
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -152,55 +189,44 @@ export function RequestedPayouts() {
         crumbs={["Business & Finance", "Payouts", "Requested Payouts"]}
         title="Requested Payouts"
         description="Review and manage all payout requests from drivers and trucking companies."
-        actions={<Button icon="plus">New Payout Request</Button>}
+        actions={<Button icon="plus" onClick={() => { setTab("Pending"); setStatus("Pending Review"); setType("Company Payout"); setParty("company"); setPage(1); }}>Review Company Payouts</Button>}
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "var(--tk-space-4)",
-        }}
-      >
+      <div className="payout-stats">
         <StatCard
           icon="clock"
           tint="navy"
           label="Total Requests"
-          value={payoutRequestSummary.totalRequests}
-          delta={payoutRequestSummary.totalRequestsDelta}
-          caption="vs last week"
+          value={all.length}
+          caption="all payout requests"
         />
         <StatCard
           icon="hourglass"
           tint="amber"
           label="Pending Review"
-          value={payoutRequestSummary.pendingReview}
-          caption={payoutRequestSummary.pendingReviewCaption}
+          value={counts.Pending}
+          caption={`${companySummary.held ? formatNaira(companySummary.held) : "No funds"} held`}
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Approved"
-          value={payoutRequestSummary.approved}
-          delta={payoutRequestSummary.approvedDelta}
-          caption="vs last week"
+          value={all.filter((p) => ["Approved", "Processing", "Completed"].includes(p.status)).length}
+          caption={`${formatNaira(companySummary.paid)} company payouts paid`}
         />
         <StatCard
           icon="circle-x"
           tint="red"
           label="Rejected"
-          value={payoutRequestSummary.rejected}
-          delta={payoutRequestSummary.rejectedDelta}
-          direction={payoutRequestSummary.rejectedDirection}
-          caption="vs last week"
+          value={counts.Rejected}
+          caption="requires no further payment"
         />
         <StatCard
           icon="database"
           tint="blue"
           label="Total Requested Amount"
-          value={formatNaira(payoutRequestSummary.totalRequestedAmount)}
-          delta={payoutRequestSummary.totalRequestedAmountDelta}
-          caption="vs last week"
+          value={formatNaira(totalRequested)}
+          caption="net of rejected requests"
         />
       </div>
 
@@ -222,7 +248,7 @@ export function RequestedPayouts() {
             style={{ border: "none", flex: 1 }}
             items={TABS}
           />
-          <Button variant="outline" icon="download">
+          <Button variant="outline" icon="download" onClick={() => exportPayouts(filtered)}>
             Export
           </Button>
         </div>
@@ -230,7 +256,13 @@ export function RequestedPayouts() {
         <TableToolbar
           filters={
             <>
-              <FilterSelect label="May 1 – May 30, 2026" icon="calendar" />
+              <FilterButton
+                label="Request Dates"
+                value={date}
+                options={["All Request Dates", ...new Set(all.map((payout) => payout.dateRequested))]}
+                active={date !== "All Request Dates"}
+                onChange={(value) => { setDate(value); setPage(1); }}
+              />
               <FilterButton
                 label="Payout Types"
                 value={type}
@@ -328,14 +360,9 @@ export function RequestedPayouts() {
                     >
                       <Avatar name={r.party} size={28} />
                       <span style={{ display: "grid", gap: 2 }}>
-                        <span
-                          style={{
-                            font: "500 13px/18px var(--tk-font-sans)",
-                            color: "var(--tk-ink-700)",
-                          }}
-                        >
-                          {r.party}
-                        </span>
+                        {r.partyType === "company" ? (
+                          <Link to={`/companies/${encodeURIComponent(r.companyId || r.partyId)}`} onClick={(e) => e.stopPropagation()}>{r.party}</Link>
+                        ) : <span className="tk-label">{r.party}</span>}
                         <span className="tk-meta">{r.partyId}</span>
                       </span>
                     </span>
@@ -352,7 +379,7 @@ export function RequestedPayouts() {
                 },
                 {
                   key: "job",
-                  header: "Related Job / Trip",
+                  header: "Job / Trips",
                   render: (r) => (
                     <span style={{ display: "grid", gap: 2 }}>
                       <Link
@@ -363,14 +390,25 @@ export function RequestedPayouts() {
                         {r.jobId}
                       </Link>
                       <span className="tk-meta">{r.route}</span>
+                      <span className="tk-meta">{r.tripIds?.length || 0} trip{r.tripIds?.length === 1 ? "" : "s"}</span>
                     </span>
                   ),
                 },
                 {
                   key: "amount",
-                  header: "Amount (₦)",
+                  header: "Gross / Net",
                   align: "right",
-                  render: (r) => <b>{r.amount.toLocaleString("en-NG")}</b>,
+                  render: (r) => <span style={{ display: "grid", gap: 2 }}><span className="tk-meta">{formatNaira(r.grossAmount ?? r.amount)}</span><b>{formatNaira(r.netAmount ?? r.amount)}</b></span>,
+                },
+                {
+                  key: "eligibility",
+                  header: "Eligibility",
+                  render: (r) => r.partyType === "company" ? (
+                    <span style={{ display: "grid", gap: 3 }}>
+                      <Badge tone={r.approvalReady ? "success" : r.eligibility === "Needs Review" ? "warning" : "danger"}>{r.eligibility}</Badge>
+                      <span className="tk-meta">{r.reconciliation?.ok ? "Reconciled" : "Needs reconciliation"}</span>
+                    </span>
+                  ) : <span className="tk-meta">Driver payout</span>,
                 },
                 {
                   key: "status",

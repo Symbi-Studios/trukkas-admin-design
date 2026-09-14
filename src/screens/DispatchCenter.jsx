@@ -5,22 +5,56 @@ import {
   ListRow, QuickActionsCard, Modal, ChoiceCard,
 } from '../ds.js';
 import { useCollection } from '../mock/useCollection.js';
-import { assignTruckToJob } from '../mock/api.js';
+import { assignTripsToJob } from '../mock/api.js';
+import { getJobTripCounts, getJobTrips } from '../domain/jobTrips.js';
 
 export function DispatchCenter() {
   const jobs = useCollection('jobs') || [];
   const trucks = useCollection('trucks') || [];
   const [assignJob, setAssignJob] = useState(null);
-  const [picked, setPicked] = useState(null);
+  const [picked, setPicked] = useState([]);
+  const [error, setError] = useState('');
 
-  const openJobs = useMemo(() => jobs.filter((j) => j.status === 'Open'), [jobs]);
+  const openJobs = useMemo(() => jobs.filter((job) => {
+    const counts = getJobTripCounts(job);
+    return ['Open', 'Awaiting Assignment', 'Partially Assigned'].includes(job.status) ||
+      (counts.assigned < counts.required && !!job.truckingCompany && !['Pending Approval', 'Bidding', 'Cancelled', 'Rejected'].includes(job.status));
+  }), [jobs]);
   const availableTrucks = useMemo(() => trucks.filter((t) => t.status === 'Available'), [trucks]);
 
   async function handleAssign() {
-    if (!assignJob || !picked) return;
-    await assignTruckToJob(assignJob.id, picked);
-    setAssignJob(null);
-    setPicked(null);
+    if (!assignJob || !picked.length) return;
+    try {
+      await assignTripsToJob(assignJob.id, picked.map((plate) => {
+        const truck = trucks.find((item) => item.plate === plate);
+        return { truckPlate: plate, driverId: truck.dr };
+      }));
+      setAssignJob(null);
+      setPicked([]);
+      setError('');
+    } catch (assignmentError) {
+      setError(assignmentError.message);
+    }
+  }
+
+  function toggleTruck(truck) {
+    const required = Math.max(1, Number(assignJob?.requiredTrucks) || 1);
+    if (picked.includes(truck.plate)) {
+      setPicked((items) => items.filter((plate) => plate !== truck.plate));
+      setError('');
+      return;
+    }
+    const selectedCompany = trucks.find((item) => item.plate === picked[0])?.company;
+    if ((assignJob?.truckingCompany && truck.company !== assignJob.truckingCompany) || (selectedCompany && truck.company !== selectedCompany)) {
+      setError(`All trucks and drivers must come from ${assignJob?.truckingCompany || selectedCompany}.`);
+      return;
+    }
+    if (picked.length >= required) {
+      setError(`This job requires ${required} truck${required === 1 ? '' : 's'}.`);
+      return;
+    }
+    setPicked((items) => [...items, truck.plate]);
+    setError('');
   }
 
   return (
@@ -51,7 +85,7 @@ export function DispatchCenter() {
                 { key: 'suggested', header: 'Note', render: (r) => r.suggestedTruck || '—' },
                 { key: 'status', header: 'Status', render: (r) => <Badge>{r.status}</Badge> },
                 { key: 'x', header: '', width: 140, render: (r) => (
-                  <Button size="sm" icon="truck" onClick={() => setAssignJob(r)}>Assign Truck</Button>) },
+                  <Button size="sm" icon="truck" onClick={() => { setAssignJob(r); setPicked(getJobTrips(r).map((trip) => trip.truckPlate).filter(Boolean)); setError(''); }}>Assign Trucks</Button>) },
               ]} />
           )}
         </SectionCard>
@@ -71,18 +105,20 @@ export function DispatchCenter() {
         </div>
       </div>
 
-      <Modal open={!!assignJob} onClose={() => { setAssignJob(null); setPicked(null); }}
-        title="Assign Truck" description={assignJob ? `Choose an available truck for ${assignJob.id} — ${assignJob.cargo}.` : ''}
+      <Modal open={!!assignJob} onClose={() => { setAssignJob(null); setPicked([]); setError(''); }}
+        title="Assign trucks and drivers" description={assignJob ? `${assignJob.id} requires ${getJobTripCounts(assignJob).required} truck and driver pair${getJobTripCounts(assignJob).required === 1 ? '' : 's'} from one trucking company.` : ''}
         footer={<>
           <Button variant="outline" onClick={() => setAssignJob(null)}>Cancel</Button>
-          <Button disabled={!picked} onClick={handleAssign}>Confirm Assignment</Button>
+          <Button disabled={!picked.length} onClick={handleAssign}>Assign {picked.length} of {assignJob?.requiredTrucks || 1}</Button>
         </>}>
         <div style={{ display: 'grid', gap: 10 }}>
+          {error && <span style={{ color: 'var(--tk-danger)' }} className="tk-meta">{error}</span>}
+          {!!assignJob && <span className="tk-meta">Selected: {picked.length} / {assignJob.requiredTrucks || 1}. Partial assignment is allowed; dispatch can add the remaining pairs later.</span>}
           {availableTrucks.length === 0 && <span className="tk-meta">No available trucks right now.</span>}
-          {availableTrucks.map((t) => (
-            <ChoiceCard key={t.plate} icon="truck" selected={picked === t.plate}
+          {trucks.filter((truck) => (truck.status === 'Available' || picked.includes(truck.plate)) && (!assignJob?.truckingCompany || truck.company === assignJob.truckingCompany)).map((t) => (
+            <ChoiceCard key={t.plate} icon="truck" selected={picked.includes(t.plate)}
               title={`${t.plate} — ${t.type}`} description={`${t.driver} · ${t.company}`}
-              onSelect={() => setPicked(t.plate)} />
+              onSelect={() => toggleTruck(t)} />
           ))}
         </div>
       </Modal>

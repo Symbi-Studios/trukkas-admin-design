@@ -6,13 +6,16 @@ import {
   IconButton, Checkbox, ProgressBar, DonutChart, AlertRow, Modal, Textarea, Banner, Icon,
 } from '../ds.js';
 import './LiveTracking.css';
+import { useCollection } from '../mock/useCollection.js';
+import { getJobTrips } from '../domain/jobTrips.js';
 
-const STATUSES = ['In Transit', 'At Pickup', 'Delivered', 'Delayed', 'Stopped'];
+const STATUSES = ['Assigned', 'In Transit', 'At Pickup', 'At Delivery', 'Delivered', 'Delayed', 'Stopped'];
 const STATUS_COLOR = {
+  Assigned: 'var(--tk-info)',
   'In Transit': 'var(--tk-blue)', 'At Pickup': 'var(--tk-warning)', Delivered: 'var(--tk-success)',
-  Delayed: 'var(--tk-danger)', Stopped: 'var(--tk-ink-300)', Maintenance: 'var(--tk-purple)',
+  'At Delivery': 'var(--tk-teal)', Delayed: 'var(--tk-danger)', Stopped: 'var(--tk-ink-300)', Maintenance: 'var(--tk-purple)',
 };
-const STATUS_BADGE = { 'In Transit': 'info', 'At Pickup': 'warning', Delivered: 'success', Delayed: 'danger', Stopped: 'neutral', Maintenance: 'purple' };
+const STATUS_BADGE = { Assigned: 'info', 'In Transit': 'info', 'At Pickup': 'warning', 'At Delivery': 'teal', Delivered: 'success', Delayed: 'danger', Stopped: 'neutral', Maintenance: 'purple' };
 const LEGEND = [
   { label: 'In Transit', color: STATUS_COLOR['In Transit'] }, { label: 'At Pickup', color: STATUS_COLOR['At Pickup'] },
   { label: 'Delivered', color: STATUS_COLOR.Delivered }, { label: 'Delayed', color: STATUS_COLOR.Delayed },
@@ -102,6 +105,7 @@ const ROUTES = [
 ];
 
 export function LiveTracking() {
+  const jobs = useCollection('jobs') || [];
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [q, setQ] = useState('');
   const [openFilter, setOpenFilter] = useState(null);
@@ -120,12 +124,31 @@ export function LiveTracking() {
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2600); return () => clearTimeout(t); }, [toast]);
   function notify(tone, title) { setToast({ tone, title }); }
 
-  const filtered = useMemo(() => TRIPS.filter((t) =>
+  const trackedTrips = useMemo(() => {
+    const dynamic = jobs.flatMap((job, jobIndex) => getJobTrips(job)
+      .filter((trip) => !['Cancelled', 'Completed'].includes(trip.status))
+      .map((trip, tripIndex) => ({
+        id: trip.id, jobId: job.id, from: trip.origin || job.origin || '—', to: trip.destination || job.destination || '—',
+        status: trip.status || 'Assigned', speed: trip.status === 'In Transit' ? 62 + ((jobIndex + tripIndex) % 16) : 0,
+        driver: trip.driverName || 'Unassigned', driverPhone: trip.driverPhone || '—', truck: trip.truckPlate || 'Unassigned', truckPhone: '—',
+        company: trip.truckingCompany || job.truckingCompany || job.truckCompany || '—', companyPhone: 'Operations contact',
+        container: job.cargoDetails?.match(/\d+ft/i)?.[0]?.toUpperCase() || 'General', cargo: job.cargo || job.cargoType || '—',
+        location: trip.currentLocation || trip.origin || job.origin || '—', distanceCovered: `${Math.round((trip.distanceKm || job.distanceKm || 0) * ((trip.progress || 0) / 100))} km`,
+        totalDistance: `${trip.distanceKm || job.distanceKm || 0} km`, eta: trip.eta || job.deliveryDate || '—', nextStop: trip.destination || job.destination || '—',
+        lastUpdate: job.updatedAt || 'Recently', engine: ['In Transit', 'Delayed'].includes(trip.status) ? 'ON' : 'OFF', progress: trip.progress || 0,
+        mapPos: { left: 20 + ((jobIndex * 13 + tripIndex * 9) % 65), top: 12 + ((jobIndex * 17 + tripIndex * 11) % 70) },
+        stops: [{ time: '—', label: `Pickup at ${trip.origin || job.origin}`, state: trip.progress > 0 ? 'done' : 'current' }, { time: '—', label: `Deliver to ${trip.destination || job.destination}`, state: trip.progress >= 100 ? 'done' : trip.progress > 0 ? 'current' : 'pending' }],
+      })));
+    const ids = new Set(dynamic.map((trip) => trip.id));
+    return [...dynamic, ...TRIPS.filter((trip) => !ids.has(trip.id))];
+  }, [jobs]);
+
+  const filtered = useMemo(() => trackedTrips.filter((t) =>
     (statusFilter === 'All Status' || t.status === statusFilter) &&
     (!q || [t.id, t.driver, t.from, t.to].some((v) => v.toLowerCase().includes(q.toLowerCase())))
-  ), [statusFilter, q]);
+  ), [statusFilter, q, trackedTrips]);
   const visible = filtered.slice(0, visibleCount);
-  const selected = TRIPS.find((t) => t.id === selectedId) || null;
+  const selected = trackedTrips.find((t) => t.id === selectedId) || null;
 
   function runQuickAction(label) {
     if (label === 'Zoom to Fit') { setZoom(100); notify('success', 'Map zoomed to fit all active trips.'); }
@@ -151,7 +174,7 @@ export function LiveTracking() {
             font: `${c.big ? '700 26px' : c.size === 12 ? '600 12px' : '500 10px'}/1 var(--tk-font-sans)`,
             color: c.big ? 'rgba(15,23,42,.10)' : 'var(--tk-ink-700)', whiteSpace: 'nowrap' }}>{c.label}</span>
         ))}
-        {TRIPS.filter((t) => t.mapPos).map((t) => (
+        {trackedTrips.filter((t) => t.mapPos).map((t) => (
           <span key={t.id} onClick={() => setSelectedId(t.id)}
             style={{ position: 'absolute', left: t.mapPos.left + '%', top: t.mapPos.top + '%', transform: 'translate(-50%,-50%)', cursor: 'pointer', zIndex: 2 }}>
             <span style={{ display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: 999, background: STATUS_COLOR[t.status],

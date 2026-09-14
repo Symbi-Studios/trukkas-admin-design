@@ -14,6 +14,10 @@ import {
   Textarea,
 } from "../ds.js";
 import "./Operations.css";
+import { useCollection } from "../mock/useCollection.js";
+import { getJobTrips } from "../domain/jobTrips.js";
+import { normalizePayouts } from "../domain/payouts.js";
+import { updateJobTripStatus } from "../mock/api.js";
 
 const initialTrips = [
   [
@@ -110,18 +114,22 @@ const initialTrips = [
 }));
 
 const tones = {
+  Assigned: "info",
   "In Transit": "success",
   "At Pickup": "purple",
   "At Delivery": "orange",
   "Returning Container": "teal",
   Delayed: "danger",
+  Delivered: "success",
 };
 const TRIP_STATUSES = [
+  "Assigned",
   "In Transit",
   "At Pickup",
   "At Delivery",
   "Returning Container",
   "Delayed",
+  "Delivered",
 ];
 const PAGE_SIZE = 10;
 
@@ -151,7 +159,29 @@ function Metric({
 
 export function TripsSegments() {
   const navigate = useNavigate();
-  const [trips, setTrips] = useState(initialTrips);
+  const jobs = useCollection("jobs") || [];
+  const payoutRows = useCollection("payoutRequests") || [];
+  const payouts = useMemo(() => normalizePayouts(payoutRows, jobs), [payoutRows, jobs]);
+  const [tripOverrides, setTripOverrides] = useState({});
+  const trips = useMemo(() => {
+    const linked = jobs.flatMap((job) => getJobTrips(job).map((trip) => ({
+      id: trip.id,
+      job: job.id,
+      from: trip.origin || job.origin || "—",
+      to: trip.destination || job.destination || "—",
+      truck: trip.truckPlate || "Unassigned",
+      driver: trip.driverName || "Unassigned",
+      company: trip.truckingCompany || job.truckingCompany || job.truckCompany || "—",
+      status: trip.status || "Assigned",
+      eta: trip.eta || trip.deliveryDate || "—",
+      distance: `${trip.distanceKm || job.distanceKm || 0} km`,
+      progress: trip.progress || 0,
+      segment: trip.segment || 1,
+    })));
+    const linkedIds = new Set(linked.map((trip) => trip.id));
+    return [...linked, ...initialTrips.filter((trip) => !linkedIds.has(trip.id))]
+      .map((trip) => ({ ...trip, ...tripOverrides[trip.id] }));
+  }, [jobs, tripOverrides]);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("All Trips");
   const [originFilter, setOriginFilter] = useState("All Locations");
@@ -206,9 +236,17 @@ export function TripsSegments() {
         (t) => t.job === selectedTrip.job && t.id !== selectedTrip.id,
       )
     : [];
+  const selectedPayout = selectedTrip
+    ? payouts.find((payout) => payout.tripIds?.includes(selectedTrip.id))
+    : null;
 
-  function updateTripStatus(id, status) {
-    setTrips((ts) => ts.map((t) => (t.id === id ? { ...t, status } : t)));
+  async function updateTripStatus(id, status) {
+    const trip = trips.find((item) => item.id === id);
+    if (trip && jobs.some((job) => job.id === trip.job && getJobTrips(job).some((item) => item.id === id))) {
+      await updateJobTripStatus(trip.job, id, status);
+    } else {
+      setTripOverrides((current) => ({ ...current, [id]: { ...current[id], status } }));
+    }
     setMenuFor(null);
     setToast({
       tone: status === "Delayed" ? "warning" : "success",
@@ -758,7 +796,12 @@ export function TripsSegments() {
                   {siblingTrips.map((t) => t.id).join(", ")}.
                 </div>
               )}
+              <div className="trip-fact">
+                <span>Company payout</span>
+                <b>{selectedPayout ? `${selectedPayout.id} · ${selectedPayout.status}` : "Not yet included"}</b>
+              </div>
               <div style={{ display: "flex", gap: 8 }}>
+                {selectedPayout && <Button variant="outline" style={{ flex: 1 }} onClick={() => navigate(`/payouts/${selectedPayout.id}`)}>View Payout</Button>}
                 <Button
                   variant="outline"
                   style={{ flex: 1 }}

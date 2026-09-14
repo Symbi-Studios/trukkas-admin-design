@@ -47,6 +47,8 @@ import {
   securityAlertEvents, alertDeliverySettings, securityAlertsQuietHours,
 } from './fixtures/settings.js';
 import { faqGroups } from './fixtures/faq.js';
+import { deriveJobStatus, getJobTrips, normalizeJobTrips, validateTripAssignments, withJobTrips } from '../domain/jobTrips.js';
+import { normalizePayouts, validatePayoutApproval } from '../domain/payouts.js';
 
 seed('trucks', trucks);
 seed('feeRules', feeRules);
@@ -55,7 +57,8 @@ seed('walletSummary', [walletSummary]);
 seed('transactions', transactions);
 seed('bankAccounts', bankAccounts);
 seed('announcements', announcements);
-seed('jobs', jobs);
+const normalizedJobs = jobs.map(normalizeJobTrips);
+seed('jobs', normalizedJobs);
 seed('triangulation', triangulationMatches);
 seed('triangulationOpportunities', triangulationOpportunities);
 seed('drivers', drivers);
@@ -76,7 +79,7 @@ seed('disputes', disputes);
 seed('escrowTransactions', escrowTransactions);
 seed('settlements', settlements);
 seed('transactionRows', transactionRows);
-seed('payoutRequests', payoutRequests);
+seed('payoutRequests', normalizePayouts(payoutRequests, normalizedJobs));
 seed('verificationPerformanceRows', verificationPerformanceRows);
 seed('users', users);
 seed('roles', roles);
@@ -165,24 +168,94 @@ let tripSeq = 15;
 
 export async function assignTruckToJob(jobId, plate) {
   await delay();
+  const job = getRow('jobs', 'id', jobId);
   const truck = getRow('trucks', 'plate', plate);
+  if (!job || !truck) throw new Error('Job or truck not found.');
+  if (truck.status !== 'Available') throw new Error(`${plate} is not currently available.`);
+  const existing = getJobTrips(job);
+  if (existing.some((trip) => trip.truckPlate === plate)) throw new Error('This truck is already assigned to the job.');
+  if (existing.length >= Math.max(1, Number(job.requiredTrucks) || 1)) throw new Error('All requested trucks are already assigned.');
+  if (job.truckingCompany && job.truckingCompany !== truck.company) throw new Error(`All trucks must belong to ${job.truckingCompany}.`);
   const tripId = `TK-2026-${String(tripSeq++).padStart(6, '0')}`;
   patchRow('trucks', 'plate', plate, { status: 'On Trip', trip: tripId });
-  return patchRow('jobs', 'id', jobId, {
-    status: 'Assigned',
-    truckPlate: truck.plate, driver: truck.driver, truckCompany: truck.company,
-    trip: tripId,
+  const trips = [...existing, {
+    id: tripId, jobId, truckingCompany: truck.company, truckPlate: truck.plate,
+    driverId: truck.dr, driverName: truck.driver, status: 'Assigned', progress: 0,
+    origin: job.origin, destination: job.destination, route: job.route,
+    pickupDate: job.pickupDate, deliveryDate: job.deliveryDate, eta: job.deliveryDate,
+    distanceKm: job.distanceKm || 0, currentLocation: job.origin || truck.loc,
+  }];
+  return patchRow('jobs', 'id', jobId, withJobTrips({ ...job, truckingCompany: job.truckingCompany || truck.company }, trips));
+}
+
+export async function assignTripsToJob(jobId, assignments) {
+  await delay();
+  const job = getRow('jobs', 'id', jobId);
+  if (!job) throw new Error('Job not found.');
+  const truckRows = getSnapshot('trucks') || [];
+  const driverRows = getSnapshot('drivers') || [];
+  const validation = validateTripAssignments({ job, assignments, trucks: truckRows, drivers: driverRows });
+  if (!validation.valid) throw new Error(validation.errors.join(' '));
+  const priorTrips = getJobTrips(job);
+  const priorByPlate = new Map(priorTrips.map((trip) => [trip.truckPlate, trip]));
+  const trips = assignments.map((assignment) => {
+    const truck = truckRows.find((item) => item.plate === assignment.truckPlate);
+    const driver = driverRows.find((item) => item.id === assignment.driverId);
+    const previous = priorByPlate.get(assignment.truckPlate);
+    const tripId = previous?.id || `TK-2026-${String(tripSeq++).padStart(6, '0')}`;
+    patchRow('trucks', 'plate', truck.plate, { status: 'On Trip', trip: tripId, driver: driver.name, dr: driver.id });
+    return {
+      ...previous,
+      id: tripId, jobId, truckingCompany: validation.company, truckPlate: truck.plate,
+      driverId: driver.id, driverName: driver.name, driverPhone: driver.phone,
+      status: previous?.status || 'Assigned', progress: previous?.progress || 0,
+      origin: job.origin, destination: job.destination, route: job.route,
+      pickupDate: job.pickupDate, deliveryDate: job.deliveryDate, eta: job.deliveryDate,
+      distanceKm: job.distanceKm || 0, currentLocation: previous?.currentLocation || job.origin || truck.loc,
+    };
   });
+  priorTrips.filter((trip) => !assignments.some((item) => item.truckPlate === trip.truckPlate)).forEach((trip) => {
+    if (trip.truckPlate) patchRow('trucks', 'plate', trip.truckPlate, { status: 'Available', trip: '—' });
+  });
+  const updated = patchRow('jobs', 'id', jobId, withJobTrips({ ...job, truckingCompany: validation.company }, trips));
+  logJobActivity(jobId, { user: validation.company, role: 'Trucking Company', action: 'Trips Assigned', details: `${trips.length} of ${job.requiredTrucks || 1} truck and driver pair${trips.length === 1 ? '' : 's'} assigned.` });
+  return updated;
+}
+
+export async function updateJobTripStatus(jobId, tripId, status) {
+  await delay(80);
+  const job = getRow('jobs', 'id', jobId);
+  if (!job) return null;
+  const trips = getJobTrips(job).map((trip) => trip.id === tripId ? {
+    ...trip,
+    status,
+    progress: ['Delivered', 'Completed'].includes(status) ? 100 : status === 'In Transit' ? Math.max(trip.progress || 0, 50) : trip.progress,
+    currentLocation: ['Delivered', 'Completed'].includes(status) ? job.destination : trip.currentLocation,
+  } : trip);
+  const changed = trips.find((trip) => trip.id === tripId);
+  if (changed?.truckPlate) patchRow('trucks', 'plate', changed.truckPlate, {
+    status: ['Delivered', 'Completed', 'Cancelled'].includes(status) ? 'Available' : status === 'In Transit' ? 'On Trip' : getRow('trucks', 'plate', changed.truckPlate)?.status,
+    trip: ['Delivered', 'Completed', 'Cancelled'].includes(status) ? '—' : tripId,
+  });
+  const updated = patchRow('jobs', 'id', jobId, withJobTrips(job, trips));
+  logJobActivity(jobId, { user: changed?.driverName || 'Operations', role: 'Trip Operations', action: 'Trip Status Updated', details: `${tripId} marked as ${status}.` });
+  return updated;
 }
 
 export async function markJobDelivered(jobId) {
   await delay();
-  return patchRow('jobs', 'id', jobId, { status: 'Delivered', etaCountdown: null });
+  const job = getRow('jobs', 'id', jobId);
+  const trips = getJobTrips(job).map((trip) => ({ ...trip, status: 'Delivered', progress: 100, currentLocation: job.destination }));
+  trips.forEach((trip) => trip.truckPlate && patchRow('trucks', 'plate', trip.truckPlate, { status: 'Available', trip: '—' }));
+  return patchRow('jobs', 'id', jobId, { ...withJobTrips(job, trips), etaCountdown: null });
 }
 
 export async function cancelJob(jobId) {
   await delay();
-  return patchRow('jobs', 'id', jobId, { status: 'Cancelled', etaCountdown: null });
+  const job = getRow('jobs', 'id', jobId);
+  const trips = getJobTrips(job).map((trip) => ({ ...trip, status: 'Cancelled' }));
+  trips.forEach((trip) => trip.truckPlate && patchRow('trucks', 'plate', trip.truckPlate, { status: 'Available', trip: '—' }));
+  return patchRow('jobs', 'id', jobId, { ...withJobTrips({ ...job, status: 'Cancelled' }, trips), status: 'Cancelled', etaCountdown: null });
 }
 
 export async function createJob(payload) {
@@ -200,9 +273,12 @@ export async function createJob(payload) {
     updatedAt: 'Just now',
     requiredTrucks: 1,
     truckingCompany: null,
-    assignedDriverName: null,
-    assignedTruckPlate: null,
     ...payload,
+    trips: [],
+    assignedTruckPlate: null,
+    assignedDriverId: null,
+    assignedDriverName: null,
+    assignedDriverPhone: null,
   });
 }
 
@@ -235,7 +311,7 @@ export async function acceptJobBid(jobId, company) {
   const job = getRow('jobs', 'id', jobId);
   const bid = job?.bids?.find((b) => b.company === company);
   const updated = patchRow('jobs', 'id', jobId, {
-    status: 'Assigned',
+    status: getJobTrips(job).length ? deriveJobStatus(job) : 'Awaiting Assignment',
     truckingCompany: company,
     biddingCloses: null,
   });
@@ -245,8 +321,10 @@ export async function acceptJobBid(jobId, company) {
 
 export async function markJobInTransit(jobId) {
   await delay();
-  const job = patchRow('jobs', 'id', jobId, { status: 'In Transit' });
-  logJobActivity(jobId, { user: job?.assignedDriverName || 'Driver', role: 'Driver (Trucking Co.)', action: 'Status Update', details: 'Trip marked as In Transit.' });
+  const current = getRow('jobs', 'id', jobId);
+  const trips = getJobTrips(current).map((trip) => ['Delivered', 'Completed', 'Cancelled'].includes(trip.status) ? trip : { ...trip, status: 'In Transit', progress: Math.max(trip.progress || 0, 50) });
+  const job = patchRow('jobs', 'id', jobId, withJobTrips(current, trips));
+  logJobActivity(jobId, { user: trips[0]?.driverName || 'Driver', role: 'Driver (Trucking Co.)', action: 'Status Update', details: `${trips.length} trip${trips.length === 1 ? '' : 's'} marked as In Transit.` });
   return job;
 }
 
@@ -672,6 +750,12 @@ export async function approvePayoutRequest(id) {
   await delay();
   const p = getRow('payoutRequests', 'id', id);
   if (!p) return null;
+  const validation = validatePayoutApproval(
+    p,
+    getSnapshot('payoutRequests'),
+    getSnapshot('jobs'),
+  );
+  if (!validation.valid) throw new Error(validation.errors.join(' '));
   return patchRow('payoutRequests', 'id', id, {
     status: 'Completed',
     relatedTransaction: `TRX-${Math.floor(Math.random() * 90000 + 10000)}`,

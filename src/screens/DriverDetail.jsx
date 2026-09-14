@@ -8,6 +8,7 @@ import {
   Card, Textarea, Banner,
 } from '../ds.js';
 import { useCollection } from '../mock/useCollection.js';
+import { getJobTrips } from '../domain/jobTrips.js';
 import { setDriverStatus } from '../mock/api.js';
 import './DriverDetail.css';
 
@@ -222,6 +223,7 @@ export function DriverDetail() {
   const drivers = useCollection('drivers') || [];
   const trucks = useCollection('trucks') || [];
   const maintenance = useCollection('maintenance') || [];
+  const jobs = useCollection('jobs') || [];
   const d = drivers.find((x) => x.id === decodeURIComponent(driverId || ''));
 
   const [tab, setTab] = useState('Overview');
@@ -238,7 +240,23 @@ export function DriverDetail() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const trips = useMemo(() => (d ? generateTrips(d) : []), [d]);
+  const trips = useMemo(() => {
+    if (!d) return [];
+    const linked = jobs.flatMap((job) => getJobTrips(job)
+      .filter((trip) => trip.driverId === d.id || trip.driverName === d.name)
+      .map((trip, index) => ({
+        n: `${job.id}-${trip.id}-${index}`,
+        id: trip.id,
+        route: trip.route || job.route,
+        cargo: job.cargo || job.cargoDetails || '—',
+        status: trip.status,
+        departed: trip.pickupDate || job.pickupDate || '—',
+        delivered: ['Delivered', 'Completed'].includes(trip.status) ? trip.deliveryDate || job.deliveryDate || 'Completed' : '—',
+        distance: `${trip.distanceKm || job.distanceKm || 0} km`,
+        earnings: trip.driverPayment || 0,
+      })));
+    return linked.length ? linked : generateTrips(d);
+  }, [d, jobs]);
   const documents = useMemo(() => (d ? documentsFor(d) : []), [d]);
   const vehicles = useMemo(() => (d ? vehiclesFor(d, trucks) : []), [d, trucks]);
   const reviews = useMemo(() => (d ? reviewsFor(d) : []), [d]);

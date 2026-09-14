@@ -24,15 +24,20 @@ export function makePayout(o) {
     requestedBy, requestedByRole,
     relatedSettlement, escrowId,
     requester, job, breakdown, payment, notes, documents,
+    companyId, companyName, jobIds, tripIds, allocations,
+    relatedTransaction, approvedOn, approvedTime, processedOn, processedTime,
   } = o;
 
   return {
     id, dateRequested, dateRequestedTime, party, partyId, partyType,
     type, jobId, route, amount, status,
+    companyId: companyId || (partyType === 'company' ? partyId : null),
+    companyName: companyName || (partyType === 'company' ? party : null),
+    jobIds: jobIds || [jobId], tripIds: tripIds || [], allocations: allocations || [],
     requestedBy: requestedBy || party, requestedByRole: requestedByRole || (partyType === 'driver' ? 'Driver' : 'Company'),
 
     relatedSettlement: relatedSettlement || null,
-    relatedTransaction: null,
+    relatedTransaction: relatedTransaction || null,
     escrowId: escrowId || null,
 
     requester: {
@@ -50,14 +55,58 @@ export function makePayout(o) {
     documents: documents || [DOC(`${type} Reference`, `${id}.pdf`)],
 
     adminRemark: null,
-    approvedOn: null, approvedTime: null,
-    processedOn: null, processedTime: null,
+    approvedOn: approvedOn || null, approvedTime: approvedTime || null,
+    processedOn: processedOn || null, processedTime: processedTime || null,
     issueNotes: [],
   };
 }
 const mk = makePayout;
 
 export const payoutRequests = [
+  mk({
+    id: 'PAY-77423', dateRequested: 'May 30, 2026', dateRequestedTime: '11:20 AM',
+    party: 'DCL Shipping Services', partyId: 'TC-DCL-001', partyType: 'company', companyId: 'TC-DCL-001',
+    type: 'Company Payout', jobId: 'JOB-29821', jobIds: ['JOB-29821'], route: 'Apapa Port → Ikeja Warehouse', amount: 900000,
+    status: 'Pending Review', requestedBy: 'Daniel Etim', requestedByRole: 'Accountant',
+    relatedSettlement: 'SETT-98233', escrowId: 'ESC-67213',
+    tripIds: ['TRIP-98231', 'TRIP-98232'],
+    allocations: [
+      { jobId: 'JOB-29821', tripId: 'TRIP-98231', amount: 500000 },
+      { jobId: 'JOB-29821', tripId: 'TRIP-98232', amount: 500000 },
+    ],
+    requester: { phone: '+234 809 213 7765', email: 'ops@dclshipping.ng', status: 'Active', company: 'DCL Shipping Services' },
+    job: { tripId: 'TRIP-98231', route: 'Apapa Port → Ikeja Warehouse', truck: '2 trucks', customer: 'Goodwill Forwarding Ltd.', cargoType: 'General Goods', tripDates: 'May 26 – May 28, 2026', status: 'In Transit' },
+    breakdown: [
+      { label: 'Gross Settlement Amount', value: 1000000 },
+      { label: 'Platform Fee (8%)', value: -80000 },
+      { label: 'Insurance Adjustment', value: -20000 },
+    ],
+    payment: { method: 'Bank Transfer', bank: 'UBA', accountNumber: '0166778899', accountName: 'DCL Shipping Services' },
+    notes: 'Held until both associated trips have been delivered and verified.',
+  }),
+  mk({
+    id: 'PAY-77422', dateRequested: 'May 30, 2026', dateRequestedTime: '10:35 AM',
+    party: 'SpeedLine Logistics', partyId: 'TC-000156', partyType: 'company', companyId: 'TC-000156',
+    type: 'Company Payout', jobId: 'JOB-29817', jobIds: ['JOB-29817'], route: 'Apapa Port → Ibadan Dry Port', amount: 3370950,
+    status: 'Completed', requestedBy: 'Ngozi Okafor', requestedByRole: 'Finance Officer',
+    relatedSettlement: 'SETT-98232', escrowId: 'ESC-67212',
+    relatedTransaction: 'TRX-82992', approvedOn: 'May 30, 2026', processedOn: 'May 30, 2026',
+    tripIds: ['TRIP-98171', 'TRIP-98172', 'TRIP-98173'],
+    allocations: [
+      { jobId: 'JOB-29817', tripId: 'TRIP-98171', amount: 1215000 },
+      { jobId: 'JOB-29817', tripId: 'TRIP-98172', amount: 1215000 },
+      { jobId: 'JOB-29817', tripId: 'TRIP-98173', amount: 1215000 },
+    ],
+    requester: { phone: '+234 803 556 7712', email: 'finance@speedline.ng', status: 'Active', company: 'SpeedLine Logistics' },
+    job: { tripId: 'TRIP-98171', route: 'Apapa Port → Ibadan Dry Port', truck: '3 trucks', customer: 'Nigerian Bulk Consortia', cargoType: 'Construction Materials', tripDates: 'May 21 – May 22, 2026', status: 'Completed' },
+    breakdown: [
+      { label: 'Gross Settlement Amount', value: 3645000 },
+      { label: 'Platform Fee (7.5%)', value: -273375 },
+      { label: 'Rounding Adjustment', value: -675 },
+    ],
+    payment: { method: 'Bank Transfer', bank: 'Access Bank', accountNumber: '0188992200', accountName: 'SpeedLine Logistics' },
+    notes: 'One company payout reconciled across all three delivered truck trips.',
+  }),
   mk({
     id: 'PAY-77421', dateRequested: 'May 30, 2026', dateRequestedTime: '09:46 AM',
     party: 'John Adewale', partyId: 'DRV-0045', partyType: 'driver',

@@ -7,6 +7,7 @@ import {
   FilterSelect, Icon, LegendList, LineChart, ProgressBar, SectionCard, StatCard,
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
+import { getJobTrips } from "../domain/jobTrips.js";
 import { formatNaira } from "../mock/format.js";
 import { statusTone } from "./JobDetail.jsx";
 import styles from "./Dashboard.module.css";
@@ -94,10 +95,13 @@ export function Dashboard() {
     const companyPayouts = Math.round(totalRevenue * 0.184);
     const demurrage = Math.round(totalRevenue * 0.056);
     const otherCosts = Math.round(totalRevenue * 0.028);
-    const activeTrips = normalized.filter((job) => ["In Transit", "Assigned", "At Pickup"].includes(job.status)).length;
-    const completed = normalized.filter((job) => job.status === "Delivered").length;
-    const scheduled = normalized.filter((job) => ["Open", "Bidding", "Pending Approval"].includes(job.status)).length;
-    const cancelled = normalized.filter((job) => ["Cancelled", "Rejected"].includes(job.status)).length;
+    const actualTrips = normalized.flatMap((job) => getJobTrips(job));
+    const activeTrips = actualTrips.filter((trip) => ["In Transit", "At Pickup", "At Delivery", "Returning Container"].includes(trip.status)).length;
+    const completed = actualTrips.filter((trip) => ["Delivered", "Completed"].includes(trip.status)).length;
+    const assignedPending = actualTrips.filter((trip) => ["Assigned", "Scheduled"].includes(trip.status)).length;
+    const unassignedRequested = normalized.reduce((sum, job) => sum + Math.max(0, (job.requiredTrucks || 1) - getJobTrips(job).length), 0);
+    const scheduled = assignedPending + unassignedRequested;
+    const cancelled = actualTrips.filter((trip) => trip.status === "Cancelled").length + normalized.filter((job) => job.status === "Rejected" && !getJobTrips(job).length).length;
     const forwarders = new Set(normalized.map((job) => job.company).filter((name) => name !== "—"));
     const exporters = new Set(normalized.filter((job) => job.requestType === "Export").map((job) => job.company));
     const routes = Object.values(normalized.reduce((acc, job) => {

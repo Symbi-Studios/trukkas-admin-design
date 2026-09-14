@@ -27,6 +27,7 @@ import {
   markJobDelivered,
 } from "../mock/api.js";
 import { statusTone } from "./JobDetail.jsx";
+import { getJobTripCounts, getJobTrips } from "../domain/jobTrips.js";
 import styles from "./JobsTrips.module.css";
 
 const REQUEST_TYPES = [
@@ -45,6 +46,8 @@ const shortType = (type) =>
   type === "Transfer / Value Chain" ? "Transfer" : type;
 
 function normalize(job) {
+  const tripCounts = getJobTripCounts(job);
+  const trips = getJobTrips(job);
   return {
     ...job,
     displayValue: job.jobValue ?? job.amount ?? 0,
@@ -54,7 +57,11 @@ function normalize(job) {
     displayForwarder: job.forwarder || "—",
     displayCreated: job.createdAt || job.published || "—",
     displayCargo: job.cargoDetails || job.cargo || job.cargoType || "—",
-    displayAssignee: job.assignedDriverName || job.driver || null,
+    tripCounts,
+    trips,
+    displayAssignee: tripCounts.assigned
+      ? `${tripCounts.assigned} trip${tripCounts.assigned === 1 ? "" : "s"} · ${job.truckingCompany || job.truckCompany || "Assigned"}`
+      : null,
   };
 }
 
@@ -167,6 +174,10 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
           <div>
             <dt>Created</dt>
             <dd>{job.displayCreated}</dd>
+          </div>
+          <div>
+            <dt>Trip Fulfilment</dt>
+            <dd><strong>{job.tripCounts.assigned} of {job.tripCounts.required} assigned</strong></dd>
           </div>
         </dl>
         <div className={styles.requester}>
@@ -294,6 +305,7 @@ export function JobsTrips() {
     destination: "",
     cargo: "",
     jobValue: "",
+    requiredTrucks: 1,
   });
 
   useEffect(() => {
@@ -326,8 +338,8 @@ export function JobsTrips() {
       total: jobs.length,
       pending: jobs.filter((job) => job.status === "Pending Approval").length,
       bidding: jobs.filter((job) => job.status === "Bidding").length,
-      assigned: jobs.filter((job) => job.status === "Assigned").length,
-      inTransit: jobs.filter((job) => job.status === "In Transit").length,
+      assigned: jobs.filter((job) => ["Awaiting Assignment", "Partially Assigned", "Assigned"].includes(job.status)).length,
+      inTransit: jobs.filter((job) => ["In Transit", "Partially Delivered", "Attention Required"].includes(job.status)).length,
       delivered: jobs.filter((job) => job.status === "Delivered").length,
       cancelled: jobs.filter((job) =>
         ["Cancelled", "Rejected"].includes(job.status),
@@ -362,8 +374,8 @@ export function JobsTrips() {
     "All Jobs": () => true,
     "Pending Approval": (job) => job.status === "Pending Approval",
     Bidding: (job) => job.status === "Bidding",
-    Assigned: (job) => job.status === "Assigned",
-    "In Transit": (job) => job.status === "In Transit",
+    Assigned: (job) => ["Awaiting Assignment", "Partially Assigned", "Assigned"].includes(job.status),
+    "In Transit": (job) => ["In Transit", "Partially Delivered", "Attention Required"].includes(job.status),
     Delivered: (job) => job.status === "Delivered",
     Cancelled: (job) => ["Cancelled", "Rejected"].includes(job.status),
     Flagged: (job) => job.status === "Rejected",
@@ -497,6 +509,7 @@ export function JobsTrips() {
       destination: "",
       cargo: "",
       jobValue: "",
+      requiredTrucks: 1,
     });
     setToast({
       tone: "success",
@@ -577,8 +590,8 @@ export function JobsTrips() {
       render: (job) =>
         job.displayAssignee ? (
           <span className={styles.assignee}>
-            <Avatar name={job.displayAssignee} size={26} />
-            <span>{job.displayAssignee}</span>
+            <Avatar name={job.truckingCompany || job.truckCompany || job.displayAssignee} size={26} />
+            <span className={styles.twoLine}><strong>{job.tripCounts.assigned} of {job.tripCounts.required} trips</strong><small>{job.truckingCompany || job.truckCompany}</small></span>
           </span>
         ) : (
           "—"
@@ -795,8 +808,12 @@ export function JobsTrips() {
               "All Statuses",
               "Pending Approval",
               "Bidding",
+              "Awaiting Assignment",
+              "Partially Assigned",
               "Assigned",
               "In Transit",
+              "Partially Delivered",
+              "Attention Required",
               "Delivered",
               "Cancelled",
               "Rejected",
@@ -1018,6 +1035,16 @@ export function JobsTrips() {
               setDraft({ ...draft, jobValue: event.target.value })
             }
             placeholder="0"
+          />
+          <TextField
+            required
+            min="1"
+            max="50"
+            type="number"
+            label="Trucks Required"
+            value={draft.requiredTrucks}
+            onChange={(event) => setDraft({ ...draft, requiredTrucks: Math.max(1, Number(event.target.value) || 1) })}
+            hint="Each truck will create its own trip and require a separate driver."
           />
         </form>
       </Modal>

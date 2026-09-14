@@ -25,6 +25,7 @@ import {
   SplitButton,
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
+import { normalizePayouts } from "../domain/payouts.js";
 import {
   approveJob,
   rejectJob,
@@ -33,7 +34,9 @@ import {
   markJobDelivered,
   cancelJob,
   reviewJobDocument,
+  updateJobTripStatus,
 } from "../mock/api.js";
+import { getJobTripCounts, getJobTrips } from "../domain/jobTrips.js";
 import "./JobDetail.css";
 
 const STAGES = [
@@ -62,6 +65,11 @@ const STATUS_TONE = {
   Rejected: "danger",
   Open: "info",
   "At Pickup": "warning",
+  "Awaiting Assignment": "warning",
+  "Partially Assigned": "warning",
+  "Partially Delivered": "info",
+  "Attention Required": "danger",
+  Delayed: "danger",
 };
 export const statusTone = (s) => STATUS_TONE[s] || "neutral";
 const naira = (n) => `₦${Math.round(n || 0).toLocaleString("en-NG")}`;
@@ -270,7 +278,7 @@ function fallbackActivity(job) {
       user: job.truckingCompany,
       role: "Trucking Company",
       action: "Assignment Confirmed",
-      details: `Assigned driver: ${job.assignedDriverName || "Pending"}.`,
+      details: `${getJobTripCounts(job).assigned} of ${getJobTripCounts(job).required} truck and driver pairs assigned.`,
     });
   return items;
 }
@@ -513,6 +521,8 @@ export function JobDetail() {
   const navigate = useNavigate();
   const { jobId } = useParams();
   const jobs = useCollection("jobs") || [];
+  const payoutRows = useCollection("payoutRequests") || [];
+  const payoutRequests = useMemo(() => normalizePayouts(payoutRows, jobs), [payoutRows, jobs]);
   const job = jobs.find((j) => j.id === decodeURIComponent(jobId || ""));
 
   const [tab, setTab] = useState("Overview");
@@ -531,6 +541,8 @@ export function JobDetail() {
   const [activityFilter, setActivityFilter] = useState("All Activities");
   const [activityOpenFilter, setActivityOpenFilter] = useState(false);
   const [currency, setCurrency] = useState("NGN");
+  const [tripMenu, setTripMenu] = useState(null);
+  const [selectedTripId, setSelectedTripId] = useState(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -556,6 +568,17 @@ export function JobDetail() {
     [job],
   );
   const photos = useMemo(() => (job ? job.photos || [] : []), [job]);
+  const jobTrips = useMemo(() => getJobTrips(job), [job]);
+  const tripCounts = useMemo(() => getJobTripCounts(job), [job]);
+  const selectedTrip = jobTrips.find((trip) => trip.id === selectedTripId) || jobTrips[0] || null;
+
+  useEffect(() => {
+    const tripId = new URLSearchParams(window.location.search).get("tripId");
+    if (tripId && jobTrips.some((trip) => trip.id === tripId)) {
+      setSelectedTripId(tripId);
+      setTab("Tracking & Updates");
+    }
+  }, [jobTrips]);
 
   useEffect(() => {
     setReviewDoc((d) =>
@@ -587,9 +610,14 @@ export function JobDetail() {
   }
 
   const terminal = job.status === "Cancelled" || job.status === "Rejected";
+  const workflowStatus = ["Awaiting Assignment", "Partially Assigned"].includes(job.status)
+    ? "Assigned"
+    : job.status === "Partially Delivered" || job.status === "Attention Required"
+      ? "In Transit"
+      : job.status;
   const stageIndex = terminal
     ? STAGES.indexOf("Pending Approval")
-    : Math.max(0, STAGES.indexOf(job.status));
+    : Math.max(0, STAGES.indexOf(workflowStatus));
   const stageDates = [
     job.createdAt || job.published,
     job.status !== "Pending Approval" ? job.updatedAt : undefined,
@@ -608,6 +636,15 @@ export function JobDetail() {
       ? Math.round((job.jobValue || 0) * 0.05)
       : 0;
   const netEarnings = fee;
+  const tripFinancials = jobTrips.map((trip) => ({
+    ...trip,
+    cost: trip.cost || Math.round((driverPayment || 0) / Math.max(1, jobTrips.length)),
+    driverPayment: trip.driverPayment || 0,
+    expenses: trip.expenses || 0,
+  }));
+  const relatedPayouts = payoutRequests.filter((payout) =>
+    payout.jobId === job.id || payout.jobIds?.includes(job.id),
+  );
 
   async function doApprove() {
     await approveJob(job.id);
@@ -631,6 +668,11 @@ export function JobDetail() {
   async function doMarkDelivered() {
     await markJobDelivered(job.id);
     notify("success", `${job.id} marked as Delivered.`);
+  }
+  async function doTripStatus(tripId, status) {
+    await updateJobTripStatus(job.id, tripId, status);
+    setTripMenu(null);
+    notify(status === "Delayed" ? "warning" : "success", `${tripId} marked as ${status}.`);
   }
   async function doCancel() {
     await cancelJob(job.id);
@@ -870,6 +912,7 @@ export function JobDetail() {
             label: "Bids & Responses",
             count: bids.length,
           },
+          { value: "Associated Trips", label: "Associated Trips", count: jobTrips.length },
           { value: "Tracking & Updates", label: "Tracking & Updates" },
           { value: "Documents", label: "Documents", count: documents.length },
           { value: "Financials", label: "Financials" },
@@ -1221,24 +1264,11 @@ export function JobDetail() {
               />
 
               <EntityRow
-                icon="user"
+                icon="route"
                 tint="purple"
-                label="Assigned Driver"
-                value={job.assignedDriverName || "Not yet assigned"}
-                action={
-                  job.assignedDriverName ? (
-                    <ExternalLink onClick={() => navigate("/drivers")}>
-                      View Profile
-                    </ExternalLink>
-                  ) : (
-                    <a
-                      style={{ cursor: "pointer" }}
-                      onClick={() => setTab("Bids & Responses")}
-                    >
-                      Assign →
-                    </a>
-                  )
-                }
+                label="Associated Trips"
+                value={`${tripCounts.assigned} of ${tripCounts.required} assigned`}
+                action={<a style={{ cursor: "pointer" }} onClick={() => setTab("Associated Trips")}>View Trips →</a>}
               />
               <EntityRow
                 icon="truck"
@@ -1668,6 +1698,51 @@ export function JobDetail() {
         </>
       )}
 
+      {tab === "Associated Trips" && (
+        <>
+          <InfoStrip
+            items={[
+              { icon: "truck", label: "Trucks Requested", value: tripCounts.required, tint: "amber" },
+              { icon: "route", label: "Trips Created", value: `${tripCounts.assigned} of ${tripCounts.required}` },
+              { icon: "navigation", label: "Active Trips", value: tripCounts.active, tint: "purple" },
+              { icon: "circle-check", label: "Trips Delivered", value: tripCounts.completed, tint: "green" },
+            ]}
+          />
+          {tripCounts.assigned < tripCounts.required && (
+            <Banner tone="warning" title={`${tripCounts.required - tripCounts.assigned} assignment${tripCounts.required - tripCounts.assigned === 1 ? "" : "s"} remaining`}>
+              Every requested truck needs its own eligible driver from {job.truckingCompany || "the same trucking company"} before dispatch is complete.
+            </Banner>
+          )}
+          <SectionCard
+            title={`Associated Trips (${jobTrips.length})`}
+            description="Each trip represents one truck and one driver fulfilling this job."
+            pad="none"
+            action={<Button size="sm" icon="truck" onClick={() => navigate("/dispatch")}>Manage Assignments</Button>}
+          >
+            {jobTrips.length ? (
+              <DataTable
+                rows={jobTrips}
+                rowKey={(trip) => trip.id}
+                onRowClick={(trip) => { setSelectedTripId(trip.id); setTab("Tracking & Updates"); }}
+                coloredHeader
+                columns={[
+                  { key: "id", header: "Trip ID", render: (trip) => <strong className="jd-trip-id">{trip.id}</strong> },
+                  { key: "truck", header: "Truck", render: (trip) => trip.truckPlate ? <a className="jd-trip-link" onClick={(event) => { event.stopPropagation(); navigate(`/fleet/${encodeURIComponent(trip.truckPlate)}`); }}>{trip.truckPlate}</a> : "—" },
+                  { key: "driver", header: "Driver", render: (trip) => <span className="jd-trip-person"><Avatar name={trip.driverName || "Unassigned"} size={26}/><span><strong>{trip.driverName || "Unassigned"}</strong><small>{trip.driverPhone || trip.driverId || "—"}</small></span></span> },
+                  { key: "company", header: "Trucking Company", render: (trip) => trip.truckingCompany || job.truckingCompany || "—" },
+                  { key: "status", header: "Trip Status", render: (trip) => <Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge> },
+                  { key: "progress", header: "Progress", render: (trip) => <span className="jd-trip-progress"><span><i style={{ width: `${Math.min(100, trip.progress || 0)}%` }}/></span><strong>{trip.progress || 0}%</strong></span> },
+                  { key: "eta", header: "ETA", render: (trip) => trip.eta || trip.deliveryDate || "—" },
+                  { key: "actions", header: "", width: 54, render: (trip) => <span className="jd-trip-menu" onClick={(event) => event.stopPropagation()}><Button size="sm" variant="outline" icon="ellipsis" onClick={() => setTripMenu(tripMenu === trip.id ? null : trip.id)}/>{tripMenu === trip.id && <span><DropdownMenu width={205} items={["Assigned", "At Pickup", "In Transit", "At Delivery", "Delivered", "Delayed"].filter((status) => status !== trip.status).map((status) => ({ label: `Mark ${status}`, icon: status === "Delivered" ? "circle-check" : status === "Delayed" ? "triangle-alert" : "route", tone: status === "Delayed" ? "danger" : undefined, onClick: () => doTripStatus(trip.id, status) }))}/></span>}</span> },
+                ]}
+              />
+            ) : (
+              <EmptyState icon="route" title="No trips assigned" description="Select a trucking company, then assign the required truck and driver pairs." action={<Button onClick={() => navigate("/dispatch")}>Open Dispatch Center</Button>}/>
+            )}
+          </SectionCard>
+        </>
+      )}
+
       {tab === "Tracking & Updates" && (
         <>
           <InfoStrip
@@ -1685,15 +1760,15 @@ export function JobDetail() {
               },
               {
                 icon: "truck",
-                label: "Assigned Truck",
-                value: job.assignedTruckPlate || "Not assigned",
+                label: "Assigned Trucks",
+                value: tripCounts.assigned ? `${tripCounts.assigned} of ${tripCounts.required}` : "Not assigned",
                 tint: "amber",
               },
               {
                 icon: "user",
-                label: "Assigned Driver",
-                value: job.assignedDriverName || "Not assigned",
-                caption: job.assignedDriverPhone,
+                label: "Assigned Drivers",
+                value: tripCounts.assigned ? `${tripCounts.assigned} driver${tripCounts.assigned === 1 ? "" : "s"}` : "Not assigned",
+                caption: job.truckingCompany,
                 tint: "purple",
               },
               {
@@ -1706,6 +1781,17 @@ export function JobDetail() {
           />
           <div className="jd-layout">
             <div className="jd-main">
+              {jobTrips.length > 0 && (
+                <SectionCard title="Select Trip" description="Tracking and updates are recorded per truck movement.">
+                  <div className="jd-trip-selector">
+                    {jobTrips.map((trip) => (
+                      <button key={trip.id} className={trip.id === selectedTrip?.id ? "active" : ""} onClick={() => setSelectedTripId(trip.id)}>
+                        <Icon name="truck" size={16}/><span><strong>{trip.id}</strong><small>{trip.truckPlate} · {trip.driverName}</small></span><Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge>
+                      </button>
+                    ))}
+                  </div>
+                </SectionCard>
+              )}
               <SectionCard
                 title="Live Tracking"
                 description={
@@ -1730,10 +1816,7 @@ export function JobDetail() {
                     size={28}
                   />
                   {job.status === "In Transit" ? (
-                    <span className="tk-meta">
-                      {job.assignedTruckPlate} · Moving towards{" "}
-                      {job.destination}
-                    </span>
+                    <span className="tk-meta">{selectedTrip?.truckPlate} · {selectedTrip?.driverName} · Moving towards {job.destination}</span>
                   ) : (
                     <span className="tk-meta">
                       No live position to display for this job's current status.
@@ -1744,20 +1827,20 @@ export function JobDetail() {
                   <span>
                     <span className="tk-meta">Distance Covered</span>
                     <strong>
-                      {job.status === "In Transit" || job.status === "Delivered"
-                        ? `${Math.round((job.distanceKm || 0) * 0.6)} km / ${job.distanceKm} km`
+                      {selectedTrip && ["In Transit", "Delivered", "Completed"].includes(selectedTrip.status)
+                        ? `${Math.round((selectedTrip.distanceKm || job.distanceKm || 0) * ((selectedTrip.progress || 0) / 100))} km / ${selectedTrip.distanceKm || job.distanceKm} km`
                         : "—"}
                     </strong>
                   </span>
                   <span>
                     <span className="tk-meta">Current Speed</span>
                     <strong>
-                      {job.status === "In Transit" ? "72 km/h" : "—"}
+                      {selectedTrip?.status === "In Transit" ? "72 km/h" : "—"}
                     </strong>
                   </span>
                   <span>
                     <span className="tk-meta">ETA</span>
-                    <strong>{job.deliveryDate || "—"}</strong>
+                    <strong>{selectedTrip?.eta || job.deliveryDate || "—"}</strong>
                   </span>
                   <span>
                     <span className="tk-meta">Next Stop</span>
@@ -1905,15 +1988,9 @@ export function JobDetail() {
                 <EntityRow
                   icon="user"
                   tint="purple"
-                  label="Driver"
-                  value={job.assignedDriverName || "Not yet assigned"}
-                  action={
-                    job.assignedDriverName && (
-                      <ExternalLink onClick={() => navigate("/drivers")}>
-                        View Profile
-                      </ExternalLink>
-                    )
-                  }
+                  label="Drivers"
+                  value={tripCounts.assigned ? `${tripCounts.assigned} assigned` : "Not yet assigned"}
+                  action={<a style={{ cursor: "pointer" }} onClick={() => setTab("Associated Trips")}>View Trips →</a>}
                 />
                 <EntityRow
                   icon="file-text"
@@ -2063,6 +2140,7 @@ export function JobDetail() {
                         ),
                       },
                       { key: "type", header: "Type" },
+                      { key: "scope", header: "Scope", render: (r) => <Badge tone={r.tripId ? "info" : "neutral"}>{r.tripId || "Job-wide"}</Badge> },
                       { key: "submittedBy", header: "Submitted By" },
                       { key: "date", header: "Date Submitted" },
                       {
@@ -2188,6 +2266,10 @@ export function JobDetail() {
                       <div>
                         <span>Document Type</span>
                         <strong>{reviewDoc.type}</strong>
+                      </div>
+                      <div>
+                        <span>Applies To</span>
+                        <strong>{reviewDoc.tripId || "All job trips"}</strong>
                       </div>
                       <div>
                         <span>Submitted By</span>
@@ -2333,6 +2415,32 @@ export function JobDetail() {
                     </div>
                   </div>
                 </div>
+              </SectionCard>
+
+              {tripFinancials.length > 0 && (
+                <SectionCard title="Trip-level Costs" description="Operational costs stay attached to each truck movement and roll up to the job." pad="none">
+                  <DataTable rows={tripFinancials} rowKey={(trip) => trip.id} coloredHeader columns={[
+                    { key: "id", header: "Trip ID", render: (trip) => <strong className="jd-trip-id">{trip.id}</strong> },
+                    { key: "truckPlate", header: "Truck" },
+                    { key: "driverName", header: "Driver" },
+                    { key: "cost", header: "Trip Cost", render: (trip) => naira(trip.cost) },
+                    { key: "driverPayment", header: "Driver Payment", render: (trip) => naira(trip.driverPayment) },
+                    { key: "expenses", header: "Expenses", render: (trip) => naira(trip.expenses) },
+                    { key: "status", header: "Status", render: (trip) => <Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge> },
+                  ]}/>
+                </SectionCard>
+              )}
+
+              <SectionCard title={`Related Payouts (${relatedPayouts.length})`} description="Company payouts are reconciled to the individual trips included in this job." pad="none">
+                {relatedPayouts.length ? <DataTable rows={relatedPayouts} rowKey={(payout) => payout.id} coloredHeader onRowClick={(payout) => navigate(`/payouts/${payout.id}`)} columns={[
+                  { key: "id", header: "Payout ID", render: (payout) => <strong className="jd-trip-id">{payout.id}</strong> },
+                  { key: "party", header: "Beneficiary" },
+                  { key: "trips", header: "Trips Included", render: (payout) => `${payout.tripIds?.length || 0} of ${jobTrips.length}` },
+                  { key: "gross", header: "Gross", render: (payout) => naira(payout.grossAmount ?? payout.amount) },
+                  { key: "net", header: "Net", render: (payout) => naira(payout.netAmount ?? payout.amount) },
+                  { key: "status", header: "Status", render: (payout) => <Badge dot tone={statusTone(payout.status)}>{payout.status}</Badge> },
+                  { key: "eligibility", header: "Eligibility", render: (payout) => <Badge tone={payout.approvalReady ? "success" : "warning"}>{payout.eligibility || "Legacy"}</Badge> },
+                ]} /> : <EmptyState icon="wallet" title="No payout created" description="A company payout can be reconciled after eligible trips are delivered." />}
               </SectionCard>
 
               <div className="jd-row2">

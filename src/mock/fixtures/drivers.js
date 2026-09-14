@@ -181,4 +181,27 @@ export const drivers = [
     rating: 0, reviews: 0, activeTrip: null,
     rejectionReason: 'Background check did not meet compliance requirements.',
   },
+  {
+    id: 'DR-DCL-001', name: 'Ibrahim Musa', registrationType: 'Company Driver', company: 'DCL Shipping Services',
+    license: 'LIC-DCL-101', licenseClass: 'Heavy Vehicle (Class E)', licenseIssued: 'May 4, 2022', licenseExpiry: 'May 4, 2028', licenseStatus: 'Valid', licenseAuthority: 'Federal Road Safety Corps (FRSC)',
+    phone: '+234 803 123 4567', email: 'ibrahim.musa@dclshipping.com', truckPlate: 'APP 123 XY', truckType: '40FT Container', status: 'On Trip', joined: 'May 4, 2022',
+    dob: 'Jun 18, 1989 (36 years)', gender: 'Male', nationality: 'Nigerian', maritalStatus: 'Married', employmentType: 'Full Time', language: 'English, Hausa', emergencyContact: 'Amina Musa', emergencyPhone: '+234 802 111 0099', address: '15 Creek Road, Apapa, Lagos State, Nigeria', currentLocation: 'Oshodi, Lagos',
+    verification: { identity: 'Verified', address: 'Verified', face: 'Verified', background: 'Clear' }, kyc: 'Approved', kycDate: 'May 4, 2022', walletBalance: 92000, totalEarnings: 2880000, monthEarnings: 270000, totalTrips: 67, completedTrips: 62, totalDistance: 44120, onTimeDelivery: 95, safetyScore: 97, rating: 4.8, reviews: 38,
+    activeTrip: { id: 'TRIP-98231', route: 'Apapa Port → Ikeja Warehouse', started: 'May 26, 2026, 08:00', eta: 'May 28, 2026, 10:00' },
+  },
+  {
+    id: 'DR-DCL-002', name: 'Aisha Danjuma', registrationType: 'Company Driver', company: 'DCL Shipping Services',
+    license: 'LIC-DCL-102', licenseClass: 'Heavy Vehicle (Class E)', licenseIssued: 'Aug 12, 2023', licenseExpiry: 'Aug 12, 2029', licenseStatus: 'Valid', licenseAuthority: 'Federal Road Safety Corps (FRSC)',
+    phone: '+234 816 445 3322', email: 'aisha.danjuma@dclshipping.com', truckPlate: 'APP 456 ZZ', truckType: '40FT Container', status: 'On Trip', joined: 'Aug 12, 2023',
+    dob: 'Nov 3, 1992 (33 years)', gender: 'Female', nationality: 'Nigerian', maritalStatus: 'Single', employmentType: 'Full Time', language: 'English, Hausa', emergencyContact: 'Yusuf Danjuma', emergencyPhone: '+234 810 222 1188', address: '8 Dockyard Road, Apapa, Lagos State, Nigeria', currentLocation: 'Apapa Port, Lagos',
+    verification: { identity: 'Verified', address: 'Verified', face: 'Verified', background: 'Clear' }, kyc: 'Approved', kycDate: 'Aug 12, 2023', walletBalance: 61000, totalEarnings: 1760000, monthEarnings: 205000, totalTrips: 39, completedTrips: 37, totalDistance: 26780, onTimeDelivery: 96, safetyScore: 98, rating: 4.7, reviews: 29,
+    activeTrip: { id: 'TRIP-98232', route: 'Apapa Port → Ikeja Warehouse', started: 'May 26, 2026, 09:10', eta: 'May 28, 2026, 12:30' },
+  },
+  {
+    id: 'DR-SL-003', name: 'Grace Okoro', registrationType: 'Company Driver', company: 'SpeedLine Logistics',
+    license: 'LIC-SL-303', licenseClass: 'Heavy Vehicle (Class E)', licenseIssued: 'Feb 20, 2021', licenseExpiry: 'Feb 20, 2028', licenseStatus: 'Valid', licenseAuthority: 'Federal Road Safety Corps (FRSC)',
+    phone: '+234 816 445 3322', email: 'grace.okoro@speedlinelogistics.com', truckPlate: 'LAG-889-QP', truckType: '40FT Trailer', status: 'Active', joined: 'Feb 20, 2021',
+    dob: 'Jan 14, 1988 (38 years)', gender: 'Female', nationality: 'Nigerian', maritalStatus: 'Married', employmentType: 'Full Time', language: 'English, Igbo', emergencyContact: 'David Okoro', emergencyPhone: '+234 809 332 1199', address: '22 Ring Road, Ibadan, Oyo State, Nigeria', currentLocation: 'Ibadan Dry Port',
+    verification: { identity: 'Verified', address: 'Verified', face: 'Verified', background: 'Clear' }, kyc: 'Approved', kycDate: 'Feb 20, 2021', walletBalance: 84000, totalEarnings: 3210000, monthEarnings: 240000, totalTrips: 74, completedTrips: 72, totalDistance: 58920, onTimeDelivery: 97, safetyScore: 98, rating: 4.9, reviews: 44, activeTrip: null,
+  },
 ];

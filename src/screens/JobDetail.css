@@ -205,6 +205,105 @@
   font: 700 17px/22px var(--tk-font-sans);
 }
 
+.jd-trip-id,
+.jd-trip-link {
+  color: var(--tk-blue);
+  font: var(--tk-body-strong-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans);
+}
+.jd-trip-link {
+  cursor: pointer;
+}
+.jd-trip-person {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-space-2);
+  min-width: 160px;
+}
+.jd-trip-person > span {
+  display: grid;
+  min-width: 0;
+}
+.jd-trip-person strong {
+  font: var(--tk-body-strong-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans);
+  color: var(--tk-ink-700);
+}
+.jd-trip-person small {
+  font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-sans);
+  color: var(--tk-ink-400);
+}
+.jd-trip-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-space-2);
+  min-width: 104px;
+}
+.jd-trip-progress > span {
+  width: 64px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--tk-r-pill);
+  background: var(--tk-surface-sunk);
+}
+.jd-trip-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tk-blue);
+}
+.jd-trip-progress strong {
+  font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-sans);
+  color: var(--tk-ink-500);
+}
+.jd-trip-menu {
+  position: relative;
+  display: inline-flex;
+}
+.jd-trip-menu > span {
+  position: absolute;
+  right: 0;
+  top: 38px;
+  z-index: 30;
+}
+.jd-trip-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--tk-space-2);
+}
+.jd-trip-selector > button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--tk-space-2);
+  padding: var(--tk-space-3);
+  border: 1px solid var(--tk-line-strong);
+  border-radius: var(--tk-r-lg);
+  background: var(--tk-surface);
+  color: var(--tk-ink-500);
+  text-align: left;
+  cursor: pointer;
+}
+.jd-trip-selector > button.active {
+  border-color: var(--tk-blue);
+  background: var(--tk-blue-soft);
+  color: var(--tk-blue);
+  box-shadow: var(--tk-focus-ring);
+}
+.jd-trip-selector button > span {
+  display: grid;
+  min-width: 0;
+}
+.jd-trip-selector strong {
+  font: var(--tk-body-strong-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans);
+  color: var(--tk-ink-900);
+}
+.jd-trip-selector small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-sans);
+  color: var(--tk-ink-400);
+}
+
 .jd-entity-row {
   display: flex;
   align-items: center;

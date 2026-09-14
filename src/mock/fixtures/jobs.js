@@ -99,6 +99,10 @@ export const jobs = [
     jobValue: 1450000, amount: 1450000, platformFeePct: 8.7, requiredTrucks: 2,
     truckingCompany: 'DCL Shipping Services',
     assignedDriverName: 'Ibrahim Musa', assignedDriverPhone: '+234 803 123 4567', assignedTruckPlate: 'APP 123 XY',
+    trips: [
+      { id: 'TRIP-98231', truckingCompany: 'DCL Shipping Services', truckPlate: 'APP 123 XY', driverId: 'DR-DCL-001', driverName: 'Ibrahim Musa', driverPhone: '+234 803 123 4567', status: 'In Transit', progress: 66, currentLocation: 'Oshodi, Lagos', eta: 'May 28, 2026, 10:00 AM', distanceKm: 28, cost: 490000, driverPayment: 135000, expenses: 42000 },
+      { id: 'TRIP-98232', truckingCompany: 'DCL Shipping Services', truckPlate: 'APP 456 ZZ', driverId: 'DR-DCL-002', driverName: 'Aisha Danjuma', driverPhone: '+234 816 445 3322', status: 'At Pickup', progress: 20, currentLocation: 'Apapa Port, Lagos', eta: 'May 28, 2026, 12:30 PM', distanceKm: 28, cost: 490000, driverPayment: 135000, expenses: 38000 },
+    ],
     biddingCloses: 'May 25, 2026, 5:00 PM',
     bids: [
       { company: 'DCL Shipping Services', rating: 4.8, trips: 120, amount: 980000, estDeliveryDays: 2, estDeliveryDate: 'May 28, 2026', services: ['Truck', 'Driver', 'Fuel', 'Escort'], submittedAt: 'May 25, 2026 2:14 PM', status: 'Best Offer' },
@@ -222,6 +226,11 @@ export const jobs = [
     distanceKm: 128, durationLabel: '2 – 3 hours', routeType: 'Port to Depot',
     jobValue: 4860000, amount: 4860000, platformFeePct: 7.5, requiredTrucks: 3,
     truckingCompany: 'SpeedLine Logistics', assignedDriverName: 'Chinedu Okafor', assignedDriverPhone: '+234 803 556 7712', assignedTruckPlate: 'KJA-123-XD',
+    trips: [
+      { id: 'TRIP-98171', truckingCompany: 'SpeedLine Logistics', truckPlate: 'KJA-123-XD', driverId: 'DR-000245', driverName: 'Chinedu Okafor', driverPhone: '+234 803 123 4567', status: 'Delivered', progress: 100, currentLocation: 'Ibadan Dry Port', eta: 'Delivered May 22, 2026', distanceKm: 128, cost: 1215000, driverPayment: 280000, expenses: 96000 },
+      { id: 'TRIP-98172', truckingCompany: 'SpeedLine Logistics', truckPlate: 'EKY-441-HJ', driverId: 'DR-000289', driverName: 'John Udo', driverPhone: '+234 803 998 7766', status: 'Delivered', progress: 100, currentLocation: 'Ibadan Dry Port', eta: 'Delivered May 22, 2026', distanceKm: 128, cost: 1215000, driverPayment: 280000, expenses: 102000 },
+      { id: 'TRIP-98173', truckingCompany: 'SpeedLine Logistics', truckPlate: 'LAG-889-QP', driverId: 'DR-SL-003', driverName: 'Grace Okoro', driverPhone: '+234 816 445 3322', status: 'Delivered', progress: 100, currentLocation: 'Ibadan Dry Port', eta: 'Delivered May 22, 2026', distanceKm: 128, cost: 1215000, driverPayment: 280000, expenses: 91000 },
+    ],
     biddingCloses: 'May 21, 2026, 5:00 PM',
   },
   {
