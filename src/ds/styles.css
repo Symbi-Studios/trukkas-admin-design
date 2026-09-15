@@ -102,3 +102,173 @@
   --spacing-tk-section-gap: var(--tk-section-gap);
   --spacing-tk-page-gutter: var(--tk-page-gutter);
 }
+
+/* Responsive behavior shared by every admin route. */
+.tk-app-shell { min-height: 100dvh !important; height: 100dvh !important; overflow: hidden; }
+.tk-sidebar-slot { display: flex; flex: 0 0 auto; min-width: 0; z-index: 92; }
+.tk-sidebar-scrim { display: none; }
+.tk-topbar { flex: 0 0 auto; min-width: 0; }
+.tk-page-frame, .tk-page-main, .tk-card, .tk-section-card-body { min-width: 0; }
+.tk-page-header-actions { justify-content: flex-end; }
+.tk-table-toolbar-filters { display: flex; align-items: center; gap: var(--tk-space-3); flex-wrap: wrap; }
+.tk-table-toolbar-trailing { display: flex; align-items: center; gap: var(--tk-space-3); }
+.tk-table-wrap { width: 100%; overscroll-behavior-inline: contain; }
+.tk-data-table td { overflow-wrap: anywhere; }
+.tk-data-table tr:focus-visible { outline: 2px solid var(--tk-blue); outline-offset: -2px; }
+.tk-dropdown-menu { max-width: min(280px, calc(100vw - 24px)); max-height: min(520px, calc(100dvh - 24px)); overflow-y: auto; }
+
+@media (max-width: 1023px) {
+  .tk-sidebar-slot {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(320px, 86vw);
+    transform: translateX(-105%);
+    transition: transform var(--tk-dur-slow) var(--tk-ease);
+    box-shadow: var(--tk-shadow-modal);
+  }
+  .tk-app-shell[data-mobile-nav-open] .tk-sidebar-slot { transform: translateX(0); }
+  .tk-sidebar-slot .tk-sidebar { width: 100% !important; height: 100dvh !important; }
+  .tk-sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 91;
+    border: 0;
+    background: var(--tk-scrim);
+  }
+  .tk-app-column { width: 100%; }
+  .tk-page-frame { display: grid !important; grid-template-columns: minmax(0, 1fr); }
+  .tk-page-rail { width: 100% !important; }
+  .tk-topbar { gap: var(--tk-space-3) !important; padding-inline: var(--tk-page-gutter) !important; }
+
+  /* Repeated desktop content + rail layouts used by finance, settings and reports. */
+  .tk-page-main [style*="320px"],
+  .tk-page-main [style*="340px"],
+  .tk-page-main [style*="380px"],
+  .tk-page-main [style*="300px"],
+  .tk-page-main [style*="220px minmax"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .tk-page-main [style*="repeat(4"],
+  .tk-page-main [style*="repeat(5"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .tk-page-main [style*="repeat(3"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .tk-page-main [style*="repeat(6"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .tk-page-main [style*="1.5fr 1fr 1fr"],
+  .tk-page-main [style*="1.3fr 1.1fr 0.9fr"] { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+@media (max-width: 767px) {
+  .tk-topbar-health { display: none !important; }
+  .tk-global-search { flex-basis: 100% !important; order: 5; width: 100%; }
+  .tk-topbar { height: auto !important; min-height: var(--tk-h-topbar); flex-wrap: wrap; padding-block: var(--tk-space-3) !important; }
+  .tk-topbar-spacer { display: none; }
+  .tk-topbar-account > span:not(:first-child), .tk-topbar-account > svg { display: none !important; }
+  .tk-topbar-account { margin-left: auto; }
+  .tk-page-header-row { display: grid !important; grid-template-columns: minmax(0, 1fr); }
+  .tk-page-header-copy { min-width: 0 !important; }
+  .tk-page-header-actions { width: 100%; justify-content: flex-start; }
+  .tk-page-header-actions > button, .tk-page-header-actions > a { flex: 1 1 auto; }
+  .tk-tabs { gap: var(--tk-space-6) !important; scroll-snap-type: x proximity; }
+  .tk-tabs > button { min-height: 44px !important; scroll-snap-align: start; }
+  .tk-section-card-header { align-items: flex-start !important; flex-wrap: wrap; padding-inline: var(--tk-card-pad) !important; }
+  .tk-section-card-action { margin-left: auto; max-width: 100%; flex-wrap: wrap; }
+  .tk-table-toolbar { align-items: stretch !important; }
+  .tk-table-toolbar-search, .tk-table-toolbar-filters, .tk-table-toolbar-trailing { width: 100%; min-width: 0 !important; }
+  .tk-table-toolbar-filters > *, .tk-table-toolbar-trailing > * { flex: 1 1 150px; min-width: 0 !important; }
+  .tk-table-toolbar-filters button, .tk-table-toolbar-trailing button { width: 100%; }
+  .tk-table-toolbar-spacer { display: none; }
+  .tk-pagination { justify-content: center; }
+  .tk-pagination-summary { width: 100%; text-align: center; }
+  .tk-pagination > div[style*="flex: 1"] { display: none; }
+
+  .tk-page-main [style*="repeat(3"],
+  .tk-page-main [style*="repeat(4"],
+  .tk-page-main [style*="repeat(5"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .tk-page-main [style*="repeat(6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .tk-page-main [style*="1fr 1fr"],
+  .tk-page-main [style*="minmax(0px, 1fr) minmax(0px, 1fr)"],
+  .tk-page-main [style*="minmax(0px, 1fr) minmax(0px, 1.3fr)"],
+  .tk-page-main [style*="minmax(0, 1fr) minmax(0, 1fr)"],
+  .tk-page-main [style*="minmax(0, 1fr) minmax(0, 1.3fr)"],
+  .tk-section-card-body > [style*="1fr 1fr"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .tk-app button, .tk-app [role="button"] { min-height: 40px; }
+  .tk-app input, .tk-app select, .tk-app textarea { font-size: 16px !important; }
+  .tk-field, .tk-search-field { width: 100%; min-width: 0 !important; }
+  .tk-select-field { overflow: hidden; }
+  .tk-table-toolbar-filters > * { flex-basis: 100%; width: 100%; }
+  .tk-global-search kbd { display: none; }
+  .tk-page-header-actions { display: grid !important; grid-template-columns: minmax(0, 1fr); }
+  .tk-page-header-actions > *, .tk-modal-footer > * { width: 100%; }
+  .tk-card { border-radius: var(--tk-r-lg) !important; }
+  .tk-page-main [style*="repeat(2"],
+  .tk-page-main [style*="repeat(3"],
+  .tk-page-main [style*="repeat(4"],
+  .tk-page-main [style*="repeat(5"],
+  .tk-page-main [style*="1fr 1fr"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .tk-page-main [style*="minmax(0px, 1fr) minmax(0px, 1fr)"],
+  .tk-page-main [style*="minmax(0px, 1fr) minmax(0px, 1.3fr)"],
+  .tk-page-main [style*="minmax(0, 1fr) minmax(0, 1fr)"],
+  .tk-page-main [style*="minmax(0, 1fr) minmax(0, 1.3fr)"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .tk-page-main [style*="minmax(120px"],
+  .tk-page-main [style*="minmax(110px"] { grid-template-columns: minmax(0, 1fr) !important; }
+  .tk-page-main [style*="70px 70px"] { grid-template-columns: minmax(100px, 1fr) repeat(3, 36px) 80px !important; gap: var(--tk-space-2) !important; }
+  .tk-page-main [style*="56px 56px"] { grid-template-columns: minmax(100px, 1fr) repeat(3, 36px) minmax(80px, 1fr) !important; gap: var(--tk-space-2) !important; }
+  .tk-page-main [style*="repeat(3, 130px)"] { grid-template-columns: minmax(110px, 1fr) repeat(3, 42px) !important; }
+  .tk-mobile-scroll { overflow-x: auto !important; overscroll-behavior-inline: contain; }
+  .tk-mobile-scroll > * { min-width: max-content; }
+  .tk-page-main [style*="70px 70px"] > *,
+  .tk-page-main [style*="56px 56px"] > * { min-width: 0; overflow-wrap: anywhere; }
+  .tk-notification-event-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: var(--tk-space-2) var(--tk-space-3) !important;
+    padding-block: var(--tk-space-3) !important;
+  }
+  .tk-notification-event-grid > :first-child,
+  .tk-notification-event-grid > :last-child {
+    grid-column: 1 / -1;
+  }
+  .tk-notification-event-grid > .tk-select-field { margin-top: var(--tk-space-1); }
+  .tk-notification-event-header > :last-child { text-align: left !important; }
+
+  /* Tables become labelled record cards; all row data and actions remain available. */
+  .tk-data-table { min-width: 0 !important; display: block; }
+  .tk-data-table thead { display: none; }
+  .tk-data-table tbody { display: grid; gap: var(--tk-space-3); padding: var(--tk-space-3); }
+  .tk-data-table tr { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--tk-line) !important; border-radius: var(--tk-r-md); background: var(--tk-surface) !important; overflow: visible; }
+  .tk-data-table td { display: grid; grid-template-columns: minmax(92px, 34%) minmax(0, 1fr); gap: var(--tk-space-3); align-items: start; padding: var(--tk-space-3) !important; text-align: left !important; border-bottom: 1px solid var(--tk-line); white-space: normal !important; }
+  .tk-data-table td:last-child { border-bottom: 0; }
+  .tk-data-table td::before { content: attr(data-label); color: var(--tk-ink-400); font: var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans); }
+  .tk-data-table td.tk-table-select { display: flex; justify-content: flex-end; min-height: 36px; }
+  .tk-data-table td.tk-table-select::before { content: "Select"; margin-right: auto; }
+  .tk-data-table td[data-key="actions"], .tk-data-table td[data-key="x"] { align-items: center; }
+  .tk-data-table td[data-key="actions"] > *, .tk-data-table td[data-key="x"] > * { justify-self: end; }
+
+  .tk-modal-scrim { place-items: end center !important; padding: 0 !important; }
+  .tk-modal { width: 100% !important; max-width: none !important; max-height: min(92dvh, 760px) !important; border-radius: var(--tk-r-2xl) var(--tk-r-2xl) 0 0 !important; }
+  .tk-modal-header { padding: var(--tk-space-5) var(--tk-card-pad) var(--tk-space-4) !important; }
+  .tk-modal-body { padding: 0 var(--tk-card-pad) var(--tk-card-pad) !important; }
+  .tk-modal-footer { display: grid !important; grid-template-columns: minmax(0, 1fr); padding: var(--tk-space-4) var(--tk-card-pad) max(var(--tk-space-4), env(safe-area-inset-bottom)) !important; }
+}
+
+@media (max-width: 380px) {
+  .tk-topbar-account { display: none !important; }
+  .tk-page-main [style*="repeat(2"] { grid-template-columns: minmax(0, 1fr) !important; }
+  .tk-pagination-pages button:not(:first-child):not(:last-child), .tk-pagination-pages span { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-app *, .tk-app *::before, .tk-app *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

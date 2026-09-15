@@ -18,13 +18,13 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
   };
   const [bg, fg] = TINT[iconTint] || TINT.blue;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', minWidth: 0 }}>
       <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: bg, color: fg,
                      display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
         <Icon name={icon} size={17} />
       </span>
-      <span style={{ flex: 1, font: '400 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>{label}</span>
-      <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)', textAlign: 'right' }}>{value}</span>
+      <span style={{ flex: 1, minWidth: 0, font: '400 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>{label}</span>
+      <span style={{ minWidth: 0, overflowWrap: 'anywhere', font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)', textAlign: 'right' }}>{value}</span>
     </div>
   );
 }

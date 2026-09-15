@@ -15,15 +15,15 @@ export function Pagination({ page = 1, pageCount = 1, pageSize = 10, total, onPa
   if (pageCount > 4) pages.push('…');
   if (pageCount > 3) pages.push(pageCount);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+    <div className="tk-pagination" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
                   padding: '14px var(--tk-card-pad)', borderTop: '1px solid var(--tk-line)', ...style }}>
       {total != null && (
-        <span className="tk-meta">
-          Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total.toLocaleString()}
+        <span className="tk-meta tk-pagination-summary">
+          Showing {total === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total.toLocaleString()}
         </span>
       )}
       <div style={{ flex: 1 }} />
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div className="tk-pagination-pages" style={{ display: 'flex', gap: 6 }}>
         <button style={btn(false, page === 1)} onClick={() => onPage?.(page - 1)} aria-label="Previous">
           <Icon name="chevron-left" size={15} />
         </button>

@@ -5,13 +5,13 @@ export function Tabs({ items = [], value, onChange, style }) {
   const accent = 'var(--tk-blue)';
   return (
     <div style={{ display: 'flex', gap: 26, borderBottom: '1px solid var(--tk-line)',
-                  overflowX: 'auto', ...style }} className="tk-scroll">
+                  overflowX: 'auto', ...style }} className="tk-scroll tk-tabs" role="tablist">
       {items.map(it => {
         const key = typeof it === 'string' ? it : it.value;
         const label = typeof it === 'string' ? it : it.label;
         const on = key === value;
         return (
-          <button key={key} type="button" onClick={() => onChange?.(key)}
+          <button key={key} type="button" role="tab" aria-selected={on} onClick={() => onChange?.(key)}
             style={{ border: 0, background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
                      height: 'var(--tk-h-tab)', padding: 0,
                      borderBottom: '2px solid ' + (on ? accent : 'transparent'),

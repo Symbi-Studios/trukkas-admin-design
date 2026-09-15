@@ -143,7 +143,7 @@ export function ExportReportPreview() {
 
       {banner && <Banner tone="success" title={banner} />}
 
-      <Card style={{ display: 'flex', alignItems: 'center', padding: '14px 20px' }}>
+      <Card className="tk-mobile-scroll" style={{ display: 'flex', alignItems: 'center', padding: '14px 20px' }}>
         {STEP_LABELS.map((label, i) => {
           const n = i + 1;
           const done = n < 5;

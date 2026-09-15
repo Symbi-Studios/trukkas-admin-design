@@ -17,7 +17,7 @@ export function Select({ label, options = [], value, onChange, placeholder = 'Se
                          leadingDot, disabled, style, ...rest }) {
   const [f, setF] = React.useState(false);
   return (
-    <label style={{ display: 'grid', gap: 6, ...style }}>
+    <label className="tk-field tk-select-field" style={{ display: 'grid', gap: 6, ...style }}>
       {label && <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{label}</span>}
       <div style={{ ...shell(false, f, disabled), position: 'relative', paddingRight: 34 }}>
         {leadingDot && <span style={{ width: 8, height: 8, borderRadius: 999, background: leadingDot }} />}

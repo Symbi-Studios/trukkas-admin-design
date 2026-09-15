@@ -15,17 +15,26 @@ import "./mock/api.js";
 
 export function AdminShell({ children }) {
   const [collapsed, setCollapsed] = React.useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
   const [globalSearch, setGlobalSearch] = React.useState("");
   const notificationRows = useCollection("notifications") || [];
   const router = useRouter();
   const pathname = usePathname();
   const activeId = pathname.split("/")[1] || "dashboard";
-  React.useEffect(() => setGlobalSearch(""), [pathname]);
+  React.useEffect(() => {
+    setGlobalSearch("");
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  function toggleNavigation() {
+    if (window.matchMedia("(max-width: 1023px)").matches) setMobileNavOpen((open) => !open);
+    else setCollapsed((current) => !current);
+  }
 
   const sidebar = (
     <Sidebar
       collapsed={collapsed}
-      onCollapse={() => setCollapsed((c) => !c)}
+      onCollapse={toggleNavigation}
       footer={
         !collapsed && (
           <div
@@ -82,9 +91,11 @@ export function AdminShell({ children }) {
   return (
     <AppShell
       sidebar={sidebar}
+      mobileNavOpen={mobileNavOpen}
+      onMobileNavClose={() => setMobileNavOpen(false)}
       topbar={
         <TopBar
-          onMenu={() => setCollapsed((c) => !c)}
+          onMenu={toggleNavigation}
           notifications={notificationRows.filter((row) => !row.read).length}
           searchPlaceholder={SEARCH_PLACEHOLDER[activeId]}
           searchValue={globalSearch}

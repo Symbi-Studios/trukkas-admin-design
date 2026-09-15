@@ -23,19 +23,21 @@ export function DataTable({
     verticalAlign: "middle",
   };
   return (
-    <div className="tk-scroll" style={{ overflowX: "auto", ...style }}>
+    <div className="tk-scroll tk-table-wrap" style={{ overflowX: "auto", ...style }}>
       <table
+        className="tk-data-table"
         style={{
           width: "100%",
           borderCollapse: "collapse",
           tableLayout,
+          minWidth: Math.max(640, columns.length * 118 + (selectable ? 44 : 0)),
           font: "var(--tk-body-weight) var(--tk-body-size)/var(--tk-body-lh) var(--tk-font-sans)",
         }}
       >
         <thead>
           <tr style={{ borderBottom: "1px solid var(--tk-line)" }}>
             {selectable && (
-              <th
+              <th className="tk-table-select"
                 style={{
                   ...cell,
                   width: 44,
@@ -51,6 +53,7 @@ export function DataTable({
             {columns.map((c) => (
               <th
                 key={c.key}
+                data-key={c.key}
                 style={{
                   ...cell,
                   width: c.width,
@@ -77,6 +80,8 @@ export function DataTable({
             return (
               <tr
                 key={k}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={onRowClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onRowClick(r); } } : undefined}
                 onClick={() => onRowClick?.(r)}
                 style={{
                   borderBottom: "1px solid var(--tk-line)",
@@ -85,7 +90,7 @@ export function DataTable({
                 }}
               >
                 {selectable && (
-                  <td style={cell} onClick={(e) => e.stopPropagation()}>
+                  <td className="tk-table-select" style={cell} onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={on}
                       onChange={(v) =>
@@ -101,6 +106,8 @@ export function DataTable({
                 {columns.map((c) => (
                   <td
                     key={c.key}
+                    data-label={c.header}
+                    data-key={c.key}
                     style={{
                       ...cell,
                       textAlign: c.align || "left",

@@ -8,23 +8,23 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
                          health = 'System Health', notifications = 0, user, role, style,
                          searchValue, onSearch, onNotifications }) {
   return (
-    <header style={{
+    <header className="tk-topbar" style={{
       display: 'flex', alignItems: 'center', gap: 16, height: 'var(--tk-h-topbar)',
       padding: '0 var(--tk-page-gutter)', background: '#fff',
       borderBottom: '1px solid var(--tk-line)', ...style,
     }}>
       {onMenu && (
-        <button type="button" onClick={onMenu} aria-label="Toggle navigation"
+        <button className="tk-topbar-menu" type="button" onClick={onMenu} aria-label="Toggle navigation"
           style={{ width: 34, height: 34, display: 'grid', placeItems: 'center', cursor: 'pointer',
                    borderRadius: 'var(--tk-r-sm)', border: '1px solid var(--tk-line-strong)',
                    background: '#fff', color: 'var(--tk-ink-500)' }}>
           <Icon name="menu" size={16} />
         </button>
       )}
-      <SearchField variant="global" placeholder={searchPlaceholder} style={{ flex: '0 1 440px' }}
+      <SearchField className="tk-global-search" variant="global" placeholder={searchPlaceholder} style={{ flex: '0 1 440px' }}
         value={searchValue} onChange={onSearch} />
-      <div style={{ flex: 1 }} />
-      <button type="button" aria-label="Notifications" onClick={onNotifications}
+      <div className="tk-topbar-spacer" style={{ flex: 1 }} />
+      <button className="tk-topbar-notifications" type="button" aria-label="Notifications" onClick={onNotifications}
         style={{ position: 'relative', width: 38, height: 38, display: 'grid', placeItems: 'center',
                  border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--tk-ink-500)' }}>
         <Icon name="bell" size={20} />
@@ -35,14 +35,14 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
         )}
       </button>
       {health && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 36, padding: '0 14px',
+        <span className="tk-topbar-health" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 36, padding: '0 14px',
                        borderRadius: 'var(--tk-r-md)', border: '1px solid var(--tk-line-strong)',
                        font: '500 13px/1 var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>
           <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--tk-success)' }} />
           {health}
         </span>
       )}
-      <button type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 0,
+      <button className="tk-topbar-account" type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 0,
                                      background: 'transparent', cursor: 'pointer', padding: 0 }}>
         <Avatar name={user} square size={34} tone="var(--tk-navy)" />
         <span style={{ textAlign: 'left', lineHeight: 1.25 }}>

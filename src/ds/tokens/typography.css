@@ -89,3 +89,14 @@
   font: 400 var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-mono);
   color: var(--tk-ink-400);
 }
+
+@media (max-width: 639px) {
+  :root {
+    --tk-display-size: 23px;
+    --tk-display-lh: 29px;
+    --tk-metric-size: 24px;
+    --tk-metric-lh: 30px;
+    --tk-title-size: 18px;
+    --tk-title-lh: 24px;
+  }
+}

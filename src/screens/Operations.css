@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  min-width: 900px;
+  min-width: 0;
 }
 .operations-screen .screen-head {
   display: flex;
@@ -664,4 +664,36 @@
   .jobs-master {
     grid-template-columns: 210px 1fr;
   }
+}
+@media (max-width: 900px) {
+  .operations-screen .screen-head { flex-wrap: wrap; }
+  .operations-screen .head-actions { width: 100%; flex-wrap: wrap; }
+  .operations-screen .head-actions > * { flex: 1 1 160px; }
+  .operations-screen .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .jobs-master, .trip-workspace, .bottom-bid-grid, .job-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .jobs-nav-card { overflow-x: auto; }
+  .jobs-nav-card > p { max-width: 560px; }
+  .jobs-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: var(--tk-space-4); }
+  .trip-detail { grid-column: auto; }
+  .overview-facts, .finance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-fact:nth-child(2n) { border-right: 0; }
+  .bid-analytics, .info-grid { grid-template-columns: minmax(0, 1fr); }
+  .rank-row, .segment-row { min-width: 620px; }
+  .status-flow { min-width: 620px; }
+  .ops-panel:has(.rank-row), .ops-panel:has(.segment-row), .ops-panel:has(.status-flow) { overflow-x: auto; }
+}
+@media (max-width: 560px) {
+  .operations-screen .screen-head h1 { font-size: var(--tk-display-size); line-height: var(--tk-display-lh); }
+  .operations-screen .kpi-grid, .jobs-filters, .overview-facts, .finance-grid { grid-template-columns: minmax(0, 1fr); }
+  .operations-screen .metric-card { min-height: 112px; }
+  .operations-screen .inline-actions, .bulk-bar { flex-wrap: wrap; }
+  .operations-screen .inline-actions > button, .bulk-bar > button { flex: 1 1 auto; }
+  .trip-filter-tabs { overflow-x: auto; }
+  .trip-filter-tabs button { flex: 0 0 auto; min-height: 36px; }
+  .trip-row { grid-template-columns: 38px minmax(0, 1fr); }
+  .trip-eta { grid-column: 2; text-align: left; }
+  .offer-row { grid-template-columns: 30px minmax(0, 1fr); }
+  .offer-row .amount { grid-column: 2; text-align: left; }
+  .funnel-row { grid-template-columns: 88px minmax(80px, 1fr) 54px; }
+  .trip-fact { grid-template-columns: minmax(82px, 34%) minmax(0, 1fr); }
 }

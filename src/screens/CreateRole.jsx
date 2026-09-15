@@ -120,7 +120,7 @@ export function CreateRole() {
             <SearchField placeholder="Search modules or permissions…" value={permQ}
               onChange={(e) => setPermQ(e.target.value)} />
 
-            <div style={{ border: '1px solid var(--tk-line)', borderRadius: 'var(--tk-r-lg)', overflow: 'hidden' }}>
+            <div className="tk-mobile-scroll" style={{ border: '1px solid var(--tk-line)', borderRadius: 'var(--tk-r-lg)', overflow: 'hidden' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr repeat(3, 130px)', alignItems: 'center',
                            padding: '10px 16px', borderBottom: '1px solid var(--tk-line)', background: 'var(--tk-surface-sunk)' }}>
                 <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>Module</span>

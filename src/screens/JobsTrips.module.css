@@ -1,7 +1,7 @@
 .page {
   display: grid;
   gap: var(--tk-space-5);
-  min-width: 1040px;
+  min-width: 0;
 }
 .header {
   display: flex;
@@ -435,4 +435,27 @@
   .filterBar {
     grid-template-columns: repeat(4, minmax(130px, 1fr));
   }
+}
+@media (max-width: 1023px) {
+  .header { flex-wrap: wrap; }
+  .headerActions { width: 100%; flex-wrap: wrap; }
+  .dateButton { min-width: min(318px, 100%); flex: 1 1 260px; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filterBar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mainGrid { grid-template-columns: minmax(0, 1fr); }
+  .tableArea { border-right: 0; }
+  .inspector { border-top: 1px solid var(--tk-line); }
+  .tableTools { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+}
+@media (max-width: 639px) {
+  .header { gap: var(--tk-space-3); }
+  .header h1 { font-size: var(--tk-display-size); line-height: var(--tk-display-lh); }
+  .headerActions > button, .dateButton { width: 100%; flex-basis: 100%; }
+  .metrics, .filterBar, .tableTools, .createForm { grid-template-columns: minmax(0, 1fr); }
+  .tabs { padding-inline: var(--tk-space-3); gap: var(--tk-space-6); }
+  .filterBar, .tableTools, .inspector { padding: var(--tk-space-3); }
+  .tableShell table { min-width: 0; }
+  .bulkBar { flex-wrap: wrap; }
+  .detailsList div { grid-template-columns: minmax(82px, 34%) minmax(0, 1fr); }
+  .requester { grid-template-columns: 72px 34px minmax(0, 1fr); }
 }

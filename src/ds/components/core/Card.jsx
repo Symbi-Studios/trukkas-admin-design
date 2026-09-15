@@ -29,6 +29,7 @@ export function Card({ pad = "md", tone = "white", children, style, ...rest }) {
   return (
     <div
       {...rest}
+      className={["tk-card", rest.className].filter(Boolean).join(" ")}
       style={{
         borderRadius: "var(--tk-r-xl)",
         padding: pads[pad] ?? pads.md,

@@ -410,7 +410,7 @@ export function TripsSegments() {
       <div className="screen-head">
         <div>
           <div className="tk-meta">Jobs & Trips　›　Trips & Segments</div>
-          <h1>Trips & Segments</h1>
+          <h1 style={{ fontWeight: 600 }}>Trips & Segments</h1>
           <p>
             Monitor all active trips and their segment execution in real-time.
           </p>

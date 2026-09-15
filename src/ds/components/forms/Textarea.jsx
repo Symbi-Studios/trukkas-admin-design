@@ -15,7 +15,7 @@ const input = { flex: 1, border: 0, outline: 'none', background: 'transparent',
 export function Textarea({ label, hint, maxLength, value, rows = 4, style, ...rest }) {
   const [f, setF] = React.useState(false);
   return (
-    <label style={{ display: 'grid', gap: 6, ...style }}>
+    <label className="tk-field tk-textarea-field" style={{ display: 'grid', gap: 6, ...style }}>
       {label && <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{label}</span>}
       <div style={{ ...shell(false, f, false), height: 'auto', padding: '10px 12px', alignItems: 'stretch',
                     flexDirection: 'column', gap: 4 }}>

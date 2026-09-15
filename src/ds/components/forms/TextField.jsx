@@ -16,7 +16,7 @@ const input = { flex: 1, border: 0, outline: 'none', background: 'transparent',
 export function TextField({ label, required, hint, error, icon, suffix, disabled, style, ...rest }) {
   const [f, setF] = React.useState(false);
   return (
-    <label style={{ display: 'grid', gap: 6, ...style }}>
+    <label className="tk-field" style={{ display: 'grid', gap: 6, ...style }}>
       {label && (
         <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>
           {label}{required && <span style={{ color: 'var(--tk-danger)' }}> *</span>}

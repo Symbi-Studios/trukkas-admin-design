@@ -45,6 +45,7 @@ const TIMEZONES = [
 function EventRow({ event, onToggle, onFrequency }) {
   return (
     <div
+      className="tk-notification-event-grid"
       style={{
         display: "grid",
         gridTemplateColumns: "minmax(0, 1fr) 70px 70px 70px 140px",
@@ -282,6 +283,7 @@ export function SettingsNotifications() {
                 Set your overall notification preferences and quiet hours.
               </span>
               <div
+                className="tk-notification-event-grid tk-notification-event-header"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",

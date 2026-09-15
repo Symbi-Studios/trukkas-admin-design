@@ -6,7 +6,7 @@ export function SearchField({ placeholder = 'Search…', variant = 'panel', shor
   const [f, setF] = React.useState(false);
   const global = variant === 'global';
   return (
-    <div className={className} style={{
+    <div className={["tk-search-field", className].filter(Boolean).join(" ")} style={{
       display: 'flex', alignItems: 'center', gap: 10, height: 'var(--tk-h-search)',
       padding: '0 12px', background: global ? 'var(--tk-surface-sunk)' : '#fff',
       border: '1px solid ' + (f ? 'var(--tk-blue)' : global ? 'transparent' : 'var(--tk-line-strong)'),

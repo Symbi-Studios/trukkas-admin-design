@@ -17,3 +17,22 @@
   --tk-row-pad-y: 14px; /* table cell vertical padding */
   --tk-row-pad-x: 16px;
 }
+
+@media (max-width: 1023px) {
+  :root {
+    --tk-page-gutter: 20px;
+    --tk-section-gap: 16px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --tk-page-gutter: 12px;
+    --tk-card-pad: 16px;
+    --tk-card-pad-tight: 12px;
+    --tk-grid-gap: 12px;
+    --tk-section-gap: 14px;
+    --tk-row-pad-y: 10px;
+    --tk-row-pad-x: 12px;
+  }
+}

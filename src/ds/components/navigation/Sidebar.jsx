@@ -6,7 +6,7 @@ import { Icon } from '../../assets/icons/Icon.jsx';
  *  Children are SidebarSectionLabel + SidebarNavItem rows. */
 export function Sidebar({ collapsed, children, footer, onCollapse, style }) {
   return (
-    <aside className="tk-scroll" style={{
+    <aside className="tk-scroll tk-sidebar" data-collapsed={collapsed || undefined} style={{
       width: collapsed ? 'var(--tk-w-sidebar-collapsed)' : 'var(--tk-w-sidebar)',
       flex: '0 0 auto', display: 'flex', flexDirection: 'column',
       background: '#fff', borderRight: '1px solid var(--tk-line)',

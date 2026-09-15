@@ -19,9 +19,10 @@ export function SectionCard({
   return (
     <Card
       pad="none"
+      className="tk-section-card"
       style={{ display: "flex", flexDirection: "column", ...style }}
     >
-      <div
+      <div className="tk-section-card-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -45,7 +46,7 @@ export function SectionCard({
           </h3>
           <p className="tk-meta">{description}</p>
         </div>
-        <div
+        <div className="tk-section-card-action"
           style={{
             display: "flex",
             alignItems: "center",
@@ -69,7 +70,7 @@ export function SectionCard({
           {action}
         </div>
       </div>
-      <div
+      <div className="tk-section-card-body"
         style={{
           padding:
             pad === "none" ? 0 : "14px var(--tk-card-pad) var(--tk-card-pad)",
@@ -80,7 +81,7 @@ export function SectionCard({
         {children}
       </div>
       {footer && (
-        <div
+        <div className="tk-section-card-footer"
           style={{
             borderTop: "1px solid var(--tk-line)",
             padding: "12px var(--tk-card-pad)",
