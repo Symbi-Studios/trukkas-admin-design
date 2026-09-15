@@ -42,7 +42,7 @@ export function DataTable({
               <th className="tk-table-select"
                 style={{
                   ...cell,
-                  minWidth: 44,
+                  width: 44,
                 }}
               >
                 <Checkbox
