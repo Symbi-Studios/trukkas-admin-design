@@ -1,4 +1,6 @@
 import { UserDetail } from '../../../screens/UserDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('userId'); }
 
 export async function generateMetadata({ params }) {
   const { userId } = await params;

@@ -1,4 +1,6 @@
 import { FeeRuleDetail } from '../../../screens/FeeRuleDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('ruleId'); }
 
 export async function generateMetadata({ params }) {
   const { ruleId } = await params;

@@ -1,4 +1,6 @@
 import { TriangulationDetail } from '../../../screens/TriangulationDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('matchId'); }
 
 export async function generateMetadata({ params }) {
   const { matchId } = await params;

@@ -1,4 +1,6 @@
 import { CompanyDetail } from '../../../screens/CompanyDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('companyId'); }
 
 export async function generateMetadata({ params }) {
   const { companyId } = await params;

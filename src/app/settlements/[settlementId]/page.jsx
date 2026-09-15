@@ -1,4 +1,6 @@
 import { SettlementDetail } from '../../../screens/SettlementDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('settlementId'); }
 
 export async function generateMetadata({ params }) {
   const { settlementId } = await params;

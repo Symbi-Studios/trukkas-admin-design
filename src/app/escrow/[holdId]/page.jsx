@@ -1,4 +1,6 @@
 import { EscrowHoldDetail } from '../../../screens/EscrowHoldDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('holdId'); }
 
 export async function generateMetadata({ params }) {
   const { holdId } = await params;

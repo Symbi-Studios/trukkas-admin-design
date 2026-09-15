@@ -1,4 +1,6 @@
 import { PricingDetail } from '../../../screens/PricingDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('priceId'); }
 
 export async function generateMetadata({ params }) {
   const { priceId } = await params;

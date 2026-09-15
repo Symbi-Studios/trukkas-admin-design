@@ -1,4 +1,6 @@
 import { TransactionDetail } from '../../../screens/TransactionDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('transactionId'); }
 
 export async function generateMetadata({ params }) {
   const { transactionId } = await params;

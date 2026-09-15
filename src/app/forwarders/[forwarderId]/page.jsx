@@ -1,4 +1,6 @@
 import { ForwarderDetail } from '../../../screens/ForwarderDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('forwarderId'); }
 
 export async function generateMetadata({ params }) {
   const { forwarderId } = await params;

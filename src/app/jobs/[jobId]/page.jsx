@@ -1,4 +1,6 @@
 import { JobDetail } from '../../../screens/JobDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('jobId'); }
 
 export async function generateMetadata({ params }) {
   const { jobId } = await params;

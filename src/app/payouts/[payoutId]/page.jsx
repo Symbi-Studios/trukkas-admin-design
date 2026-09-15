@@ -1,4 +1,6 @@
 import { PayoutDetail } from '../../../screens/PayoutDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('payoutId'); }
 
 export async function generateMetadata({ params }) {
   const { payoutId } = await params;

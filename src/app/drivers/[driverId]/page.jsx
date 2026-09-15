@@ -1,4 +1,6 @@
 import { DriverDetail } from '../../../screens/DriverDetail.jsx';
+import { staticParamsFor } from '../../../staticParams.js';
+export function generateStaticParams(){ return staticParamsFor('driverId'); }
 
 export async function generateMetadata({ params }) {
   const { driverId } = await params;
