@@ -9,6 +9,8 @@ import {
   Tabs,
   SearchField,
   DataTable,
+  DonutChart,
+  LegendList,
   Pagination,
   Badge,
   Icon,
@@ -25,6 +27,12 @@ const STATUS_TONE = {
   Resolved: "success",
   Dispute: "purple",
 };
+const DEMURRAGE_SUMMARY = [
+  { label: "Active", value: 72, display: "₦18.6M (72%)", color: "#f14b67" },
+  { label: "Upcoming", value: 14, display: "₦7.3M (14%)", color: "#f2b400" },
+  { label: "Resolved", value: 12, display: "₦32.3M (12%)", color: "#0da56a" },
+  { label: "Disputes", value: 2, display: "₦2.2M (2%)", color: "#762ce8" },
+];
 const money = (n) =>
   "₦" + Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
 function exportCsv(rows) {
@@ -134,45 +142,45 @@ export function Demurrage() {
           </Button>
         }
       />
+      <div className="grid grid-cols-[repeat(5,minmax(150px,1fr))] gap-3 min-w-0 max-[1440px]:grid-cols-3 max-[760px]:grid-cols-2 max-[480px]:grid-cols-1">
+        <StatCard
+          icon="calendar-x"
+          tint="red"
+          label="Active Demurrage"
+          value="27"
+          caption="₦18,645,000.00 Total Charges"
+        />
+        <StatCard
+          icon="calendar-clock"
+          tint="amber"
+          label="Upcoming Charges"
+          value="16"
+          caption="₦7,250,000.00 Est. Total Charges"
+        />
+        <StatCard
+          icon="inbox"
+          label="Resolved (This Month)"
+          value="42"
+          caption="₦32,280,000.00 Total Resolved"
+        />
+        <StatCard
+          icon="circle-check"
+          tint="green"
+          label="Collected (This Month)"
+          value="₦24,680,000.00"
+          delta="68.4%"
+          caption="Collection Rate"
+        />
+        <StatCard
+          icon="circle-alert"
+          tint="purple"
+          label="Disputes"
+          value="4"
+          caption="₦2,150,000.00 In Dispute"
+        />
+      </div>
       <div className="grid grid-cols-[minmax(0,1fr)_310px] gap-4 items-start max-[1200px]:grid-cols-1">
         <div className="grid grid-cols-1 gap-3.5 content-start min-w-0">
-          <div className="grid grid-cols-[repeat(5,minmax(150px,1fr))] gap-3 min-w-0 max-[1200px]:grid-cols-3 max-[760px]:grid-cols-2 max-[480px]:grid-cols-1">
-            <StatCard
-              icon="calendar-x"
-              tint="red"
-              label="Active Demurrage"
-              value="27"
-              caption="₦18,645,000.00 Total Charges"
-            />
-            <StatCard
-              icon="calendar-clock"
-              tint="amber"
-              label="Upcoming Charges"
-              value="16"
-              caption="₦7,250,000.00 Est. Total Charges"
-            />
-            <StatCard
-              icon="inbox"
-              label="Resolved (This Month)"
-              value="42"
-              caption="₦32,280,000.00 Total Resolved"
-            />
-            <StatCard
-              icon="circle-check"
-              tint="green"
-              label="Collected (This Month)"
-              value="₦24,680,000.00"
-              delta="68.4%"
-              caption="Collection Rate"
-            />
-            <StatCard
-              icon="circle-alert"
-              tint="purple"
-              label="Disputes"
-              value="4"
-              caption="₦2,150,000.00 In Dispute"
-            />
-          </div>
           <SectionCard title="" pad="none">
             <Tabs
               value={tab}
@@ -437,40 +445,20 @@ export function Demurrage() {
               </select>
             }
           >
-            <div className="flex items-center gap-4">
-              <div
-                className="w-[108px] h-[108px] rounded-full grid place-items-center shrink-0"
-                style={{
-                  background:
-                    "conic-gradient(#f14b67 0 72%, #f2b400 72% 86%, #0da56a 86% 98%, #762ce8 98%)",
-                }}
-              >
-                <div className="w-[72px] h-[72px] rounded-full bg-white grid place-items-center text-center text-tk-ink-900 text-[14px]/[16px] font-bold font-tk-sans">
-                  <span>
-                    ₦25.9M
-                    <br />
-                    Total Charges
-                  </span>
-                </div>
-              </div>
-              <div className="grid gap-2 flex-1 text-tk-micro">
-                <span className="flex justify-between gap-2">
-                  <i style={{ color: "#f14b67" }}>● Active</i>
-                  <b>₦18.6M (72%)</b>
-                </span>
-                <span className="flex justify-between gap-2">
-                  <i style={{ color: "#f2b400" }}>● Upcoming</i>
-                  <b>₦7.3M (14%)</b>
-                </span>
-                <span className="flex justify-between gap-2">
-                  <i style={{ color: "#0da56a" }}>● Resolved</i>
-                  <b>₦32.3M (12%)</b>
-                </span>
-                <span className="flex justify-between gap-2">
-                  <i style={{ color: "#762ce8" }}>● Disputes</i>
-                  <b>₦2.2M (2%)</b>
-                </span>
-              </div>
+            <div className="flex flex-col items-center gap-4 w-full">
+              <DonutChart
+                size={180}
+                thickness={18}
+                centerValue="₦25.9M"
+                centerLabel="Total Charges"
+                style={{ flex: "0 0 auto" }}
+                data={DEMURRAGE_SUMMARY}
+              />
+              <LegendList
+                items={DEMURRAGE_SUMMARY}
+                showShare={false}
+                style={{ flex: 1, width: "100%" }}
+              />
             </div>
             <div className="border-t border-tk-line mt-3.5 pt-1.5">
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
@@ -674,9 +662,7 @@ function Action({ icon, title, hint, onClick }) {
         <Icon name={icon} size={13} />
       </span>
       <span className="flex-1">
-        <strong className="block text-tk-meta text-tk-ink-900">
-          {title}
-        </strong>
+        <strong className="block text-tk-meta text-tk-ink-900">{title}</strong>
         <small className="block text-tk-micro text-tk-ink-400">{hint}</small>
       </span>
       <Icon name="chevron-right" size={13} />
