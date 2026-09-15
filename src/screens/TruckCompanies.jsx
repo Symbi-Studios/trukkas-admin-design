@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useNavigate } from "../router.js";
-import { Avatar, Badge, Button, Card, DataTable, DropdownMenu, Icon, IconButton, Modal, Pagination, SearchField, Select, StatCard, Tabs, TextField } from "../ds.js";
+import { Avatar, Badge, Button, Card, DataTable, DropdownMenu, Icon, IconButton, Modal, PageHeader, Pagination, SearchField, Select, StatCard, Tabs, TextField } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
 import { companyStats } from "../mock/fixtures/companies.js";
 import { addCompany, setCompanyStatus, setCompanyVerification } from "../mock/api.js";
@@ -33,7 +33,7 @@ export function TruckCompanies() {
   async function saveCompany() { if (!form.name || !form.regNo) return; await addCompany({ ...form, id: `TC-${Date.now()}`, trucks: 0, drivers: 0, status: "Active", verification: "Pending", performance: null, joined: "Sep 14, 2026" }); setForm(blank); setAddOpen(false); }
 
   return <div className="tc-page">
-    <div className="tc-title-row"><div><span className="tc-breadcrumb">Companies <Icon name="chevron-right" size={13}/> Trucking Companies</span><h1 className="tk-display">Trucking Companies</h1><p className="tk-body">Review, verify and manage all registered trucking companies on Trukkas.</p></div><div className="tc-title-actions"><Button variant="outline" icon="download" onClick={() => downloadCsv(filtered)}>Export</Button><Button icon="plus" onClick={() => setAddOpen(true)}>Add Company</Button></div></div>
+    <PageHeader crumbs={["Companies", "Trucking Companies"]} title="Trucking Companies" description="Review, verify and manage all registered trucking companies on Trukkas." actions={<><Button variant="outline" icon="download" onClick={() => downloadCsv(filtered)}>Export</Button><Button icon="plus" onClick={() => setAddOpen(true)}>Add Company</Button></>}/>
     <div className="tc-stat-grid tc-stat-grid-primary">
       <StatCard icon="building-2" label="Total Companies" value={companyStats.totalCompanies} delta="18%" caption="vs last month"/><StatCard icon="truck" tint="green" label="Active Companies" value={companyStats.activeCompanies} delta="16%" caption="vs last month"/><StatCard icon="shield-check" label="Verified Companies" value={companyStats.verifiedCompanies} delta="21%" caption="vs last month"/><StatCard icon="hourglass" tint="amber" label="Pending Review" value="18" delta="12%" direction="down" caption="vs last month"/><StatCard icon="ban" tint="red" label="Suspended Companies" value="6" delta="50%" direction="down" caption="vs last month"/>
     </div>

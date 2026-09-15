@@ -9,6 +9,7 @@ import {
   DropdownMenu,
   Icon,
   Modal,
+  PageHeader,
   Pagination,
   Sparkline,
   Textarea,
@@ -407,15 +408,11 @@ export function TripsSegments() {
 
   return (
     <div className="operations-screen">
-      <div className="screen-head">
-        <div>
-          <div className="tk-meta">Jobs & Trips　›　Trips & Segments</div>
-          <h1 style={{ fontWeight: 600 }}>Trips & Segments</h1>
-          <p>
-            Monitor all active trips and their segment execution in real-time.
-          </p>
-        </div>
-        <div className="head-actions">
+      <PageHeader
+        crumbs={["Jobs & Trips", "Trips & Segments"]}
+        title="Trips & Segments"
+        description="Monitor all active trips and their segment execution in real-time."
+        actions={<>
           <button className="date-button">
             <Icon name="calendar" size={15} />
             May 24 – May 30, 2026⌄
@@ -431,8 +428,8 @@ export function TripsSegments() {
           >
             Export
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
 

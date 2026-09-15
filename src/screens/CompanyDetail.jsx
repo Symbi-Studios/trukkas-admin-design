@@ -11,6 +11,7 @@ import {
   Icon,
   IconButton,
   Modal,
+  PageHeader,
   Pagination,
   SearchField,
   Select,
@@ -239,16 +240,45 @@ export function CompanyDetail() {
   ];
   return (
     <div className="company-page">
-      <div className="company-crumb">
-        Trucking Companies <Icon name="chevron-right" size={13} />{" "}
-        {company.name}
-      </div>
+      <PageHeader
+        crumbs={["Companies", "Trucking Companies", company.name]}
+        title="Company Details"
+        description="Review the company profile, fleet, drivers, documents and compliance status."
+        actions={<>
+          <IconButton icon="ellipsis" onClick={() => setMenu(!menu)} />
+          <Button variant="outline" icon="mail" onClick={() => setMessageOpen(true)}>Send Message</Button>
+          <span className="company-menu-wrap">
+            <Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>Actions</Button>
+            {menu && (
+              <span className="company-dropdown">
+                <DropdownMenu
+                  width={220}
+                  items={[
+                    { label: "Edit company", icon: "pencil", onClick: () => { setEditOpen(true); setMenu(false); } },
+                    { label: "Print profile", icon: "printer", onClick: () => window.print() },
+                    { divider: true },
+                    {
+                      label: company.status === "Suspended" ? "Reactivate company" : "Suspend company",
+                      icon: "ban",
+                      tone: company.status === "Suspended" ? undefined : "danger",
+                      onClick: () => {
+                        setCompanyStatus(company.id, company.status === "Suspended" ? "Active" : "Suspended");
+                        setMenu(false);
+                      },
+                    },
+                  ]}
+                />
+              </span>
+            )}
+          </span>
+        </>}
+      />
       <header className="company-hero">
         <div className="company-brand">
           <Avatar name={company.name} size={64} square />
           <div>
             <div className="company-name">
-              <h1 className="tk-display">{company.name}</h1>
+              <h2 className="tk-title">{company.name}</h2>
               <Badge
                 dot
                 tone={
@@ -264,62 +294,6 @@ export function CompanyDetail() {
             </p>
             <small>Reliable movement. Greater possibilities.</small>
           </div>
-        </div>
-        <div className="company-actions">
-          <IconButton icon="ellipsis" onClick={() => setMenu(!menu)} />
-          <Button
-            variant="outline"
-            icon="mail"
-            onClick={() => setMessageOpen(true)}
-          >
-            Send Message
-          </Button>
-          <span className="company-menu-wrap">
-            <Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>
-              Actions
-            </Button>
-            {menu && (
-              <span className="company-dropdown">
-                <DropdownMenu
-                  width={220}
-                  items={[
-                    {
-                      label: "Edit company",
-                      icon: "pencil",
-                      onClick: () => {
-                        setEditOpen(true);
-                        setMenu(false);
-                      },
-                    },
-                    {
-                      label: "Print profile",
-                      icon: "printer",
-                      onClick: () => window.print(),
-                    },
-                    { divider: true },
-                    {
-                      label:
-                        company.status === "Suspended"
-                          ? "Reactivate company"
-                          : "Suspend company",
-                      icon: "ban",
-                      tone:
-                        company.status === "Suspended" ? undefined : "danger",
-                      onClick: () => {
-                        setCompanyStatus(
-                          company.id,
-                          company.status === "Suspended"
-                            ? "Active"
-                            : "Suspended",
-                        );
-                        setMenu(false);
-                      },
-                    },
-                  ]}
-                />
-              </span>
-            )}
-          </span>
         </div>
         <div className="company-contact">
           <span>

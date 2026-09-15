@@ -3,26 +3,6 @@
   gap: var(--tk-space-5);
   min-width: 0;
 }
-.header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--tk-space-5);
-}
-.header > div:first-child {
-  flex: 1;
-}
-.header h1 {
-  margin: 0;
-  color: var(--tk-ink-900);
-  font-size: 29px;
-  line-height: 34px;
-  letter-spacing: -0.5px;
-}
-.header p {
-  margin: 3px 0 0;
-  color: var(--tk-ink-400);
-  font-size: 13px;
-}
 .headerActions {
   display: flex;
   align-items: center;
@@ -437,7 +417,6 @@
   }
 }
 @media (max-width: 1023px) {
-  .header { flex-wrap: wrap; }
   .headerActions { width: 100%; flex-wrap: wrap; }
   .dateButton { min-width: min(318px, 100%); flex: 1 1 260px; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -448,8 +427,6 @@
   .tableTools { grid-template-columns: minmax(0, 1fr) auto auto auto; }
 }
 @media (max-width: 639px) {
-  .header { gap: var(--tk-space-3); }
-  .header h1 { font-size: var(--tk-display-size); line-height: var(--tk-display-lh); }
   .headerActions > button, .dateButton { width: 100%; flex-basis: 100%; }
   .metrics, .filterBar, .tableTools, .createForm { grid-template-columns: minmax(0, 1fr); }
   .tabs { padding-inline: var(--tk-space-3); gap: var(--tk-space-6); }

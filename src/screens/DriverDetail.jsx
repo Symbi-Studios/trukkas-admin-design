@@ -331,7 +331,7 @@ export function DriverDetail() {
             </div>
             <div style={{ display: 'grid', gap: 4, minWidth: 220 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <h1 className="tk-display" style={{ fontSize: 24 }}>{d.name}</h1>
+                <h2 className="tk-title">{d.name}</h2>
                 <Badge tone={STATUS_TONE[d.status]} dot>{d.status}</Badge>
                 <Badge tone={d.registrationType === 'Company Driver' ? 'info' : 'neutral'}>{d.registrationType}</Badge>
               </div>

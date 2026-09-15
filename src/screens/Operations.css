@@ -4,27 +4,6 @@
   gap: 16px;
   min-width: 0;
 }
-.operations-screen .screen-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-.operations-screen .screen-head > div:first-child {
-  flex: 1;
-}
-.operations-screen .screen-head h1 {
-  margin: 0;
-  color: var(--tk-ink-900);
-  font-size: 28px;
-  line-height: 34px;
-  letter-spacing: -0.4px;
-}
-.operations-screen .screen-head p {
-  margin: 4px 0 0;
-  color: var(--tk-ink-400);
-  font-size: 13px;
-}
-.operations-screen .head-actions,
 .operations-screen .inline-actions {
   display: flex;
   align-items: center;
@@ -666,9 +645,6 @@
   }
 }
 @media (max-width: 900px) {
-  .operations-screen .screen-head { flex-wrap: wrap; }
-  .operations-screen .head-actions { width: 100%; flex-wrap: wrap; }
-  .operations-screen .head-actions > * { flex: 1 1 160px; }
   .operations-screen .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .jobs-master, .trip-workspace, .bottom-bid-grid, .job-detail-grid { grid-template-columns: minmax(0, 1fr); }
   .jobs-nav-card { overflow-x: auto; }
@@ -683,7 +659,6 @@
   .ops-panel:has(.rank-row), .ops-panel:has(.segment-row), .ops-panel:has(.status-flow) { overflow-x: auto; }
 }
 @media (max-width: 560px) {
-  .operations-screen .screen-head h1 { font-size: var(--tk-display-size); line-height: var(--tk-display-lh); }
   .operations-screen .kpi-grid, .jobs-filters, .overview-facts, .finance-grid { grid-template-columns: minmax(0, 1fr); }
   .operations-screen .metric-card { min-height: 112px; }
   .operations-screen .inline-actions, .bulk-bar { flex-wrap: wrap; }

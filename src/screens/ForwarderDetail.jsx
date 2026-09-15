@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
-  Button, Badge, Tag, SectionCard, LabelValue, Card, Breadcrumbs, DropdownMenu, DataTable, Tabs,
+  Button, Badge, Tag, SectionCard, LabelValue, Card, PageHeader, DropdownMenu, DataTable, Tabs,
   Timeline, QuickActionsCard, Icon, Avatar, EmptyState,
 } from '../ds.js';
 import './ForwarderDetail.css';
@@ -109,13 +109,14 @@ export function ForwarderDetail() {
 
   return (
     <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-      <div className="fd-head">
-        <Breadcrumbs items={[
+      <PageHeader
+        crumbs={[
           { label: 'Forwarders / Exporters', onClick: () => navigate('/forwarders') },
-          { label: FORWARDER.name, onClick: () => navigate('/forwarders') },
-          'Details',
-        ]} />
-        <div className="fd-head-actions">
+          FORWARDER.name,
+        ]}
+        title="Forwarder Details"
+        description="Review the forwarder profile, verification, jobs, financial standing and activity."
+        actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/forwarders')}>Back to Forwarders</Button>
           <Button icon="pencil">Edit Forwarder</Button>
           <span style={{ position: 'relative' }}>
@@ -132,15 +133,15 @@ export function ForwarderDetail() {
               </span>
             )}
           </span>
-        </div>
-      </div>
+        </>}
+      />
 
       <Card>
         <div className="fd-identity">
           <Avatar name={FORWARDER.name} size={56} />
           <div style={{ flex: 1, minWidth: 240, display: 'grid', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h1 className="tk-display" style={{ fontSize: 22 }}>{FORWARDER.name}</h1>
+              <h2 className="tk-title">{FORWARDER.name}</h2>
               <Badge tone="success">{FORWARDER.status}</Badge>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

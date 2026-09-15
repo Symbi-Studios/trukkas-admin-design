@@ -12,6 +12,7 @@ import {
   DropdownMenu,
   Icon,
   Modal,
+  PageHeader,
   Tabs,
   Timeline,
   Avatar,
@@ -848,38 +849,16 @@ export function JobDetail() {
 
   return (
     <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
-      <div>
-        <a onClick={() => navigate("/jobs")} className="jd-back-link">
-          <Icon name="arrow-left" size={14} />
-          Back to Jobs
-        </a>
-      </div>
-
-      <div className="jd-header">
-        <div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <h1 className="tk-display">{job.id}</h1>
-            <Badge tone={statusTone(job.status)} dot>
-              {job.status}
-            </Badge>
-          </div>
-          <p className="jd-header-meta">
-            <Icon name="clock" size={13} />
-            Created on {job.createdAt || job.published}
-            <span className="jd-dot">•</span>Last updated {job.updatedAt || "—"}
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <PageHeader
+        crumbs={["Jobs & Trips", "Jobs", job.id]}
+        title={job.id}
+        meta={<Badge tone={statusTone(job.status)} dot>{job.status}</Badge>}
+        description={`Created on ${job.createdAt || job.published} • Last updated ${job.updatedAt || "—"}`}
+        actions={<>
+          <Button variant="outline" icon="arrow-left" onClick={() => navigate("/jobs")}>Back to Jobs</Button>
           {headerActions}
-        </div>
-      </div>
+        </>}
+      />
 
       {toast && (
         <Banner

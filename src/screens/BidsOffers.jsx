@@ -10,6 +10,7 @@ import {
   DropdownMenu,
   Icon,
   Modal,
+  PageHeader,
   Pagination,
   SearchField,
   Sparkline,
@@ -450,13 +451,11 @@ export function BidsOffers() {
 
   return (
     <div className="operations-screen">
-      <div className="screen-head">
-        <div>
-          <div className="tk-meta">Jobs & Trips　›　Bids & Offers</div>
-          <h1>Bids & Offers</h1>
-          <p>Manage all bid submissions and counter offers across Trukkas.</p>
-        </div>
-        <div className="head-actions">
+      <PageHeader
+        crumbs={["Jobs & Trips", "Bids & Offers"]}
+        title="Bids & Offers"
+        description="Manage all bid submissions and counter offers across Trukkas."
+        actions={<>
           <span style={{ position: "relative" }}>
             <button
               className="date-button"
@@ -524,8 +523,8 @@ export function BidsOffers() {
           >
             Export
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
 

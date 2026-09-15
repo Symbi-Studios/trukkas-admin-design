@@ -11,6 +11,7 @@ import {
   Icon,
   IconButton,
   Modal,
+  PageHeader,
   Select,
   StatCard,
   Tabs,
@@ -89,29 +90,40 @@ export function FleetTruckDetail() {
   const companyUrl = `/companies/${truck.tc}`;
   return (
     <div className="truck-detail-page">
-      <div className="truck-detail-crumb">
-        Trucking Companies <Icon name="chevron-right" size={13} />
-        <button onClick={() => navigate(companyUrl)}>{truck.company}</button>
-        <Icon name="chevron-right" size={13} />
-        Trucks
-        <Icon name="chevron-right" size={13} />
-        {truck.plate}
-      </div>
-      <Button
-        className="truck-back"
-        variant="outline"
-        icon="arrow-left"
-        onClick={() => navigate(`${companyUrl}?tab=trucks`)}
-      >
-        Back to Trucks
-      </Button>
+      <PageHeader
+        crumbs={[
+          "Trucking Companies",
+          { label: truck.company, onClick: () => navigate(companyUrl) },
+          "Trucks",
+          truck.plate,
+        ]}
+        title="Truck Details"
+        description="View vehicle information, assignments, maintenance, trips and compliance records."
+        actions={<>
+          <Button variant="outline" icon="arrow-left" onClick={() => navigate(`${companyUrl}?tab=trucks`)}>Back to Trucks</Button>
+          <span className="truck-detail-actions">
+            <span>
+              <Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>Actions</Button>
+              {menu && (
+                <span>
+                  <DropdownMenu width={220} items={[
+                    { label: "Schedule maintenance", icon: "wrench", onClick: () => navigate("/maintenance") },
+                    { divider: true },
+                    { label: "Print profile", icon: "printer", onClick: () => window.print() },
+                  ]}/>
+                </span>
+              )}
+            </span>
+          </span>
+        </>}
+      />
       <header className="truck-detail-hero">
         <div className="truck-detail-visual">
           <Icon name="truck" size={76} />
         </div>
         <div className="truck-detail-title">
           <div>
-            <h1 className="tk-display">{truck.plate}</h1>
+            <h2 className="tk-title">{truck.plate}</h2>
             <Badge dot tone={tone[truck.status]}>
               {truck.status}
             </Badge>
@@ -123,33 +135,6 @@ export function FleetTruckDetail() {
             <Icon name="building-2" size={15} />
             {truck.company}
           </button>
-        </div>
-        <div className="truck-detail-actions">
-          <span>
-            <Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>
-              Actions
-            </Button>
-            {menu && (
-              <span>
-                <DropdownMenu
-                  width={220}
-                  items={[
-                    {
-                      label: "Schedule maintenance",
-                      icon: "wrench",
-                      onClick: () => navigate("/maintenance"),
-                    },
-                    { divider: true },
-                    {
-                      label: "Print profile",
-                      icon: "printer",
-                      onClick: () => window.print(),
-                    },
-                  ]}
-                />
-              </span>
-            )}
-          </span>
         </div>
         <div className="truck-detail-meta">
           <span>

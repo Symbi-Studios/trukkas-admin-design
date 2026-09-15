@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "../router.js";
 import {
   Avatar, Badge, DataTable, DonutChart, DropdownMenu,
-  FilterSelect, Icon, LegendList, LineChart, ProgressBar, SectionCard, StatCard,
+  FilterSelect, Icon, LegendList, LineChart, PageHeader, ProgressBar, SectionCard, StatCard,
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
 import { getJobTrips } from "../domain/jobTrips.js";
@@ -150,11 +150,14 @@ export function Dashboard() {
 
   return (
     <div className={styles.dashboard}>
-      <header className={styles.hero}>
-        <div><h1>Good morning, Super Admin <span aria-hidden="true">👋</span></h1><p>Here&apos;s what&apos;s happening on Trukkas for {dateRange}.</p></div>
-        <blockquote><Icon name="quote" size={20} />“Connecting People. Moving Africa Forward.”</blockquote>
-        <MenuSelect id="date" value={dateRange} options={DATE_RANGES} openMenu={openMenu} setOpenMenu={setOpenMenu} onChange={setDateRange} icon="calendar-days" />
-      </header>
+      <PageHeader
+        title={<>Good morning, Super Admin <span aria-hidden="true">👋</span></>}
+        description={<>Here&apos;s what&apos;s happening on Trukkas for {dateRange}.</>}
+        actions={<>
+          <blockquote className={styles.motto}><Icon name="quote" size={20} />“Connecting People. Moving Africa Forward.”</blockquote>
+          <MenuSelect id="date" value={dateRange} options={DATE_RANGES} openMenu={openMenu} setOpenMenu={setOpenMenu} onChange={setDateRange} icon="calendar-days" />
+        </>}
+      />
       <section className={styles.stats} aria-label="Platform summary">
         <StatCard icon="user-round" label="Total Drivers" value={drivers.length} delta="12%" caption={`${drivers.filter((d) => d.registrationType?.includes("Individual")).length} Individual`} />
         <StatCard icon="building-2" tint="green" label="Trucking Companies" value={companies.length} delta="8%" caption={`${companies.filter((c) => c.status === "Active").length} Active`} />

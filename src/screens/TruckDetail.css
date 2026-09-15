@@ -3,26 +3,6 @@
   display: grid;
   gap: var(--tk-section-gap);
 }
-.truck-detail-crumb {
-  display: flex;
-  align-items: center;
-  gap: var(--tk-space-2);
-  flex-wrap: wrap;
-  font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh)
-    var(--tk-font-sans);
-  color: var(--tk-ink-400);
-}
-.truck-detail-crumb button {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: var(--tk-blue);
-  cursor: pointer;
-  font: inherit;
-}
-.truck-back {
-  justify-self: start;
-}
 .truck-detail-hero {
   display: grid;
   grid-template-columns: 140px 1fr auto;
@@ -370,9 +350,6 @@
 @media (max-width: 760px) {
   .truck-detail-hero {
     grid-template-columns: 100px 1fr;
-  }
-  .truck-detail-actions {
-    grid-column: 1/-1;
   }
   .truck-detail-meta {
     gap: var(--tk-space-3);

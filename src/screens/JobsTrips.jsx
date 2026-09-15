@@ -14,6 +14,7 @@ import {
   IconButton,
   Modal,
   Pagination,
+  PageHeader,
   SearchField,
   Select,
   StatCard,
@@ -679,12 +680,11 @@ export function JobsTrips() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <h1>Jobs</h1>
-          <p>View, manage and monitor all logistics jobs across Trukkas.</p>
-        </div>
-        <div className={styles.headerActions}>
+      <PageHeader
+        crumbs={["Jobs & Trips", "Jobs"]}
+        title="Jobs"
+        description="View, manage and monitor all logistics jobs across Trukkas."
+        actions={<span className={styles.headerActions}>
           <button
             className={styles.dateButton}
             type="button"
@@ -708,8 +708,8 @@ export function JobsTrips() {
               setMenu(null);
             }}
           />
-        </div>
-      </header>
+        </span>}
+      />
       {toast && <Banner tone={toast.tone} title={toast.title} />}
       <section className={styles.metrics} aria-label="Job summary">
         <StatCard
