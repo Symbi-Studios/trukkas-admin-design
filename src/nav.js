@@ -119,4 +119,5 @@ export const SEARCH_PLACEHOLDER = {
   announcements: "Search tickets, articles, announcements...",
   feedback: "Search feedback submissions...",
   notifications: "Search notifications...",
+  profile: "Search settings and activity...",
 };

@@ -968,6 +968,21 @@ export async function resetUserPassword(id) {
   return patchRow('users', 'id', id, { passwordLastChanged: 'Just now' });
 }
 
+export async function updateUserProfile(id, changes) {
+  await delay(80);
+  return patchRow('users', 'id', id, changes);
+}
+
+export async function changeUserPassword(id) {
+  await delay(80);
+  return patchRow('users', 'id', id, {
+    passwordLastChanged: 'Just now',
+    passwordStrength: 'Strong',
+    passwordStrengthPct: 96,
+    passwordExpires: 'Dec 14, 2026 (in 90 days)',
+  });
+}
+
 export async function addUser(entry) {
   await delay();
   return prependRow('users', {

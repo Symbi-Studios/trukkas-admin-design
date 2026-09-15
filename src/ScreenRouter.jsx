@@ -35,6 +35,8 @@ import { NotificationCenter } from './screens/NotificationCenter.jsx';
 import { AuditLogs } from './screens/AuditLogs.jsx';
 import { SystemSettings } from './screens/SystemSettings.jsx';
 import { FAQ } from './screens/FAQ.jsx';
+import { AdminProfile } from './screens/AdminProfile.jsx';
+import { SignedOut } from './screens/SignedOut.jsx';
 import { ScreenPlaceholder } from './screens/ScreenPlaceholder.jsx';
 import { NAV } from './nav.js';
 
@@ -74,6 +76,8 @@ const screens = {
   audit: AuditLogs,
   settings: SystemSettings,
   faq: FAQ,
+  profile: AdminProfile,
+  'signed-out': SignedOut,
 };
 
 export function ScreenRouter({ screen }) {

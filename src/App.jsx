@@ -31,6 +31,8 @@ export function AdminShell({ children }) {
     else setCollapsed((current) => !current);
   }
 
+  if (pathname === "/signed-out") return children;
+
   const sidebar = (
     <Sidebar
       collapsed={collapsed}
@@ -108,6 +110,8 @@ export function AdminShell({ children }) {
             );
           }}
           onNotifications={() => router.push("/notifications")}
+          onViewProfile={() => router.push("/profile")}
+          onLogout={() => router.push("/signed-out")}
           user="Trukkas Admin"
           role="Super Admin"
         />
