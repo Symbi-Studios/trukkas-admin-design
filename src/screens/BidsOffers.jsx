@@ -354,66 +354,13 @@ export function BidsOffers() {
           <small>{r.time}</small>
         </span>
       ),
-    },
-    {
-      key: "a",
-      header: "Actions",
-      render: (r) => (
-        <span style={{ position: "relative" }}>
-          <button
-            className="row-actions"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuFor(menuFor === r.id ? null : r.id);
-            }}
-          >
-            •••
-          </button>
-          {menuFor === r.id && (
-            <span
-              style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <DropdownMenu
-                width={200}
-                items={[
-                  {
-                    label: "View Job",
-                    icon: "eye",
-                    onClick: () => {
-                      setMenuFor(null);
-                      navigate("/jobs/" + r.id);
-                    },
-                  },
-                  { divider: true },
-                  {
-                    label: "Accept Bid",
-                    icon: "circle-check",
-                    onClick: () => updateBidStatus(r.id, "Bid Accepted"),
-                  },
-                  {
-                    label: "Reject Bid",
-                    icon: "circle-x",
-                    tone: "danger",
-                    onClick: () => updateBidStatus(r.id, "Cancelled"),
-                  },
-                  {
-                    label: "Mark Pending Evaluation",
-                    icon: "hourglass",
-                    onClick: () => updateBidStatus(r.id, "Pending Evaluation"),
-                  },
-                ]}
-              />
-            </span>
-          )}
-        </span>
-      ),
-    },
+    }
   ];
   const offerCols = [
     {
       key: "id",
       header: "Job ID",
+      width: "120px",
       render: (r) => <a onClick={() => navigate("/jobs/" + r.id)}>{r.id}</a>,
     },
     { key: "company", header: "Bidding Company" },

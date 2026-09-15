@@ -8,7 +8,7 @@ export const NAV = [
     section: "Operations",
     items: [
       { id: "jobs", icon: "package", label: "Jobs" },
-      { id: "trips", icon: "radio-tower", label: "Trips & Segments" },
+      { id: "trips", icon: "route", label: "Trips & Segments" },
       { id: "bids", icon: "radio-tower", label: "Bids & Offers" },
       { id: "documents", icon: "file-text", label: "Documents" },
       { id: "tracking", icon: "map-pin", label: "Live Tracking" },

@@ -227,7 +227,7 @@
   color: var(--tk-ink-400);
 }
 .route-cell {
-  white-space: nowrap;
+  /* white-space: nowrap; */
   color: var(--tk-ink-700);
 }
 .row-actions {

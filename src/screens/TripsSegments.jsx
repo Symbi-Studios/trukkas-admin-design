@@ -19,6 +19,7 @@ import { useCollection } from "../mock/useCollection.js";
 import { getJobTrips } from "../domain/jobTrips.js";
 import { normalizePayouts } from "../domain/payouts.js";
 import { updateJobTripStatus } from "../mock/api.js";
+import { ProgressBar } from "../ds/components/data/ProgressBar.jsx";
 
 const initialTrips = [
   [
@@ -162,26 +163,37 @@ export function TripsSegments() {
   const navigate = useNavigate();
   const jobs = useCollection("jobs") || [];
   const payoutRows = useCollection("payoutRequests") || [];
-  const payouts = useMemo(() => normalizePayouts(payoutRows, jobs), [payoutRows, jobs]);
+  const payouts = useMemo(
+    () => normalizePayouts(payoutRows, jobs),
+    [payoutRows, jobs],
+  );
   const [tripOverrides, setTripOverrides] = useState({});
   const trips = useMemo(() => {
-    const linked = jobs.flatMap((job) => getJobTrips(job).map((trip) => ({
-      id: trip.id,
-      job: job.id,
-      from: trip.origin || job.origin || "—",
-      to: trip.destination || job.destination || "—",
-      truck: trip.truckPlate || "Unassigned",
-      driver: trip.driverName || "Unassigned",
-      company: trip.truckingCompany || job.truckingCompany || job.truckCompany || "—",
-      status: trip.status || "Assigned",
-      eta: trip.eta || trip.deliveryDate || "—",
-      distance: `${trip.distanceKm || job.distanceKm || 0} km`,
-      progress: trip.progress || 0,
-      segment: trip.segment || 1,
-    })));
+    const linked = jobs.flatMap((job) =>
+      getJobTrips(job).map((trip) => ({
+        id: trip.id,
+        job: job.id,
+        from: trip.origin || job.origin || "—",
+        to: trip.destination || job.destination || "—",
+        truck: trip.truckPlate || "Unassigned",
+        driver: trip.driverName || "Unassigned",
+        company:
+          trip.truckingCompany ||
+          job.truckingCompany ||
+          job.truckCompany ||
+          "—",
+        status: trip.status || "Assigned",
+        eta: trip.eta || trip.deliveryDate || "—",
+        distance: `${trip.distanceKm || job.distanceKm || 0} km`,
+        progress: trip.progress || 0,
+        segment: trip.segment || 1,
+      })),
+    );
     const linkedIds = new Set(linked.map((trip) => trip.id));
-    return [...linked, ...initialTrips.filter((trip) => !linkedIds.has(trip.id))]
-      .map((trip) => ({ ...trip, ...tripOverrides[trip.id] }));
+    return [
+      ...linked,
+      ...initialTrips.filter((trip) => !linkedIds.has(trip.id)),
+    ].map((trip) => ({ ...trip, ...tripOverrides[trip.id] }));
   }, [jobs, tripOverrides]);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("All Trips");
@@ -243,10 +255,20 @@ export function TripsSegments() {
 
   async function updateTripStatus(id, status) {
     const trip = trips.find((item) => item.id === id);
-    if (trip && jobs.some((job) => job.id === trip.job && getJobTrips(job).some((item) => item.id === id))) {
+    if (
+      trip &&
+      jobs.some(
+        (job) =>
+          job.id === trip.job &&
+          getJobTrips(job).some((item) => item.id === id),
+      )
+    ) {
       await updateJobTripStatus(trip.job, id, status);
     } else {
-      setTripOverrides((current) => ({ ...current, [id]: { ...current[id], status } }));
+      setTripOverrides((current) => ({
+        ...current,
+        [id]: { ...current[id], status },
+      }));
     }
     setMenuFor(null);
     setToast({
@@ -287,13 +309,14 @@ export function TripsSegments() {
     {
       key: "id",
       header: "Trip ID",
+      width: "120px",
       render: (r) => (
         <a onClick={() => selectTrip(r)} style={{ cursor: "pointer" }}>
           {r.id}
         </a>
       ),
     },
-    { key: "job", header: "Job ID" },
+    { key: "job", header: "Job ID", width: "120px" },
     {
       key: "type",
       header: "Trip Type",
@@ -307,8 +330,9 @@ export function TripsSegments() {
           {r.from}　→　{r.to}
         </span>
       ),
+      width: "120px",
     },
-    { key: "driver", header: "Driver" },
+    { key: "driver", header: "Driver", width: "120px" },
     {
       key: "truck",
       header: "Truck / Container",
@@ -336,6 +360,7 @@ export function TripsSegments() {
     {
       key: "eta",
       header: "ETA",
+      width: "120px",
       render: (r) => (
         <span className="cell-two">
           <strong>{r.eta}</strong>
@@ -346,10 +371,10 @@ export function TripsSegments() {
     {
       key: "progress",
       header: "Progress",
+      width: "120px",
       render: (r) => (
         <span>
-          {r.progress}%　
-          <progress value={r.progress} max="100" />
+          <ProgressBar value={r.progress} max="100" label={`${r.progress}%`} />
         </span>
       ),
     },
@@ -391,12 +416,7 @@ export function TripsSegments() {
                       navigate("/jobs/" + r.job);
                     },
                   },
-                  { divider: true },
-                  ...TRIP_STATUSES.filter((s) => s !== r.status).map((s) => ({
-                    label: "Mark as " + s,
-                    icon: "route",
-                    onClick: () => updateTripStatus(r.id, s),
-                  })),
+                  
                 ]}
               />
             </span>
@@ -412,23 +432,25 @@ export function TripsSegments() {
         crumbs={["Jobs & Trips", "Trips & Segments"]}
         title="Trips & Segments"
         description="Monitor all active trips and their segment execution in real-time."
-        actions={<>
-          <button className="date-button">
-            <Icon name="calendar" size={15} />
-            May 24 – May 30, 2026⌄
-          </button>
-          <Button
-            icon="plus"
-            onClick={() =>
-              setToast({
-                tone: "info",
-                title: `Exporting ${filtered.length} trip(s)…`,
-              })
-            }
-          >
-            Export
-          </Button>
-        </>}
+        actions={
+          <>
+            <button className="date-button">
+              <Icon name="calendar" size={15} />
+              May 24 – May 30, 2026⌄
+            </button>
+            <Button
+              icon="plus"
+              onClick={() =>
+                setToast({
+                  tone: "info",
+                  title: `Exporting ${filtered.length} trip(s)…`,
+                })
+              }
+            >
+              Export
+            </Button>
+          </>
+        }
       />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
@@ -795,10 +817,22 @@ export function TripsSegments() {
               )}
               <div className="trip-fact">
                 <span>Company payout</span>
-                <b>{selectedPayout ? `${selectedPayout.id} · ${selectedPayout.status}` : "Not yet included"}</b>
+                <b>
+                  {selectedPayout
+                    ? `${selectedPayout.id} · ${selectedPayout.status}`
+                    : "Not yet included"}
+                </b>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                {selectedPayout && <Button variant="outline" style={{ flex: 1 }} onClick={() => navigate(`/payouts/${selectedPayout.id}`)}>View Payout</Button>}
+                {selectedPayout && (
+                  <Button
+                    variant="outline"
+                    style={{ flex: 1 }}
+                    onClick={() => navigate(`/payouts/${selectedPayout.id}`)}
+                  >
+                    View Payout
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   style={{ flex: 1 }}
