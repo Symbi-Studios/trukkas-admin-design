@@ -16,6 +16,8 @@ export function DataTable({
   tableLayout = "auto",
   style,
   coloredHeader,
+  expandedRowKeys = [],
+  renderExpandedRow,
 }) {
   const allOn = rows.length > 0 && selected.length === rows.length;
   const cell = {
@@ -77,9 +79,10 @@ export function DataTable({
           {rows.map((r, i) => {
             const k = rowKey(r, i);
             const on = selected.includes(k);
+            const expanded = expandedRowKeys.includes(k);
             return (
+              <React.Fragment key={k}>
               <tr
-                key={k}
                 tabIndex={onRowClick ? 0 : undefined}
                 onKeyDown={onRowClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onRowClick(r); } } : undefined}
                 onClick={() => onRowClick?.(r)}
@@ -118,6 +121,14 @@ export function DataTable({
                   </td>
                 ))}
               </tr>
+              {expanded && renderExpandedRow && (
+                <tr className="tk-data-table-expanded">
+                  <td colSpan={columns.length + (selectable ? 1 : 0)} style={{ padding: 0, background: "var(--tk-surface-soft)" }}>
+                    {renderExpandedRow(r)}
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             );
           })}
         </tbody>

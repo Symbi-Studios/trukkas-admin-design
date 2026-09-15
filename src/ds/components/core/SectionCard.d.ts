@@ -16,6 +16,7 @@ export interface SectionCardProps {
   /** centred footer link under a hairline, e.g. "View all events" */
   footer?: React.ReactNode;
   pad?: "none" | "md";
+  className?: string;
   children?: React.ReactNode;
   style?: React.CSSProperties;
 }

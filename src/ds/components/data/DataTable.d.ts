@@ -25,6 +25,8 @@ export interface DataTableProps<T = any> {
    *  room for badges/numbers with hard content minimums. Pair with an ellipsis style on
    *  cell content so overflow truncates instead of breaking the row. Default 'auto'. */
   tableLayout?: 'auto' | 'fixed';
+  expandedRowKeys?: Array<string | number>;
+  renderExpandedRow?: (row: T) => React.ReactNode;
   style?: React.CSSProperties;
 }
 export declare function DataTable<T>(props: DataTableProps<T>): JSX.Element;

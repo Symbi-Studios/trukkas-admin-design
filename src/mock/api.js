@@ -625,6 +625,35 @@ export async function bulkDeleteDocuments(ids) {
   setRows('documents', getSnapshot('documents').filter((d) => !ids.includes(d.id)));
 }
 
+export async function approveOperationalDocument(id) {
+  await delay(80);
+  const document = getRow('documents', 'id', id);
+  if (!document || document.reviewAuthority !== 'trukkas_admin') return document;
+  return patchRow('documents', 'id', id, {
+    status: 'Approved', reviewedBy: 'Amina Yusuf', reviewedAt: 'Just now', updatedAt: 'Just now',
+    rejectionReason: undefined, reuploadMessage: undefined,
+  });
+}
+
+export async function rejectOperationalDocument(id, reason, requestReupload = false) {
+  await delay(80);
+  const document = getRow('documents', 'id', id);
+  if (!document || document.reviewAuthority !== 'trukkas_admin') return document;
+  return patchRow('documents', 'id', id, {
+    status: requestReupload ? 'Re-upload Requested' : 'Rejected',
+    rejectionReason: reason,
+    reuploadMessage: requestReupload ? reason : undefined,
+    reviewedBy: 'Amina Yusuf', reviewedAt: 'Just now', updatedAt: 'Just now',
+  });
+}
+
+export async function bulkReviewOperationalDocuments(ids, action, reason = '') {
+  await Promise.all(ids.map((id) => {
+    if (action === 'approve') return approveOperationalDocument(id);
+    return rejectOperationalDocument(id, reason, action === 'request-reupload');
+  }));
+}
+
 export async function updateMaintenance(id, changes) {
   await delay(80);
   return patchRow('maintenance', 'id', id, changes);

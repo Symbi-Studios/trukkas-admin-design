@@ -14,12 +14,13 @@ export function SectionCard({
   footer,
   children,
   pad = "md",
+  className,
   style,
 }) {
   return (
     <Card
       pad="none"
-      className="tk-section-card"
+      className={`tk-section-card${className ? ` ${className}` : ""}`}
       style={{ display: "flex", flexDirection: "column", ...style }}
     >
       <div className="tk-section-card-header"

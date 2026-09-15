@@ -106,7 +106,7 @@ export const SEARCH_PLACEHOLDER = {
   transactions: "Search transactions, references, users...",
   settlements: "Search by settlement ID, job ID, trip ID, payer, payee...",
   fees: "Search fee rules...",
-  documents: "Search documents, entities, statuses...",
+  documents: "Search jobs, documents, companies, routes...",
   verification: "Search forwarders, exporters, RC number, email...",
   audit: "Search audit log by user, action, entity...",
   reports: "Search reports and saved analyses...",
