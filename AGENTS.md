@@ -12,7 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Project structure and runtime
 
-- This repository is a JavaScript/JSX admin console using Next.js 16.3.4, React 18, and the App Router. Routes live in `src/app/`; the shared shell is in `src/App.jsx`; screen components are in `src/screens/`.
+- This repository is a JavaScript/JSX admin console using Next.js 16.3.4, React 18, and the App Router, with TypeScript/TSX enabled for gradual adoption. Routes live in `src/app/`; the shared shell is in `src/App.jsx`; screen components are in `src/screens/`.
+- `tsconfig.json` enables `allowJs` and leaves existing JavaScript unchecked (`checkJs: false`); TypeScript files use strict checking. Keep existing modules in JavaScript unless a task benefits from typed contracts or components, and allow `.tsx` files to import existing `.jsx` modules.
 - Shared UI components and design tokens are under `src/ds/`. Reuse those components, tokens, and established screen patterns before adding new dependencies or one-off styles.
 - `next.config.mjs` sets `output: 'export'`. Treat the app as a static client deployment: there is no deployed Next.js server runtime for API proxying, server actions, or route handlers. Preserve static export unless a task explicitly calls for an architecture change.
 - Use `package.json` as the source of truth for available commands. Current scripts are `npm run dev`, `npm run build`, and `npm run audit:responsive`.
