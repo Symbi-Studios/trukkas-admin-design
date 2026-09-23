@@ -1,6 +1,8 @@
 import '../ds/styles.css';
 import { AdminShell } from '../App.jsx';
 import { StoreProvider } from '../store/StoreProvider.jsx';
+import { DesktopOnlyNotice } from '../components/DesktopOnlyNotice.jsx';
+import screenStyles from '../components/DesktopOnlyNotice.module.css';
 
 export const metadata = {
   title: {
@@ -14,7 +16,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body style={{ margin: 0 }}>
-        <StoreProvider><AdminShell>{children}</AdminShell></StoreProvider>
+        <div className={screenStyles.experience}>
+          <StoreProvider><AdminShell>{children}</AdminShell></StoreProvider>
+        </div>
+        <DesktopOnlyNotice />
       </body>
     </html>
   );
