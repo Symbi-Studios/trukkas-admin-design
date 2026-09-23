@@ -2,6 +2,7 @@
 
 import React from "react";
 import { usePathname, useRouter } from "next/navigation.js";
+import { useDispatch, useSelector } from "react-redux";
 import {
   AppShell,
   Sidebar,
@@ -11,16 +12,46 @@ import {
 } from "./ds.js";
 import { NAV, SEARCH_PLACEHOLDER } from "./nav.js";
 import { useCollection } from "./mock/useCollection.js";
+import { useLogoutAdminMutation } from "./store/features/auth/authApi.js";
+import { clearSession } from "./store/features/auth/authSlice.js";
+import { baseApi } from "./store/api/baseApi.js";
 import "./mock/api.js";
+
+const PUBLIC_ROUTES = new Set([
+  "/login",
+  "/forgot-password",
+  "/reset-password",
+  "/signed-out",
+]);
 
 export function AdminShell({ children }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
   const [globalSearch, setGlobalSearch] = React.useState("");
+  const [mounted, setMounted] = React.useState(false);
+  const [loggingOut, setLoggingOut] = React.useState(false);
+  const admin = useSelector((state) => state.auth.admin);
+  const dispatch = useDispatch();
+  const [logoutAdmin] = useLogoutAdminMutation();
   const notificationRows = useCollection("notifications") || [];
   const router = useRouter();
   const pathname = usePathname();
   const activeId = pathname.split("/")[1] || "dashboard";
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!mounted || PUBLIC_ROUTES.has(pathname) || admin || loggingOut) return;
+    const target = pathname + window.location.search;
+    router.replace("/login?next=" + encodeURIComponent(target));
+  }, [admin, loggingOut, mounted, pathname, router]);
+
+  React.useEffect(() => {
+    if (pathname === "/signed-out") setLoggingOut(false);
+  }, [pathname]);
+
   React.useEffect(() => {
     setGlobalSearch("");
     setMobileNavOpen(false);
@@ -31,7 +62,29 @@ export function AdminShell({ children }) {
     else setCollapsed((current) => !current);
   }
 
-  if (pathname === "/signed-out") return children;
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    let confirmedByServer = false;
+    try {
+      await logoutAdmin().unwrap();
+      confirmedByServer = true;
+    } catch {
+      // Clear this device's session even when server logout cannot be confirmed.
+    } finally {
+      dispatch(clearSession());
+      dispatch(baseApi.util.resetApiState());
+    }
+    router.replace(confirmedByServer ? "/signed-out" : "/signed-out?server=unconfirmed");
+  }
+
+  if (!mounted) {
+    return <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }} role="status">Loading admin console…</main>;
+  }
+  if (PUBLIC_ROUTES.has(pathname)) return children;
+  if (!admin || loggingOut) {
+    return <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }} role="status">Checking admin session…</main>;
+  }
 
   const sidebar = (
     <Sidebar
@@ -111,9 +164,9 @@ export function AdminShell({ children }) {
           }}
           onNotifications={() => router.push("/notifications")}
           onViewProfile={() => router.push("/profile")}
-          onLogout={() => router.push("/signed-out")}
-          user="Trukkas Admin"
-          role="Super Admin"
+          onLogout={handleLogout}
+          user={admin.name || admin.email || "Trukkas Admin"}
+          role={admin.role === "SUPER_ADMIN" ? "Super Admin" : "Admin"}
         />
       }
     >

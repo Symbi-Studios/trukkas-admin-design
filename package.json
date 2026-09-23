@@ -10,9 +10,11 @@
     "audit:responsive": "node scripts/responsive-audit.mjs"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.12.0",
     "next": "16.3.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-redux": "^9.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
