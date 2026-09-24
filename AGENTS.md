@@ -26,6 +26,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Keep the prototype working while integrating incrementally. For an API-backed feature, add endpoints with `baseApi.injectEndpoints(...)` in `src/store/features/<feature>/`, adapt API response DTOs to the screen's existing view model there, and handle loading, empty, error, and permission states in the UI. Components use generated RTK Query hooks; do not scatter raw `fetch` calls or wire-format assumptions across screens.
 - Retain mock-backed screens and fixtures that have not been migrated. Remove the mock store only as part of an explicitly requested complete cutover after checking all consumers.
 - Redux Toolkit configuration lives in `src/store/store.js`, the client provider in `src/store/StoreProvider.jsx`, and shared RTK Query transport and refresh logic in `src/store/api/baseApi.js`. Add each API domain under `src/store/features/` using the same injected-endpoint pattern. Use `builder.query` for reads and `builder.mutation` for writes.
+- The shared API transport logs sanitized request and response bodies in development by default. Set `NEXT_PUBLIC_API_LOGGING=false` to disable development logs; production logging is always disabled. Keep secret and personal-data redaction in place when extending the logger.
 
 ## Backend API reference and integration
 
