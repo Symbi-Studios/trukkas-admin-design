@@ -1,4 +1,4 @@
-import { baseApi, refreshSession } from '../../api/baseApi.js';
+import { baseApi, refreshSession, unwrapApiResponseData } from '../../api/baseApi.js';
 import { setCredentials } from './authSlice.js';
 
 export const authApi = baseApi.injectEndpoints({
@@ -7,7 +7,7 @@ export const authApi = baseApi.injectEndpoints({
       async queryFn(body, api, extraOptions, baseQuery) {
         const result = await baseQuery({ url: '/admin/auth/login', method: 'POST', body });
         if (result.error) return { error: result.error };
-        const data = result.data;
+        const data = unwrapApiResponseData(result.data);
         if (!data?.accessToken || !data?.refreshToken || !data?.admin) {
           return { error: { status: 'CUSTOM_ERROR', error: 'The login response is missing session details.' } };
         }

@@ -15,6 +15,7 @@ import { useCollection } from "./mock/useCollection.js";
 import { useLogoutAdminMutation } from "./store/features/auth/authApi.js";
 import { clearSession } from "./store/features/auth/authSlice.js";
 import { baseApi } from "./store/api/baseApi.js";
+import { AppLoadingScreen } from "./components/AppLoadingScreen.jsx";
 import "./mock/api.js";
 
 const PUBLIC_ROUTES = new Set([
@@ -79,11 +80,11 @@ export function AdminShell({ children }) {
   }
 
   if (!mounted) {
-    return <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }} role="status">Loading admin console…</main>;
+    return <AppLoadingScreen mode="startup" />;
   }
   if (PUBLIC_ROUTES.has(pathname)) return children;
   if (!admin || loggingOut) {
-    return <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }} role="status">Checking admin session…</main>;
+    return <AppLoadingScreen mode={loggingOut ? "logout" : "session"} />;
   }
 
   const sidebar = (

@@ -5,6 +5,8 @@ import { Link, useNavigate } from "../router.js";
 import {
   Avatar,
   Badge,
+  Button,
+  Card,
   DataTable,
   DonutChart,
   DropdownMenu,
@@ -15,12 +17,14 @@ import {
   PageHeader,
   ProgressBar,
   SectionCard,
+  Skeleton,
   StatCard,
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
 import { getJobTrips } from "../domain/jobTrips.js";
 import { formatNaira } from "../mock/format.js";
 import { statusTone } from "./JobDetail.jsx";
+import { useGetAdminOverviewQuery } from "../store/features/overview/overviewApi.js";
 import styles from "./Dashboard.module.css";
 
 const DATE_RANGES = [
@@ -180,6 +184,13 @@ const HEALTH = [
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const {
+    data: overview,
+    isLoading: isOverviewLoading,
+    isUninitialized: isOverviewUninitialized,
+    isError: isOverviewError,
+    refetch: refetchOverview,
+  } = useGetAdminOverviewQuery();
   const jobs = useCollection("jobs") || [];
   const drivers = useCollection("drivers") || [];
   const companies = useCollection("companies") || [];
@@ -364,13 +375,37 @@ export function Dashboard() {
       .slice(0, 5);
   }, [registrationTab, drivers, companies, jobs, query]);
 
-  const activityTotal =
-    data.completed + data.activeTrips + data.scheduled + data.cancelled || 1;
+  const activityTotal = overview
+    ? overview.jobs.total ?? 0
+    : data.completed + data.activeTrips + data.scheduled + data.cancelled || 1;
+  const recentJobs = useMemo(() => {
+    // An empty list is a valid API result. Do not replace it with fixture rows.
+    const rows = overview ? overview.recentJobs : data.recentJobs;
+    if (!query) return rows;
+    const normalizedQuery = query.toLowerCase();
+    return rows.filter((job) =>
+      [job.displayId, job.id, job.routeLabel, job.company, job.cargo, job.truckerName].some((field) =>
+        String(field || "").toLowerCase().includes(normalizedQuery),
+      ),
+    );
+  }, [overview, data.recentJobs, query]);
+  const activityCompleted = overview?.jobs.completed ?? data.completed;
+  const activityInTransit = overview?.jobs.active ?? data.activeTrips;
+  const activityCancelled = overview?.jobs.cancelled ?? data.cancelled;
+  const activityScheduled = overview
+    ? Math.max(
+        0,
+        (overview.jobs.total ?? 0) -
+          activityCompleted -
+          activityInTransit -
+          activityCancelled,
+      )
+    : data.scheduled;
   const activityData = [
-    { label: "Completed", value: data.completed, color: "var(--tk-success)" },
-    { label: "In Transit", value: data.activeTrips, color: "var(--tk-blue)" },
-    { label: "Scheduled", value: data.scheduled, color: "var(--tk-purple)" },
-    { label: "Cancelled", value: data.cancelled, color: "var(--tk-danger)" },
+    { label: "Completed", value: activityCompleted, color: "var(--tk-success)" },
+    { label: "In Transit", value: activityInTransit, color: "var(--tk-blue)" },
+    { label: "Scheduled", value: activityScheduled, color: "var(--tk-purple)" },
+    { label: "Cancelled", value: activityCancelled, color: "var(--tk-danger)" },
   ];
   const earnings = [
     { label: "Drivers", value: data.driverPayouts, color: "var(--tk-blue)" },
@@ -419,6 +454,14 @@ export function Dashboard() {
     },
   ];
 
+  if (!overview && (isOverviewLoading || isOverviewUninitialized)) {
+    return <DashboardLoading />;
+  }
+
+  if (!overview && isOverviewError) {
+    return <DashboardLoadError onRetry={refetchOverview} />;
+  }
+
   return (
     <div className={styles.dashboard}>
       <PageHeader
@@ -452,25 +495,36 @@ export function Dashboard() {
         <StatCard
           icon="user-round"
           label="Total Drivers"
-          value={drivers.length}
-          delta="12%"
-          caption={`${drivers.filter((d) => d.registrationType?.includes("Individual")).length} Individual`}
+          value={overview?.users.drivers.total ?? drivers.length}
+          delta={overview?.users.drivers.monthDelta != null ? String(Math.abs(overview.users.drivers.monthDelta)) : "12%"}
+          direction={(overview?.users.drivers.monthDelta ?? 0) < 0 ? "down" : "up"}
+          caption={overview?.users.drivers.monthDelta != null ? "New this month" : `${drivers.filter((d) => d.registrationType?.includes("Individual")).length} Individual`}
         />
         <StatCard
           icon="building-2"
           tint="green"
           label="Trucking Companies"
-          value={companies.length}
-          delta="8%"
-          caption={`${companies.filter((c) => c.status === "Active").length} Active`}
+          value={overview ? overview.users.truckers.total ?? "—" : companies.length}
+          delta={overview
+            ? overview.users.truckers.monthDelta != null
+              ? String(Math.abs(overview.users.truckers.monthDelta))
+              : undefined
+            : "8%"}
+          direction={(overview?.users.truckers.monthDelta ?? 0) < 0 ? "down" : "up"}
+          caption={overview
+            ? overview.users.truckers.monthDelta != null
+              ? "New this month"
+              : "—"
+            : `${companies.filter((c) => c.status === "Active").length} Active`}
         />
         <StatCard
           icon="users-round"
           tint="purple"
           label="Forwarders"
-          value={data.forwarders}
-          delta="15%"
-          caption={`${Math.max(0, data.forwarders - 1)} Active`}
+          value={overview?.users.forwarders.total ?? data.forwarders}
+          delta={overview?.users.forwarders.monthDelta != null ? String(Math.abs(overview.users.forwarders.monthDelta)) : "15%"}
+          direction={(overview?.users.forwarders.monthDelta ?? 0) < 0 ? "down" : "up"}
+          caption={overview?.users.forwarders.monthDelta != null ? "New this month" : `${Math.max(0, data.forwarders - 1)} Active`}
         />
         <StatCard
           icon="box"
@@ -489,17 +543,22 @@ export function Dashboard() {
         <StatCard
           icon="route"
           label="Active Trips"
-          value={data.activeTrips}
-          delta="14%"
+          value={overview ? overview.jobs.active ?? "—" : data.activeTrips}
+          delta={overview
+            ? overview.jobs.activeTrendPercent != null
+              ? `${Math.abs(overview.jobs.activeTrendPercent)}%`
+              : undefined
+            : "14%"}
+          direction={(overview?.jobs.activeTrendPercent ?? 0) < 0 ? "down" : "up"}
           caption="Live operations"
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Completed Jobs"
-          value={data.completed}
-          delta="18%"
-          caption={`${Math.round((data.completed / (jobs.length || 1)) * 100)}% Success Rate`}
+          value={overview?.jobs.completed ?? data.completed}
+          delta={overview?.jobs.completedToday != null ? String(overview.jobs.completedToday) : "18%"}
+          caption={overview?.jobs.completedToday != null ? "Completed today" : `${Math.round((data.completed / (jobs.length || 1)) * 100)}% Success Rate`}
         />
         <StatCard
           icon="container"
@@ -714,7 +773,7 @@ export function Dashboard() {
               thickness={20}
               data={activityData}
               centerValue={activityTotal}
-              centerLabel="Total Trips"
+              centerLabel="Total Jobs"
             />
             <LegendList style={{ width: "100%" }} items={activityData} />
           </div>
@@ -781,22 +840,24 @@ export function Dashboard() {
         >
           <div className={styles.compactTable}>
             <DataTable
-              rows={data.recentJobs}
+              rows={recentJobs}
               rowKey={(job) => job.id}
-              onRowClick={(job) => navigate(`/jobs/${job.id}`)}
+              onRowClick={overview ? undefined : (job) => navigate(`/jobs/${job.id}`)}
               columns={[
                 {
                   key: "id",
                   header: "Job ID",
-                  render: (job) => <Link to={`/jobs/${job.id}`}>{job.id}</Link>,
+                  render: (job) => job.detailAvailable === false
+                    ? (job.displayId || job.id)
+                    : <Link to={`/jobs/${job.id}`}>{job.displayId || job.id}</Link>,
                 },
                 {
                   key: "route",
                   header: "Route",
                   render: (job) => job.routeLabel,
                 },
-                { key: "cargo", header: "Cargo" },
-                { key: "company", header: "Forwarder / Exporter" },
+                { key: "cargo", header: "Cargo", render: (job) => job.cargo || "—" },
+                { key: "company", header: "Forwarder / Exporter", render: (job) => job.company || "—" },
                 {
                   key: "status",
                   header: "Status",
@@ -808,7 +869,7 @@ export function Dashboard() {
                   key: "value",
                   header: "Value",
                   align: "right",
-                  render: (job) => <strong>{formatNaira(job.value)}</strong>,
+                  render: (job) => <strong>{job.value == null ? "—" : formatNaira(job.value)}</strong>,
                 },
               ]}
             />
@@ -885,6 +946,133 @@ export function Dashboard() {
           </div>
         </SectionCard>
       </section>
+    </div>
+  );
+}
+
+function DashboardLoadingTable({ columns = 4, rows = 5 }) {
+  const widths = ["42%", "76%", "58%", "64%", "50%"];
+
+  return (
+    <div className={styles.loadingTableRows} aria-hidden="true">
+      {Array.from({ length: rows }, (_, rowIndex) => (
+        <div
+          className={styles.loadingTableRow}
+          key={rowIndex}
+          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: columns }, (_, columnIndex) => (
+            <Skeleton
+              key={columnIndex}
+              height={11}
+              width={widths[(rowIndex + columnIndex) % widths.length]}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DashboardLoading() {
+  const statCards = [
+    ["user-round", "Total Drivers"],
+    ["building-2", "Trucking Companies"],
+    ["users-round", "Forwarders"],
+    ["box", "Exporters"],
+    ["truck", "Trucks & Fleet"],
+    ["route", "Active Trips"],
+    ["circle-check", "Completed Jobs"],
+    ["container", "Containers Moved"],
+  ];
+
+  return (
+    <div className={styles.dashboard} aria-busy="true">
+      <div className={styles.loadingHeader}>
+        <div className={styles.loadingHeaderTitle} aria-hidden="true">
+          <Skeleton width={250} height={28} />
+          <Skeleton width={330} height={14} />
+        </div>
+        <div className={styles.loadingHeaderControls} aria-hidden="true">
+          <Skeleton width={220} height={42} radius={10} />
+          <Skeleton width={150} height={42} radius={10} />
+        </div>
+      </div>
+
+      <div className={styles.loadingNotice} role="status" aria-live="polite">
+        <span className={styles.loadingNoticeDot} aria-hidden="true" />
+        Loading dashboard data…
+      </div>
+
+      <section className={styles.stats} aria-label="Loading platform summary">
+        {statCards.map(([icon, label]) => (
+          <StatCard
+            key={label}
+            icon={icon}
+            label={label}
+            value={<Skeleton width={54} height={23} />}
+            caption={<Skeleton width={96} height={11} />}
+          />
+        ))}
+      </section>
+
+      <section className={styles.financeGrid} aria-hidden="true">
+        <SectionCard title="Top Routes by Volume" pad="none">
+          <DashboardLoadingTable columns={4} />
+        </SectionCard>
+        <SectionCard title="Earnings Breakdown">
+          <div className={styles.loadingChart}>
+            <Skeleton width={150} height={150} radius={75} />
+            <DashboardLoadingTable columns={2} rows={4} />
+          </div>
+        </SectionCard>
+      </section>
+
+      <section className={styles.insightsGrid} aria-hidden="true">
+        <SectionCard title="Trip Activity">
+          <div className={styles.loadingChart}>
+            <Skeleton width={142} height={142} radius={71} />
+            <DashboardLoadingTable columns={2} rows={4} />
+          </div>
+        </SectionCard>
+        <SectionCard title="Average Rating">
+          <div className={styles.loadingRating}>
+            <Skeleton width={72} height={28} />
+            <DashboardLoadingTable columns={2} rows={5} />
+          </div>
+        </SectionCard>
+        <SectionCard title="System Health" pad="none">
+          <DashboardLoadingTable columns={3} rows={5} />
+        </SectionCard>
+      </section>
+
+      <section className={styles.tablesGrid} aria-hidden="true">
+        <SectionCard title="Recent Jobs" pad="none">
+          <DashboardLoadingTable columns={6} />
+        </SectionCard>
+        <SectionCard title="Recent Registrations" pad="none">
+          <div className={styles.loadingTabs}>
+            <Skeleton width={72} height={28} radius={8} />
+            <Skeleton width={116} height={28} radius={8} />
+            <Skeleton width={82} height={28} radius={8} />
+            <Skeleton width={72} height={28} radius={8} />
+          </div>
+          <DashboardLoadingTable columns={5} />
+        </SectionCard>
+      </section>
+    </div>
+  );
+}
+
+function DashboardLoadError({ onRetry }) {
+  return (
+    <div className={styles.dashboard}>
+      <Card className={styles.loadError}>
+        <span className={styles.loadErrorIcon} aria-hidden="true">!</span>
+        <h1>Dashboard data couldn’t be loaded</h1>
+        <p>Check your connection and try loading the overview again.</p>
+        <Button onClick={onRetry}>Try again</Button>
+      </Card>
     </div>
   );
 }

@@ -8,7 +8,9 @@ import { authApi } from './features/auth/authApi.js';
 function tokenExpiresAt(token) {
   try {
     const encoded = token.split('.')[1];
-    const payload = JSON.parse(window.atob(encoded.replace(/-/g, '+').replace(/_/g, '/')));
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const payload = JSON.parse(window.atob(padded));
     return typeof payload.exp === 'number' ? payload.exp * 1000 : 0;
   } catch {
     return 0;

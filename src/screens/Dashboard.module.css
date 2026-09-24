@@ -3,6 +3,108 @@
   gap: var(--tk-space-4);
   min-width: 0;
 }
+.loadingHeader {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tk-space-4);
+}
+.loadingHeaderTitle,
+.loadingHeaderControls {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-space-3);
+}
+.loadingHeaderTitle {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.loadingNotice {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border: 1px solid var(--tk-line);
+  border-radius: var(--tk-r-pill);
+  background: var(--tk-surface);
+  color: var(--tk-ink-500);
+  font: 500 12px/16px var(--tk-font-sans);
+}
+.loadingNoticeDot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--tk-blue);
+  box-shadow: 0 0 0 4px var(--tk-blue-soft);
+  animation: dashboard-loading-pulse 1.3s ease-in-out infinite;
+}
+.loadingTableRows {
+  display: grid;
+  padding: 0 var(--tk-card-pad);
+}
+.loadingTableRow {
+  display: grid;
+  min-height: 38px;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--tk-line);
+}
+.loadingChart {
+  display: grid;
+  min-height: 220px;
+  justify-items: center;
+  align-content: center;
+  gap: 18px;
+}
+.loadingChart > :last-child {
+  width: 100%;
+}
+.loadingRating {
+  display: grid;
+  gap: 16px;
+  padding: var(--tk-space-4) 0;
+}
+.loadingTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px var(--tk-card-pad);
+}
+.loadError {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 520px;
+  margin: min(18vh, 150px) auto;
+  padding: 32px;
+  text-align: center;
+}
+.loadError h1 {
+  margin: 0;
+  color: var(--tk-ink-900);
+  font: 700 20px/28px var(--tk-font-sans);
+}
+.loadError p {
+  margin: 0 0 4px;
+  color: var(--tk-ink-500);
+  font: 400 14px/21px var(--tk-font-sans);
+}
+.loadErrorIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tk-danger-soft);
+  color: var(--tk-danger);
+  font: 700 19px/1 var(--tk-font-sans);
+}
+@keyframes dashboard-loading-pulse {
+  50% { opacity: 0.42; }
+}
 .motto {
   min-height: var(--tk-h-btn);
   margin: 0;
@@ -458,6 +560,19 @@
   }
 }
 @media (max-width: 720px) {
+  .loadingHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .loadingHeaderControls {
+    align-self: stretch;
+  }
+  .loadingHeaderControls > div {
+    flex: 1;
+  }
+  .loadingTableRow {
+    gap: 8px;
+  }
   .menuWrap {
     justify-content: flex-start;
   }

@@ -147,6 +147,17 @@ function clearExpiredSession(api, expectedRefreshToken) {
   api.dispatch(baseApi.util.resetApiState());
 }
 
+export function unwrapApiResponseData(response) {
+  let data = response;
+  while (
+    data && typeof data === 'object' && !Array.isArray(data)
+    && data.data && typeof data.data === 'object' && !Array.isArray(data.data)
+  ) {
+    data = data.data;
+  }
+  return data;
+}
+
 async function performRefresh(refreshToken, api, extraOptions) {
   const result = await runLoggedBaseQuery(refreshBaseQuery, {
     url: '/admin/auth/refresh',
@@ -160,14 +171,16 @@ async function performRefresh(refreshToken, api, extraOptions) {
     if (isTerminalRefreshError(result.error)) clearExpiredSession(api, refreshToken);
     return { status: 'failed', error: result.error };
   }
-  if (!result.data?.accessToken || !result.data?.refreshToken) {
+  const data = unwrapApiResponseData(result.data);
+  if (!data?.accessToken) {
     clearExpiredSession(api, refreshToken);
     return { status: 'failed', error: { status: 'CUSTOM_ERROR', error: 'The refresh response is missing session details.' } };
   }
 
   api.dispatch(setCredentials({
-    accessToken: result.data.accessToken,
-    refreshToken: result.data.refreshToken,
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken || refreshToken,
+    admin: data.admin,
   }));
   return { status: 'success' };
 }
