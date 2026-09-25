@@ -11,8 +11,8 @@ import {
   TopBar,
 } from "./ds.js";
 import { NAV, SEARCH_PLACEHOLDER } from "./nav.js";
-import { useCollection } from "./mock/useCollection.js";
 import { useLogoutAdminMutation } from "./store/features/auth/authApi.js";
+import { useGetAdminNotificationsQuery } from "./store/features/notifications/notificationsApi.js";
 import { clearSession } from "./store/features/auth/authSlice.js";
 import { baseApi } from "./store/api/baseApi.js";
 import { AppLoadingScreen } from "./components/AppLoadingScreen.jsx";
@@ -34,7 +34,10 @@ export function AdminShell({ children }) {
   const admin = useSelector((state) => state.auth.admin);
   const dispatch = useDispatch();
   const [logoutAdmin] = useLogoutAdminMutation();
-  const notificationRows = useCollection("notifications") || [];
+  const { data: notificationData } = useGetAdminNotificationsQuery(
+    { page: 1, limit: 20, tab: "all" },
+    { skip: !mounted || !admin || loggingOut, pollingInterval: 60000 },
+  );
   const router = useRouter();
   const pathname = usePathname();
   const activeId = pathname.split("/")[1] || "dashboard";
@@ -152,7 +155,7 @@ export function AdminShell({ children }) {
       topbar={
         <TopBar
           onMenu={toggleNavigation}
-          notifications={notificationRows.filter((row) => !row.read).length}
+          notifications={notificationData?.unreadCount ?? 0}
           searchPlaceholder={SEARCH_PLACEHOLDER[activeId]}
           searchValue={globalSearch}
           onSearch={(event) => {

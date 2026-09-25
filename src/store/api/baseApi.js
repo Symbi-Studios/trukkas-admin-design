@@ -12,6 +12,7 @@ const reauthExcludedPaths = new Set([
   '/admin/auth/forgot-password',
   '/admin/auth/reset-password',
 ]);
+const retryableAfterRefresh = new Set(['markAdminNotificationsRead', 'markAllAdminNotificationsRead']);
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl,
@@ -27,7 +28,7 @@ const refreshBaseQuery = fetchBaseQuery({ baseUrl });
 let activeRefresh = null;
 
 const REDACTED = '[REDACTED]';
-const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
+const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
 const identityCollection = new Set([
   'users', 'admins', 'drivers', 'forwarders', 'customers', 'profiles',
   'companies', 'accounts', 'recipients', 'contacts', 'verification',
@@ -204,7 +205,7 @@ async function baseQueryWithReauth(args, api, extraOptions) {
   let result = await runLoggedBaseQuery(rawBaseQuery, args, api, extraOptions);
   const path = (typeof args === 'string' ? args : args.url).split('?')[0];
   const method = (typeof args === 'string' ? 'GET' : args.method || 'GET').toUpperCase();
-  const safeToRetry = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const safeToRetry = ['GET', 'HEAD', 'OPTIONS'].includes(method) || retryableAfterRefresh.has(api.endpoint);
 
   if (result.error?.status !== 401 || reauthExcludedPaths.has(path)) return result;
 
@@ -228,5 +229,6 @@ async function baseQueryWithReauth(args, api, extraOptions) {
 export const baseApi = createApi({
   reducerPath: 'baseApi',
   baseQuery: baseQueryWithReauth,
+  tagTypes: ['AdminNotifications'],
   endpoints: () => ({}),
 });
