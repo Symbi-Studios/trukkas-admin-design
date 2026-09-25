@@ -135,7 +135,7 @@ export function NotificationCenter() {
               {!row.read && <i className="notify-dot" />}
               <span className={'notify-icon ' + row.tone}><Icon name={row.icon} size={20} /></span>
               <div className="notify-copy"><span><strong>{row.title}</strong></span><p>{row.message}</p></div>
-              <time>{row.time}</time><span />
+              <time>{row.time}</time>
               <span className="notify-menu"><IconButton icon="ellipsis-vertical" tone="outline" onClick={(event) => { event.stopPropagation(); setMenu(menu === row.id ? null : row.id); }} />
                 {menu === row.id && <span className="notify-dropdown" onClick={(event) => event.stopPropagation()}><DropdownMenu width={190} items={[
                   ...(!row.read ? [{ label: 'Mark as read', icon: 'mail-check', onClick: () => { setMenu(null); void markOne(row); } }] : []),
