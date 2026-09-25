@@ -38,7 +38,9 @@ export function LegendList({ items = [], showShare = true, style }) {
           </span>
           {showShare && it.value != null && (
             <span className="tk-meta" style={{ width: 46, textAlign: "right" }}>
-              ({Math.round((it.value / total) * 1000) / 10}%)
+              ({Number.isFinite(it.percent)
+                ? Math.round(it.percent * 10) / 10
+                : Math.round((it.value / total) * 1000) / 10}%)
             </span>
           )}
         </div>

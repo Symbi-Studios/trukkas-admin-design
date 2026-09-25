@@ -41,6 +41,12 @@ const REGISTRATION_TABS = [
   "Forwarders",
   "Exporters",
 ];
+const REGISTRATION_API_GROUP = {
+  Drivers: "drivers",
+  "Trucking Companies": "truckingCompanies",
+  Forwarders: "forwarders",
+  Exporters: "exporters",
+};
 const compactNaira = (value) => {
   if (value >= 1_000_000_000) return `₦${(value / 1_000_000_000).toFixed(1)}B`;
   if (value >= 1_000_000) return `₦${(value / 1_000_000).toFixed(1)}M`;
@@ -99,14 +105,14 @@ function FlowNode({ icon, tint = "blue", value, label, note, onClick }) {
   );
 }
 
-function StarRating({ rating, reviews }) {
-  const rows = [
-    { stars: 5, pct: 68 },
-    { stars: 4, pct: 22 },
-    { stars: 3, pct: 7 },
-    { stars: 2, pct: 2 },
-    { stars: 1, pct: 1 },
-  ];
+function StarRating({ rating, reviews, trend, breakdown }) {
+  const rows = [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    pct: breakdown?.[stars] ?? 0,
+  }));
+  const trendLabel = Number.isFinite(trend)
+    ? `${trend < 0 ? "↓" : "↑"} ${Math.abs(trend)} from last month`
+    : null;
   return (
     <div className={styles.rating}>
       <div className={styles.ratingHead}>
@@ -114,9 +120,9 @@ function StarRating({ rating, reviews }) {
           <Icon name="star" size={22} />
         </span>
         <span>
-          <strong>{rating.toFixed(1)} / 5</strong>
-          <small>Based on {reviews} reviews</small>
-          <em>↑ 0.2 from last month</em>
+          <strong>{Number.isFinite(rating) ? `${rating.toFixed(1)} / 5` : "—"}</strong>
+          <small>Based on {reviews ?? "—"} reviews</small>
+          {trendLabel && <em>{trendLabel}</em>}
         </span>
       </div>
       <div className={styles.ratingRows}>
@@ -146,6 +152,7 @@ function StarRating({ rating, reviews }) {
 
 const HEALTH = [
   {
+    apiKey: "platformApi",
     icon: "server",
     label: "Platform / API",
     status: "Healthy",
@@ -153,6 +160,7 @@ const HEALTH = [
     route: "/settings",
   },
   {
+    apiKey: "gpsTracking",
     icon: "map-pin",
     label: "GPS & Tracking",
     status: "Healthy",
@@ -160,6 +168,7 @@ const HEALTH = [
     route: "/tracking",
   },
   {
+    apiKey: "payments",
     icon: "credit-card",
     label: "Payments",
     status: "Healthy",
@@ -167,6 +176,7 @@ const HEALTH = [
     route: "/transactions",
   },
   {
+    apiKey: "notifications",
     icon: "bell",
     label: "Notifications",
     status: "Degraded",
@@ -174,6 +184,7 @@ const HEALTH = [
     route: "/notifications",
   },
   {
+    apiKey: "database",
     icon: "database",
     label: "Database",
     status: "Healthy",
@@ -316,7 +327,12 @@ export function Dashboard() {
 
   const registrations = useMemo(() => {
     let rows;
-    if (registrationTab === "Drivers")
+    if (overview) {
+      rows =
+        overview.recentRegistrations?.[
+          REGISTRATION_API_GROUP[registrationTab]
+        ] || [];
+    } else if (registrationTab === "Drivers")
       rows = drivers.map((driver) => ({
         id: driver.id,
         name: driver.name,
@@ -373,11 +389,27 @@ export function Dashboard() {
           ),
       )
       .slice(0, 5);
-  }, [registrationTab, drivers, companies, jobs, query]);
+  }, [overview, registrationTab, drivers, companies, jobs, query]);
 
+  const apiTripActivity = overview?.tripActivity;
+  const activityCompleted =
+    apiTripActivity?.completed ?? overview?.jobs.completed ?? (overview ? 0 : data.completed);
+  const activityInTransit =
+    apiTripActivity?.inTransit ?? overview?.jobs.active ?? (overview ? 0 : data.activeTrips);
+  const activityCancelled =
+    apiTripActivity?.cancelled ?? overview?.jobs.cancelled ?? (overview ? 0 : data.cancelled);
   const activityTotal = overview
-    ? overview.jobs.total ?? 0
+    ? apiTripActivity?.totalTrips ?? overview.jobs.total ?? 0
     : data.completed + data.activeTrips + data.scheduled + data.cancelled || 1;
+  const activityScheduled = overview
+    ? apiTripActivity?.scheduled ?? Math.max(
+        0,
+        (overview.jobs.total ?? 0) -
+          activityCompleted -
+          activityInTransit -
+          activityCancelled,
+      )
+    : data.scheduled;
   const recentJobs = useMemo(() => {
     // An empty list is a valid API result. Do not replace it with fixture rows.
     const rows = overview ? overview.recentJobs : data.recentJobs;
@@ -389,18 +421,6 @@ export function Dashboard() {
       ),
     );
   }, [overview, data.recentJobs, query]);
-  const activityCompleted = overview?.jobs.completed ?? data.completed;
-  const activityInTransit = overview?.jobs.active ?? data.activeTrips;
-  const activityCancelled = overview?.jobs.cancelled ?? data.cancelled;
-  const activityScheduled = overview
-    ? Math.max(
-        0,
-        (overview.jobs.total ?? 0) -
-          activityCompleted -
-          activityInTransit -
-          activityCancelled,
-      )
-    : data.scheduled;
   const activityData = [
     { label: "Completed", value: activityCompleted, color: "var(--tk-success)" },
     { label: "In Transit", value: activityInTransit, color: "var(--tk-blue)" },
@@ -408,24 +428,73 @@ export function Dashboard() {
     { label: "Cancelled", value: activityCancelled, color: "var(--tk-danger)" },
   ];
   const earnings = [
-    { label: "Drivers", value: data.driverPayouts, color: "var(--tk-blue)" },
+    {
+      label: "Drivers",
+      value: overview
+        ? overview.earningsBreakdown.drivers.percent ?? overview.earningsBreakdown.drivers.amount ?? 0
+        : data.driverPayouts,
+      amount: overview ? overview.earningsBreakdown.drivers.amount : data.driverPayouts,
+      percent: overview?.earningsBreakdown.drivers.percent,
+      color: "var(--tk-blue)",
+    },
     {
       label: "Companies",
-      value: data.companyPayouts,
+      value: overview
+        ? overview.earningsBreakdown.companies.percent ?? overview.earningsBreakdown.companies.amount ?? 0
+        : data.companyPayouts,
+      amount: overview ? overview.earningsBreakdown.companies.amount : data.companyPayouts,
+      percent: overview?.earningsBreakdown.companies.percent,
       color: "var(--tk-success)",
     },
     {
       label: "Platform Fees",
-      value: data.platformFees,
+      value: overview
+        ? overview.earningsBreakdown.platformFees.percent ?? overview.earningsBreakdown.platformFees.amount ?? 0
+        : data.platformFees,
+      amount: overview ? overview.earningsBreakdown.platformFees.amount : data.platformFees,
+      percent: overview?.earningsBreakdown.platformFees.percent,
       color: "var(--tk-warning)",
     },
-    { label: "Demurrage", value: data.demurrage, color: "var(--tk-purple)" },
+    {
+      label: "Demurrage",
+      value: overview
+        ? overview.earningsBreakdown.demurrage.percent ?? overview.earningsBreakdown.demurrage.amount ?? 0
+        : data.demurrage,
+      amount: overview ? overview.earningsBreakdown.demurrage.amount : data.demurrage,
+      percent: overview?.earningsBreakdown.demurrage.percent,
+      color: "var(--tk-purple)",
+    },
     {
       label: "Other Costs",
-      value: data.otherCosts,
+      value: overview
+        ? overview.earningsBreakdown.otherCosts.percent ?? overview.earningsBreakdown.otherCosts.amount ?? 0
+        : data.otherCosts,
+      amount: overview ? overview.earningsBreakdown.otherCosts.amount : data.otherCosts,
+      percent: overview?.earningsBreakdown.otherCosts.percent,
       color: "var(--tk-ink-300)",
     },
   ];
+  const routes = overview
+    ? overview.topRoutesByVolume.map((route) => ({
+        ...route,
+        pct: route.percentOfTotal == null
+          ? "—"
+          : `${Number(route.percentOfTotal.toFixed(1))}%`,
+      }))
+    : data.routes;
+  const rating = overview ? overview.averageRating.average : data.rating;
+  const reviewCount = overview ? overview.averageRating.totalReviews : data.reviews;
+  const ratingTrend = overview?.averageRating.trendVsLastMonth;
+  const ratingBreakdown = overview?.averageRating.breakdown;
+  const systemHealth = overview
+    ? HEALTH.map((item) => ({
+        ...item,
+        ...(overview.systemHealth[item.apiKey] || {
+          status: "—",
+          tone: "neutral",
+        }),
+      }))
+    : HEALTH;
   const trendScale =
     trendPeriod === "Last 3 Months"
       ? 0.72
@@ -495,10 +564,18 @@ export function Dashboard() {
         <StatCard
           icon="user-round"
           label="Total Drivers"
-          value={overview?.users.drivers.total ?? drivers.length}
-          delta={overview?.users.drivers.monthDelta != null ? String(Math.abs(overview.users.drivers.monthDelta)) : "12%"}
+          value={overview ? overview.users.drivers.total ?? "—" : drivers.length}
+          delta={overview
+            ? overview.users.drivers.monthDelta != null
+              ? String(Math.abs(overview.users.drivers.monthDelta))
+              : undefined
+            : "12%"}
           direction={(overview?.users.drivers.monthDelta ?? 0) < 0 ? "down" : "up"}
-          caption={overview?.users.drivers.monthDelta != null ? "New this month" : `${drivers.filter((d) => d.registrationType?.includes("Individual")).length} Individual`}
+          caption={overview
+            ? overview.users.drivers.monthDelta != null
+              ? "New this month"
+              : undefined
+            : `${drivers.filter((d) => d.registrationType?.includes("Individual")).length} Individual`}
         />
         <StatCard
           icon="building-2"
@@ -521,24 +598,38 @@ export function Dashboard() {
           icon="users-round"
           tint="purple"
           label="Forwarders"
-          value={overview?.users.forwarders.total ?? data.forwarders}
-          delta={overview?.users.forwarders.monthDelta != null ? String(Math.abs(overview.users.forwarders.monthDelta)) : "15%"}
+          value={overview ? overview.users.forwarders.total ?? "—" : data.forwarders}
+          delta={overview
+            ? overview.users.forwarders.monthDelta != null
+              ? String(Math.abs(overview.users.forwarders.monthDelta))
+              : undefined
+            : "15%"}
           direction={(overview?.users.forwarders.monthDelta ?? 0) < 0 ? "down" : "up"}
-          caption={overview?.users.forwarders.monthDelta != null ? "New this month" : `${Math.max(0, data.forwarders - 1)} Active`}
+          caption={overview
+            ? overview.users.forwarders.monthDelta != null
+              ? "New this month"
+              : undefined
+            : `${Math.max(0, data.forwarders - 1)} Active`}
         />
         <StatCard
           icon="box"
           label="Exporters"
-          value={data.exporters}
-          delta="10%"
-          caption={`${data.exporters} Active`}
+          value={overview
+            ? overview.users.forwarders.exporterCount ?? "—"
+            : data.exporters}
+          delta={overview ? undefined : "10%"}
+          caption={overview ? undefined : `${data.exporters} Active`}
         />
         <StatCard
           icon="truck"
           label="Trucks & Fleet"
-          value={trucks.length}
-          delta="6%"
-          caption={`${trucks.filter((t) => ["On Trip", "Available"].includes(t.status)).length} Active`}
+          value={overview ? overview.fleet.trucksTotal ?? "—" : trucks.length}
+          delta={overview ? undefined : "6%"}
+          caption={overview
+            ? overview.fleet.trucksActive != null
+              ? `${overview.fleet.trucksActive} Active`
+              : undefined
+            : `${trucks.filter((t) => ["On Trip", "Available"].includes(t.status)).length} Active`}
         />
         <StatCard
           icon="route"
@@ -556,16 +647,31 @@ export function Dashboard() {
           icon="circle-check"
           tint="green"
           label="Completed Jobs"
-          value={overview?.jobs.completed ?? data.completed}
-          delta={overview?.jobs.completedToday != null ? String(overview.jobs.completedToday) : "18%"}
-          caption={overview?.jobs.completedToday != null ? "Completed today" : `${Math.round((data.completed / (jobs.length || 1)) * 100)}% Success Rate`}
+          value={overview ? overview.jobs.completed ?? "—" : data.completed}
+          delta={overview
+            ? overview.jobs.completedToday != null
+              ? String(overview.jobs.completedToday)
+              : undefined
+            : "18%"}
+          caption={overview
+            ? overview.jobs.completedToday != null
+              ? "Completed today"
+              : undefined
+            : `${Math.round((data.completed / (jobs.length || 1)) * 100)}% Success Rate`}
         />
         <StatCard
           icon="container"
           tint="red"
           label="Containers Moved"
-          value={jobs.reduce((sum, job) => sum + (job.requiredTrucks || 1), 0)}
-          delta="11%"
+          value={overview
+            ? overview.trips.containersMovedThisMonth ?? "—"
+            : jobs.reduce((sum, job) => sum + (job.requiredTrucks || 1), 0)}
+          delta={overview
+            ? overview.trips.containersMovedTrendPercent != null
+              ? `${Math.abs(overview.trips.containersMovedTrendPercent)}%`
+              : undefined
+            : "11%"}
+          direction={(overview?.trips.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
           caption="This month"
         />
       </section>
@@ -704,7 +810,7 @@ export function Dashboard() {
               <b>Trips</b>
               <b>% of Total</b>
             </div>
-            {data.routes.map((route, index) => (
+            {routes.map((route, index) => (
               <button
                 type="button"
                 key={route.route}
@@ -739,14 +845,18 @@ export function Dashboard() {
               size={150}
               thickness={20}
               data={earnings}
-              centerValue={compactNaira(data.totalRevenue)}
+              centerValue={compactNaira(
+                overview
+                  ? overview.earningsBreakdown.totalOrders ?? 0
+                  : data.totalRevenue,
+              )}
               centerLabel="Total Orders"
             />
             <LegendList
               style={{ width: "100%" }}
               items={earnings.map((item) => ({
                 ...item,
-                display: compactNaira(item.value),
+                display: item.amount == null ? "—" : compactNaira(item.amount),
               }))}
             />
           </div>
@@ -773,7 +883,7 @@ export function Dashboard() {
               thickness={20}
               data={activityData}
               centerValue={activityTotal}
-              centerLabel="Total Jobs"
+              centerLabel="Total Trips"
             />
             <LegendList style={{ width: "100%" }} items={activityData} />
           </div>
@@ -791,7 +901,12 @@ export function Dashboard() {
             />
           }
         >
-          <StarRating rating={data.rating} reviews={data.reviews} />
+          <StarRating
+            rating={rating}
+            reviews={reviewCount}
+            trend={ratingTrend}
+            breakdown={ratingBreakdown}
+          />
         </SectionCard>
         <SectionCard
           title="System Health"
@@ -806,7 +921,7 @@ export function Dashboard() {
           pad="none"
         >
           <div className={styles.healthList}>
-            {HEALTH.map((item) => (
+            {systemHealth.map((item) => (
               <button
                 type="button"
                 key={item.label}

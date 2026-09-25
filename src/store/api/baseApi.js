@@ -125,13 +125,13 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
 
   console.groupCollapsed(`[API] ${method} ${url} → ${response?.status ?? result.error?.status ?? 'complete'} (${Date.now() - startedAt}ms)`);
   console.info('Endpoint:', label);
-  console.info('Request:', sanitizeForLog({
+  console.info('Request:', {
     method,
     url,
     headers: request?.headers,
     body: requestBody,
-  }));
-  console.info('Response body:', sanitizeForLog(responseBody));
+  });
+  console.info('Response body:', responseBody);
   console.groupEnd();
   return result;
 }

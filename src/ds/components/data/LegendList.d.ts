@@ -1,5 +1,5 @@
 import * as React from 'react';
-export interface LegendItem { label: string; value?: number; display?: React.ReactNode; color?: string; }
+export interface LegendItem { label: string; value?: number; percent?: number; display?: React.ReactNode; color?: string; }
 export interface LegendListProps {
   items: LegendItem[];
   /** hide the computed percentage column */
