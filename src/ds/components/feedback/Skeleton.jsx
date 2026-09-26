@@ -1,8 +1,11 @@
 import React from 'react';
 
 /** Flat grey loading geometry — no shimmer gradient, no spinner where a shape will do. */
-export function Skeleton({ width = '100%', height = 12, radius = 6, style }) {
-  return <div style={{ width, height, borderRadius: radius, background: 'var(--tk-viz-track)', ...style }} />;
+export function Skeleton({ as: Element = 'div', width = '100%', height = 12, radius = 6, style }) {
+  return <Element style={{
+    display: Element === 'span' ? 'inline-block' : undefined,
+    width, height, borderRadius: radius, background: 'var(--tk-viz-track)', ...style,
+  }} />;
 }
 
 export function SkeletonRow({ columns = 4, style }) {

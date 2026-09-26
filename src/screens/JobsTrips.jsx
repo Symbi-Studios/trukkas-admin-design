@@ -17,10 +17,11 @@ import {
   PageHeader,
   SearchField,
   Select,
+  Skeleton,
   StatCard,
   TextField,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
+import { useGetAdminJobsQuery } from "../store/features/jobs/jobsApi.js";
 import {
   approveJob,
   cancelJob,
@@ -42,27 +43,36 @@ const DATE_OPTIONS = [
   "May 24 – May 30, 2026",
   "May 18 – May 23, 2026",
 ];
-const naira = (number) => `₦${Math.round(number || 0).toLocaleString("en-NG")}`;
+const naira = (number) => number == null
+  ? "—"
+  : `₦${Math.round(number).toLocaleString("en-NG")}`;
 const shortType = (type) =>
   type === "Transfer / Value Chain" ? "Transfer" : type;
 
 function normalize(job) {
   const tripCounts = getJobTripCounts(job);
   const trips = getJobTrips(job);
+  const truckingCompany = job.truckingCompany || job.truckCompany || null;
   return {
     ...job,
-    displayValue: job.jobValue ?? job.amount ?? 0,
+    displayId: job.displayId || job.jobNumber || job.id,
+    displayValue: job.jobValue ?? job.amount ?? null,
     displayRoute:
-      job.route || `${job.origin || "—"} → ${job.destination || "—"}`,
+      job.route || (job.origin || job.destination
+        ? `${job.origin || "—"} → ${job.destination || "—"}`
+        : "—"),
     displayType: job.requestType || job.cargoType || "—",
     displayForwarder: job.forwarder || "—",
     displayCreated: job.createdAt || job.published || "—",
+    displayDeadline: job.displayDeadline || null,
     displayCargo: job.cargoDetails || job.cargo || job.cargoType || "—",
     tripCounts,
     trips,
-    displayAssignee: tripCounts.assigned
-      ? `${tripCounts.assigned} trip${tripCounts.assigned === 1 ? "" : "s"} · ${job.truckingCompany || job.truckCompany || "Assigned"}`
-      : null,
+    displayAssignee: job.assignmentDataAvailable === false
+      ? truckingCompany
+      : tripCounts.assigned
+        ? `${tripCounts.assigned} trip${tripCounts.assigned === 1 ? "" : "s"} · ${truckingCompany || "Assigned"}`
+        : null,
   };
 }
 
@@ -120,7 +130,7 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
         }
       : {
           title: job.status,
-          description: job.updatedAt || "Job is active",
+          description: job.updatedAt || "Status from jobs list",
           state: job.status === "Cancelled" ? "danger" : "current",
         },
     {
@@ -128,17 +138,23 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
         ? "—"
         : job.status === "Delivered"
           ? "Delivered"
-          : "Delivery",
-      description: pending ? "Not started" : job.deliveryDate || "In progress",
+          : job.displayDeadline
+            ? "Delivery Deadline"
+            : "Delivery",
+      description: pending
+        ? "Not started"
+        : job.status === "Delivered"
+          ? job.deliveryDate || "Delivery completed"
+          : job.displayDeadline || job.deliveryDate || "In progress",
       state: job.status === "Delivered" ? "done" : "pending",
     },
   ];
   return (
-    <aside className={styles.inspector} aria-label={`Selected job ${job.id}`}>
+    <aside className={styles.inspector} aria-label={`Selected job ${job.displayId || job.id}`}>
       <div className={styles.inspectorHead}>
         <span className={styles.jobTitle}>
           <Icon name="package" size={16} />
-          {job.id}
+          {job.displayId || job.id}
         </span>
         <IconButton icon="x" label="Close inspector" onClick={onClose} />
       </div>
@@ -178,15 +194,17 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
           </div>
           <div>
             <dt>Trip Fulfilment</dt>
-            <dd><strong>{job.tripCounts.assigned} of {job.tripCounts.required} assigned</strong></dd>
+            <dd><strong>{job.assignmentDataAvailable === false
+              ? "—"
+              : `${job.tripCounts.assigned} of ${job.tripCounts.required} assigned`}</strong></dd>
           </div>
         </dl>
         <div className={styles.requester}>
           <span>Requested By</span>
-          <Avatar name={job.contactPerson || job.displayForwarder} size={34} />
+          <Avatar name={job.contactPerson || "—"} size={34} />
           <span>
-            <strong>{job.contactPerson || job.displayForwarder}</strong>
-            <small>{job.contactEmail || "Operations contact"}</small>
+            <strong>{job.contactPerson || "—"}</strong>
+            <small>{job.contactEmail || "Not provided"}</small>
           </span>
         </div>
       </section>
@@ -212,7 +230,7 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
               <DropdownMenu
                 width={240}
                 items={[
-                  ...(pending
+                  ...(job.actionsAvailable === false ? [] : pending
                     ? [
                         {
                           label: "Approve Job",
@@ -221,7 +239,7 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
                         },
                       ]
                     : []),
-                  ...(job.status === "In Transit"
+                  ...(job.actionsAvailable === false ? [] : job.status === "In Transit"
                     ? [
                         {
                           label: "Mark Delivered",
@@ -235,7 +253,7 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
                     icon: "download",
                     onClick: () => onAction("export", job),
                   },
-                  ...(job.status !== "Cancelled" && job.status !== "Delivered"
+                  ...(job.actionsAvailable !== false && job.status !== "Cancelled" && job.status !== "Delivered"
                     ? [
                         { divider: true },
                         {
@@ -270,19 +288,75 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
   );
 }
 
+function JobsLoading() {
+  const cards = [
+    ["clipboard-list", "Total Jobs", "blue"],
+    ["clock-3", "Pending Approval", "amber"],
+    ["truck", "In Transit", "blue"],
+    ["circle-check", "Delivered", "green"],
+    ["circle-x", "Cancelled", "red"],
+  ];
+  const cellWidths = ["68%", "84%", "54%", "78%", "60%", "72%", "56%", "66%", "62%", "48%"];
+
+  return (
+    <div className={styles.page} aria-busy="true">
+      <div className={styles.loadingHeader} aria-hidden="true">
+        <div className={styles.loadingHeaderTitle}>
+          <Skeleton width={190} height={28} />
+          <Skeleton width={330} height={14} />
+        </div>
+        <Skeleton width={318} height={42} radius={10} />
+      </div>
+      <div className={styles.loadingNotice} role="status" aria-live="polite">
+        <span className={styles.loadingNoticeDot} aria-hidden="true" />
+        Loading jobs…
+      </div>
+      <section className={styles.metrics} aria-label="Loading job summary">
+        {cards.map(([icon, label, tint]) => (
+          <StatCard
+            key={label}
+            icon={icon}
+            label={label}
+            tint={tint}
+            value={<Skeleton as="span" width={54} height={23} />}
+            caption={<Skeleton as="span" width={86} height={11} />}
+            style={{ minHeight: 92, padding: 13 }}
+          />
+        ))}
+      </section>
+      <Card pad="none" className={styles.workspace}>
+        <div className={styles.loadingTabs} aria-hidden="true">
+          {[74, 130, 66, 76, 86, 78, 80, 68].map((width, index) => (
+            <Skeleton key={index} width={width} height={13} />
+          ))}
+        </div>
+        <div className={styles.loadingFilters} aria-hidden="true">
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton key={index} height={46} radius={10} />
+          ))}
+        </div>
+        <div className={styles.loadingTools} aria-hidden="true">
+          <Skeleton width={260} height={38} radius={8} />
+          <Skeleton width={90} height={38} radius={8} />
+          <Skeleton width={38} height={38} radius={8} />
+          <Skeleton width={38} height={38} radius={8} />
+        </div>
+        <div className={styles.loadingTable} aria-hidden="true">
+          {Array.from({ length: 8 }, (_, rowIndex) => (
+            <div className={styles.loadingRow} key={rowIndex}>
+              {cellWidths.map((width, columnIndex) => (
+                <Skeleton key={columnIndex} width={width} height={11} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export function JobsTrips() {
   const navigate = useNavigate();
-  const rawJobs = useCollection("jobs") || [];
-  const jobs = useMemo(
-    () =>
-      rawJobs
-        .map(normalize)
-        .sort(
-          (a, b) =>
-            Number(b.id.startsWith("JOB-")) - Number(a.id.startsWith("JOB-")),
-        ),
-    [rawJobs],
-  );
   const [tab, setTab] = useState("All Jobs");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -295,7 +369,7 @@ export function JobsTrips() {
   const [dateFilter, setDateFilter] = useState("All Dates");
   const [menu, setMenu] = useState(null);
   const [selected, setSelected] = useState([]);
-  const [selectedJobId, setSelectedJobId] = useState("JOB-29821");
+  const [selectedJobId, setSelectedJobId] = useState("");
   const [rowMenu, setRowMenu] = useState(null);
   const [toast, setToast] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -308,6 +382,26 @@ export function JobsTrips() {
     jobValue: "",
     requiredTrucks: 1,
   });
+
+  const {
+    currentData: jobsResponse,
+    isLoading: jobsLoading,
+    isFetching: jobsFetching,
+    isError: jobsError,
+    refetch: refetchJobs,
+  } = useGetAdminJobsQuery({ page, limit: pageSize });
+  const jobsBusy = jobsLoading || jobsFetching;
+  const rawJobs = jobsResponse?.rows || [];
+  const jobs = useMemo(
+    () =>
+      rawJobs
+        .map(normalize)
+        .sort(
+          (a, b) =>
+            Number(String(b.displayId).startsWith("JOB-")) - Number(String(a.displayId).startsWith("JOB-")),
+        ),
+    [rawJobs],
+  );
 
   useEffect(() => {
     const onGlobalSearch = (event) => setQuery(event.detail || "");
@@ -331,12 +425,19 @@ export function JobsTrips() {
     destinationFilter,
     dateFilter,
     query,
-    pageSize,
   ]);
+  useEffect(() => {
+    if (!jobs.length) {
+      if (selectedJobId && selectedJobId !== null) setSelectedJobId("");
+      return;
+    }
+    if (selectedJobId === null) return;
+    if (!jobs.some((job) => job.id === selectedJobId)) setSelectedJobId(jobs[0].id);
+  }, [jobs, selectedJobId]);
 
   const counts = useMemo(
     () => ({
-      total: jobs.length,
+      total: jobsResponse?.pagination?.total ?? jobs.length,
       pending: jobs.filter((job) => job.status === "Pending Approval").length,
       bidding: jobs.filter((job) => job.status === "Bidding").length,
       assigned: jobs.filter((job) => ["Awaiting Assignment", "Partially Assigned", "Assigned"].includes(job.status)).length,
@@ -351,7 +452,7 @@ export function JobsTrips() {
         .filter((job) => job.status === "In Transit")
         .reduce((sum, job) => sum + job.displayValue * 0.04, 0),
     }),
-    [jobs],
+    [jobs, jobsResponse?.pagination?.total],
   );
   const locations = useMemo(
     () =>
@@ -387,8 +488,8 @@ export function JobsTrips() {
         const matchDate =
           dateFilter === "All Dates" ||
           (dateFilter.startsWith("May 24")
-            ? /May (2[4-9]|30)/.test(job.displayCreated)
-            : /May (1[8-9]|2[0-3])/.test(job.displayCreated));
+            ? /May (2[4-9]|30)/.test(job.displayDeadline || job.displayCreated)
+            : /May (1[8-9]|2[0-3])/.test(job.displayDeadline || job.displayCreated));
         return (
           tabFilters[tab]?.(job) &&
           (statusFilter === "All Statuses" || job.status === statusFilter) &&
@@ -401,6 +502,7 @@ export function JobsTrips() {
           matchDate &&
           (!query ||
             [
+              job.displayId,
               job.id,
               job.displayForwarder,
               job.displayRoute,
@@ -424,7 +526,14 @@ export function JobsTrips() {
       query,
     ],
   );
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const paged = filtered;
+  const pageCount = Math.max(1, jobsResponse?.pagination?.totalPages || 1);
+  const hasLocalFilters = Boolean(
+    query || tab !== "All Jobs" || statusFilter !== "All Statuses"
+    || typeFilter !== "All Types" || cargoFilter !== "All Cargo"
+    || originFilter !== "All Locations" || destinationFilter !== "All Locations"
+    || dateFilter !== "All Dates",
+  );
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
 
   function resetFilters() {
@@ -447,9 +556,11 @@ export function JobsTrips() {
         "Value",
         "Status",
         "Created",
+        "Deadline",
+        "Free Days",
       ],
       ...rows.map((job) => [
-        job.id,
+        job.displayId || job.id,
         job.displayForwarder,
         job.displayType,
         job.displayRoute,
@@ -457,6 +568,8 @@ export function JobsTrips() {
         job.displayValue,
         job.status,
         job.displayCreated,
+        job.deadline || "",
+        job.freeDays ?? "",
       ]),
     ];
     const csv = data
@@ -479,14 +592,20 @@ export function JobsTrips() {
   async function handleAction(action, job) {
     setMenu(null);
     setRowMenu(null);
-    if (action === "view") return navigate(`/jobs/${job.id}`);
+    if (action === "view") {
+      return navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`);
+    }
     if (action === "export") return exportRows([job]);
+    if (job.actionsAvailable === false) {
+      setToast({ tone: "warning", title: "Job actions are not connected yet." });
+      return;
+    }
     if (action === "approve") await approveJob(job.id);
     if (action === "deliver") await markJobDelivered(job.id);
     if (action === "cancel") await cancelJob(job.id);
     setToast({
       tone: action === "cancel" ? "warning" : "success",
-      title: `${job.id} ${action === "approve" ? "approved" : action === "deliver" ? "marked delivered" : "cancelled"}.`,
+      title: `${job.displayId || job.id} ${action === "approve" ? "approved" : action === "deliver" ? "marked delivered" : "cancelled"}.`,
     });
   }
   async function submitJob(event) {
@@ -525,11 +644,11 @@ export function JobsTrips() {
       width: 92,
       render: (job) => (
         <Link
-          to={`/jobs/${job.id}`}
+          to={`/jobs/detail?id=${encodeURIComponent(job.id)}`}
           className={styles.jobLink}
           onClick={(event) => event.stopPropagation()}
         >
-          {job.id}
+          {job.displayId || job.id}
         </Link>
       ),
     },
@@ -540,7 +659,7 @@ export function JobsTrips() {
       render: (job) => (
         <span className={styles.twoLine}>
           <strong>{job.displayForwarder}</strong>
-          <small>{job.originCountry || "Lagos, Nigeria"}</small>
+          <small>{job.originCountry || "—"}</small>
         </span>
       ),
     },
@@ -592,7 +711,9 @@ export function JobsTrips() {
         job.displayAssignee ? (
           <span className={styles.assignee}>
             <Avatar name={job.truckingCompany || job.truckCompany || job.displayAssignee} size={26} />
-            <span className={styles.twoLine}><strong>{job.tripCounts.assigned} of {job.tripCounts.required} trips</strong><small>{job.truckingCompany || job.truckCompany}</small></span>
+            {job.assignmentDataAvailable === false
+              ? <span>{job.displayAssignee}</span>
+              : <span className={styles.twoLine}><strong>{job.tripCounts.assigned} of {job.tripCounts.required} trips</strong><small>{job.truckingCompany || job.truckCompany}</small></span>}
           </span>
         ) : (
           "—"
@@ -604,7 +725,18 @@ export function JobsTrips() {
       width: 116,
       render: (job) => (
         <span className={styles.dateCell}>
-          {job.displayCreated.replace(" at ", ", ")}
+          {job.displayCreated !== "—" ? (
+            <>
+              <span>{job.displayCreated.replace(" at ", ", ")}</span>
+              <small>Created</small>
+            </>
+          ) : job.displayDeadline ? (
+            <>
+              <span>{job.displayDeadline}</span>
+              <small>Deadline</small>
+              {job.freeDays != null && <small>{job.freeDays} free days</small>}
+            </>
+          ) : "—"}
         </span>
       ),
     },
@@ -616,7 +748,7 @@ export function JobsTrips() {
         <span className={styles.rowMenuWrap}>
           <IconButton
             icon="ellipsis"
-            label={`Actions for ${job.id}`}
+            label={`Actions for ${job.displayId || job.id}`}
             onClick={(event) => {
               event.stopPropagation();
               setRowMenu(rowMenu === job.id ? null : job.id);
@@ -635,7 +767,7 @@ export function JobsTrips() {
                     icon: "eye",
                     onClick: () => handleAction("view", job),
                   },
-                  ...(job.status === "Pending Approval"
+                  ...(job.actionsAvailable === false ? [] : job.status === "Pending Approval"
                     ? [
                         {
                           label: "Approve Job",
@@ -644,7 +776,7 @@ export function JobsTrips() {
                         },
                       ]
                     : []),
-                  ...(job.status === "In Transit"
+                  ...(job.actionsAvailable === false ? [] : job.status === "In Transit"
                     ? [
                         {
                           label: "Mark Delivered",
@@ -658,7 +790,7 @@ export function JobsTrips() {
                     icon: "download",
                     onClick: () => handleAction("export", job),
                   },
-                  ...(job.status !== "Cancelled" && job.status !== "Delivered"
+                  ...(job.actionsAvailable !== false && job.status !== "Cancelled" && job.status !== "Delivered"
                     ? [
                         { divider: true },
                         {
@@ -677,6 +809,8 @@ export function JobsTrips() {
       ),
     },
   ];
+
+  if (!jobsResponse && jobsBusy) return <JobsLoading />;
 
   return (
     <div className={styles.page}>
@@ -711,6 +845,20 @@ export function JobsTrips() {
         </span>}
       />
       {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {jobsFetching && jobsResponse && (
+        <div className={styles.loadingNotice} role="status" aria-live="polite">
+          <span className={styles.loadingNoticeDot} aria-hidden="true" />
+          Refreshing jobs…
+        </div>
+      )}
+      {jobsError && (
+        <div className={styles.loadError}>
+          <Banner tone="danger" title="Unable to load jobs from the API." />
+          <Button variant="outline" icon="rotate-ccw" onClick={refetchJobs}>
+            Retry
+          </Button>
+        </div>
+      )}
       <section className={styles.metrics} aria-label="Job summary">
         <StatCard
           icon="clipboard-list"
@@ -927,25 +1075,25 @@ export function JobsTrips() {
                 onRowClick={(job) => setSelectedJobId(job.id)}
               />
             </div>
-            {filtered.length === 0 && (
+            {!jobsBusy && !jobsError && filtered.length === 0 && (
               <div className={styles.empty}>
                 No jobs match the selected filters.
               </div>
             )}
             <Pagination
               page={page}
-              pageCount={Math.max(1, Math.ceil(filtered.length / pageSize))}
+              pageCount={pageCount}
               pageSize={pageSize}
-              total={filtered.length}
+              total={hasLocalFilters ? undefined : jobsResponse?.pagination?.total ?? filtered.length}
               onPage={(next) =>
                 setPage(
-                  Math.min(
-                    Math.max(1, next),
-                    Math.max(1, Math.ceil(filtered.length / pageSize)),
-                  ),
+                  Math.min(Math.max(1, next), pageCount),
                 )
               }
-              onPageSize={setPageSize}
+              onPageSize={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
             />
           </div>
           {selectedJob && (

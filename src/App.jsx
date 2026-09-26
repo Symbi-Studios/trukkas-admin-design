@@ -36,7 +36,7 @@ export function AdminShell({ children }) {
   const [logoutAdmin] = useLogoutAdminMutation();
   const { data: notificationData } = useGetAdminNotificationsQuery(
     { page: 1, limit: 20, tab: "all" },
-    { skip: !mounted || !admin || loggingOut, pollingInterval: 60000 },
+    { skip: !mounted || !admin || loggingOut },
   );
   const router = useRouter();
   const pathname = usePathname();

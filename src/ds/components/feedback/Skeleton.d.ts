@@ -1,5 +1,6 @@
 import * as React from 'react';
 export interface SkeletonProps {
+  as?: 'div' | 'span';
   width?: number | string;
   height?: number;
   radius?: number;

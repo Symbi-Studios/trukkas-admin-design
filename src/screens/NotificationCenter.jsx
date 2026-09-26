@@ -48,7 +48,7 @@ export function NotificationCenter() {
         : tab === 'Unread' || (statuses.length === 1 && statuses[0] === 'Unread') ? 'unread' : 'all';
   const { currentData: data, isLoading, isFetching, error, refetch } = useGetAdminNotificationsQuery(
     { page, limit: pageSize, tab: apiTab },
-    { pollingInterval: 60000 },
+    { refetchOnMountOrArgChange: true },
   );
   const [markRead, { isLoading: markingRead }] = useMarkAdminNotificationsReadMutation();
   const [markAllRead, { isLoading: markingAll }] = useMarkAllAdminNotificationsReadMutation();

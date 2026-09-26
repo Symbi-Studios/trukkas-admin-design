@@ -1125,8 +1125,8 @@ function DashboardLoading() {
             key={label}
             icon={icon}
             label={label}
-            value={<Skeleton width={54} height={23} />}
-            caption={<Skeleton width={96} height={11} />}
+            value={<Skeleton as="span" width={54} height={23} />}
+            caption={<Skeleton as="span" width={96} height={11} />}
           />
         ))}
       </section>

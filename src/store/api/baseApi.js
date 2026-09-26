@@ -229,6 +229,6 @@ async function baseQueryWithReauth(args, api, extraOptions) {
 export const baseApi = createApi({
   reducerPath: 'baseApi',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['AdminNotifications'],
+  tagTypes: ['AdminNotifications', 'AdminJobs', 'AdminBids'],
   endpoints: () => ({}),
 });
