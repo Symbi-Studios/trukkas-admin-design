@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "../router.js";
 import {
@@ -11,112 +13,27 @@ import {
   Modal,
   PageHeader,
   Pagination,
-  Sparkline,
-  Textarea,
+  Skeleton,
 } from "../ds.js";
+import { useGetAdminTripsQuery } from "../store/features/trips/tripsApi.js";
 import "./Operations.css";
-import { useCollection } from "../mock/useCollection.js";
-import { getJobTrips } from "../domain/jobTrips.js";
-import { normalizePayouts } from "../domain/payouts.js";
-import { updateJobTripStatus } from "../mock/api.js";
-import { ProgressBar } from "../ds/components/data/ProgressBar.jsx";
 
-const initialTrips = [
-  [
-    "TRP-98231",
-    "JOB-29821",
-    "Apapa Port",
-    "Ikeja Warehouse",
-    "LND-234-XZ",
-    "John Adewale",
-    "In Transit",
-    "14:35",
-    "28 km",
-    66,
-    2,
-  ],
-  [
-    "TRP-98230",
-    "JOB-29820",
-    "Tin Can Port",
-    "Victoria Island",
-    "KJA-112-BD",
-    "T. James",
-    "At Pickup",
-    "11:20",
-    "3.2 km",
-    25,
-    1,
-  ],
-  [
-    "TRP-98229",
-    "JOB-29819",
-    "Ikeja Warehouse",
-    "Ajah Depot",
-    "LAG-445-KJ",
-    "A. Ibrahim",
-    "At Delivery",
-    "10:40",
-    "1.1 km",
-    90,
-    3,
-  ],
-  [
-    "TRP-98228",
-    "JOB-29818",
-    "Lekki Warehouse",
-    "Apapa Port",
-    "ENU-221-TA",
-    "O. Chinedu",
-    "Returning Container",
-    "18:25",
-    "15 km",
-    40,
-    1,
-  ],
-  [
-    "TRP-98227",
-    "JOB-29817",
-    "PH Port",
-    "Aba Enugu Road",
-    "RIV-998-PO",
-    "S. Musa",
-    "Delayed",
-    "20:10",
-    "+1h 25m",
-    70,
-    2,
-  ],
-  // JOB-29821 needed a second truck from the forwarder, so it has two trips running the same route.
-  [
-    "TRP-98232",
-    "JOB-29821",
-    "Apapa Port",
-    "Ikeja Warehouse",
-    "EKY-778-QP",
-    "Grace Okoro",
-    "At Pickup",
-    "15:10",
-    "26 km",
-    20,
-    1,
-  ],
-].map((r) => ({
-  id: r[0],
-  job: r[1],
-  from: r[2],
-  to: r[3],
-  truck: r[4],
-  driver: r[5],
-  status: r[6],
-  eta: r[7],
-  distance: r[8],
-  progress: r[9],
-  segment: r[10],
-}));
-
+const PAGE_SIZE = 10;
+const TRIP_STATUSES = [
+  "In Transit",
+  "At Pickup",
+  "Delivered",
+  "Delayed",
+  "At Delivery",
+  "Returning Container",
+];
+const STATUS_TO_API = {
+  "In Transit": "InTransit",
+  "At Pickup": "AtPickup",
+  Delivered: "Delivered",
+  Delayed: "Delayed",
+};
 const tones = {
-  Assigned: "info",
   "In Transit": "success",
   "At Pickup": "purple",
   "At Delivery": "orange",
@@ -124,77 +41,68 @@ const tones = {
   Delayed: "danger",
   Delivered: "success",
 };
-const TRIP_STATUSES = [
-  "Assigned",
-  "In Transit",
-  "At Pickup",
-  "At Delivery",
-  "Returning Container",
-  "Delayed",
-  "Delivered",
-];
-const PAGE_SIZE = 10;
 
-function Metric({
-  label,
-  value,
-  delta,
-  icon,
-  color = "#4c16ac",
-  down = false,
-}) {
+function Metric({ label, value, icon, color = "#4c16ac", caption }) {
   return (
     <Card className="metric-card">
       <label>{label}</label>
       <strong>{value}</strong>
-      <span className={"delta " + (down ? "down" : "")}>
-        {down ? "↓" : "↑"} {delta}
-      </span>
-      <small>vs May 17 – May 23</small>
+      <small>{caption}</small>
       <i className="metric-icon" style={{ color, background: color + "12" }}>
         <Icon name={icon} size={20} />
       </i>
-      <Sparkline points={[2, 3, 3, 5, 4, 7]} color={color} />
     </Card>
+  );
+}
+
+function TripsLoading() {
+  return (
+    <div className="operations-screen" aria-busy="true">
+      <Card>
+        <Skeleton width={220} height={28} />
+        <div style={{ marginTop: 12 }}><Skeleton width={420} height={14} /></div>
+      </Card>
+      <div className="kpi-grid">
+        {Array.from({ length: 6 }, (_, index) => (
+          <Card className="metric-card" key={index}>
+            <Skeleton width="48%" height={12} />
+            <div style={{ marginTop: 14 }}><Skeleton width={72} height={27} /></div>
+          </Card>
+        ))}
+      </div>
+      <Card><Skeleton height={260} /></Card>
+    </div>
+  );
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function FilterMenu({ label, value, active, open, onToggle, options, onSelect }) {
+  return (
+    <span style={{ position: "relative" }}>
+      <button className={`jobs-filter${active ? " active" : ""}`} onClick={onToggle}>
+        <span>{label}</span>{value}
+      </button>
+      {open && (
+        <span style={{ position: "absolute", left: 0, top: 52, zIndex: 30 }}>
+          <DropdownMenu
+            width={220}
+            items={options.map((option) => ({
+              label: option,
+              icon: option === value ? "check" : undefined,
+              onClick: () => onSelect(option),
+            }))}
+          />
+        </span>
+      )}
+    </span>
   );
 }
 
 export function TripsSegments() {
   const navigate = useNavigate();
-  const jobs = useCollection("jobs") || [];
-  const payoutRows = useCollection("payoutRequests") || [];
-  const payouts = useMemo(
-    () => normalizePayouts(payoutRows, jobs),
-    [payoutRows, jobs],
-  );
-  const [tripOverrides, setTripOverrides] = useState({});
-  const trips = useMemo(() => {
-    const linked = jobs.flatMap((job) =>
-      getJobTrips(job).map((trip) => ({
-        id: trip.id,
-        job: job.id,
-        from: trip.origin || job.origin || "—",
-        to: trip.destination || job.destination || "—",
-        truck: trip.truckPlate || "Unassigned",
-        driver: trip.driverName || "Unassigned",
-        company:
-          trip.truckingCompany ||
-          job.truckingCompany ||
-          job.truckCompany ||
-          "—",
-        status: trip.status || "Assigned",
-        eta: trip.eta || trip.deliveryDate || "—",
-        distance: `${trip.distanceKm || job.distanceKm || 0} km`,
-        progress: trip.progress || 0,
-        segment: trip.segment || 1,
-      })),
-    );
-    const linkedIds = new Set(linked.map((trip) => trip.id));
-    return [
-      ...linked,
-      ...initialTrips.filter((trip) => !linkedIds.has(trip.id)),
-    ].map((trip) => ({ ...trip, ...tripOverrides[trip.id] }));
-  }, [jobs, tripOverrides]);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("All Trips");
   const [originFilter, setOriginFilter] = useState("All Locations");
@@ -202,91 +110,52 @@ export function TripsSegments() {
   const [driverFilter, setDriverFilter] = useState("All Drivers");
   const [openFilter, setOpenFilter] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [zoom, setZoom] = useState(100);
-  const [contactOpen, setContactOpen] = useState(false);
-  const [message, setMessage] = useState("");
   const [menuFor, setMenuFor] = useState(null);
   const [toast, setToast] = useState(null);
 
+  const serverStatus = STATUS_TO_API[statusFilter];
+  const {
+    currentData: tripsResponse,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useGetAdminTripsQuery({ page, limit: PAGE_SIZE, statusFilter: serverStatus }, {
+    refetchOnMountOrArgChange: true,
+  });
+  const { currentData: allTripsResponse } = useGetAdminTripsQuery({ page: 1, limit: 1 });
+
+  const trips = tripsResponse?.rows || [];
+  const origins = useMemo(() => [...new Set(trips.map((trip) => trip.origin).filter(Boolean))], [trips]);
+  const destinations = useMemo(() => [...new Set(trips.map((trip) => trip.destination).filter(Boolean))], [trips]);
+  const drivers = useMemo(() => [...new Set(trips.map((trip) => trip.driverName).filter(Boolean))], [trips]);
+  const localStatus = statusFilter !== "All Trips" && !serverStatus ? statusFilter : null;
+  const filtered = useMemo(() => trips.filter((trip) => (
+    (!localStatus || trip.status === localStatus)
+    && (originFilter === "All Locations" || trip.origin === originFilter)
+    && (destFilter === "All Locations" || trip.destination === destFilter)
+    && (driverFilter === "All Drivers" || trip.driverName === driverFilter)
+  )), [destFilter, driverFilter, localStatus, originFilter, trips]);
+  const selectedTrip = trips.find((trip) => trip.id === selectedId) || null;
+  const hasLocalFilters = Boolean(
+    localStatus || originFilter !== "All Locations"
+    || destFilter !== "All Locations" || driverFilter !== "All Drivers",
+  );
+
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(t);
+    if (!toast) return undefined;
+    const timeout = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timeout);
   }, [toast]);
+
   useEffect(() => {
     setPage(1);
   }, [statusFilter, originFilter, destFilter, driverFilter]);
 
-  const origins = useMemo(
-    () => [...new Set(trips.map((t) => t.from))],
-    [trips],
-  );
-  const destinations = useMemo(
-    () => [...new Set(trips.map((t) => t.to))],
-    [trips],
-  );
-  const drivers = useMemo(
-    () => [...new Set(trips.map((t) => t.driver))],
-    [trips],
-  );
+  useEffect(() => {
+    if (selectedId && !selectedTrip) setSelectedId(null);
+  }, [selectedId, selectedTrip]);
 
-  const filtered = useMemo(
-    () =>
-      trips.filter(
-        (t) =>
-          (statusFilter === "All Trips" || t.status === statusFilter) &&
-          (originFilter === "All Locations" || t.from === originFilter) &&
-          (destFilter === "All Locations" || t.to === destFilter) &&
-          (driverFilter === "All Drivers" || t.driver === driverFilter),
-      ),
-    [trips, statusFilter, originFilter, destFilter, driverFilter],
-  );
-
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const selectedTrip = trips.find((t) => t.id === selectedId) || null;
-  const siblingTrips = selectedTrip
-    ? trips.filter(
-        (t) => t.job === selectedTrip.job && t.id !== selectedTrip.id,
-      )
-    : [];
-  const selectedPayout = selectedTrip
-    ? payouts.find((payout) => payout.tripIds?.includes(selectedTrip.id))
-    : null;
-
-  async function updateTripStatus(id, status) {
-    const trip = trips.find((item) => item.id === id);
-    if (
-      trip &&
-      jobs.some(
-        (job) =>
-          job.id === trip.job &&
-          getJobTrips(job).some((item) => item.id === id),
-      )
-    ) {
-      await updateJobTripStatus(trip.job, id, status);
-    } else {
-      setTripOverrides((current) => ({
-        ...current,
-        [id]: { ...current[id], status },
-      }));
-    }
-    setMenuFor(null);
-    setToast({
-      tone: status === "Delayed" ? "warning" : "success",
-      title: `${id} marked as ${status}`,
-    });
-  }
-  function selectTrip(t) {
-    setSelectedId(t.id);
-    setZoom(100);
-    setContactOpen(false);
-    setMessage("");
-  }
-  function closeTrip() {
-    setSelectedId(null);
-    setContactOpen(false);
-    setMessage("");
-  }
   function resetFilters() {
     setStatusFilter("All Trips");
     setOriginFilter("All Locations");
@@ -295,128 +164,113 @@ export function TripsSegments() {
     setOpenFilter(null);
     setPage(1);
   }
-  function sendMessage() {
-    if (!message.trim()) return;
-    setToast({
-      tone: "success",
-      title: `Message sent to ${selectedTrip.driver}.`,
-    });
-    setContactOpen(false);
-    setMessage("");
+
+  function exportTrips() {
+    if (!filtered.length) return;
+    const rows = [
+      ["Trip ID", "Job", "Container", "Route", "Driver", "Truck", "Status", "ETA", "Last Location Update"],
+      ...filtered.map((trip) => [
+        trip.id,
+        trip.jobNumber,
+        trip.containerNumber,
+        trip.route,
+        trip.driverName,
+        trip.truck?.plateNumber,
+        trip.status,
+        trip.eta,
+        trip.truck?.lastLocationUpdate,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    link.download = `trukkas-trips-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setToast({ tone: "success", title: `${filtered.length} trip${filtered.length === 1 ? "" : "s"} exported.` });
   }
 
-  const cols = [
+  function metricValue(label) {
+    if (statusFilter === label && tripsResponse) return tripsResponse.pagination.total.toLocaleString();
+    return "—";
+  }
+
+  const columns = [
     {
       key: "id",
       header: "Trip ID",
-      width: "120px",
-      render: (r) => (
-        <a onClick={() => selectTrip(r)} style={{ cursor: "pointer" }}>
-          {r.id}
+      width: 120,
+      render: (trip) => <a onClick={() => setSelectedId(trip.id)} style={{ cursor: "pointer" }}>{trip.id}</a>,
+    },
+    {
+      key: "job",
+      header: "Job ID",
+      width: 130,
+      render: (trip) => (
+        <a
+          style={{ cursor: trip.jobId ? "pointer" : "default" }}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (trip.jobId) navigate(`/jobs/detail?id=${encodeURIComponent(trip.jobId)}`);
+          }}
+        >
+          {trip.jobNumber}
         </a>
       ),
     },
-    { key: "job", header: "Job ID", width: "120px" },
-    {
-      key: "type",
-      header: "Trip Type",
-      render: () => <Badge tone="purple">Import (Container)</Badge>,
-    },
-    {
-      key: "route",
-      header: "Route",
-      render: (r) => (
-        <span className="route-cell">
-          {r.from}　→　{r.to}
-        </span>
-      ),
-      width: "120px",
-    },
-    { key: "driver", header: "Driver", width: "120px" },
+    { key: "type", header: "Trip Type", render: () => <Badge tone="purple">Container Trip</Badge> },
+    { key: "route", header: "Route", render: (trip) => <span className="route-cell">{trip.route}</span>, width: 190 },
+    { key: "driver", header: "Driver", render: (trip) => trip.driverName || "—", width: 130 },
     {
       key: "truck",
       header: "Truck / Container",
-      render: (r) => (
+      render: (trip) => (
         <span className="cell-two">
-          <strong>{r.truck}</strong>
-          <small>MSKU 4567893</small>
+          <strong>{trip.truck?.plateNumber || "—"}</strong>
+          <small>{trip.containerNumber || "—"}</small>
         </span>
       ),
     },
-    {
-      key: "segment",
-      header: "Current Segment",
-      render: (r) => r.segment + " / 3",
-    },
+    { key: "segment", header: "Current Segment", render: () => "—" },
     {
       key: "status",
       header: "Status",
-      render: (r) => (
-        <Badge tone={tones[r.status]} dot>
-          {r.status}
-        </Badge>
+      render: (trip) => (
+        <span className="cell-two">
+          <Badge tone={tones[trip.status] || "neutral"} dot>{trip.status}</Badge>
+          {trip.statusLabel && trip.statusLabel !== trip.status && <small>{trip.statusLabel}</small>}
+        </span>
       ),
     },
     {
       key: "eta",
       header: "ETA",
-      width: "120px",
-      render: (r) => (
-        <span className="cell-two">
-          <strong>{r.eta}</strong>
-          <small>{r.distance}</small>
-        </span>
+      width: 145,
+      render: (trip) => (
+        <span className="cell-two"><strong>{trip.displayEta || "—"}</strong><small>Distance unavailable</small></span>
       ),
     },
+    { key: "progress", header: "Progress", width: 100, render: () => "—" },
     {
-      key: "progress",
-      header: "Progress",
-      width: "120px",
-      render: (r) => (
-        <span>
-          <ProgressBar value={r.progress} max="100" label={`${r.progress}%`} />
-        </span>
-      ),
-    },
-    {
-      key: "a",
+      key: "actions",
       header: "Actions",
-      render: (r) => (
+      render: (trip) => (
         <span style={{ position: "relative" }}>
           <button
             className="row-actions"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuFor(menuFor === r.id ? null : r.id);
+            aria-label={`Actions for ${trip.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuFor(menuFor === trip.id ? null : trip.id);
             }}
-          >
-            •••
-          </button>
-          {menuFor === r.id && (
-            <span
-              style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }}
-              onClick={(e) => e.stopPropagation()}
-            >
+          >•••</button>
+          {menuFor === trip.id && (
+            <span style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }} onClick={(event) => event.stopPropagation()}>
               <DropdownMenu
                 width={200}
                 items={[
-                  {
-                    label: "View Trip",
-                    icon: "eye",
-                    onClick: () => {
-                      setMenuFor(null);
-                      selectTrip(r);
-                    },
-                  },
-                  {
-                    label: "View Job",
-                    icon: "briefcase-business",
-                    onClick: () => {
-                      setMenuFor(null);
-                      navigate("/jobs/" + r.job);
-                    },
-                  },
-                  
+                  { label: "View Trip", icon: "eye", onClick: () => { setMenuFor(null); setSelectedId(trip.id); } },
+                  ...(trip.jobId ? [{ label: "View Job", icon: "briefcase-business", onClick: () => { setMenuFor(null); navigate(`/jobs/detail?id=${encodeURIComponent(trip.jobId)}`); } }] : []),
                 ]}
               />
             </span>
@@ -426,450 +280,163 @@ export function TripsSegments() {
     },
   ];
 
+  if (!tripsResponse && isLoading) return <TripsLoading />;
+
   return (
     <div className="operations-screen">
       <PageHeader
         crumbs={["Jobs & Trips", "Trips & Segments"]}
         title="Trips & Segments"
         description="Monitor all active trips and their segment execution in real-time."
-        actions={
+        actions={(
           <>
-            <button className="date-button">
-              <Icon name="calendar" size={15} />
-              May 24 – May 30, 2026⌄
+            <button className="date-button" disabled title="The trips API does not provide date filtering.">
+              <Icon name="calendar" size={15} />Date range unavailable
             </button>
-            <Button
-              icon="plus"
-              onClick={() =>
-                setToast({
-                  tone: "info",
-                  title: `Exporting ${filtered.length} trip(s)…`,
-                })
-              }
-            >
-              Export
-            </Button>
+            <Button icon="download" disabled={!filtered.length} onClick={exportTrips}>Export</Button>
           </>
-        }
+        )}
       />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {isFetching && tripsResponse && <Banner tone="info" title="Refreshing trips…" />}
+      {error && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Banner tone="danger" title="Unable to load trips from the API." />
+          <Button variant="outline" icon="rotate-cw" onClick={refetch}>Retry</Button>
+        </div>
+      )}
 
       <div className="kpi-grid">
-        <Metric
-          label="All Trips"
-          value="1,586"
-          delta="12.6%"
-          icon="briefcase-business"
-        />
-        <Metric
-          label="In Transit"
-          value="186"
-          delta="8.3%"
-          icon="route"
-          color="#12a150"
-        />
-        <Metric
-          label="At Pickup"
-          value="28"
-          delta="16.4%"
-          icon="truck"
-          color="#2469e8"
-        />
-        <Metric
-          label="At Delivery"
-          value="51"
-          delta="6.9%"
-          icon="clipboard-check"
-          color="#f5a524"
-        />
-        <Metric
-          label="Returning Container"
-          value="34"
-          delta="14.2%"
-          icon="layers"
-          color="#0e9f9a"
-        />
-        <Metric
-          label="Delayed"
-          value="28"
-          delta="15.6%"
-          icon="clock"
-          color="#e02b22"
-          down
-        />
+        <Metric label="All Trips" value={allTripsResponse?.pagination.total?.toLocaleString() || "—"} caption="Across all pages" icon="briefcase-business" />
+        <Metric label="In Transit" value={metricValue("In Transit")} caption={statusFilter === "In Transit" ? "Across all pages" : "Total unavailable"} icon="route" color="#12a150" />
+        <Metric label="At Pickup" value={metricValue("At Pickup")} caption={statusFilter === "At Pickup" ? "Across all pages" : "Total unavailable"} icon="truck" color="#2469e8" />
+        <Metric label="At Delivery" value="—" caption="Not reported by API" icon="clipboard-check" color="#f5a524" />
+        <Metric label="Returning Container" value="—" caption="Not reported by API" icon="layers" color="#0e9f9a" />
+        <Metric label="Delayed" value={metricValue("Delayed")} caption={statusFilter === "Delayed" ? "Across all pages" : "Total unavailable"} icon="clock" color="#e02b22" />
       </div>
 
       <div className="ops-panel">
         <div className="ops-panel-head">
           <div>
-            <h3>
-              All Trips <small>({filtered.length})</small>
-            </h3>
-            <p>Click a trip to view its live map and details.</p>
+            <h3>All Trips <small>({hasLocalFilters ? filtered.length : tripsResponse?.pagination.total ?? 0})</small></h3>
+            <p>Click a trip to view its latest available details.</p>
           </div>
         </div>
 
         <div className="jobs-filters">
-          <span style={{ position: "relative" }}>
-            <button
-              className={
-                "jobs-filter" + (statusFilter !== "All Trips" ? " active" : "")
-              }
-              onClick={() =>
-                setOpenFilter(openFilter === "status" ? null : "status")
-              }
-            >
-              <span>Trip Status</span>
-              {statusFilter}
-            </button>
-            {openFilter === "status" && (
-              <span
-                style={{ position: "absolute", left: 0, top: 52, zIndex: 30 }}
-              >
-                <DropdownMenu
-                  width={200}
-                  items={["All Trips", ...TRIP_STATUSES].map((s) => ({
-                    label: s,
-                    icon: s === statusFilter ? "check" : undefined,
-                    onClick: () => {
-                      setStatusFilter(s);
-                      setOpenFilter(null);
-                    },
-                  }))}
-                />
-              </span>
-            )}
-          </span>
-          <span style={{ position: "relative" }}>
-            <button
-              className={
-                "jobs-filter" +
-                (originFilter !== "All Locations" ? " active" : "")
-              }
-              onClick={() =>
-                setOpenFilter(openFilter === "origin" ? null : "origin")
-              }
-            >
-              <span>Origin</span>
-              {originFilter}
-            </button>
-            {openFilter === "origin" && (
-              <span
-                style={{ position: "absolute", left: 0, top: 52, zIndex: 30 }}
-              >
-                <DropdownMenu
-                  width={200}
-                  items={["All Locations", ...origins].map((s) => ({
-                    label: s,
-                    icon: s === originFilter ? "check" : undefined,
-                    onClick: () => {
-                      setOriginFilter(s);
-                      setOpenFilter(null);
-                    },
-                  }))}
-                />
-              </span>
-            )}
-          </span>
-          <span style={{ position: "relative" }}>
-            <button
-              className={
-                "jobs-filter" +
-                (destFilter !== "All Locations" ? " active" : "")
-              }
-              onClick={() =>
-                setOpenFilter(openFilter === "dest" ? null : "dest")
-              }
-            >
-              <span>Destination</span>
-              {destFilter}
-            </button>
-            {openFilter === "dest" && (
-              <span
-                style={{ position: "absolute", left: 0, top: 52, zIndex: 30 }}
-              >
-                <DropdownMenu
-                  width={200}
-                  items={["All Locations", ...destinations].map((s) => ({
-                    label: s,
-                    icon: s === destFilter ? "check" : undefined,
-                    onClick: () => {
-                      setDestFilter(s);
-                      setOpenFilter(null);
-                    },
-                  }))}
-                />
-              </span>
-            )}
-          </span>
-          <span style={{ position: "relative" }}>
-            <button
-              className={
-                "jobs-filter" +
-                (driverFilter !== "All Drivers" ? " active" : "")
-              }
-              onClick={() =>
-                setOpenFilter(openFilter === "driver" ? null : "driver")
-              }
-            >
-              <span>Driver</span>
-              {driverFilter}
-            </button>
-            {openFilter === "driver" && (
-              <span
-                style={{ position: "absolute", left: 0, top: 52, zIndex: 30 }}
-              >
-                <DropdownMenu
-                  width={200}
-                  items={["All Drivers", ...drivers].map((s) => ({
-                    label: s,
-                    icon: s === driverFilter ? "check" : undefined,
-                    onClick: () => {
-                      setDriverFilter(s);
-                      setOpenFilter(null);
-                    },
-                  }))}
-                />
-              </span>
-            )}
-          </span>
-          <button className="jobs-filter">
-            <span>Date Range</span>May 24 – May 30, 2026
-          </button>
-          <span style={{ position: "relative" }}>
-            <Button
-              variant="outline"
-              icon="list-filter"
-              onClick={() =>
-                setOpenFilter(openFilter === "quick" ? null : "quick")
-              }
-            >
-              Filters
-            </Button>
-            {openFilter === "quick" && (
-              <span
-                style={{ position: "absolute", right: 0, top: 44, zIndex: 30 }}
-              >
-                <DropdownMenu
-                  width={210}
-                  items={[
-                    { section: "QUICK FILTERS" },
-                    {
-                      label: "Delayed Trips Only",
-                      icon: "clock",
-                      onClick: () => {
-                        setStatusFilter("Delayed");
-                        setOpenFilter(null);
-                      },
-                    },
-                    {
-                      label: "Returning Container Only",
-                      icon: "layers",
-                      onClick: () => {
-                        setStatusFilter("Returning Container");
-                        setOpenFilter(null);
-                      },
-                    },
-                  ]}
-                />
-              </span>
-            )}
-          </span>
-          <Button variant="outline" icon="rotate-cw" onClick={resetFilters}>
-            Reset
-          </Button>
+          <FilterMenu
+            label="Trip Status"
+            value={statusFilter}
+            active={statusFilter !== "All Trips"}
+            open={openFilter === "status"}
+            onToggle={() => setOpenFilter(openFilter === "status" ? null : "status")}
+            options={["All Trips", ...TRIP_STATUSES]}
+            onSelect={(value) => { setStatusFilter(value); setOpenFilter(null); }}
+          />
+          <FilterMenu
+            label="Origin"
+            value={originFilter}
+            active={originFilter !== "All Locations"}
+            open={openFilter === "origin"}
+            onToggle={() => setOpenFilter(openFilter === "origin" ? null : "origin")}
+            options={["All Locations", ...origins]}
+            onSelect={(value) => { setOriginFilter(value); setOpenFilter(null); }}
+          />
+          <FilterMenu
+            label="Destination"
+            value={destFilter}
+            active={destFilter !== "All Locations"}
+            open={openFilter === "destination"}
+            onToggle={() => setOpenFilter(openFilter === "destination" ? null : "destination")}
+            options={["All Locations", ...destinations]}
+            onSelect={(value) => { setDestFilter(value); setOpenFilter(null); }}
+          />
+          <FilterMenu
+            label="Driver"
+            value={driverFilter}
+            active={driverFilter !== "All Drivers"}
+            open={openFilter === "driver"}
+            onToggle={() => setOpenFilter(openFilter === "driver" ? null : "driver")}
+            options={["All Drivers", ...drivers]}
+            onSelect={(value) => { setDriverFilter(value); setOpenFilter(null); }}
+          />
+          <button className="jobs-filter" disabled><span>Date Range</span>Unavailable</button>
+          <Button variant="outline" icon="rotate-cw" onClick={resetFilters}>Reset</Button>
         </div>
 
-        {filtered.length === 0 ? (
-          <div
-            style={{ padding: "40px 18px", textAlign: "center" }}
-            className="tk-meta"
-          >
-            No trips match the current filters.
-          </div>
+        {!error && filtered.length === 0 ? (
+          <div style={{ padding: "40px 18px", textAlign: "center" }} className="tk-meta">No trips match the current filters.</div>
         ) : (
-          <DataTable rows={paged} columns={cols} onRowClick={selectTrip} />
+          <DataTable rows={filtered} columns={columns} onRowClick={(trip) => setSelectedId(trip.id)} />
         )}
         <Pagination
-          page={page}
-          pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-          total={filtered.length}
-          onPage={setPage}
-          onPageSize={() => {}}
+          page={tripsResponse?.pagination.page || page}
+          pageCount={Math.max(1, tripsResponse?.pagination.totalPages || 1)}
+          pageSize={tripsResponse?.pagination.limit || PAGE_SIZE}
+          total={hasLocalFilters ? undefined : tripsResponse?.pagination.total ?? 0}
+          onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, tripsResponse?.pagination.totalPages || 1)))}
         />
       </div>
 
       <Modal
         open={!!selectedTrip}
-        onClose={closeTrip}
+        onClose={() => setSelectedId(null)}
         width={640}
         title={selectedTrip?.id}
-        description={
-          selectedTrip ? `${selectedTrip.from}　→　${selectedTrip.to}` : ""
-        }
+        description={selectedTrip?.route || ""}
       >
-        {selectedTrip &&
-          (contactOpen ? (
-            <div style={{ display: "grid", gap: 14 }}>
-              <div className="trip-fact">
-                <span>To</span>
-                <b>
-                  {selectedTrip.driver}　·　{selectedTrip.truck}
-                </b>
-              </div>
-              <Textarea
-                label="Message"
-                placeholder={`Write a message to ${selectedTrip.driver}...`}
-                rows={5}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-              />
-              <div
-                style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}
-              >
-                <Button variant="outline" onClick={() => setContactOpen(false)}>
-                  Back
-                </Button>
-                <Button
-                  icon="send"
-                  disabled={!message.trim()}
-                  onClick={sendMessage}
-                >
-                  Send Message
-                </Button>
-              </div>
+        {selectedTrip && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Badge tone={tones[selectedTrip.status] || "neutral"} dot>{selectedTrip.status}</Badge>
+              {selectedTrip.statusLabel && <span className="tk-meta">{selectedTrip.statusLabel}</span>}
             </div>
-          ) : (
-            <div style={{ display: "grid", gap: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Badge tone={tones[selectedTrip.status]} dot>
-                  {selectedTrip.status}
-                </Badge>
-                <span
-                  style={{
-                    color: "var(--tk-success)",
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  ● Live
-                </span>
-              </div>
-              <div
-                style={{
-                  height: 220,
-                  borderRadius: 10,
-                  border: "1.5px dashed var(--tk-line-strong)",
-                  background: "var(--tk-surface-sunk)",
-                  display: "grid",
-                  placeItems: "center",
-                  gap: 8,
-                  textAlign: "center",
-                  color: "var(--tk-ink-300)",
-                  position: "relative",
-                }}
-              >
-                <div
-                  className="trip-map-controls"
-                  style={{ position: "absolute", right: 10, top: 10 }}
-                >
-                  <button onClick={() => setZoom((z) => Math.min(z + 20, 200))}>
-                    +
-                  </button>
-                  <button onClick={() => setZoom((z) => Math.max(z - 20, 40))}>
-                    −
-                  </button>
-                  <button onClick={() => setZoom(100)}>⌖</button>
-                </div>
-                <Icon name="map" size={30} />
-                <strong
-                  style={{
-                    color: "var(--tk-ink-500)",
-                    font: "600 13px var(--tk-font-sans)",
-                  }}
-                >
-                  Map view placeholder
-                </strong>
-                <span className="tk-meta">Zoom {zoom}%</span>
-              </div>
-              {[
-                ["Driver", selectedTrip.driver],
-                ["Truck", selectedTrip.truck],
-                ["Job ID", selectedTrip.job],
-                ["Container", "MSKU 4567893 (40FT HC)"],
-                ["Trip Type", "Import (Container)"],
-                ["Current Segment", selectedTrip.segment + " of 3"],
-                ["Distance Left", selectedTrip.distance],
-                ["ETA", selectedTrip.eta],
-              ].map((x) => (
-                <div className="trip-fact" key={x[0]}>
-                  <span>{x[0]}</span>
-                  <b>{x[1]}</b>
-                </div>
-              ))}
-              {siblingTrips.length > 0 && (
-                <div className="approval-note">
-                  {selectedTrip.job} has {siblingTrips.length + 1} trips
-                  (multiple trucks requested by the forwarder) — also see{" "}
-                  {siblingTrips.map((t) => t.id).join(", ")}.
-                </div>
-              )}
-              <div className="trip-fact">
-                <span>Company payout</span>
-                <b>
-                  {selectedPayout
-                    ? `${selectedPayout.id} · ${selectedPayout.status}`
-                    : "Not yet included"}
-                </b>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {selectedPayout && (
-                  <Button
-                    variant="outline"
-                    style={{ flex: 1 }}
-                    onClick={() => navigate(`/payouts/${selectedPayout.id}`)}
-                  >
-                    View Payout
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  style={{ flex: 1 }}
-                  disabled={selectedTrip.status === "Delayed"}
-                  onClick={() => updateTripStatus(selectedTrip.id, "Delayed")}
-                >
-                  Mark Delayed
-                </Button>
-                <Button
-                  variant="outline"
-                  style={{ flex: 1 }}
-                  disabled={selectedTrip.status === "At Delivery"}
-                  onClick={() =>
-                    updateTripStatus(selectedTrip.id, "At Delivery")
-                  }
-                >
-                  Mark At Delivery
-                </Button>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <Button
-                  icon="message-circle"
-                  style={{ flex: 1 }}
-                  onClick={() => setContactOpen(true)}
-                >
-                  Contact Driver
-                </Button>
-                <Button
-                  variant="outline"
-                  style={{ flex: 1 }}
-                  onClick={() => navigate("/jobs/" + selectedTrip.job)}
-                >
-                  View Job Details
-                </Button>
-              </div>
+            <div
+              style={{
+                minHeight: 180,
+                borderRadius: 10,
+                border: "1.5px dashed var(--tk-line-strong)",
+                background: "var(--tk-surface-sunk)",
+                display: "grid",
+                placeItems: "center",
+                gap: 8,
+                textAlign: "center",
+                color: "var(--tk-ink-300)",
+                padding: 20,
+              }}
+            >
+              <Icon name="map-pin" size={30} />
+              {selectedTrip.truck?.latitude != null && selectedTrip.truck?.longitude != null ? (
+                <>
+                  <strong style={{ color: "var(--tk-ink-700)" }}>{selectedTrip.truck.latitude}, {selectedTrip.truck.longitude}</strong>
+                  <span className="tk-meta">Last updated {selectedTrip.truck.displayLastLocationUpdate || "—"}</span>
+                </>
+              ) : <span className="tk-meta">No live position available.</span>}
             </div>
-          ))}
+            {[
+              ["Job", selectedTrip.jobNumber],
+              ["Container", selectedTrip.containerNumber || "—"],
+              ["Driver", selectedTrip.driverName || "—"],
+              ["Truck", selectedTrip.truck?.plateNumber || "—"],
+              ["ETA", selectedTrip.displayEta || "—"],
+              ["Current Segment", "—"],
+              ["Distance Left", "—"],
+              ["Progress", "—"],
+            ].map(([label, value]) => (
+              <div className="trip-fact" key={label}><span>{label}</span><b>{value}</b></div>
+            ))}
+            {selectedTrip.jobId && (
+              <Button
+                variant="outline"
+                icon="briefcase-business"
+                onClick={() => navigate(`/jobs/detail?id=${encodeURIComponent(selectedTrip.jobId)}`)}
+              >
+                View Job Details
+              </Button>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );
