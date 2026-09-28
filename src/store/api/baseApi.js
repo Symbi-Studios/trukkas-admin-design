@@ -28,7 +28,7 @@ const refreshBaseQuery = fetchBaseQuery({ baseUrl });
 let activeRefresh = null;
 
 const REDACTED = '[REDACTED]';
-const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
+const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
 const identityCollection = new Set([
   'users', 'admins', 'drivers', 'forwarders', 'customers', 'profiles',
   'companies', 'accounts', 'recipients', 'contacts', 'verification',
@@ -129,10 +129,10 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   console.info('Request:', {
     method,
     url,
-    headers: request?.headers,
-    body: requestBody,
+    headers: sanitizeForLog(request?.headers),
+    body: sanitizeForLog(requestBody),
   });
-  console.info('Response body:', responseBody);
+  console.info('Response body:', sanitizeForLog(responseBody));
   console.groupEnd();
   return result;
 }
@@ -229,6 +229,6 @@ async function baseQueryWithReauth(args, api, extraOptions) {
 export const baseApi = createApi({
   reducerPath: 'baseApi',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['AdminNotifications', 'AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips'],
+  tagTypes: ['AdminNotifications', 'AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips', 'AdminDocReviewStats', 'AdminDocReviewQueue', 'AdminDocReviewDetail'],
   endpoints: () => ({}),
 });
