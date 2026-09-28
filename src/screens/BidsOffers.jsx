@@ -1,6 +1,9 @@
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "../router.js";
 import {
+  Avatar,
   Badge,
   Banner,
   Button,
@@ -8,393 +11,248 @@ import {
   DataTable,
   DonutChart,
   DropdownMenu,
+  EmptyState,
   Icon,
   Modal,
   PageHeader,
   Pagination,
   SearchField,
-  Sparkline,
+  Skeleton,
   Tabs,
 } from "../ds.js";
+import {
+  useGetAdminBidAnalyticsQuery,
+  useGetAdminBidDetailQuery,
+  useGetAdminBidsQuery,
+} from "../store/features/bids/bidsApi.js";
 import "./Operations.css";
 
-const initialBids = [
-  [
-    "JOB-29821",
-    "Apapa Port → Ikeja Warehouse",
-    "Goodwill Forwarding Ltd.",
-    "5",
-    "₦1,420,000",
-    "—",
-    "Pending Evaluation",
-    "May 30, 2026",
-    "09:42 AM",
-  ],
-  [
-    "JOB-29820",
-    "Tin Can Port → Onne Port",
-    "CargoLink Logistics",
-    "7",
-    "₦2,180,000",
-    "—",
-    "Pending Evaluation",
-    "May 30, 2026",
-    "09:37 AM",
-  ],
-  [
-    "JOB-29819",
-    "Apapa Port → Ibeju Lekki → Ogun",
-    "ABC Forwarders Ltd.",
-    "4",
-    "₦3,050,000",
-    "₦3,120,000",
-    "Bid Accepted",
-    "May 30, 2026",
-    "09:22 AM",
-  ],
-  [
-    "JOB-29818",
-    "Port Harcourt → Aba Depot",
-    "DCL Shipping Services",
-    "6",
-    "₦930,000",
-    "₦980,000",
-    "In Transit",
-    "May 30, 2026",
-    "08:58 AM",
-  ],
-  [
-    "JOB-29817",
-    "Apapa Port → Ibadan Dry Port",
-    "Nigerian Bulk Consortia",
-    "8",
-    "₦4,620,000",
-    "₦4,860,000",
-    "At Delivery",
-    "May 30, 2026",
-    "08:15 AM",
-  ],
-  [
-    "JOB-29816",
-    "Tin Can Port → Lagos Island",
-    "Transglobal Logistics",
-    "3",
-    "₦1,180,000",
-    "₦1,250,000",
-    "Returning Container",
-    "May 30, 2026",
-    "07:48 AM",
-  ],
-  [
-    "JOB-29815",
-    "Ikeja Warehouse → Apapa Port",
-    "Maersk Line Nigeria",
-    "5",
-    "₦1,650,000",
-    "—",
-    "Bidding",
-    "May 30, 2026",
-    "07:12 AM",
-  ],
-  [
-    "JOB-29814",
-    "Lagos Port → Multiple Sites (20)",
-    "BuildMax Materials",
-    "9",
-    "₦8,900,000",
-    "₦9,450,000",
-    "Completed",
-    "May 30, 2026",
-    "05:32 AM",
-  ],
-  [
-    "JOB-29811",
-    "Apapa Port → Sango Ota",
-    "Continental Freighters",
-    "6",
-    "₦1,340,000",
-    "—",
-    "Expired",
-    "May 29, 2026",
-    "06:10 PM",
-  ],
-  [
-    "JOB-29810",
-    "Tin Can Port → Ijebu Ode",
-    "Westgate Shipping",
-    "2",
-    "₦2,010,000",
-    "—",
-    "Cancelled",
-    "May 29, 2026",
-    "03:25 PM",
-  ],
-].map((r) => ({
-  id: r[0],
-  route: r[1],
-  customer: r[2],
-  bids: r[3],
-  low: r[4],
-  win: r[5],
-  status: r[6],
-  date: r[7],
-  time: r[8],
-}));
-const tones = {
-  "Pending Evaluation": "warning",
-  "Bid Accepted": "success",
-  "In Transit": "info",
-  "At Delivery": "orange",
-  "Returning Container": "teal",
-  Bidding: "purple",
-  Completed: "success",
+const PAGE_SIZE = 8;
+const STATUS_OPTIONS = [
+  ["All Status", null],
+  ["Pending", "PENDING"],
+  ["Accepted", "ACCEPTED"],
+  ["Rejected", "REJECTED"],
+  ["Withdrawn", "WITHDRAWN"],
+  ["Expired", "EXPIRED"],
+];
+const TAB_STATUS = {
+  "Awarded / Won": "ACCEPTED",
+  Expired: "EXPIRED",
+  Cancelled: "WITHDRAWN",
+};
+const STATUS_TONES = {
+  Pending: "warning",
+  Accepted: "success",
+  Rejected: "danger",
+  Withdrawn: "neutral",
   Expired: "danger",
-  Cancelled: "neutral",
 };
-const STATUSES = [
-  "Pending Evaluation",
-  "Bid Accepted",
-  "In Transit",
-  "At Delivery",
-  "Returning Container",
-  "Bidding",
-  "Completed",
-  "Expired",
-  "Cancelled",
-];
-const TAB_FILTER = {
-  "Bid Overview": null,
-  "Awarded / Won": "Bid Accepted",
-  Expired: "Expired",
-  Cancelled: "Cancelled",
-};
-const DATE_RANGES = [
-  "May 24 – May 30, 2026",
-  "May 17 – May 23, 2026",
-  "Last 7 Days",
-  "Last 30 Days",
-  "This Month",
-];
-const FUNNEL_DATA = [
-  ["Jobs Published", 248, "#8d58e8"],
-  ["Jobs with Bids", 186, "#5b79e5"],
-  ["Bids Received", 762, "#74d1b1"],
-  ["Bids Accepted", 136, "#ffa11e"],
-  ["Jobs Completed", 94, "#ff676d"],
-];
-const FUNNEL_MAX = Math.max(...FUNNEL_DATA.map((x) => x[1]));
+const DATE_RANGES = ["All Dates", "Last 7 Days", "Last 30 Days", "This Month"];
 
-function Metric({
-  label,
-  value,
-  delta,
-  icon,
-  color = "#4c16ac",
-  down = false,
-}) {
+function isoStart(date) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value.toISOString();
+}
+
+function isoEnd(date) {
+  const value = new Date(date);
+  value.setHours(23, 59, 59, 999);
+  return value.toISOString();
+}
+
+function dateParams(label) {
+  if (label === "All Dates") return {};
+  const now = new Date();
+  const start = new Date(now);
+  if (label === "Last 7 Days") start.setDate(now.getDate() - 6);
+  if (label === "Last 30 Days") start.setDate(now.getDate() - 29);
+  if (label === "This Month") start.setDate(1);
+  return { dateFrom: isoStart(start), dateTo: isoEnd(now) };
+}
+
+function dateTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  }).format(date);
+}
+
+function money(value, currency = "NGN") {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency", currency: currency || "NGN", maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `₦${value.toLocaleString("en-NG")}`;
+  }
+}
+
+function Metric({ label, value, icon, color = "#4c16ac", caption = "Rolling 7 days" }) {
   return (
     <Card className="metric-card">
       <label>{label}</label>
       <strong>{value}</strong>
-      <span className={"delta " + (down ? "down" : "")}>
-        {down ? "↓" : "↑"} {delta}
-      </span>
-      <small>vs May 17 – May 23</small>
+      <small>{caption}</small>
       <i className="metric-icon" style={{ color, background: color + "12" }}>
         <Icon name={icon} size={20} />
       </i>
-      <Sparkline points={[2, 3, 3, 5, 4, 7]} color={color} />
     </Card>
   );
 }
 
+function BidsLoading() {
+  return (
+    <div className="operations-screen" aria-busy="true">
+      <Card><Skeleton width={220} height={28} /><div style={{ marginTop: 12 }}><Skeleton width={420} height={14} /></div></Card>
+      <div className="kpi-grid">
+        {Array.from({ length: 6 }, (_, index) => <Card className="metric-card" key={index}><Skeleton width="46%" height={12} /><div style={{ marginTop: 14 }}><Skeleton width={72} height={27} /></div></Card>)}
+      </div>
+      <Card><Skeleton height={300} /></Card>
+    </div>
+  );
+}
+
+function BidsTableLoading({ columns }) {
+  const rows = Array.from({ length: 6 }, (_, index) => ({ id: `loading-${index}` }));
+  const loadingColumns = columns.map((column, index) => ({
+    ...column,
+    render: () => <Skeleton width={index === 3 ? "76%" : "62%"} height={12} />,
+  }));
+
+  return (
+    <div role="status" aria-label="Loading bids" aria-busy="true">
+      <DataTable rows={rows} rowKey={(row) => row.id} columns={loadingColumns} />
+      <span className="tk-meta" style={{ display: "block", padding: "0 16px 12px" }}>Loading bids…</span>
+    </div>
+  );
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
 export function BidsOffers() {
   const navigate = useNavigate();
-  const [bids, setBids] = useState(initialBids);
-  const [offers, setOffers] = useState([
-    {
-      id: "JOB-29821",
-      company: "TrukLine Logistics Ltd.",
-      amount: "₦1,520,000",
-      delta: "+₦80,000",
-    },
-    {
-      id: "JOB-29820",
-      company: "Prime Haulage Ltd.",
-      amount: "₦2,250,000",
-      delta: "+₦70,000",
-    },
-    {
-      id: "JOB-29815",
-      company: "SpeedWay Transport",
-      amount: "₦1,720,000",
-      delta: "+₦50,000",
-    },
-    {
-      id: "JOB-29814",
-      company: "HeavyDuty Logistics",
-      amount: "₦9,650,000",
-      delta: "+₦200,000",
-    },
-    {
-      id: "JOB-29809",
-      company: "Golden Trucking Co.",
-      amount: "₦2,100,000",
-      delta: "+₦60,000",
-    },
-  ]);
-  const [tab, setTab] = useState("Bid Overview"),
-    [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [tab, setTab] = useState("Bid Overview");
+  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
-  const [dateRange, setDateRange] = useState(DATE_RANGES[0]);
+  const [dateRange, setDateRange] = useState("All Dates");
   const [openFilter, setOpenFilter] = useState(null);
-  const [menuFor, setMenuFor] = useState(null);
-  const [offerModal, setOfferModal] = useState(null);
+  const [selectedBidId, setSelectedBidId] = useState(null);
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(t);
-  }, [toast]);
+    const timeout = setTimeout(() => setSearch(query.trim()), 300);
+    return () => clearTimeout(timeout);
+  }, [query]);
   useEffect(() => {
     setPage(1);
-  }, [tab, q, statusFilter]);
+  }, [tab, search, statusFilter, dateRange]);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timeout = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timeout);
+  }, [toast]);
 
-  function updateBidStatus(id, status, message) {
-    setBids((bs) => bs.map((b) => (b.id === id ? { ...b, status } : b)));
-    setMenuFor(null);
-    setToast({
-      tone:
-        status === "Bid Accepted"
-          ? "success"
-          : status === "Cancelled"
-            ? "danger"
-            : "info",
-      title: message || `${id} marked as ${status}`,
-    });
-  }
-  function resolveOffer(offer, accept) {
-    setOffers((os) =>
-      os.filter((o) => o.id + o.company !== offer.id + offer.company),
-    );
-    if (accept)
-      updateBidStatus(
-        offer.id,
-        "Bid Accepted",
-        `Counter offer from ${offer.company} accepted for ${offer.id}.`,
-      );
-    else
-      setToast({
-        tone: "warning",
-        title: `Counter offer from ${offer.company} declined.`,
-      });
-    setOfferModal(null);
-  }
+  const selectedStatus = STATUS_OPTIONS.find(([label]) => label === statusFilter)?.[1] || null;
+  const status = TAB_STATUS[tab] || selectedStatus;
+  const dates = dateParams(dateRange);
+  const {
+    currentData: bidsResponse,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useGetAdminBidsQuery({ status, search, ...dates, page, limit: PAGE_SIZE }, {
+    refetchOnMountOrArgChange: true,
+  });
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    error: analyticsError,
+    refetch: refetchAnalytics,
+  } = useGetAdminBidAnalyticsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const {
+    currentData: selectedBid,
+    isLoading: detailLoading,
+    isFetching: detailFetching,
+    error: detailError,
+    refetch: refetchDetail,
+  } = useGetAdminBidDetailQuery(selectedBidId, { skip: !selectedBidId });
 
+  const rows = bidsResponse?.rows || [];
   const isCounterTab = tab === "Counter Offers";
-  const filteredBids = useMemo(
-    () =>
-      bids.filter((b) => {
-        const matchesQ =
-          !q ||
-          [b.id, b.customer, b.route].some((v) =>
-            v.toLowerCase().includes(q.toLowerCase()),
-          );
-        const matchesTabStatus =
-          !TAB_FILTER[tab] || b.status === TAB_FILTER[tab];
-        const matchesStatus =
-          statusFilter === "All Status" || b.status === statusFilter;
-        return matchesQ && matchesTabStatus && matchesStatus;
-      }),
-    [bids, q, tab, statusFilter],
+  const visibleRows = useMemo(
+    () => isCounterTab ? rows.filter((bid) => bid.isCounterOffer) : rows,
+    [isCounterTab, rows],
   );
-  const filteredOffers = useMemo(
-    () =>
-      offers.filter(
-        (o) =>
-          !q ||
-          [o.id, o.company].some((v) =>
-            v.toLowerCase().includes(q.toLowerCase()),
-          ),
-      ),
-    [offers, q],
-  );
+  const counterOffers = rows.filter((bid) => bid.isCounterOffer);
 
-  const pageRows = isCounterTab ? filteredOffers : filteredBids;
-  const pageCount = Math.max(1, Math.ceil(pageRows.length / 8));
+  const funnelData = analytics ? [
+    ["Jobs Published", analytics.funnel.jobsPublished, "#8d58e8"],
+    ["Jobs with Bids", analytics.funnel.jobsWithBids, "#5b79e5"],
+    ["Bids Received", analytics.funnel.bidsReceived, "#74d1b1"],
+    ["Bids Accepted", analytics.funnel.bidsAccepted, "#ffa11e"],
+    ["Jobs Completed", analytics.funnel.jobsCompleted, "#ff676d"],
+  ] : [];
+  const funnelMax = Math.max(1, ...funnelData.map((item) => item[1]));
+  const otherBids = analytics
+    ? Math.max(0, analytics.totalBids - analytics.pendingBids - analytics.acceptedBids - analytics.expiredBids)
+    : 0;
 
-  const cols = [
+  function exportRows() {
+    if (!visibleRows.length) return;
+    const data = [
+      ["Bid ID", "Job", "Route", "Trucking Company", "Amount", "Counter Offer", "Status", "Submitted", "Expires", "Responded"],
+      ...visibleRows.map((bid) => [
+        bid.id, bid.jobNumber, bid.route, bid.truckerName, bid.amount,
+        bid.isCounterOffer ? "Yes" : "No", bid.status, bid.createdAt, bid.expiresAt, bid.respondedAt,
+      ]),
+    ];
+    const csv = data.map((row) => row.map(csvCell).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    link.download = `trukkas-bids-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setToast({ tone: "success", title: `${visibleRows.length} bid${visibleRows.length === 1 ? "" : "s"} exported.` });
+  }
+
+  const columns = [
     {
-      key: "id",
-      header: "Job ID",
-      render: (r) => <a onClick={() => navigate("/jobs/" + r.id)}>{r.id}</a>,
-    },
-    { key: "route", header: "Route" },
-    { key: "customer", header: "Customer" },
-    { key: "bids", header: "Bids" },
-    { key: "low", header: "Lowest Bid (₦)" },
-    { key: "win", header: "Winning Bid (₦)" },
-    {
-      key: "status",
-      header: "Status",
-      render: (r) => (
-        <Badge tone={tones[r.status]} dot>
-          {r.status}
-        </Badge>
-      ),
-    },
-    {
-      key: "date",
-      header: "Created At",
-      render: (r) => (
-        <span className="cell-two">
-          <strong>{r.date}</strong>
-          <small>{r.time}</small>
-        </span>
-      ),
-    }
-  ];
-  const offerCols = [
-    {
-      key: "id",
-      header: "Job ID",
-      width: "120px",
-      render: (r) => <a onClick={() => navigate("/jobs/" + r.id)}>{r.id}</a>,
-    },
-    { key: "company", header: "Bidding Company" },
-    { key: "amount", header: "Offer Amount (₦)" },
-    {
-      key: "delta",
-      header: "Δ vs Lowest",
-      render: (r) => (
-        <span style={{ color: "var(--tk-success)" }}>{r.delta}</span>
-      ),
+      key: "id", header: "Bid ID", width: 120,
+      render: (bid) => <a style={{ cursor: "pointer" }} onClick={() => setSelectedBidId(bid.id)}>{bid.id}</a>,
     },
     {
-      key: "a",
-      header: "Actions",
-      render: (r) => (
-        <span style={{ display: "flex", gap: 6 }}>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => resolveOffer(r, true)}
-          >
-            Accept
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => resolveOffer(r, false)}
-          >
-            Decline
-          </Button>
+      key: "job", header: "Job", width: 130,
+      render: (bid) => bid.jobId ? (
+        <a onClick={(event) => { event.stopPropagation(); navigate(`/jobs/detail?id=${encodeURIComponent(bid.jobId)}`); }}>{bid.jobNumber || bid.jobId}</a>
+      ) : bid.jobNumber || "—",
+    },
+    { key: "route", header: "Route", render: (bid) => bid.route || "—", width: 180 },
+    {
+      key: "company", header: "Trucking Company",
+      render: (bid) => (
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Avatar name={bid.truckerName} size={30} />
+          <span className="cell-two"><strong>{bid.truckerName}</strong><small>{bid.truckerRating == null ? "Rating unavailable" : `${bid.truckerRating} rating`}{bid.truckerTrips == null ? "" : ` · ${bid.truckerTrips} trips`}</small></span>
         </span>
       ),
     },
+    { key: "amount", header: "Bid Amount", render: (bid) => <strong>{money(bid.amount, bid.currency)}</strong> },
+    { key: "offer", header: "Offer Type", render: (bid) => bid.isCounterOffer ? <Badge tone="info">Counter Offer</Badge> : "Initial Bid" },
+    { key: "status", header: "Status", render: (bid) => <Badge tone={STATUS_TONES[bid.status] || "neutral"} dot>{bid.status}</Badge> },
+    { key: "created", header: "Submitted", render: (bid) => dateTime(bid.createdAt), width: 145 },
   ];
+
+  if (!bidsResponse && isLoading && !analytics) return <BidsLoading />;
 
   return (
     <div className="operations-screen">
@@ -402,275 +260,123 @@ export function BidsOffers() {
         crumbs={["Jobs & Trips", "Bids & Offers"]}
         title="Bids & Offers"
         description="Manage all bid submissions and counter offers across Trukkas."
-        actions={<>
-          <span style={{ position: "relative" }}>
-            <button
-              className="date-button"
-              onClick={() =>
-                setOpenFilter(openFilter === "date" ? null : "date")
-              }
-            >
-              <Icon name="calendar" size={15} />
-              {dateRange}⌄
-            </button>
-            {openFilter === "date" && (
-              <span
-                style={{ position: "absolute", left: 0, top: 44, zIndex: 30 }}
-              >
-                <DropdownMenu
-                  width={210}
-                  items={DATE_RANGES.map((r) => ({
-                    label: r,
-                    icon: r === dateRange ? "check" : undefined,
-                    onClick: () => {
-                      setDateRange(r);
-                      setOpenFilter(null);
-                    },
-                  }))}
-                />
-              </span>
-            )}
-          </span>
-          <span style={{ position: "relative" }}>
-            <Button
-              variant="outline"
-              icon="list-filter"
-              onClick={() =>
-                setOpenFilter(openFilter === "head" ? null : "head")
-              }
-            >
-              Filters
-            </Button>
-            {openFilter === "head" && (
-              <span
-                style={{ position: "absolute", right: 0, top: 44, zIndex: 30 }}
-              >
-                <DropdownMenu
-                  width={200}
-                  items={["All Status", ...STATUSES].map((s) => ({
-                    label: s,
-                    icon: s === statusFilter ? "check" : undefined,
-                    onClick: () => {
-                      setStatusFilter(s);
-                      setOpenFilter(null);
-                    },
-                  }))}
-                />
-              </span>
-            )}
-          </span>
-          <Button
-            icon="download"
-            onClick={() =>
-              setToast({
-                tone: "info",
-                title: `Exporting ${pageRows.length} record(s)…`,
-              })
-            }
-          >
-            Export
-          </Button>
-        </>}
+        actions={(
+          <>
+            <span style={{ position: "relative" }}>
+              <button className="date-button" onClick={() => setOpenFilter(openFilter === "date" ? null : "date")}>
+                <Icon name="calendar" size={15} />{dateRange}⌄
+              </button>
+              {openFilter === "date" && (
+                <span style={{ position: "absolute", left: 0, top: 44, zIndex: 30 }}>
+                  <DropdownMenu width={210} items={DATE_RANGES.map((range) => ({ label: range, icon: range === dateRange ? "check" : undefined, onClick: () => { setDateRange(range); setOpenFilter(null); } }))} />
+                </span>
+              )}
+            </span>
+            <Button icon="download" disabled={!visibleRows.length} onClick={exportRows}>Export</Button>
+          </>
+        )}
       />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {isFetching && bidsResponse && <Banner tone="info" title="Refreshing bids…" />}
+      {error && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Banner tone="danger" title="Unable to load bids from the API." />
+          <Button variant="outline" icon="rotate-cw" onClick={refetch}>Retry</Button>
+        </div>
+      )}
+      {analyticsError && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Banner tone="warning" title="Bid analytics are temporarily unavailable." />
+          <Button variant="outline" icon="rotate-cw" onClick={refetchAnalytics}>Retry analytics</Button>
+        </div>
+      )}
 
       <div className="kpi-grid">
-        <Metric
-          label="Total Bids"
-          value="762"
-          delta="18.4%"
-          icon="briefcase-business"
-        />
-        <Metric
-          label="Pending Evaluation"
-          value="42"
-          delta="6.7%"
-          icon="hand-coins"
-          color="#f27602"
-          down
-        />
-        <Metric
-          label="Counter Offers"
-          value={String(offers.length)}
-          delta="12.1%"
-          icon="users-round"
-          color="#2469e8"
-        />
-        <Metric
-          label="Accepted Bids"
-          value={String(bids.filter((b) => b.status === "Bid Accepted").length)}
-          delta="15.3%"
-          icon="badge-check"
-          color="#12a150"
-        />
-        <Metric
-          label="Expired Offers"
-          value={String(bids.filter((b) => b.status === "Expired").length)}
-          delta="9.5%"
-          icon="trophy"
-          color="#e02b22"
-          down
-        />
-        <Metric
-          label="Avg. Winning Margin"
-          value="7.8%"
-          delta="2.6%"
-          icon="badge-percent"
-        />
+        <Metric label="Total Bids" value={analyticsLoading ? "…" : analytics?.totalBids?.toLocaleString() ?? "—"} icon="briefcase-business" />
+        <Metric label="Pending Evaluation" value={analyticsLoading ? "…" : analytics?.pendingBids?.toLocaleString() ?? "—"} icon="hand-coins" color="#f27602" />
+        <Metric label="Counter Offers" value={analyticsLoading ? "…" : analytics?.counterOffers?.toLocaleString() ?? "—"} icon="users-round" color="#2469e8" />
+        <Metric label="Accepted Bids" value={analyticsLoading ? "…" : analytics?.acceptedBids?.toLocaleString() ?? "—"} icon="badge-check" color="#12a150" />
+        <Metric label="Expired Offers" value={analyticsLoading ? "…" : analytics?.expiredBids?.toLocaleString() ?? "—"} icon="clock" color="#e02b22" />
+        <Metric label="Avg. Winning Margin" value="—" caption="Not reported by API" icon="badge-percent" />
       </div>
 
       <Tabs
-        items={[
-          "Bid Overview",
-          "Counter Offers",
-          "Awarded / Won",
-          "Expired",
-          "Cancelled",
-        ]}
+        items={["Bid Overview", "Counter Offers", "Awarded / Won", "Expired", "Cancelled"]}
         value={tab}
-        onChange={setTab}
+        onChange={(value) => {
+          if (value === "Counter Offers" && status == null && page === 1) refetch();
+          setTab(value);
+          setStatusFilter("All Status");
+        }}
       />
 
       <div className="bids-layout">
         <div className="ops-panel">
           <div className="ops-panel-head">
-            <div>
-              <h3>{tab}</h3>
-            </div>
+            <div><h3>{tab}</h3></div>
             <span style={{ position: "relative" }}>
-              <button
-                className="date-button"
-                onClick={() =>
-                  setOpenFilter(openFilter === "panel" ? null : "panel")
-                }
-              >
-                {statusFilter}⌄
-              </button>
-              {openFilter === "panel" && (
-                <span
-                  style={{ position: "absolute", left: 0, top: 40, zIndex: 30 }}
-                >
-                  <DropdownMenu
-                    width={200}
-                    items={["All Status", ...STATUSES].map((s) => ({
-                      label: s,
-                      icon: s === statusFilter ? "check" : undefined,
-                      onClick: () => {
-                        setStatusFilter(s);
-                        setOpenFilter(null);
-                      },
-                    }))}
-                  />
+              <button className="date-button" onClick={() => setOpenFilter(openFilter === "status" ? null : "status")}>{statusFilter}⌄</button>
+              {openFilter === "status" && (
+                <span style={{ position: "absolute", left: 0, top: 40, zIndex: 30 }}>
+                  <DropdownMenu width={190} items={STATUS_OPTIONS.map(([label]) => ({ label, icon: label === statusFilter ? "check" : undefined, onClick: () => { setStatusFilter(label); setOpenFilter(null); } }))} />
                 </span>
               )}
             </span>
-            <SearchField
-              placeholder="Search by Job ID, Company, Truck, Driver..."
-              style={{ width: 260 }}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
+            <SearchField placeholder="Search job number or trucking company..." style={{ width: 280 }} value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
-          {isCounterTab ? (
-            <DataTable
-              rows={filteredOffers.slice((page - 1) * 8, page * 8)}
-              rowKey={(r) => r.id + r.company}
-              columns={offerCols}
-            />
-          ) : filteredBids.length === 0 ? (
-            <div
-              style={{ padding: "40px 18px", textAlign: "center" }}
-              className="tk-meta"
-            >
-              No bids match the current filters.
-            </div>
+          {isFetching ? (
+            <BidsTableLoading columns={columns} />
+          ) : !error && visibleRows.length === 0 ? (
+            <EmptyState icon="gavel" title="No bids match these filters" description="Try another status, date range, or search term." />
           ) : (
-            <DataTable
-              rows={filteredBids.slice((page - 1) * 8, page * 8)}
-              columns={cols}
-            />
+            <DataTable rows={visibleRows} rowKey={(bid) => bid.id} columns={columns} onRowClick={(bid) => setSelectedBidId(bid.id)} />
           )}
           <Pagination
-            page={page}
-            pageCount={pageCount}
-            total={pageRows.length}
-            onPage={setPage}
-            onPageSize={() => {}}
+            page={bidsResponse?.pagination.page || page}
+            pageCount={Math.max(1, bidsResponse?.pagination.totalPages || 1)}
+            pageSize={bidsResponse?.pagination.limit || PAGE_SIZE}
+            total={isCounterTab ? undefined : bidsResponse?.pagination.total ?? 0}
+            onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, bidsResponse?.pagination.totalPages || 1)))}
           />
         </div>
 
         <div className="bid-rail">
           <div className="ops-panel">
-            <div className="ops-panel-head">
-              <div>
-                <h3>Bid Analytics</h3>
-              </div>
-              <a onClick={() => setTab("Bid Overview")}>View Report</a>
-            </div>
+            <div className="ops-panel-head"><div><h3>Bid Analytics</h3></div></div>
             <div className="bid-analytics">
               <DonutChart
                 size={130}
                 thickness={20}
-                centerValue="762"
+                centerValue={analytics?.totalBids ?? "—"}
                 centerLabel="Total Bids"
                 data={[
-                  { value: 320, color: "#4c16ac" },
-                  { value: 236, color: "#2469e8" },
-                  { value: 128, color: "#12a150" },
-                  { value: 78, color: "#f27602" },
+                  { value: analytics?.pendingBids || 0, color: "#f27602" },
+                  { value: analytics?.acceptedBids || 0, color: "#12a150" },
+                  { value: analytics?.expiredBids || 0, color: "#e02b22" },
+                  { value: otherBids, color: "#8d58e8" },
                 ]}
               />
               <div>
                 {[
-                  ["#4c16ac", "Lowest Bids", "42% (320)"],
-                  ["#2469e8", "Competing Bids", "31% (236)"],
-                  ["#12a150", "Counter Offers", "17% (128)"],
-                  ["#f27602", "Expired Offers", "10% (78)"],
-                ].map((x) => (
-                  <div className="bid-legend" key={x[1]}>
-                    <span>
-                      <i style={{ background: x[0] }} />
-                      {x[1]}
-                    </span>
-                    <b>{x[2]}</b>
-                  </div>
+                  ["#f27602", "Pending", analytics?.pendingBids],
+                  ["#12a150", "Accepted", analytics?.acceptedBids],
+                  ["#e02b22", "Expired", analytics?.expiredBids],
+                  ["#8d58e8", "Other", otherBids],
+                ].map(([color, label, value]) => (
+                  <div className="bid-legend" key={label}><span><i style={{ background: color }} />{label}</span><b>{value ?? "—"}</b></div>
                 ))}
               </div>
             </div>
           </div>
           <div className="ops-panel">
-            <div className="ops-panel-head">
-              <div>
-                <h3>Recent Counter Offers</h3>
-              </div>
-              <a onClick={() => setTab("Counter Offers")}>View All</a>
-            </div>
-            {offers.length === 0 && (
-              <div style={{ padding: "20px 14px" }} className="tk-meta">
-                No open counter offers.
-              </div>
-            )}
-            {offers.map((o, i) => (
-              <div
-                className="offer-row"
-                key={o.id + o.company}
-                onClick={() => setOfferModal(o)}
-              >
-                <i>
-                  <Icon
-                    name={i % 2 ? "gavel" : "briefcase-business"}
-                    size={16}
-                  />
-                </i>
-                <span>
-                  <strong>{o.id}</strong>
-                  <small>{o.company}</small>
-                </span>
-                <span className="amount">
-                  <b>{o.amount}</b>
-                  <em>{o.delta}</em>
-                </span>
+            <div className="ops-panel-head"><div><h3>Counter Offers on This Page</h3></div><a onClick={() => setTab("Counter Offers")}>View All</a></div>
+            {counterOffers.length === 0 && <div style={{ padding: "20px 14px" }} className="tk-meta">No counter offers on the loaded page.</div>}
+            {counterOffers.slice(0, 5).map((bid) => (
+              <div className="offer-row" key={bid.id} onClick={() => setSelectedBidId(bid.id)}>
+                <i><Icon name="gavel" size={16} /></i>
+                <span><strong>{bid.jobNumber || bid.id}</strong><small>{bid.truckerName}</small></span>
+                <span className="amount"><b>{money(bid.amount, bid.currency)}</b><em>{bid.status}</em></span>
               </div>
             ))}
           </div>
@@ -679,103 +385,50 @@ export function BidsOffers() {
 
       <div className="bottom-bid-grid">
         <div className="ops-panel">
-          <div className="ops-panel-head">
-            <div>
-              <h3>
-                Top Bidding Companies <small>(This Week)</small>
-              </h3>
+          <div className="ops-panel-head"><div><h3>Top Bidding Companies <small>(Rolling 7 Days)</small></h3></div></div>
+          {analytics?.topCompanies.length ? analytics.topCompanies.map((company, index) => (
+            <div className="rank-row" key={company.id}>
+              <b>{index + 1}</b><span>{company.name}</span><span>{company.totalBids} Bids</span><span>Won: {company.won}</span><span>Win Rate {company.winRate}%</span>
             </div>
-          </div>
-          {[
-            ["TrukLine Logistics Ltd.", "48 Bids", "Won: 12", "Win Rate 25%"],
-            ["Prime Haulage Ltd.", "42 Bids", "Won: 9", "Win Rate 21%"],
-            ["SpeedWay Transport", "37 Bids", "Won: 8", "Win Rate 22%"],
-            ["HeavyDuty Logistics", "34 Bids", "Won: 10", "Win Rate 29%"],
-            ["Golden Trucking Co.", "28 Bids", "Won: 6", "Win Rate 21%"],
-          ].map((x, i) => (
-            <div className="rank-row" key={x[0]}>
-              <b>{i + 1}</b>
-              {x.map((v) => (
-                <span key={v}>{v}</span>
-              ))}
-            </div>
-          ))}
+          )) : <div style={{ padding: "20px 14px" }} className="tk-meta">No company analytics available.</div>}
         </div>
         <div className="ops-panel">
-          <div className="ops-panel-head">
-            <div>
-              <h3>Bid Conversion Funnel</h3>
-            </div>
-            <a
-              onClick={() =>
-                setToast({
-                  tone: "info",
-                  title: "Full funnel report is not available in this preview.",
-                })
-              }
-            >
-              View Report
-            </a>
-          </div>
+          <div className="ops-panel-head"><div><h3>Bid Conversion Funnel</h3></div></div>
           <div className="funnel">
-            {FUNNEL_DATA.map((x) => (
-              <div className="funnel-row" key={x[0]}>
-                <span>{x[0]}</span>
-                <i
-                  style={{
-                    background: x[2],
-                    width: Math.max(18, (x[1] / FUNNEL_MAX) * 100) + "%",
-                  }}
-                />
-                <b>{x[1]}</b>
-              </div>
+            {funnelData.map(([label, value, color]) => (
+              <div className="funnel-row" key={label}><span>{label}</span><i style={{ background: color, width: Math.max(18, (value / funnelMax) * 100) + "%" }} /><b>{value}</b></div>
             ))}
           </div>
         </div>
       </div>
 
       <Modal
-        open={!!offerModal}
-        onClose={() => setOfferModal(null)}
-        title="Counter Offer"
-        description={
-          offerModal ? `${offerModal.company} · ${offerModal.id}` : ""
-        }
-        footer={
-          offerModal && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => resolveOffer(offerModal, false)}
-              >
-                Decline
-              </Button>
-              <Button
-                icon="check"
-                onClick={() => resolveOffer(offerModal, true)}
-              >
-                Accept Offer
-              </Button>
-            </>
-          )
-        }
+        open={!!selectedBidId}
+        onClose={() => setSelectedBidId(null)}
+        title={selectedBid?.id || "Bid Details"}
+        description={selectedBid ? `${selectedBid.truckerName} · ${selectedBid.jobNumber || selectedBid.jobId || "Job unavailable"}` : "Loading bid details…"}
       >
-        {offerModal && (
-          <div style={{ display: "grid", gap: 10 }}>
-            <div className="trip-fact">
-              <span>Offer Amount</span>
-              <b>{offerModal.amount}</b>
-            </div>
-            <div className="trip-fact">
-              <span>Δ vs Lowest Bid</span>
-              <b style={{ color: "var(--tk-success)" }}>{offerModal.delta}</b>
-            </div>
-            <span className="tk-meta">
-              Accepting will mark this job's bid as accepted and notify the
-              bidding company.
-            </span>
+        {(detailLoading || detailFetching) && !selectedBid ? (
+          <div role="status" className="tk-meta" style={{ padding: 24, textAlign: "center" }}>Loading bid details…</div>
+        ) : detailError ? (
+          <div style={{ display: "grid", justifyItems: "center", gap: 12, padding: 24 }}>
+            <Banner tone="danger" title="Unable to load bid details." />
+            <Button variant="outline" icon="rotate-cw" onClick={refetchDetail}>Retry</Button>
           </div>
-        )}
+        ) : selectedBid ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <div className="trip-fact"><span>Status</span><b><Badge tone={STATUS_TONES[selectedBid.status] || "neutral"}>{selectedBid.status}</Badge></b></div>
+            <div className="trip-fact"><span>Bid Amount</span><b>{money(selectedBid.amount, selectedBid.currency)}</b></div>
+            <div className="trip-fact"><span>Offer Type</span><b>{selectedBid.isCounterOffer ? "Counter Offer" : "Initial Bid"}</b></div>
+            <div className="trip-fact"><span>Route</span><b>{selectedBid.route || "—"}</b></div>
+            <div className="trip-fact"><span>Submitted</span><b>{dateTime(selectedBid.createdAt)}</b></div>
+            <div className="trip-fact"><span>Expires</span><b>{dateTime(selectedBid.expiresAt)}</b></div>
+            <div className="trip-fact"><span>Responded</span><b>{dateTime(selectedBid.respondedAt)}</b></div>
+            <div className="trip-fact"><span>Estimated Delivery</span><b>{dateTime(selectedBid.estimatedDeliveryDate)}</b></div>
+            <div className="trip-fact"><span>Message</span><b>{selectedBid.message || "—"}</b></div>
+            {selectedBid.jobId && <Button variant="outline" onClick={() => navigate(`/jobs/detail?id=${encodeURIComponent(selectedBid.jobId)}`)}>View Job Details</Button>}
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

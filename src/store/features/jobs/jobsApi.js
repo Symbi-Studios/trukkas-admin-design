@@ -24,12 +24,6 @@ function numberOr(value, fallback) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function nullableNumber(value) {
-  if (value == null || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function mapJob(job) {
   const id = String(job.id);
   return {
@@ -127,43 +121,6 @@ function mapJobDetail(response) {
   };
 }
 
-function mapBidsResponse(response, args = {}) {
-  const data = unwrapApiResponseData(response);
-  if (!Array.isArray(data?.bids)) {
-    throw new Error('The bids response is missing its bid list.');
-  }
-
-  const pagination = data.pagination || {};
-  const rows = data.bids.filter((bid) => bid && bid.id != null).map((bid) => ({
-    id: String(bid.id),
-    jobId: bid.jobId == null ? null : String(bid.jobId),
-    jobNumber: bid.jobNumber || null,
-    route: bid.route || null,
-    truckerName: bid.truckerName || '—',
-    truckerRating: nullableNumber(bid.truckerRating),
-    truckerTrips: nullableNumber(bid.truckerTrips),
-    amount: nullableNumber(bid.amount),
-    isCounterOffer: bid.isCounterOffer === true,
-    statusCode: typeof bid.status === 'string' ? bid.status : '',
-    status: typeof bid.status === 'string' ? formatStatus(bid.status) : '—',
-    createdAt: bid.createdAt || null,
-    expiresAt: bid.expiresAt || null,
-    respondedAt: bid.respondedAt || null,
-  }));
-  const limit = numberOr(pagination.limit, args.limit || rows.length || 20);
-  const total = numberOr(pagination.total, rows.length);
-
-  return {
-    rows,
-    pagination: {
-      page: numberOr(pagination.page, args.page || 1),
-      limit,
-      total,
-      totalPages: numberOr(pagination.totalPages, limit > 0 ? Math.ceil(total / limit) : 1),
-    },
-  };
-}
-
 export const jobsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getAdminJobs: builder.query({
@@ -179,15 +136,7 @@ export const jobsApi = baseApi.injectEndpoints({
       transformResponse: mapJobDetail,
       providesTags: (_result, _error, id) => [{ type: 'AdminJobs', id }],
     }),
-    getAdminBids: builder.query({
-      query: ({ jobId, page = 1, limit = 20 }) => ({
-        url: '/admin/bids',
-        params: { jobId, page, limit },
-      }),
-      transformResponse: (response, _meta, args) => mapBidsResponse(response, args),
-      providesTags: (_result, _error, { jobId }) => [{ type: 'AdminBids', id: jobId }],
-    }),
   }),
 });
 
-export const { useGetAdminJobsQuery, useGetAdminJobDetailQuery, useGetAdminBidsQuery } = jobsApi;
+export const { useGetAdminJobsQuery, useGetAdminJobDetailQuery } = jobsApi;

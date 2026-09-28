@@ -18,7 +18,8 @@ import {
   Tabs,
   Timeline,
 } from "../ds.js";
-import { useGetAdminBidsQuery, useGetAdminJobDetailQuery } from "../store/features/jobs/jobsApi.js";
+import { useGetAdminJobDetailQuery } from "../store/features/jobs/jobsApi.js";
+import { useGetAdminBidsQuery } from "../store/features/bids/bidsApi.js";
 import { statusTone } from "./JobDetail.jsx";
 import "./JobDetail.css";
 
