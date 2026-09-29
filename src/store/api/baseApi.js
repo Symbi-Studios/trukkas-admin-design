@@ -28,7 +28,7 @@ const refreshBaseQuery = fetchBaseQuery({ baseUrl });
 let activeRefresh = null;
 
 const REDACTED = '[REDACTED]';
-const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
+const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|route|plate|notes|comment|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
 const identityCollection = new Set([
   'users', 'admins', 'drivers', 'forwarders', 'customers', 'profiles',
   'companies', 'accounts', 'recipients', 'contacts', 'verification',
@@ -77,7 +77,7 @@ function sanitizeForLog(value, key = '', parents = [], seen = new WeakSet()) {
   const nextParents = [...parents, key.toLowerCase()];
   return Object.fromEntries(keys.map((field) => {
     const isIdentity = containsIdentityFields && /^id$/i.test(field);
-    const isNestedIdentityId = /^((user|admin|driver|customer|profile|account|recipient|contact)[_-]?id)$/i.test(field);
+    const isNestedIdentityId = /^((user|admin|driver|trucker|forwarder|customer|profile|account|recipient|contact)[_-]?id)$/i.test(field);
     const inIdentityCollection = parents.some((parent) => identityCollection.has(parent));
     return [field, isIdentity || isNestedIdentityId || (inIdentityCollection && /^id$/i.test(field))
       ? REDACTED
@@ -229,6 +229,6 @@ async function baseQueryWithReauth(args, api, extraOptions) {
 export const baseApi = createApi({
   reducerPath: 'baseApi',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['AdminNotifications', 'AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips', 'AdminDocReviewStats', 'AdminDocReviewQueue', 'AdminDocReviewDetail'],
+  tagTypes: ['AdminNotifications', 'AdminNotificationSettings', 'AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips', 'AdminDocReviewStats', 'AdminDocReviewQueue', 'AdminDocReviewDetail', 'AdminTriangulation'],
   endpoints: () => ({}),
 });

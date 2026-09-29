@@ -1,7 +1,9 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 function numberOr(value, fallback) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  if ((typeof value !== 'number' && typeof value !== 'string') || value === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function formatStatus(value) {

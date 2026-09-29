@@ -44,6 +44,13 @@
   gap:6px;
 }
 
+.triangulation-cell { display: grid; gap: 2px; }
+.triangulation-cell strong { color: var(--tk-ink-900); font: 600 13px/18px var(--tk-font-sans); }
+.triangulation-cell small { color: var(--tk-ink-400); font: 400 11px/16px var(--tk-font-sans); }
+.triangulation-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.triangulation-message { display: grid; justify-items: center; gap: 10px; padding: 32px 20px; color: var(--tk-ink-500); text-align: center; }
+.triangulation-expanded-map { position: relative; height: 520px; border-radius: var(--tk-r-lg); overflow: hidden; background: var(--tk-surface-sunk); }
+
 @media (max-width: 1300px) {
   .triangulation-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));

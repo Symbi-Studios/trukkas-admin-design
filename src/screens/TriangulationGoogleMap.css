@@ -1,0 +1,32 @@
+.tri-google-map,
+.tri-google-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.tri-google-map-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--tk-ink-500);
+  background: var(--tk-surface-sunk);
+}
+
+.tri-google-map-no-points {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 40px);
+  padding: 8px 12px;
+  border-radius: var(--tk-r-sm);
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--tk-shadow-card);
+  color: var(--tk-ink-500);
+  text-align: center;
+  font: 500 12px/17px var(--tk-font-sans);
+}

@@ -8,8 +8,14 @@ import {
 import './LiveTracking.css';
 import { useCollection } from '../mock/useCollection.js';
 import { getJobTrips } from '../domain/jobTrips.js';
+import { useGetAdminTripsQuery } from '../store/features/trips/tripsApi.js';
+import { TriangulationGoogleMap } from './TriangulationGoogleMap.jsx';
 
 const STATUSES = ['Assigned', 'In Transit', 'At Pickup', 'At Delivery', 'Delivered', 'Delayed', 'Stopped'];
+const MAP_STATUS_COLOR = {
+  Assigned: '#0241e8', 'In Transit': '#0241e8', 'At Pickup': '#f27602', 'At Delivery': '#0e7c86',
+  Delivered: '#12833b', Delayed: '#cb0611', Stopped: '#8a90a8', Maintenance: '#4c16ac',
+};
 const STATUS_COLOR = {
   Assigned: 'var(--tk-info)',
   'In Transit': 'var(--tk-blue)', 'At Pickup': 'var(--tk-warning)', Delivered: 'var(--tk-success)',
@@ -89,30 +95,61 @@ const QUICK_ACTIONS = [
 const LAYERS = ['Trucks', 'Trips', 'Clusters', 'Geofences', 'Traffic'];
 const LAYER_ICON = { Trucks: 'truck', Trips: 'route', Clusters: 'shapes', Geofences: 'octagon', Traffic: 'activity' };
 
-const CITIES = [
-  { label: 'Lagos', left: 14, top: 69, size: 12 }, { label: 'Ibadan', left: 17, top: 63 },
-  { label: 'Benin', left: 35, top: 73 }, { label: 'Port Harcourt', left: 48, top: 92 }, { label: 'Enugu', left: 51, top: 72 },
-  { label: 'Abuja', left: 49, top: 51 }, { label: 'Kaduna', left: 52, top: 24 },
-  { label: 'Kano', left: 65, top: 9, size: 12 }, { label: 'Nigeria', left: 54, top: 58, big: true },
-];
-const LANDMASS = '6.6% 11.2%,32.8% 3.7%,60.1% 1.9%,82% 7.5%,94% 20.6%,96.2% 46.7%,92.9% 71%,85.2% 87.9%,71% 93.5%,60.1% 89.7%,49.2% 86%,38.3% 80.4%,27.3% 74.8%,16.4% 76.6%,8.7% 71%,6.6% 59.8%,4.4% 37.4%';
-const WATER = '0% 60%,6.6% 59.8%,8.7% 71%,16.4% 76.6%,27.3% 74.8%,30% 86%,22% 100%,0% 100%';
-const ROUTES = [
-  { points: '13,71 19,71 36,65 46,48', color: STATUS_COLOR.Delayed },
-  { points: '46,48 52,24 65,9', color: STATUS_COLOR['In Transit'] },
-  { points: '46,48 51,72', color: STATUS_COLOR['In Transit'] },
-  { points: '46,48 17,63', color: STATUS_COLOR['At Pickup'] },
-];
+function mapApiTrip(trip) {
+  const status = trip.statusLabel || trip.status || 'Unknown';
+  const latitude = trip.truck?.latitude;
+  const longitude = trip.truck?.longitude;
+  const position = Number.isFinite(latitude) && Number.isFinite(longitude)
+    && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+    ? { lat: latitude, lng: longitude } : null;
+  const statusColor = MAP_STATUS_COLOR[status] || MAP_STATUS_COLOR['In Transit'];
+
+  return {
+    id: trip.id,
+    jobId: trip.jobId,
+    from: trip.origin || '-',
+    to: trip.destination || '-',
+    status,
+    statusColor,
+    speed: null,
+    driver: trip.driverName || '—',
+    driverPhone: '—',
+    truck: trip.truck?.plateNumber || '—',
+    truckPhone: '—',
+    company: '—',
+    companyPhone: '—',
+    container: trip.containerNumber || '—',
+    cargo: '—',
+    location: position ? `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}` : '—',
+    distanceCovered: '—',
+    totalDistance: '—',
+    eta: trip.displayEta || '—',
+    nextStop: trip.destination || '—',
+    lastUpdate: trip.truck?.displayLastLocationUpdate || '—',
+    engine: '—',
+    progress: null,
+    stops: [],
+    position,
+  };
+}
 
 export function LiveTracking() {
   const jobs = useCollection('jobs') || [];
+  const {
+    currentData: tripsResponse,
+    isLoading: tripsLoading,
+    isFetching: tripsFetching,
+    error: tripsError,
+    refetch: refetchTrips,
+  } = useGetAdminTripsQuery({ page: 1, limit: 100 }, { pollingInterval: 30000 });
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [q, setQ] = useState('');
   const [openFilter, setOpenFilter] = useState(null);
   const [selectedId, setSelectedId] = useState('TRK-2026-0124');
   const [visibleCount, setVisibleCount] = useState(6);
   const [layer, setLayer] = useState('Trucks');
-  const [zoom, setZoom] = useState(100);
+  const [zoom, setZoom] = useState(6);
+  const [fitVersion, setFitVersion] = useState(0);
   const [mapStyle, setMapStyle] = useState('Standard');
   const [showTraffic, setShowTraffic] = useState(true);
   const [fullScreen, setFullScreen] = useState(false);
@@ -124,7 +161,7 @@ export function LiveTracking() {
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2600); return () => clearTimeout(t); }, [toast]);
   function notify(tone, title) { setToast({ tone, title }); }
 
-  const trackedTrips = useMemo(() => {
+  const mockTrips = useMemo(() => {
     const dynamic = jobs.flatMap((job, jobIndex) => getJobTrips(job)
       .filter((trip) => !['Cancelled', 'Completed'].includes(trip.status))
       .map((trip, tripIndex) => ({
@@ -143,16 +180,32 @@ export function LiveTracking() {
     return [...dynamic, ...TRIPS.filter((trip) => !ids.has(trip.id))];
   }, [jobs]);
 
+  const trackedTrips = useMemo(() => tripsResponse
+    ? tripsResponse.rows.map(mapApiTrip)
+    : mockTrips, [tripsResponse, mockTrips]);
+
+  useEffect(() => {
+    if (selectedId && trackedTrips.length && !trackedTrips.some((trip) => trip.id === selectedId)) {
+      setSelectedId(trackedTrips[0].id);
+    }
+  }, [selectedId, trackedTrips]);
+
   const filtered = useMemo(() => trackedTrips.filter((t) =>
     (statusFilter === 'All Status' || t.status === statusFilter) &&
     (!q || [t.id, t.driver, t.from, t.to].some((v) => v.toLowerCase().includes(q.toLowerCase())))
   ), [statusFilter, q, trackedTrips]);
   const visible = filtered.slice(0, visibleCount);
-  const selected = trackedTrips.find((t) => t.id === selectedId) || null;
+  const selected = selectedId ? trackedTrips.find((t) => t.id === selectedId) || null : null;
+  const mapPoints = useMemo(() => filtered.filter((trip) => trip.position).map((trip) => ({
+    ...trip.position,
+    title: `${trip.truck} · ${trip.from} → ${trip.to}`,
+    color: trip.statusColor || '#2563eb',
+    opportunityId: trip.id,
+  })), [filtered]);
 
   function runQuickAction(label) {
-    if (label === 'Zoom to Fit') { setZoom(100); notify('success', 'Map zoomed to fit all active trips.'); }
-    else if (label === 'Refresh') notify('info', 'Tracking data refreshed.');
+    if (label === 'Zoom to Fit') { setFitVersion((version) => version + 1); notify('success', 'Map zoomed to fit all active trips.'); }
+    else if (label === 'Refresh') { refetchTrips(); notify('info', 'Refreshing tracking data.'); }
     else if (label === 'Create Geofence') setGeofenceOpen(true);
     else if (label === 'Send Message') setMessageOpen(true);
     else if (label === 'Export Tracking') notify('info', 'Exporting tracking report…');
@@ -163,50 +216,28 @@ export function LiveTracking() {
 
   const mapContent = (big) => (
     <div className="lt-map-wrap" style={big ? { height: 560 } : undefined}>
-      <div style={{ position: 'absolute', inset: 0, transform: `scale(${zoom / 100})`, transformOrigin: 'center' }}>
-        <div style={{ position: 'absolute', inset: 0, clipPath: `polygon(${WATER})`, background: '#dbeafe' }} />
-        <div style={{ position: 'absolute', inset: 0, clipPath: `polygon(${LANDMASS})`, background: mapStyle === 'Satellite' ? '#c9d6bd' : '#eef1e7', border: '1px solid var(--tk-line-strong)' }} />
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-          {ROUTES.map((r, i) => <polyline key={i} points={r.points} fill="none" stroke={r.color} strokeWidth={showTraffic ? '0.5' : '0.35'} opacity={showTraffic ? 0.85 : 0.6} />)}
-        </svg>
-        {CITIES.map((c) => (
-          <span key={c.label} style={{ position: 'absolute', left: c.left + '%', top: c.top + '%', transform: 'translate(-50%,-50%)',
-            font: `${c.big ? '700 26px' : c.size === 12 ? '600 12px' : '500 10px'}/1 var(--tk-font-sans)`,
-            color: c.big ? 'rgba(15,23,42,.10)' : 'var(--tk-ink-700)', whiteSpace: 'nowrap' }}>{c.label}</span>
-        ))}
-        {trackedTrips.filter((t) => t.mapPos).map((t) => (
-          <span key={t.id} onClick={() => setSelectedId(t.id)}
-            style={{ position: 'absolute', left: t.mapPos.left + '%', top: t.mapPos.top + '%', transform: 'translate(-50%,-50%)', cursor: 'pointer', zIndex: 2 }}>
-            <span style={{ display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: 999, background: STATUS_COLOR[t.status],
-              border: t.id === selectedId ? '2px solid #fff' : '2px solid #fff', boxShadow: t.id === selectedId ? '0 0 0 3px var(--tk-blue)' : 'var(--tk-shadow-card)' }}>
-              <Icon name="truck" size={13} color="#fff" />
-            </span>
-            {t.id === selectedId && (
-              <div className="lt-popup" style={{ left: 32, top: -8 }}>
-                <strong style={{ font: '600 12px/16px var(--tk-font-sans)' }}>{t.id}</strong>
-                <span style={{ font: '400 11px/15px var(--tk-font-sans)', opacity: .85 }}>{t.from.split(' ')[0]} → {t.to.split(' ')[0]}</span>
-                <span style={{ font: '400 11px/15px var(--tk-font-sans)', opacity: .85 }}>Driver: {t.driver}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, font: '600 11px/16px var(--tk-font-sans)', color: '#7dd3fc' }}>
-                  <Icon name="gauge" size={11} color="#7dd3fc" />{t.speed} km/h　·　ETA: {t.eta}
-                </span>
-              </div>
-            )}
-          </span>
-        ))}
-      </div>
+      <TriangulationGoogleMap points={mapPoints} selectedId={selectedId} onSelect={setSelectedId}
+        ariaLabel="Live truck tracking map"
+        emptyMessage={tripsLoading ? 'Loading truck locations…' : 'The trips response has no truck coordinates to plot.'}
+        mapType={mapStyle} showTraffic={showTraffic} zoom={zoom} fitVersion={fitVersion} fitOnDataChange={false} />
 
       <div className="lt-layer-rail">
         {LAYERS.map((l) => (
-          <button key={l} className={'lt-layer-btn' + (layer === l ? ' active' : '')} onClick={() => { setLayer(l); notify('info', `Showing ${l} layer.`); }}>
+          <button key={l} className={'lt-layer-btn' + (layer === l ? ' active' : '')} onClick={() => {
+            setLayer(l);
+            if (l === 'Traffic') setShowTraffic(true);
+            else if (layer === 'Traffic') setShowTraffic(false);
+            notify('info', `Showing ${l} layer.`);
+          }}>
             <Icon name={LAYER_ICON[l]} size={16} />{l}
           </button>
         ))}
       </div>
 
       <div className="lt-zoom-rail">
-        <button onClick={() => setZoom((z) => Math.min(z + 20, 200))}>+</button>
-        <button onClick={() => setZoom((z) => Math.max(z - 20, 60))}>−</button>
-        <button onClick={() => { setZoom(100); notify('info', 'Centered on your fleet.'); }}><Icon name="crosshair" size={14} /></button>
+        <button onClick={() => setZoom((z) => Math.min(z + 1, 18))}>+</button>
+        <button onClick={() => setZoom((z) => Math.max(z - 1, 3))}>-</button>
+        <button onClick={() => { setFitVersion((version) => version + 1); notify('info', 'Centered on your fleet.'); }}><Icon name="crosshair" size={14} /></button>
       </div>
 
       <div className="lt-map-toolbar">
@@ -266,9 +297,12 @@ export function LiveTracking() {
       </div>
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {tripsLoading && <Banner tone="info" title="Loading live trips">Showing the existing preview while current truck locations load.</Banner>}
+      {tripsFetching && !tripsLoading && <Banner tone="info" title="Refreshing live locations" />}
+      {tripsError && <Banner tone="warning" title="Live trip data is unavailable">The tracking map can only plot coordinates returned by GET /api/v1/admin/trips.</Banner>}
 
       <div className="lt-main">
-        <SectionCard title={statusFilter === 'All Status' && !q ? `Active Trips (${TOTAL_ACTIVE})` : `Active Trips (${filtered.length})`} pad="tight">
+        <SectionCard title={statusFilter === 'All Status' && !q ? `Active Trips (${tripsResponse ? trackedTrips.filter((trip) => !['Delivered', 'Completed', 'Cancelled'].includes(trip.status)).length : TOTAL_ACTIVE})` : `Active Trips (${filtered.length})`} pad="tight">
           <SearchField placeholder="Search trips, truck no. or driver..." value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 12 }} />
           <Tabs value={statusFilter === 'Delivered' || statusFilter === 'Stopped' ? 'All Status' : statusFilter}
             onChange={setStatusFilter}
@@ -278,9 +312,9 @@ export function LiveTracking() {
             {visible.map((t) => (
               <div key={t.id} className={'lt-trip-row' + (t.id === selectedId ? ' active' : '')} onClick={() => setSelectedId(t.id)}>
                 <div className="lt-trip-top">
-                  <span className="lt-trip-icon" style={{ background: STATUS_COLOR[t.status] }}><Icon name="truck" size={15} color="#fff" /></span>
+                  <span className="lt-trip-icon" style={{ background: t.statusColor || STATUS_COLOR[t.status] || STATUS_COLOR['In Transit'] }}><Icon name="truck" size={15} color="#fff" /></span>
                   <strong style={{ flex: 1, font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{t.id}</strong>
-                  <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: t.status === 'Delayed' ? 'var(--tk-danger)' : 'var(--tk-ink-700)' }}>{t.speed} km/h</span>
+                  <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: t.status === 'Delayed' ? 'var(--tk-danger)' : 'var(--tk-ink-700)' }}>{t.speed == null ? '—' : `${t.speed} km/h`}</span>
                 </div>
                 <div className="lt-trip-bottom">
                   <span className="tk-meta">{t.from.split(' ')[0]} → {t.to.split(' ')[0]}　·　{t.driver}</span>
@@ -307,7 +341,7 @@ export function LiveTracking() {
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <strong style={{ font: '700 16px/22px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{selected.id}</strong>
-                <Badge tone={STATUS_BADGE[selected.status]}>{selected.status}</Badge>
+                <Badge tone={STATUS_BADGE[selected.status] || 'neutral'}>{selected.status}</Badge>
               </div>
               <strong style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{selected.from} → {selected.to}</strong>
               <span className="tk-meta">Container ({selected.container})　·　{selected.cargo}</span>
@@ -317,21 +351,24 @@ export function LiveTracking() {
                   <div className="lt-contact-row" key={label} style={{ borderTop: label !== 'Driver' ? '1px solid var(--tk-line)' : 'none' }}>
                     <span style={{ width: 32, height: 32, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)', color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}><Icon name={icon} size={15} /></span>
                     <div style={{ flex: 1, display: 'grid', gap: 1 }}><span className="tk-meta">{label}</span><strong style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value}</strong></div>
-                    <IconButton icon="phone" tone="outline" onClick={() => notify('success', `Calling ${value}…`)} />
+                    <IconButton icon="phone" tone="outline" disabled={!phone || phone === '—'} onClick={() => notify('success', `Calling ${value}…`)} />
                   </div>
                 ))}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', borderTop: '1px solid var(--tk-line)', paddingTop: 10 }}>
-                {[['Current Location', selected.location], ['Speed', `${selected.speed} km/h`], ['Distance Covered', selected.distanceCovered], ['Total Distance', selected.totalDistance],
+                {[['Current Location', selected.location], ['Speed', selected.speed == null ? '—' : `${selected.speed} km/h`], ['Distance Covered', selected.distanceCovered], ['Total Distance', selected.totalDistance],
                   ['ETA', selected.eta, 'var(--tk-warning)'], ['Next Stop', selected.nextStop], ['Last Update', selected.lastUpdate], ['Engine Status', selected.engine, selected.engine === 'ON' ? 'var(--tk-success)' : 'var(--tk-ink-400)']].map(([label, value, tone]) => (
                   <div key={label}><span className="tk-meta" style={{ display: 'block' }}>{label}</span><strong style={{ font: '600 13px/18px var(--tk-font-sans)', color: tone || 'var(--tk-ink-900)' }}>{value}</strong></div>
                 ))}
               </div>
 
               <div style={{ borderTop: '1px solid var(--tk-line)', paddingTop: 12 }}>
-                <ProgressBar value={selected.progress} label="Trip Progress" caption={`${selected.progress}%`} color="var(--tk-blue)" />
+                {selected.progress == null
+                  ? <span className="tk-meta">Trip progress is not included in GET /api/v1/admin/trips.</span>
+                  : <ProgressBar value={selected.progress} label="Trip Progress" caption={`${selected.progress}%`} color="var(--tk-blue)" />}
                 <div style={{ marginTop: 10 }}>
+                  {selected.stops.length === 0 && <span className="tk-meta">Stop updates are not included in GET /api/v1/admin/trips.</span>}
                   {selected.stops.map((s, i) => (
                     <div className="lt-progress-stop" key={i}>
                       {s.state === 'done' ? <Icon name="circle-check" size={16} color="var(--tk-success)" />

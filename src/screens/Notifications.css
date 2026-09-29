@@ -182,6 +182,10 @@
 .notify-setting:last-child {
   border: 0;
 }
+.notify-setting:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 .notify-setting strong,
 .notify-setting small {
   display: block;
@@ -201,6 +205,21 @@
 .notify-setting b.on {
   color: var(--tk-success);
 }
+.notify-settings-error,
+.notify-settings-state {
+  padding: 8px 0;
+  font-size: var(--tk-micro-size);
+  line-height: 1.5;
+  color: var(--tk-ink-500);
+}
+.notify-settings-error {
+  color: var(--tk-danger);
+}
+.notify-detail-actor {
+  margin: 8px 0;
+  color: var(--tk-ink-500);
+  font-size: var(--tk-meta-size);
+}
 .notify-help {
   font-size: var(--tk-meta-size);
   line-height: 1.55;
@@ -209,6 +228,28 @@
 .notify-modal-settings {
   display: grid;
   gap: 18px;
+}
+.notify-quiet-hours {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding-left: 50px;
+}
+.notify-quiet-hours label {
+  display: grid;
+  gap: 6px;
+  color: var(--tk-ink-500);
+  font-size: var(--tk-micro-size);
+}
+.notify-quiet-hours input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--tk-line-strong);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--tk-ink-700);
+  font: 500 var(--tk-meta-size) var(--tk-font-sans);
 }
 .notify-toast {
   position: fixed;
@@ -513,6 +554,9 @@
   }
   .notify-message {
     grid-template-columns: 1fr;
+  }
+  .notify-quiet-hours {
+    padding-left: 0;
   }
   .notify-action-grid {
     grid-template-columns: 1fr;

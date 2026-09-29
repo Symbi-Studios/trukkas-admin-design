@@ -38,6 +38,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - For integrations, verify request/response schemas, IDs, enums and status transitions, filtering and pagination, date/time and currency units, upload behavior, and error/status-code handling against the live spec. Avoid guessing from fixture shapes; map wire data at the API boundary.
 - Do not send development or verification writes to production endpoints. Use a confirmed development/staging environment or mocks for write flows, especially approval, payout, payment, account, and deletion actions. Never exercise real user data or credentials as test data.
 
+## Reporting missing API data
+
+- When reporting what is missing from an integration, be concise and copy-ready for the user to send to the backend developer. Name the screen and exact endpoint for every requested field or operation.
+- Separate fields already returned from fields still needed. Say whether each field belongs in the list response, a detail response, a summary, or another endpoint; do not describe missing data vaguely.
+- Include the complete request path and query parameters, request body for writes, and a representative full 200 JSON response for each proposed or changed contract. Mark examples as proposed when they are not in the current OpenAPI spec, and do not present guessed fields or endpoints as existing API behavior.
+- Group requested fields by the UI they support (table, filters, summary cards, detail sections, map, or actions). For maps, specify coordinate shape and whether locations are job addresses or live GPS positions.
+- If the user asks for a short answer, provide one compact message they can forward to the backend developer, keeping the endpoint names and required response fields explicit.
+- When preparing text for WhatsApp, preserve literal formatting markers such as `*bold*`, underscores, and other symbols. Put the message in a plain code block when needed so those characters remain visible and copyable.
+
 ## Configuration and security
 
 - The current static export means browser code, built assets, and public environment variables are visible to users. A public API base URL may be configured as client-side environment data; never put passwords, signing keys, service credentials, or other secrets in source, fixtures, browser storage, or any `NEXT_PUBLIC_*` variable.
