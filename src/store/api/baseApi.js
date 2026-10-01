@@ -120,9 +120,15 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const method = (request?.method || (typeof args === 'string' ? 'GET' : args.method || 'GET')).toUpperCase();
   const url = sanitizeUrl(request?.url || (typeof args === 'string' ? args : args.url));
   const requestBody = typeof args === 'string' ? undefined : args.body;
-  const responseBody = result.error
-    ? (result.error.data ?? { error: result.error.error ?? result.error.status })
-    : result.data;
+  const csvResponse = !result.error && (
+    ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips'].includes(api.endpoint)
+    || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')
+  );
+  const responseBody = csvResponse
+    ? '[CSV content omitted]'
+    : result.error
+      ? (result.error.data ?? { error: result.error.error ?? result.error.status })
+      : result.data;
 
   console.groupCollapsed(`[API] ${method} ${url} → ${response?.status ?? result.error?.status ?? 'complete'} (${Date.now() - startedAt}ms)`);
   console.info('Endpoint:', label);
@@ -229,6 +235,6 @@ async function baseQueryWithReauth(args, api, extraOptions) {
 export const baseApi = createApi({
   reducerPath: 'baseApi',
   baseQuery: baseQueryWithReauth,
-  tagTypes: ['AdminNotifications', 'AdminNotificationSettings', 'AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips', 'AdminDocReviewStats', 'AdminDocReviewQueue', 'AdminDocReviewDetail', 'AdminTriangulation'],
+  tagTypes: ['AdminNotifications', 'AdminNotificationSettings', 'AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips', 'AdminDocReviewStats', 'AdminDocReviewQueue', 'AdminDocReviewDetail', 'AdminTriangulation', 'AdminFleet', 'AdminDrivers', 'AdminDriverStats', 'AdminCompanies'],
   endpoints: () => ({}),
 });

@@ -1,1596 +1,182 @@
-"use client";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "../router.js";
-import {
-  Avatar,
-  Badge,
-  Button,
-  Card,
-  DataTable,
-  DropdownMenu,
-  Icon,
-  IconButton,
-  Modal,
-  PageHeader,
-  Pagination,
-  SearchField,
-  Select,
-  StatCard,
-  Tabs,
-  Textarea,
-  TextField,
-} from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { setCompanyStatus } from "../mock/api.js";
-import { getJobTrips } from "../domain/jobTrips.js";
-import {
-  getCompanyPayoutSummary,
-  normalizePayouts,
-} from "../domain/payouts.js";
-import { formatNaira } from "../mock/format.js";
-import "./CompanyDetail.css";
+'use client';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
+import { useNavigate, useParams } from '../router.js';
+import { Avatar, Badge, Banner, Button, Card, DataTable, DropdownMenu, Icon, IconButton, Modal, PageHeader, Pagination, SearchField, Select, StatCard, Tabs, Textarea, TextField } from '../ds.js';
+import { companyDate, companyError, companyMoney, useGetAdminCompaniesQuery, useGetAdminCompanyProfileQuery, useGetAdminCompanyInfoQuery, useGetAdminCompanyDriversQuery, useGetAdminCompanyJobsQuery, useGetAdminCompanyPayoutsQuery, useGetAdminCompanyActivityQuery } from '../store/features/companies/companiesApi.js';
+import { useGetAdminDriverProfileQuery, useGetAdminDriverLicenseQuery } from '../store/features/drivers/driversApi.js';
+import { useGetAdminFleetTruckQuery } from '../store/features/fleet/fleetApi.js';
+import { useGetAdminTripsQuery } from '../store/features/trips/tripsApi.js';
+import { CompanyActionModal } from './CompanyActionModal.jsx';
+import { CompanyDetailLoading } from './CompaniesLoading.jsx';
+import { DriverTableLoading } from './DriversLoading.jsx';
+import './CompanyDetail.css';
 
-const statusTone = {
-  Active: "success",
-  Available: "success",
-  "On Trip": "info",
-  "In Maintenance": "warning",
-  Inactive: "neutral",
-  Suspended: "danger",
-  "Pending Review": "warning",
-  Delivered: "success",
-  Completed: "success",
-  "In Transit": "info",
-  Assigned: "info",
-  Open: "warning",
-};
-const docs = [
-  ["CAC Certificate", "Verified", "Jan 16, 2026"],
-  ["TIN Certificate", "Verified", "Jan 16, 2026"],
-  ["Insurance Certificate", "Verified", "Jan 18, 2026"],
-  ["Fleet Ownership Documents", "Verified", "Jan 20, 2026"],
-  ["Driver Compliance Records", "Verified", "Jan 22, 2026"],
-  ["Safety & Regulatory Clearance", "Verified", "Jan 25, 2026"],
-];
-const activity = [
-  [
-    "circle-check",
-    "Company documents verified",
-    "by Super Admin",
-    "3 days ago",
-  ],
-  ["truck", "New truck added", "by Company", "5 days ago"],
-  ["users", "Driver record updated", "by Company", "1 week ago"],
-  ["wallet", "Payout processed", "by Finance System", "1 week ago"],
-  [
-    "clipboard-check",
-    "Insurance certificate renewed",
-    "by Company",
-    "2 weeks ago",
-  ],
-];
-const initials = (name = "") =>
-  name
-    .split(" ")
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
+const statusTone = { Active: 'success', Approved: 'success', Available: 'success', 'On Trip': 'info', 'In Maintenance': 'warning', Inactive: 'neutral', Suspended: 'danger', 'Pending Review': 'warning', Pending: 'warning', Delivered: 'success', Completed: 'success', Processing: 'info', Failed: 'danger', Reversed: 'warning', 'In Transit': 'info', Assigned: 'info', Open: 'warning', Verified: 'success', Rejected: 'danger' };
+const display = (value) => value ?? '—';
 function downloadRows(filename, rows) {
-  const fields = Object.keys(rows[0] || {});
-  const csv = [
-    fields.join(","),
-    ...rows.map((row) =>
-      fields
-        .map((field) => `"${String(row[field] ?? "").replaceAll('"', '""')}"`)
-        .join(","),
-    ),
-  ].join("\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  const fields = Object.keys(rows[0] || {}).filter((field) => !rows.some((row) => row[field] && typeof row[field] === 'object'));
+  const csv = [fields.join(','), ...rows.map((row) => fields.map((field) => `"${String(row[field] ?? '').replaceAll('"', '""')}"`).join(','))].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+}
+function PanelHeader({ title, action, onAction }) { return <div className="company-panel-head"><h2 className="tk-section">{title}</h2>{action && <button onClick={onAction}>{action}</button>}</div>; }
+function KeyValues({ rows, className = 'company-key-values' }) { return <div className={className}>{rows.map(([name, value]) => <div key={name}>{className === 'company-info-grid' ? <small>{name}</small> : <span>{name}</span>}<strong>{display(value)}</strong></div>)}</div>; }
+function Status({ value }) { return <Badge dot tone={statusTone[value] || 'neutral'}>{value || '—'}</Badge>; }
+function StatGrid({ children, five = false }) { return <div className={`company-stats ${five ? 'company-stats-five' : ''}`}>{children}</div>; }
+function EmptyRecords({ label }) { return <div className="company-empty"><Icon name="search" size={24} /><strong>{label}</strong></div>; }
+function QueryError({ query, title }) { return query.error ? <Banner tone="danger" title={title}>{companyError(query.error)}<Button variant="outline" onClick={query.refetch}>Retry</Button></Banner> : null; }
+function ActivityList({ rows, allowed, query }) {
+  if (!allowed) return <p className="tk-meta">Company account activity is available to Super Admins.</p>;
+  if (query.isFetching) return <DriverTableLoading columns={3} label="Loading company activity" />;
+  if (query.error) return <QueryError query={query} title="Unable to load company activity" />;
+  if (!rows.length) return <p className="tk-meta">No company account activity found.</p>;
+  return <div className="company-activity">{rows.map((row) => <div key={row.id}><span><Icon name="clipboard-check" size={16} /></span><p><strong>{row.title}</strong><small>{row.sub || '—'}</small></p><time>{row.time}</time></div>)}</div>;
 }
 
 export function CompanyDetail() {
-  const navigate = useNavigate(),
-    { companyId } = useParams();
-  const companies = useCollection("companies") || [],
-    allTrucks = useCollection("trucks") || [],
-    allDrivers = useCollection("drivers") || [],
-    allJobs = useCollection("jobs") || [],
-    payoutRows = useCollection("payoutRequests") || [],
-    maintenance = useCollection("maintenance") || [];
-  const allPayouts = useMemo(
-    () => normalizePayouts(payoutRows, allJobs),
-    [payoutRows, allJobs],
-  );
-  const decodedCompanyId = decodeURIComponent(companyId || "");
-  const payoutCompany = allPayouts.find(
-    (payout) =>
-      payout.partyType === "company" &&
-      (payout.companyId === decodedCompanyId ||
-        payout.partyId === decodedCompanyId ||
-        payout.party === decodedCompanyId),
-  );
-  const company =
-    companies.find(
-      (item) => item.id === decodedCompanyId || item.name === decodedCompanyId,
-    ) ||
-    (payoutCompany
-      ? {
-          id: payoutCompany.companyId || payoutCompany.partyId,
-          name: payoutCompany.companyName || payoutCompany.party,
-          regNo: payoutCompany.partyId,
-          location: "Nigeria",
-          contactName: payoutCompany.requestedBy,
-          contactPhone: payoutCompany.requester?.phone || "—",
-          contactEmail: payoutCompany.requester?.email || "—",
-          joined: payoutCompany.dateRequested,
-          status: payoutCompany.requester?.status || "Active",
-          trucks: 0,
-          drivers: 0,
-        }
-      : companies[0]);
-  const trucks = useMemo(() => {
-    const linked = allTrucks.filter(
-      (truck) => truck.company === company?.name || truck.tc === company?.id,
-    );
-    return linked.length
-      ? linked
-      : companies.some((item) => item.id === company?.id)
-        ? allTrucks
-        : [];
-  }, [allTrucks, companies, company]);
-  const drivers = useMemo(() => {
-    const plates = new Set(trucks.map((truck) => truck.plate));
-    const linked = allDrivers.filter(
-      (driver) =>
-        driver.company === company?.name || plates.has(driver.truckPlate),
-    );
-    return linked.length
-      ? linked
-      : companies.some((item) => item.id === company?.id)
-        ? allDrivers
-        : [];
-  }, [allDrivers, companies, company, trucks]);
-  const jobs = useMemo(() => {
-    const plates = new Set(trucks.map((truck) => truck.plate));
-    const linked = allJobs.filter(
-      (job) =>
-        job.truckCompany === company?.name ||
-        job.truckingCompany === company?.name ||
-        getJobTrips(job).some((trip) => plates.has(trip.truckPlate)),
-    );
-    return linked.length
-      ? linked
-      : companies.some((item) => item.id === company?.id)
-        ? allJobs.slice(0, 5)
-        : [];
-  }, [allJobs, companies, company, trucks]);
-  const payouts = useMemo(
-    () =>
-      allPayouts.filter(
-        (payout) =>
-          payout.partyType === "company" &&
-          (payout.companyId === company?.id ||
-            payout.partyId === company?.id ||
-            payout.companyName === company?.name ||
-            payout.party === company?.name),
-      ),
-    [allPayouts, company],
-  );
-  const payoutSummary = useMemo(
-    () => getCompanyPayoutSummary(payouts),
-    [payouts],
-  );
-  const [tab, setTab] = useState("Overview"),
-    [query, setQuery] = useState(""),
-    [filter, setFilter] = useState("All Statuses"),
-    [page, setPage] = useState(1),
-    [selectedTruck, setSelectedTruck] = useState(null),
-    [selectedDriver, setSelectedDriver] = useState(null),
-    [checkedTrucks, setCheckedTrucks] = useState([]),
-    [checkedDrivers, setCheckedDrivers] = useState([]),
-    [menu, setMenu] = useState(false),
-    [editOpen, setEditOpen] = useState(false),
-    [messageOpen, setMessageOpen] = useState(false),
-    [message, setMessage] = useState("");
-  useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("tab");
-    if (requested === "trucks") setTab("Trucks");
-    if (requested === "drivers") setTab("Drivers");
-    if (requested === "payouts") setTab("Payouts");
-  }, []);
-  useEffect(() => {
-    if (!selectedTruck && trucks[0]) setSelectedTruck(trucks[0]);
-  }, [selectedTruck, trucks]);
-  useEffect(() => {
-    if (!selectedDriver && drivers[0]) setSelectedDriver(drivers[0]);
-  }, [drivers, selectedDriver]);
-  if (!company)
-    return (
-      <Card>
-        <p className="tk-body">Company not found.</p>
-        <Button onClick={() => navigate("/companies")}>
-          Back to companies
-        </Button>
-      </Card>
-    );
-  const activeTrucks = trucks.filter((truck) =>
-    ["Available", "On Trip", "Active"].includes(truck.status),
-  ).length;
-  const maintenanceCount = trucks.filter(
-    (truck) => truck.status === "In Maintenance",
-  ).length;
-  const activeDrivers = drivers.filter(
-    (driver) => !["Inactive", "Suspended"].includes(driver.status),
-  ).length;
-  const tabItems = [
-    { value: "Overview", label: "Overview" },
-    { value: "Trucks", label: "Trucks", count: company.trucks },
-    { value: "Drivers", label: "Drivers", count: company.drivers },
-    { value: "Documents", label: "Documents", count: 12 },
-    { value: "Jobs", label: "Jobs", count: 56 },
-    { value: "Payouts", label: "Payouts", count: payouts.length },
-    { value: "Compliance", label: "Compliance" },
-    { value: "Activity Log", label: "Activity Log" },
-  ];
-  return (
-    <div className="company-page">
-      <PageHeader
-        crumbs={["Companies", "Trucking Companies", company.name]}
-        title="Company Details"
-        description="Review the company profile, fleet, drivers, documents and compliance status."
-        actions={<>
-          <IconButton icon="ellipsis" onClick={() => setMenu(!menu)} />
-          <Button variant="outline" icon="mail" onClick={() => setMessageOpen(true)}>Send Message</Button>
-          <span className="company-menu-wrap">
-            <Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>Actions</Button>
-            {menu && (
-              <span className="company-dropdown">
-                <DropdownMenu
-                  width={220}
-                  items={[
-                    { label: "Edit company", icon: "pencil", onClick: () => { setEditOpen(true); setMenu(false); } },
-                    { label: "Print profile", icon: "printer", onClick: () => window.print() },
-                    { divider: true },
-                    {
-                      label: company.status === "Suspended" ? "Reactivate company" : "Suspend company",
-                      icon: "ban",
-                      tone: company.status === "Suspended" ? undefined : "danger",
-                      onClick: () => {
-                        setCompanyStatus(company.id, company.status === "Suspended" ? "Active" : "Suspended");
-                        setMenu(false);
-                      },
-                    },
-                  ]}
-                />
-              </span>
-            )}
-          </span>
-        </>}
-      />
-      <header className="company-hero">
-        <div className="company-brand">
-          <Avatar name={company.name} size={64} square />
-          <div>
-            <div className="company-name">
-              <h2 className="tk-title">{company.name}</h2>
-              <Badge
-                dot
-                tone={
-                  company.verification === "Verified" ? "success" : "warning"
-                }
-              >
-                {company.verification}
-              </Badge>
-            </div>
-            <p>
-              {company.regNo}
-              <span /> {company.location}
-            </p>
-            <small>Reliable movement. Greater possibilities.</small>
-          </div>
-        </div>
-        <div className="company-contact">
-          <span>
-            <Icon name="phone" size={16} />
-            {company.contactPhone}
-          </span>
-          <span>
-            <Icon name="mail" size={16} />
-            {company.contactEmail}
-          </span>
-          <span>
-            <Icon name="globe" size={16} />
-            www.
-            {company.name.toLowerCase().replaceAll(" ", "").replace("ltd", "")}
-            .com
-          </span>
-          <span>
-            <Icon name="map-pin" size={16} />
-            {company.location}
-          </span>
-          <span className="company-date">
-            <small>Joined On</small>
-            <strong>{company.joined}</strong>
-          </span>
-          <span className="company-date">
-            <small>Last Updated</small>
-            <strong>May 28, 2026</strong>
-          </span>
-        </div>
-      </header>
-      <Tabs
-        value={tab}
-        onChange={(value) => {
-          setTab(value);
-          setPage(1);
-          setQuery("");
-          setFilter("All Statuses");
-        }}
-        items={tabItems}
-      />
-      {tab === "Overview" && (
-        <Overview
-          company={company}
-          activeTrucks={activeTrucks}
-          maintenanceCount={maintenanceCount}
-          activeDrivers={activeDrivers}
-          jobs={jobs}
-          payoutSummary={payoutSummary}
-          setTab={setTab}
-          openEdit={() => setEditOpen(true)}
-        />
-      )}
-      {tab === "Trucks" && (
-        <TrucksTab
-          company={company}
-          trucks={trucks}
-          query={query}
-          setQuery={setQuery}
-          filter={filter}
-          setFilter={setFilter}
-          page={page}
-          setPage={setPage}
-          selected={selectedTruck}
-          setSelected={setSelectedTruck}
-          checked={checkedTrucks}
-          setChecked={setCheckedTrucks}
-          navigate={navigate}
-          maintenance={maintenance}
-        />
-      )}
-      {tab === "Drivers" && (
-        <DriversTab
-          company={company}
-          drivers={drivers}
-          query={query}
-          setQuery={setQuery}
-          filter={filter}
-          setFilter={setFilter}
-          page={page}
-          setPage={setPage}
-          selected={selectedDriver}
-          setSelected={setSelectedDriver}
-          checked={checkedDrivers}
-          setChecked={setCheckedDrivers}
-          navigate={navigate}
-        />
-      )}
-      {tab === "Payouts" && (
-        <PayoutsTab
-          company={company}
-          payouts={payouts}
-          summary={payoutSummary}
-          navigate={navigate}
-        />
-      )}
-      {!["Overview", "Trucks", "Drivers", "Payouts"].includes(tab) && (
-        <GenericTab tab={tab} docs={docs} jobs={jobs} navigate={navigate} />
-      )}
-      <Modal
-        open={messageOpen}
-        onClose={() => setMessageOpen(false)}
-        title={`Message ${company.name}`}
-        description={`Send a message to ${company.contactName}.`}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setMessageOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!message.trim()}
-              onClick={() => {
-                setMessage("");
-                setMessageOpen(false);
-              }}
-            >
-              Send Message
-            </Button>
-          </>
-        }
-      >
-        <Textarea
-          rows={6}
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          placeholder="Write your message..."
-        />
-      </Modal>
-      <Modal
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        title="Edit company profile"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => setEditOpen(false)}>Save changes</Button>
-          </>
-        }
-      >
-        <div className="company-form">
-          <TextField label="Company name" defaultValue={company.name} />
-          <TextField label="RC number" defaultValue={company.regNo} />
-          <TextField
-            label="Contact person"
-            defaultValue={company.contactName}
-          />
-          <TextField label="Phone" defaultValue={company.contactPhone} />
-          <TextField label="Email" defaultValue={company.contactEmail} />
-          <TextField label="Location" defaultValue={company.location} />
-        </div>
-      </Modal>
-    </div>
-  );
+  const navigate = useNavigate(), params = useParams(), search = useSearchParams();
+  const id = search.get('id') || params.companyId || '';
+  const adminRole = useSelector((state) => state.auth.admin?.role);
+  const canViewActivity = adminRole === 'SUPER_ADMIN';
+  const [tab, setTab] = useState('Overview'), [query, setQuery] = useState(''), [filter, setFilter] = useState('All Statuses'), [page, setPage] = useState(1), [selectedTruckId, setSelectedTruckId] = useState(null), [selectedDriverId, setSelectedDriverId] = useState(null), [checkedTrucks, setCheckedTrucks] = useState([]), [checkedDrivers, setCheckedDrivers] = useState([]), [menu, setMenu] = useState(false), [editOpen, setEditOpen] = useState(false), [messageOpen, setMessageOpen] = useState(false), [message, setMessage] = useState(''), [action, setAction] = useState(null), [notice, setNotice] = useState(null), [jobTab, setJobTab] = useState('all');
+  useEffect(() => { setQuery(''); setFilter('All Statuses'); setJobTab('all'); setMenu(false); setEditOpen(false); setMessageOpen(false); setMessage(''); }, [id]);
+  const requestedTab = search.get('tab');
+  useEffect(() => { setTab(({ trucks: 'Trucks', drivers: 'Drivers', payouts: 'Payouts' })[requestedTab] || 'Overview'); setPage(1); setSelectedTruckId(null); setSelectedDriverId(null); setCheckedTrucks([]); setCheckedDrivers([]); setNotice(null); setAction(null); }, [id, requestedTab]);
+  const profileQuery = useGetAdminCompanyProfileQuery(id, { skip: !id });
+  const profile = profileQuery.currentData;
+  const validCompany = profile?.role === 'TRUCKER' && profile?.truckerType === 'COMPANY';
+  const infoQuery = useGetAdminCompanyInfoQuery(id, { skip: !id || !validCompany });
+  const directoryQuery = useGetAdminCompaniesQuery(undefined, { skip: !validCompany });
+  const driversQuery = useGetAdminCompanyDriversQuery(id, { skip: !validCompany || !['Overview', 'Drivers'].includes(tab) });
+  const payoutsQuery = useGetAdminCompanyPayoutsQuery(undefined, { skip: !validCompany || !['Overview', 'Payouts'].includes(tab) });
+  const jobsQuery = useGetAdminCompanyJobsQuery({ id, tab: tab === 'Jobs' ? jobTab : 'all', page: tab === 'Jobs' ? page : 1, limit: tab === 'Jobs' ? 10 : 5 }, { skip: !validCompany || !['Overview', 'Jobs'].includes(tab) });
+  const completedQuery = useGetAdminCompanyJobsQuery({ id, tab: 'completed', page: 1, limit: 1 }, { skip: !validCompany || tab !== 'Overview' });
+  const activityQuery = useGetAdminCompanyActivityQuery(id, { skip: !validCompany || !canViewActivity || !['Overview', 'Activity Log'].includes(tab) });
+  const company = useMemo(() => {
+    if (!profile) return null;
+    const entry = directoryQuery.data?.find((row) => row.id === id);
+    const info = Object.fromEntries(Object.entries(infoQuery.currentData || {}).filter(([, value]) => value != null));
+    return { ...profile, ...info, trucks: entry?.trucks ?? profile.fleet?.length ?? null, drivers: entry?.drivers ?? driversQuery.currentData?.length ?? null, completedJobs: completedQuery.currentData?.pagination?.total ?? null };
+  }, [profile, id, directoryQuery.data, infoQuery.currentData, driversQuery.currentData, completedQuery.currentData]);
+  const trucks = profile?.fleet || [], drivers = driversQuery.currentData || [], payouts = (payoutsQuery.currentData || []).filter((row) => row.companyId === id), jobs = jobsQuery.currentData?.rows || [], activity = activityQuery.currentData || [];
+  const summary = useMemo(() => {
+    const sum = (status) => payoutsQuery.currentData && !payoutsQuery.error ? payouts.filter((row) => row.statusCode === status).every((row) => row.amount != null) ? payouts.filter((row) => row.statusCode === status).reduce((total, row) => total + row.amount, 0) : null : null;
+    return { totalEarned: profile?.totalEarned, available: profile?.walletBalance, pending: sum('PENDING'), processing: sum('PROCESSING'), paid: sum('COMPLETED'), requests: payoutsQuery.currentData && !payoutsQuery.error ? payouts.length : null };
+  }, [payoutsQuery.currentData, payoutsQuery.error, profile, id]);
+  const selectedTruck = trucks.find((row) => row.id === selectedTruckId) || trucks[0];
+  const selectedDriver = drivers.find((row) => row.id === selectedDriverId) || drivers[0];
+  const setSection = (next) => { setTab(next); setPage(1); setQuery(''); setFilter('All Statuses'); };
+  const startAction = (kind) => { setMenu(false); setAction({ company, kind }); };
+  if (!id) return <Card><Banner tone="warning" title="No company selected">Open a company from the Companies list.</Banner><Button onClick={() => navigate('/companies')}>Back to companies</Button></Card>;
+  if (!profile && (profileQuery.isLoading || profileQuery.isFetching)) return <CompanyDetailLoading />;
+  if (profileQuery.error) return <Card><QueryError query={profileQuery} title="Unable to load company" /><Button onClick={() => navigate('/companies')}>Back to companies</Button></Card>;
+  if (!company || !validCompany) return <Card><Banner tone="warning" title="Company not found">This record is not a company trucker account.</Banner><Button onClick={() => navigate('/companies')}>Back to companies</Button></Card>;
+  const companyFields = [['Company Name', company.name], ['Contact Person', company.contactName], ['RC Number', company.regNo], ['Phone Number', company.contactPhone], ['Business Type', company.businessType], ['Email Address', company.contactEmail], ['Date Registered', company.joined], ['Location', company.location], ['Address', company.location], ['Tax Identification Number (TIN)', company.taxId], ['Website', company.website], ['Status', <Status value={company.status} />]];
+  const documentNames = ['CAC Certificate', 'TIN Certificate', 'Insurance Certificate', 'Fleet Ownership Documents', 'Driver Compliance Records', 'Safety & Regulatory Clearance'];
+  return <div className="company-page">
+    <PageHeader crumbs={['Companies', { label: 'Trucking Companies', onClick: () => navigate('/companies') }, company.name]} title="Company Details" description="Review the company profile, fleet, drivers, documents and compliance status." actions={<><IconButton icon="ellipsis" onClick={() => setMenu(!menu)} /><Button variant="outline" icon="mail" onClick={() => setMessageOpen(true)}>Send Message</Button><span className="company-menu-wrap"><Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>Actions</Button>{menu && <span className="company-dropdown"><DropdownMenu width={220} items={[{ label: 'Edit company', icon: 'pencil', onClick: () => { setEditOpen(true); setMenu(false); } }, { label: 'Print profile', icon: 'printer', onClick: () => window.print() }, ...(company.statusCode === 'PENDING_REVIEW' ? [{ label: 'Review company', icon: 'shield-check', onClick: () => startAction('review') }] : []), ...(company.statusCode === 'SUSPENDED' ? [{ label: 'Reactivate company', icon: 'ban', onClick: () => startAction('activate') }] : company.statusCode === 'ACTIVE' ? [{ label: 'Suspend company', icon: 'ban', tone: 'danger', onClick: () => startAction('suspend') }] : [])]} /></span>}</span></>} />
+    {notice && <Banner tone="info" title="Company">{notice}</Banner>}
+    <QueryError query={infoQuery} title="Company verification data unavailable" />
+    <header className="company-hero"><div className="company-brand"><Avatar name={company.name} size={64} square /><div><div className="company-name"><h2 className="tk-title">{company.name}</h2><Status value={company.verification} /></div><p>{company.regNo || '—'}<span />{company.location || '—'}</p><small>Reliable movement. Greater possibilities.</small></div></div><div className="company-contact"><span><Icon name="phone" size={16} />{company.contactPhone || '—'}</span><span><Icon name="mail" size={16} />{company.contactEmail || '—'}</span><span><Icon name="globe" size={16} />{company.website || '—'}</span><span><Icon name="map-pin" size={16} />{company.location || '—'}</span><span className="company-date"><small>Joined On</small><strong>{company.joined}</strong></span><span className="company-date"><small>Last Updated</small><strong>{company.updated}</strong></span></div></header>
+    <Tabs value={tab} onChange={setSection} items={[{ value: 'Overview', label: 'Overview' }, { value: 'Trucks', label: 'Trucks', count: display(company.trucks) }, { value: 'Drivers', label: 'Drivers', count: display(company.drivers) }, { value: 'Documents', label: 'Documents', count: '—' }, { value: 'Jobs', label: 'Jobs', count: display(company.totalJobs) }, { value: 'Payouts', label: 'Payouts', count: display(summary.requests) }, { value: 'Compliance', label: 'Compliance' }, { value: 'Activity Log', label: 'Activity Log' }]} />
+    {tab === 'Overview' && <div className="company-tab">
+      <StatGrid five><StatCard icon="truck" label="Fleet Size" value={display(company.trucks)} /><StatCard icon="users" tint="teal" label="Drivers" value={display(company.drivers)} /><StatCard icon="truck" tint="green" label="Active Trucks" value="—" /><StatCard icon="clipboard-check" tint="purple" label="Completed Jobs" value={display(company.completedJobs)} /><StatCard icon="wallet" tint="amber" label="Total Earnings" value={companyMoney(company.totalEarned)} /></StatGrid>
+      <div className="company-overview-grid"><div className="company-overview-main">
+        <Card><PanelHeader title="Company Information" action="Edit" onAction={() => setEditOpen(true)} /><KeyValues rows={companyFields} className="company-info-grid" /></Card>
+        <Card><PanelHeader title="Fleet Overview" action="View All" onAction={() => setSection('Trucks')} /><div className="company-progress-labels"><span><i className="green" />Active <strong>—</strong></span><span><i className="grey" />Inactive <strong>—</strong></span><span><i className="amber" />Under Maintenance <strong>—</strong></span><b>{display(company.trucks)}<small>Total Trucks</small></b></div><div className="company-progress" aria-label="Fleet availability unavailable"><span style={{ width: '100%', background: 'var(--tk-line)' }} /></div><p className="tk-meta">Fleet availability and maintenance counts are unavailable.</p></Card>
+        <Card><PanelHeader title="Driver Overview" action="View All" onAction={() => setSection('Drivers')} /><QueryError query={driversQuery} title="Unable to load company drivers" />{driversQuery.isFetching ? <DriverTableLoading columns={3} label="Loading company driver summary" /> : !driversQuery.error && <div className="company-progress-labels"><span><i className="green" />Active <strong>{drivers.filter((driver) => driver.statusCode === 'ACTIVE').length}</strong></span><span><i className="grey" />Inactive <strong>{drivers.filter((driver) => ['INACTIVE', 'SUSPENDED', 'BANNED'].includes(driver.statusCode)).length}</strong></span><span><i className="amber" />Pending <strong>{drivers.filter((driver) => ['PENDING_PROFILE', 'PENDING_REVIEW'].includes(driver.statusCode)).length}</strong></span><b>{display(company.drivers)}<small>Total Drivers</small></b></div>}{driversQuery.currentData && !driversQuery.error && <div className="company-progress drivers" aria-label="Company driver status distribution">{[['ACTIVE'], ['INACTIVE', 'SUSPENDED', 'BANNED'], ['PENDING_PROFILE', 'PENDING_REVIEW']].map((statuses, index) => <span key={index} style={{ width: `${drivers.length ? drivers.filter((driver) => statuses.includes(driver.statusCode)).length / drivers.length * 100 : 0}%` }} />)}</div>}</Card>
+        <Card><PanelHeader title="Recent Jobs" action="View All" onAction={() => setSection('Jobs')} /><CompanyJobs query={jobsQuery} rows={jobs} /></Card>
+      </div><aside className="company-overview-side">
+        <Card><PanelHeader title="Verification & Compliance" action="View All" onAction={() => setSection('Documents')} /><KeyValues rows={[["KYB Status", <Status value={company.verification} />], ['Registration Status', company.registrationStatus]]} /><p className="tk-meta">Individual document files and review dates are unavailable.</p>{documentNames.map((name) => <div className="company-doc" key={name}><Icon name="file-text" size={17} /><span>{name}</span><Badge tone="neutral">—</Badge><time>—</time></div>)}</Card>
+        <Card><PanelHeader title="Payment & Earnings" action="View All" onAction={() => setSection('Payouts')} /><QueryError query={payoutsQuery} title="Unable to load company payouts" />{payoutsQuery.isFetching ? <DriverTableLoading columns={2} label="Loading company payouts" /> : <div className="company-payments">{[['wallet', 'Total Earnings', summary.totalEarned], ['building-2', 'Total Paid Out', summary.paid], ['circle-check', 'Pending Payout', summary.pending], ['credit-card', 'Available', summary.available]].map(([icon, name, amount]) => <div key={name}><span><Icon name={icon} size={17} /></span><p><small>{name}</small><strong>{companyMoney(amount)}</strong></p></div>)}</div>}</Card>
+        <Card><PanelHeader title="Recent Activity" action="View All" onAction={() => setSection('Activity Log')} /><ActivityList rows={activity.slice(0, 5)} allowed={canViewActivity} query={activityQuery} /></Card>
+      </aside></div>
+    </div>}
+    {tab === 'Trucks' && <TrucksTab company={company} trucks={trucks} available={profile.fleet != null} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} page={page} setPage={setPage} selected={selectedTruck} setSelected={(row) => setSelectedTruckId(row.id)} checked={checkedTrucks} setChecked={setCheckedTrucks} navigate={navigate} />}
+    {tab === 'Drivers' && <DriversTab company={company} drivers={drivers} dataQuery={driversQuery} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} page={page} setPage={setPage} selected={selectedDriver} setSelected={(row) => setSelectedDriverId(row.id)} checked={checkedDrivers} setChecked={setCheckedDrivers} navigate={navigate} />}
+    {tab === 'Payouts' && <PayoutsTab company={company} payouts={payouts} query={payoutsQuery} summary={summary} />}
+    {tab === 'Jobs' && <Card pad="none"><div className="company-list-head"><h2 className="tk-section">Jobs</h2><Select value={jobTab} onChange={(event) => { setJobTab(event.target.value); setPage(1); }} options={[{ label: 'All Jobs', value: 'all' }, { label: 'Active', value: 'active' }, { label: 'Completed', value: 'completed' }, { label: 'Cancelled', value: 'cancelled' }]} /></div><CompanyJobs query={jobsQuery} rows={jobs} />{jobsQuery.currentData?.pagination && !jobsQuery.error && <Pagination page={page} pageSize={10} pageCount={Math.max(1, jobsQuery.currentData.pagination.totalPages)} total={jobsQuery.currentData.pagination.total} onPage={setPage} />}</Card>}
+    {['Documents', 'Compliance'].includes(tab) && <Card pad="none"><div className="company-list-head"><div><h2 className="tk-section">{tab}</h2><p className="tk-meta">Current {tab.toLowerCase()} records for this company.</p></div>{company.statusCode === 'PENDING_REVIEW' && <Button icon="shield-check" onClick={() => startAction('review')}>Review company</Button>}</div><div style={{ padding: 'var(--tk-space-4)' }}><KeyValues rows={[["KYB Status", <Status value={company.verification} />], ['RC Number', company.regNo], ['Tax Identification Number (TIN)', company.taxId], ['Registration Status', company.registrationStatus]]} /><Banner tone="info" title="Document details unavailable">Individual company document files, verification dates and compliance records are not returned by the current API.</Banner></div><DataTable rows={documentNames.map((name) => ({ id: name, name }))} rowKey={(row) => row.id} coloredHeader columns={[{ key: 'name', header: 'Document' }, { key: 'status', header: 'Status', render: () => '—' }, { key: 'date', header: 'Reviewed On', render: () => '—' }]} /></Card>}
+    {tab === 'Activity Log' && <Card><PanelHeader title="Activity Log" /><ActivityList rows={activity} allowed={canViewActivity} query={activityQuery} /><p className="tk-meta">These are admin actions on this company account. Fleet and driver activity is not included.</p></Card>}
+    <Modal open={messageOpen} onClose={() => setMessageOpen(false)} title={`Message ${company.name}`} description={`Send a message to ${company.contactName || company.name}.`} footer={<><Button variant="outline" onClick={() => setMessageOpen(false)}>Cancel</Button><Button disabled>Send Message</Button></>}><Banner tone="warning" title="Company messaging unavailable">There is no documented admin API for sending a message to a company.</Banner><Textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Write your message..." /></Modal>
+    <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit company profile" footer={<><Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button disabled>Save changes</Button></>}><Banner tone="warning" title="Company editing unavailable">There is no documented admin API for updating a company profile.</Banner><div className="company-form">{[['Company name', company.name], ['RC number', company.regNo], ['Contact person', company.contactName], ['Phone', company.contactPhone], ['Email', company.contactEmail], ['Location', company.location]].map(([name, value]) => <TextField key={name} label={name} defaultValue={value || ''} />)}</div></Modal>
+    {action && <CompanyActionModal key={`${id}-${action.kind}`} action={action} onClose={() => setAction(null)} onDone={setNotice} />}
+  </div>;
 }
 
-function StatGrid({ children, five = false }) {
-  return (
-    <div className={`company-stats ${five ? "company-stats-five" : ""}`}>
-      {children}
-    </div>
-  );
-}
-function PanelHeader({ title, action, onAction }) {
-  return (
-    <div className="company-panel-head">
-      <h2 className="tk-section">{title}</h2>
-      {action && <button onClick={onAction}>{action}</button>}
-    </div>
-  );
-}
-function ActivityList() {
-  return (
-    <div className="company-activity">
-      {activity.map(([icon, title, sub, time]) => (
-        <div key={title}>
-          <span>
-            <Icon name={icon} size={16} />
-          </span>
-          <p>
-            <strong>{title}</strong>
-            <small>{sub}</small>
-          </p>
-          <time>{time}</time>
-        </div>
-      ))}
-    </div>
-  );
-}
-function Overview({
-  company,
-  activeTrucks,
-  maintenanceCount,
-  activeDrivers,
-  jobs,
-  payoutSummary,
-  setTab,
-  openEdit,
-}) {
-  return (
-    <div className="company-tab">
-      <StatGrid five>
-        <StatCard
-          icon="truck"
-          label="Fleet Size"
-          value={company.trucks}
-          delta="12%"
-          caption="from last month"
-        />
-        <StatCard
-          icon="users"
-          tint="teal"
-          label="Drivers"
-          value={company.drivers}
-          delta="8%"
-          caption="from last month"
-        />
-        <StatCard
-          icon="truck"
-          tint="green"
-          label="Active Trucks"
-          value={Math.max(activeTrucks, 38)}
-          caption="84% of fleet"
-        />
-        <StatCard
-          icon="clipboard-check"
-          tint="purple"
-          label="Completed Jobs"
-          value="256"
-          delta="16%"
-          caption="from last month"
-        />
-        <StatCard
-          icon="wallet"
-          tint="amber"
-          label="Total Earnings"
-          value={formatNaira(payoutSummary.totalEarned)}
-          caption={`${payoutSummary.requests} payout request${payoutSummary.requests === 1 ? "" : "s"}`}
-        />
-      </StatGrid>
-      <div className="company-overview-grid">
-        <div className="company-overview-main">
-          <Card>
-            <PanelHeader
-              title="Company Information"
-              action="Edit"
-              onAction={openEdit}
-            />
-            <div className="company-info-grid">
-              {[
-                ["Company Name", company.name],
-                ["Contact Person", company.contactName],
-                ["RC Number", company.regNo],
-                ["Phone Number", company.contactPhone],
-                ["Business Type", "Trucking / Logistics"],
-                ["Email Address", company.contactEmail],
-                ["Date Registered", company.joined],
-                ["Location", company.location],
-                ["Address", company.location],
-                ["Tax Identification Number (TIN)", "987654321"],
-                ["Website", "www.globalhaulage.com"],
-                [
-                  "Status",
-                  <Badge dot tone="success">
-                    {company.status}
-                  </Badge>,
-                ],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <small>{label}</small>
-                  <strong>{value}</strong>
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card>
-            <PanelHeader
-              title="Fleet Overview"
-              action="View All"
-              onAction={() => setTab("Trucks")}
-            />
-            <div className="company-progress-labels">
-              <span>
-                <i className="green" />
-                Active <strong>{Math.max(activeTrucks, 38)}</strong>
-              </span>
-              <span>
-                <i className="grey" />
-                Inactive <strong>5</strong>
-              </span>
-              <span>
-                <i className="amber" />
-                Under Maintenance{" "}
-                <strong>{Math.max(maintenanceCount, 2)}</strong>
-              </span>
-              <b>
-                {company.trucks}
-                <small>Total Trucks</small>
-              </b>
-            </div>
-            <div className="company-progress">
-              <span style={{ width: "84%" }} />
-              <span style={{ width: "11%" }} />
-              <span style={{ width: "5%" }} />
-            </div>
-          </Card>
-          <Card>
-            <PanelHeader
-              title="Driver Overview"
-              action="View All"
-              onAction={() => setTab("Drivers")}
-            />
-            <div className="company-progress-labels">
-              <span>
-                <i className="green" />
-                Active <strong>{Math.max(activeDrivers, 72)}</strong>
-              </span>
-              <span>
-                <i className="grey" />
-                Inactive <strong>4</strong>
-              </span>
-              <span>
-                <i className="amber" />
-                Pending <strong>2</strong>
-              </span>
-              <b>
-                {company.drivers}
-                <small>Total Drivers</small>
-              </b>
-            </div>
-            <div className="company-progress drivers">
-              <span style={{ width: "92%" }} />
-              <span style={{ width: "5%" }} />
-              <span style={{ width: "3%" }} />
-            </div>
-          </Card>
-          <Card>
-            <PanelHeader
-              title="Recent Jobs"
-              action="View All"
-              onAction={() => setTab("Jobs")}
-            />
-            <DataTable
-              rows={jobs.slice(0, 5)}
-              rowKey={(row) => row.id}
-              columns={[
-                {
-                  key: "id",
-                  header: "Job ID",
-                  render: (row) => (
-                    <strong className="company-blue">{row.id}</strong>
-                  ),
-                },
-                { key: "route", header: "Route" },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (row) => (
-                    <Badge dot tone={statusTone[row.status] || "neutral"}>
-                      {row.status}
-                    </Badge>
-                  ),
-                },
-                {
-                  key: "date",
-                  header: "Date",
-                  render: (row) =>
-                    row.pickupDate ||
-                    row.published?.split(" ").slice(0, 3).join(" "),
-                },
-                {
-                  key: "amount",
-                  header: "Amount",
-                  render: (row) =>
-                    `₦${Number(row.amount || 0).toLocaleString()}`,
-                },
-              ]}
-            />
-          </Card>
-        </div>
-        <aside className="company-overview-side">
-          <Card>
-            <PanelHeader title="Verification & Compliance" action="View All" />
-            {docs.map(([name, status, date]) => (
-              <div className="company-doc" key={name}>
-                <Icon name="circle-check" size={17} />
-                <span>{name}</span>
-                <Badge tone="success">{status}</Badge>
-                <time>{date}</time>
-              </div>
-            ))}
-          </Card>
-          <Card>
-            <PanelHeader
-              title="Payment & Earnings"
-              action="View All"
-              onAction={() => setTab("Payouts")}
-            />
-            <div className="company-payments">
-              {[
-                [
-                  "wallet",
-                  "Total Earnings",
-                  formatNaira(payoutSummary.totalEarned),
-                ],
-                [
-                  "building-2",
-                  "Total Paid Out",
-                  formatNaira(payoutSummary.paid),
-                ],
-                [
-                  "circle-check",
-                  "Pending Payout",
-                  formatNaira(payoutSummary.pending),
-                ],
-                [
-                  "credit-card",
-                  "Available",
-                  formatNaira(payoutSummary.available),
-                ],
-              ].map(([icon, label, value]) => (
-                <div key={label}>
-                  <span>
-                    <Icon name={icon} size={17} />
-                  </span>
-                  <p>
-                    <small>{label}</small>
-                    <strong>{value}</strong>
-                  </p>
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card>
-            <PanelHeader title="Recent Activity" action="View All" />
-            <ActivityList />
-          </Card>
-        </aside>
-      </div>
-    </div>
-  );
+function CompanyJobs({ query, rows }) {
+  if (query.error) return <QueryError query={query} title="Unable to load company jobs" />;
+  if (query.isFetching) return <DriverTableLoading columns={5} label="Loading company jobs" />;
+  return <><DataTable rows={rows} rowKey={(row) => row.id} columns={[{ key: 'id', header: 'Job ID', render: (row) => <strong className="company-blue">{row.id}</strong> }, { key: 'route', header: 'Route' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'date', header: 'Date' }, { key: 'amount', header: 'Amount', render: (row) => companyMoney(row.amount) }]} />{!rows.length && <EmptyRecords label="No company jobs found" />}</>;
 }
 
-function TrucksTab({
-  company,
-  trucks,
-  query,
-  setQuery,
-  filter,
-  setFilter,
-  page,
-  setPage,
-  selected,
-  setSelected,
-  checked,
-  setChecked,
-  navigate,
-  maintenance,
-}) {
-  const [type, setType] = useState("All Fleet Types");
-  const filtered = trucks.filter(
-    (truck) =>
-      (!query ||
-        [truck.plate, truck.type, truck.ref].some((value) =>
-          value.toLowerCase().includes(query.toLowerCase()),
-        )) &&
-      (filter === "All Statuses" || truck.status === filter) &&
-      (type === "All Fleet Types" || truck.tag === type),
-  );
-  return (
-    <div className="company-tab">
-      <StatGrid>
-        <StatCard
-          icon="truck"
-          label="Total Trucks"
-          value={company.trucks}
-          delta="12%"
-          caption="from last month"
-        />
-        <StatCard
-          icon="truck"
-          tint="green"
-          label="Active Trucks"
-          value="38"
-          delta="84%"
-          caption="of fleet"
-        />
-        <StatCard
-          icon="truck"
-          tint="purple"
-          label="Inactive Trucks"
-          value="5"
-          delta="11%"
-          direction="down"
-          caption="of fleet"
-        />
-        <StatCard
-          icon="truck"
-          tint="amber"
-          label="Under Maintenance"
-          value="2"
-          delta="4%"
-          direction="down"
-          caption="of fleet"
-        />
-      </StatGrid>
-      <div className="company-list-layout">
-        <Card pad="none">
-          <div className="company-list-head">
-            <div>
-              <h2 className="tk-section">Trucks ({company.trucks})</h2>
-              <p className="tk-meta">
-                All trucks registered under {company.name}.
-              </p>
-            </div>
-          </div>
-          <div className="company-toolbar">
-            <SearchField
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search trucks by plate number, type, VIN..."
-            />
-            <Select
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              options={[
-                "All Statuses",
-                "Available",
-                "On Trip",
-                "In Maintenance",
-                "Inactive",
-              ]}
-            />
-            <Select
-              value={type}
-              onChange={(event) => setType(event.target.value)}
-              options={[
-                "All Fleet Types",
-                "Trailer",
-                "Container",
-                "Flatbed",
-                "Tanker",
-              ]}
-            />
-            <Button
-              variant="outline"
-              icon="sliders-horizontal"
-              onClick={() => {
-                setQuery("");
-                setFilter("All Statuses");
-                setType("All Fleet Types");
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-          <DataTable
-            rows={filtered}
-            rowKey={(row) => row.plate}
-            selectable
-            selected={checked}
-            onSelect={setChecked}
-            onRowClick={setSelected}
-            coloredHeader
-            columns={[
-              {
-                key: "plate",
-                header: "Plate Number",
-                render: (row) => (
-                  <span className="company-vehicle">
-                    <span>
-                      <Icon name="truck" size={20} />
-                    </span>
-                    <strong>{row.plate}</strong>
-                  </span>
-                ),
-              },
-              { key: "type", header: "Truck Type" },
-              {
-                key: "model",
-                header: "Make / Model",
-                render: () => "Mercedes Actros",
-              },
-              { key: "year", header: "Year", render: () => "2022" },
-              {
-                key: "status",
-                header: "Status",
-                render: (row) => (
-                  <Badge dot tone={statusTone[row.status]}>
-                    {row.status}
-                  </Badge>
-                ),
-              },
-              { key: "date", header: "Last Active" },
-              {
-                key: "actions",
-                header: "Actions",
-                render: (row) => (
-                  <IconButton
-                    icon="ellipsis"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelected(row);
-                    }}
-                  />
-                ),
-              },
-            ]}
-          />
-          <Pagination
-            page={page}
-            pageCount={1}
-            total={filtered.length}
-            onPage={() => setPage(1)}
-          />
-        </Card>
-        <TruckRail
-          truck={selected}
-          navigate={navigate}
-          maintenance={maintenance}
-        />
-      </div>
-    </div>
-  );
+function TrucksTab({ company, trucks, available, query, setQuery, filter, setFilter, page, setPage, selected, setSelected, checked, setChecked, navigate }) {
+  const [type, setType] = useState('All Fleet Types');
+  const filtered = trucks.filter((truck) => (!query || [truck.plate, truck.type, truck.ref].some((value) => value?.toLowerCase().includes(query.toLowerCase()))) && (filter === 'All Statuses' || truck.status === filter) && (type === 'All Fleet Types' || truck.type === type));
+  const pages = Math.max(1, Math.ceil(filtered.length / 10)), currentPage = Math.min(page, pages);
+  return <div className="company-tab">
+    <StatGrid><StatCard icon="truck" label="Total Trucks" value={display(company.trucks)} /><StatCard icon="truck" tint="green" label="Active Trucks" value="—" /><StatCard icon="truck" tint="purple" label="Inactive Trucks" value="—" /><StatCard icon="truck" tint="amber" label="Under Maintenance" value="—" /></StatGrid>
+    <div className="company-list-layout"><Card pad="none">
+      <div className="company-list-head"><div><h2 className="tk-section">Trucks ({display(company.trucks)})</h2><p className="tk-meta">All trucks registered under {company.name}.</p></div></div>
+      <div className="company-toolbar"><SearchField value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search trucks by plate number, type, VIN..." /><Select value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }} options={['All Statuses', ...new Set(trucks.map((truck) => truck.status).filter(Boolean))]} /><Select value={type} onChange={(event) => { setType(event.target.value); setPage(1); }} options={['All Fleet Types', ...new Set(trucks.map((truck) => truck.type).filter(Boolean))]} /><Button variant="outline" icon="sliders-horizontal" onClick={() => { setQuery(''); setFilter('All Statuses'); setType('All Fleet Types'); setPage(1); }}>Reset</Button></div>
+      <p className="tk-meta" style={{ padding: '0 var(--tk-space-4)' }}>Truck statuses describe registration approval. Availability and maintenance status are unavailable.</p>
+      {!available ? <Banner tone="warning" title="Company fleet unavailable">The profile response did not include fleet records.</Banner> : <><DataTable rows={filtered.slice((currentPage - 1) * 10, currentPage * 10)} rowKey={(row) => row.id} selectable selected={checked} onSelect={setChecked} onRowClick={setSelected} coloredHeader columns={[
+        { key: 'plate', header: 'Plate Number', render: (row) => <span className="company-vehicle"><span><Icon name="truck" size={20} /></span><strong>{row.plate || '—'}</strong></span> },
+        { key: 'type', header: 'Truck Type' }, { key: 'model', header: 'Make / Model', render: (row) => [row.make, row.model].filter(Boolean).join(' ') || '—' }, { key: 'year', header: 'Year' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'date', header: 'Last Active', render: (row) => row.date || '—' }, { key: 'actions', header: 'Actions', render: (row) => <IconButton icon="ellipsis" onClick={(event) => { event.stopPropagation(); setSelected(row); }} /> }
+      ]} />{!filtered.length && <EmptyRecords label="No records match these filters" />}<Pagination page={currentPage} pageCount={pages} pageSize={10} total={filtered.length} onPage={setPage} /></>}
+    </Card>{selected && <CompanyTruckRail key={selected.id} truck={selected} navigate={navigate} />}</div>
+  </div>;
 }
-function TruckRail({ truck, navigate, maintenance }) {
-  if (!truck) return null;
-  const record = maintenance.find((item) => item.plate === truck.plate);
-  return (
-    <aside className="company-detail-rail">
-      <Card>
-        <PanelHeader title="Truck Details" />
-        <div className="company-truck-visual">
-          <Icon name="truck" size={72} />
-        </div>
-        <h2 className="tk-title">{truck.plate}</h2>
-        <p className="tk-body">
-          Mercedes-Benz Actros 1845 <Badge tone="info">{truck.tag}</Badge>
-        </p>
-        <div className="company-key-values">
-          {[
-            ["VIN Number", "WDB9634031L123456"],
-            ["Engine Number", "OM471123456"],
-            ["Year of Manufacture", "2022"],
-            ["Fleet Type", truck.type],
-            ["Load Capacity", "40,000 kg"],
-            ["Fuel Type", "Diesel"],
-            [
-              "Status",
-              <Badge dot tone={statusTone[truck.status]}>
-                {truck.status}
-              </Badge>,
-            ],
-            ["Last Active", truck.date],
-            ["Current Location", truck.loc],
-            ["Assigned Driver", truck.driver],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </div>
-          ))}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "6px",
-            marginTop: "16px",
-          }}
-        >
-          <Button
-            onClick={() =>
-              navigate(`/fleet/${encodeURIComponent(truck.plate)}`)
-            }
-          >
-            View Full Details
-          </Button>
-          <Button
-            variant="outline"
-            icon="wrench"
-            onClick={() =>
-              navigate(record ? `/maintenance/${record.id}` : "/maintenance")
-            }
-          >
-            View Maintenance
-          </Button>
-        </div>
-      </Card>
-      <Card>
-        <PanelHeader title="Recent Activity" action="View All" />
-        <ActivityList />
-      </Card>
-    </aside>
-  );
+function DriversTab({ company, drivers, dataQuery, query, setQuery, filter, setFilter, page, setPage, selected, setSelected, checked, setChecked, navigate }) {
+  const [license, setLicense] = useState('All License Types');
+  const filtered = drivers.filter((driver) => (!query || [driver.name, driver.license, driver.phone].some((value) => value?.toLowerCase().includes(query.toLowerCase()))) && (filter === 'All Statuses' || driver.status === filter) && (license === 'All License Types' || driver.licenseClass === license));
+  const pages = Math.max(1, Math.ceil(filtered.length / 10)), currentPage = Math.min(page, pages);
+  const count = (statuses) => !dataQuery.currentData || dataQuery.error ? '—' : drivers.filter((driver) => statuses.includes(driver.statusCode)).length;
+  return <div className="company-tab">
+    <StatGrid><StatCard icon="users" label="Total Drivers" value={display(company.drivers)} /><StatCard icon="truck" tint="green" label="Active Drivers" value={count(['ACTIVE'])} /><StatCard icon="clock" tint="amber" label="Inactive Drivers" value={count(['INACTIVE', 'BANNED'])} /><StatCard icon="ban" tint="red" label="Suspended Drivers" value={count(['SUSPENDED'])} /></StatGrid>
+    <div className="company-list-layout"><Card pad="none">
+      <div className="company-list-head"><div><h2 className="tk-section">Drivers ({display(company.drivers)})</h2><p className="tk-meta">All drivers registered under {company.name}.</p></div><Button variant="outline" icon="download" disabled={dataQuery.isFetching || Boolean(dataQuery.error)} onClick={() => downloadRows(`${company.name}-drivers.csv`, filtered)}>Export Drivers</Button></div>
+      <div className="company-toolbar"><SearchField value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search drivers by name, license number, phone..." /><Select value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }} options={['All Statuses', 'Active', 'On Trip', 'Inactive', 'Pending Review']} /><Select value={license} onChange={(event) => setLicense(event.target.value)} options={['All License Types', 'Heavy Vehicle (Class E)', 'Heavy Vehicle (Class D)']} disabled /><Button variant="outline" icon="sliders-horizontal" onClick={() => { setQuery(''); setFilter('All Statuses'); setLicense('All License Types'); setPage(1); }}>Reset</Button></div>
+      <QueryError query={dataQuery} title="Unable to load company drivers" />{dataQuery.isFetching ? <DriverTableLoading columns={7} label="Loading company drivers" /> : !dataQuery.error && <><DataTable rows={filtered.slice((currentPage - 1) * 10, currentPage * 10)} rowKey={(row) => row.id} selectable selected={checked} onSelect={setChecked} onRowClick={setSelected} coloredHeader columns={[
+        { key: 'driver', header: 'Driver', render: (row) => <span className="tc-company-cell"><Avatar name={row.name} size={32} /><span><strong>{row.name}</strong><small>{row.id}</small></span></span> }, { key: 'license', header: 'License Number', render: (row) => row.license || '—' }, { key: 'licenseClass', header: 'License Type', render: (row) => row.licenseClass || '—' }, { key: 'phone', header: 'Phone Number' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'joined', header: 'Date Joined', render: (row) => companyDate(row.joined) }, { key: 'actions', header: 'Actions', render: (row) => <IconButton icon="ellipsis" onClick={(event) => { event.stopPropagation(); setSelected(row); }} /> }
+      ]} />{!filtered.length && <EmptyRecords label="No records match these filters" />}<Pagination page={currentPage} pageCount={pages} pageSize={10} total={filtered.length} onPage={setPage} /></>}
+    </Card>{selected && !dataQuery.isFetching && !dataQuery.error && <CompanyDriverRail key={selected.id} driver={selected} navigate={navigate} />}</div>
+  </div>;
+}
+function PayoutsTab({ company, payouts, query, summary }) {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState(''), [status, setStatus] = useState('All Statuses'), [selectedId, setSelectedId] = useState(null), [page, setPage] = useState(1);
+  const filtered = payouts.filter((row) => (status === 'All Statuses' || row.status === status) && (!search || [row.id, row.reference].some((value) => value?.toLowerCase().includes(search.toLowerCase()))));
+  const pages = Math.max(1, Math.ceil(filtered.length / 10)), currentPage = Math.min(page, pages), selected = filtered.find((row) => row.id === selectedId) || filtered[0];
+  return <div className="company-tab">
+    <StatGrid five><StatCard icon="wallet" label="Total Earned" value={companyMoney(summary.totalEarned)} /><StatCard icon="circle-check" tint="green" label="Available" value={companyMoney(summary.available)} /><StatCard icon="clock" tint="amber" label="Pending Review" value={companyMoney(summary.pending)} /><StatCard icon="repeat" tint="blue" label="Processing" value={companyMoney(summary.processing)} /><StatCard icon="banknote" tint="purple" label="Paid Out" value={companyMoney(summary.paid)} /></StatGrid>
+    <div className="company-list-layout"><Card pad="none">
+      <div className="company-list-head"><div><h2 className="tk-section">Payout ledger ({display(summary.requests)})</h2><p className="tk-meta">Company payouts reconciled to jobs and individual truck trips.</p></div><Button variant="outline" icon="external-link" onClick={() => navigate('/payouts')}>All platform payouts</Button></div>
+      <div className="company-toolbar company-payout-toolbar"><SearchField value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search payout, job, or trip ID..." /><Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} options={['All Statuses', 'Pending', 'Processing', 'Completed', 'Failed', 'Reversed']} /><Button variant="outline" icon="sliders-horizontal" onClick={() => { setSearch(''); setStatus('All Statuses'); setPage(1); }}>Reset</Button></div>
+      <QueryError query={query} title="Unable to load company payouts" />{query.isFetching ? <DriverTableLoading columns={8} label="Loading company payouts" /> : !query.error && <><DataTable rows={filtered.slice((currentPage - 1) * 10, currentPage * 10)} rowKey={(row) => row.id} coloredHeader onRowClick={(row) => setSelectedId(row.id)} columns={[
+        { key: 'id', header: 'Payout ID', render: (row) => <button className="company-blue company-button-link" onClick={() => setSelectedId(row.id)}>{row.reference || row.id}</button> }, { key: 'jobId', header: 'Job', render: () => '—' }, { key: 'trips', header: 'Trips', render: () => '—' }, { key: 'gross', header: 'Gross', render: () => '—' }, { key: 'deductions', header: 'Deductions', render: () => '—' }, { key: 'net', header: 'Net', render: () => '—' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'eligibility', header: 'Eligibility', render: () => '—' }
+      ]} />{!filtered.length && <EmptyRecords label="No records match these filters" />}<Pagination page={currentPage} pageCount={pages} pageSize={10} total={filtered.length} onPage={setPage} /></>}
+    </Card><aside className="company-detail-rail"><Card><PanelHeader title="Payout Details" />{query.isFetching ? <DriverTableLoading columns={2} label="Loading payout details" /> : selected && !query.error ? <>
+      <div className="company-payout-total"><span className="tk-meta">Payout amount</span><strong>{companyMoney(selected.amount)}</strong><Status value={selected.status} /></div>
+      <KeyValues rows={[["Payout ID", selected.id], ['Reference', selected.reference], ['Amount', companyMoney(selected.amount)], ['Fee', companyMoney(selected.fee)], ['Source', selected.source], ['Requested By', selected.requestedBy], ['Job', null], ['Trips included', null], ['Gross amount', null], ['Deductions', null], ['Eligibility', null], ['Reconciliation', null], ['Requested', selected.dateRequested]]} /><div className="company-payout-warning">Job/trip reconciliation, gross/net amounts and payout eligibility are unavailable.</div><Button fullWidth disabled>View Full Details</Button>
+    </> : <p className="tk-meta">Select a payout to inspect it.</p>}</Card></aside></div>
+  </div>;
 }
 
-function DriversTab({
-  company,
-  drivers,
-  query,
-  setQuery,
-  filter,
-  setFilter,
-  page,
-  setPage,
-  selected,
-  setSelected,
-  checked,
-  setChecked,
-  navigate,
-}) {
-  const [license, setLicense] = useState("All License Types");
-  const filtered = drivers.filter(
-    (driver) =>
-      (!query ||
-        [driver.name, driver.license, driver.phone].some((value) =>
-          value?.toLowerCase().includes(query.toLowerCase()),
-        )) &&
-      (filter === "All Statuses" || driver.status === filter) &&
-      (license === "All License Types" || driver.licenseClass === license),
-  );
-  return (
-    <div className="company-tab">
-      <StatGrid>
-        <StatCard
-          icon="users"
-          label="Total Drivers"
-          value={company.drivers}
-          delta="8%"
-          caption="from last month"
-        />
-        <StatCard
-          icon="truck"
-          tint="green"
-          label="Active Drivers"
-          value="72"
-          delta="10%"
-          caption="from last month"
-        />
-        <StatCard
-          icon="clock"
-          tint="amber"
-          label="Inactive Drivers"
-          value="4"
-          delta="20%"
-          direction="down"
-          caption="from last month"
-        />
-        <StatCard
-          icon="ban"
-          tint="red"
-          label="Suspended Drivers"
-          value="2"
-          caption="from last month"
-        />
-      </StatGrid>
-      <div className="company-list-layout">
-        <Card pad="none">
-          <div className="company-list-head">
-            <div>
-              <h2 className="tk-section">Drivers ({company.drivers})</h2>
-              <p className="tk-meta">
-                All drivers registered under {company.name}.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              icon="download"
-              onClick={() =>
-                downloadRows(`${company.name}-drivers.csv`, filtered)
-              }
-            >
-              Export Drivers
-            </Button>
-          </div>
-          <div className="company-toolbar">
-            <SearchField
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search drivers by name, license number, phone..."
-            />
-            <Select
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              options={[
-                "All Statuses",
-                "Active",
-                "On Trip",
-                "Inactive",
-                "Pending Review",
-              ]}
-            />
-            <Select
-              value={license}
-              onChange={(event) => setLicense(event.target.value)}
-              options={[
-                "All License Types",
-                "Heavy Vehicle (Class E)",
-                "Heavy Vehicle (Class D)",
-              ]}
-            />
-            <Button
-              variant="outline"
-              icon="sliders-horizontal"
-              onClick={() => {
-                setQuery("");
-                setFilter("All Statuses");
-                setLicense("All License Types");
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-          <DataTable
-            rows={filtered}
-            rowKey={(row) => row.id}
-            selectable
-            selected={checked}
-            onSelect={setChecked}
-            onRowClick={setSelected}
-            coloredHeader
-            columns={[
-              {
-                key: "driver",
-                header: "Driver",
-                render: (row) => (
-                  <span className="tc-company-cell">
-                    <Avatar name={row.name} size={32} />
-                    <span>
-                      <strong>{row.name}</strong>
-                      <small>{row.id}</small>
-                    </span>
-                  </span>
-                ),
-              },
-              { key: "license", header: "License Number" },
-              {
-                key: "licenseClass",
-                header: "License Type",
-                render: (row) =>
-                  row.licenseClass?.split("(")[1]?.replace(")", "") ||
-                  "Class E",
-              },
-              { key: "phone", header: "Phone Number" },
-              {
-                key: "status",
-                header: "Status",
-                render: (row) => (
-                  <Badge dot tone={statusTone[row.status] || "neutral"}>
-                    {row.status}
-                  </Badge>
-                ),
-              },
-              { key: "joined", header: "Date Joined" },
-              {
-                key: "actions",
-                header: "Actions",
-                render: (row) => (
-                  <IconButton
-                    icon="ellipsis"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelected(row);
-                    }}
-                  />
-                ),
-              },
-            ]}
-          />
-          <Pagination
-            page={page}
-            pageCount={1}
-            total={filtered.length}
-            onPage={() => setPage(1)}
-          />
-        </Card>
-        <DriverRail driver={selected} navigate={navigate} />
-      </div>
-    </div>
-  );
+function CompanyTruckRail({ truck, navigate }) {
+  const detailQuery = useGetAdminFleetTruckQuery(truck.id);
+  const detail = detailQuery.currentData;
+  const model = [detail?.make || truck.make, detail?.model || truck.model].filter(Boolean).join(' ') || '—';
+  return <aside className="company-detail-rail"><Card><PanelHeader title="Truck Details" /><div className="company-truck-visual"><Icon name="truck" size={72} /></div><h2 className="tk-title">{truck.plate}</h2><p className="tk-body">{model} <Badge tone="info">{detail?.tag || truck.tag || '—'}</Badge></p><QueryError query={detailQuery} title="Truck details unavailable" />{detailQuery.isFetching ? <DriverTableLoading columns={2} label="Loading truck details" /> : <KeyValues rows={[["VIN Number", null], ['Engine Number', null], ['Year of Manufacture', detail?.year || truck.year], ['Fleet Type', detail?.type || truck.type], ['Load Capacity', detail?.containerWeight || truck.weight], ['Fuel Type', null], ['Status', <Status value={detail?.status || truck.status} />], ['Last Active', truck.date], ['Current Location', truck.loc], ['Assigned Driver', truck.driver]]} />}<div style={{ display: 'flex', gap: 6, marginTop: 16 }}><Button onClick={() => navigate(`/fleet/detail?id=${encodeURIComponent(truck.id)}`)}>View Full Details</Button><Button variant="outline" icon="wrench" onClick={() => navigate('/maintenance')}>View Maintenance</Button></div></Card><Card><PanelHeader title="Recent Activity" /><p className="tk-meta">Truck activity history is unavailable.</p></Card></aside>;
 }
-function DriverRail({ driver, navigate }) {
-  if (!driver) return null;
-  return (
-    <aside className="company-detail-rail">
-      <Card>
-        <div className="company-panel-head">
-          <h2 className="tk-section">Driver Details</h2>
-          <Badge dot tone={statusTone[driver.status] || "success"}>
-            {driver.status}
-          </Badge>
-        </div>
-        <div className="company-driver-head">
-          <Avatar name={driver.name} size={76} />
-          <div>
-            <h2 className="tk-title">{driver.name}</h2>
-            <small>{driver.id}</small>
-            <span>
-              <Icon name="phone" size={14} />
-              {driver.phone}
-            </span>
-            <span>
-              <Icon name="mail" size={14} />
-              {driver.email}
-            </span>
-            <span>
-              <Icon name="map-pin" size={14} />
-              {driver.currentLocation}
-            </span>
-          </div>
-        </div>
-
-        <div className="company-key-values">
-          {[
-            ["License Number", driver.license],
-            ["License Type", driver.licenseClass],
-            ["Date of Birth", driver.dob],
-            ["Address", driver.address],
-            ["Date Joined", driver.joined],
-            [
-              "Status",
-              <Badge dot tone={statusTone[driver.status] || "success"}>
-                {driver.status}
-              </Badge>,
-            ],
-            ["Assigned Truck", driver.truckPlate || "—"],
-            ["Total Trips", driver.totalTrips],
-            ["Rating", `⭐ ${driver.rating} / 5`],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </div>
-          ))}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-            marginTop: "16px",
-          }}
-        >
-          <Button
-            fullWidth
-            icon="eye"
-            onClick={() => navigate(`/drivers/${driver.id}`)}
-          >
-            View Full Profile
-          </Button>
-          <Button variant="outline" icon="file-text" fullWidth>
-            View Documents
-          </Button>
-        </div>
-      </Card>
-      <Card>
-        <PanelHeader title="Recent Activity" action="View All" />
-        <ActivityList />
-      </Card>
-    </aside>
-  );
-}
-
-function PayoutsTab({ company, payouts, summary, navigate }) {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("All Statuses");
-  const [selected, setSelected] = useState(payouts[0] || null);
-  const filtered = payouts.filter(
-    (payout) =>
-      (status === "All Statuses" || payout.status === status) &&
-      (!search ||
-        [payout.id, payout.jobId, ...(payout.tripIds || [])].some((value) =>
-          value?.toLowerCase().includes(search.toLowerCase()),
-        )),
-  );
-  const row =
-    selected && payouts.find((item) => item.id === selected.id)
-      ? selected
-      : filtered[0];
-  return (
-    <div className="company-tab">
-      <StatGrid five>
-        <StatCard
-          icon="wallet"
-          label="Total Earned"
-          value={formatNaira(summary.totalEarned)}
-          caption={`${summary.requests} requests`}
-        />
-        <StatCard
-          icon="circle-check"
-          tint="green"
-          label="Available"
-          value={formatNaira(summary.available)}
-          caption="eligible for approval"
-        />
-        <StatCard
-          icon="clock"
-          tint="amber"
-          label="Pending Review"
-          value={formatNaira(summary.pending)}
-          caption="submitted requests"
-        />
-        <StatCard
-          icon="repeat"
-          tint="blue"
-          label="Processing"
-          value={formatNaira(summary.processing)}
-          caption="approved or processing"
-        />
-        <StatCard
-          icon="banknote"
-          tint="purple"
-          label="Paid Out"
-          value={formatNaira(summary.paid)}
-          caption="completed payouts"
-        />
-      </StatGrid>
-      <div className="company-list-layout">
-        <Card pad="none">
-          <div className="company-list-head">
-            <div>
-              <h2 className="tk-section">Payout ledger ({payouts.length})</h2>
-              <p className="tk-meta">
-                Company payouts reconciled to jobs and individual truck trips.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              icon="external-link"
-              onClick={() =>
-                navigate(`/payouts?companyId=${encodeURIComponent(company.id)}`)
-              }
-            >
-              All platform payouts
-            </Button>
-          </div>
-          <div className="company-toolbar company-payout-toolbar">
-            <SearchField
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search payout, job, or trip ID..."
-            />
-            <Select
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-              options={[
-                "All Statuses",
-                "Pending Review",
-                "Approved",
-                "Processing",
-                "Completed",
-                "Rejected",
-              ]}
-            />
-            <Button
-              variant="outline"
-              icon="sliders-horizontal"
-              onClick={() => {
-                setSearch("");
-                setStatus("All Statuses");
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-          <DataTable
-            rows={filtered}
-            rowKey={(payout) => payout.id}
-            coloredHeader
-            onRowClick={setSelected}
-            columns={[
-              {
-                key: "id",
-                header: "Payout ID",
-                render: (payout) => (
-                  <button
-                    className="company-blue company-button-link"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      navigate(`/payouts/${payout.id}`);
-                    }}
-                  >
-                    {payout.id}
-                  </button>
-                ),
-              },
-              {
-                key: "jobId",
-                header: "Job",
-                render: (payout) => (
-                  <button
-                    className="company-blue company-button-link"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      navigate(`/jobs/${payout.jobId}`);
-                    }}
-                  >
-                    {payout.jobId}
-                  </button>
-                ),
-              },
-              {
-                key: "trips",
-                header: "Trips",
-                render: (payout) => `${payout.tripIds?.length || 0} included`,
-              },
-              {
-                key: "gross",
-                header: "Gross",
-                render: (payout) => formatNaira(payout.grossAmount),
-              },
-              {
-                key: "deductions",
-                header: "Deductions",
-                render: (payout) => formatNaira(payout.deductions),
-              },
-              {
-                key: "net",
-                header: "Net",
-                render: (payout) => (
-                  <strong>{formatNaira(payout.netAmount)}</strong>
-                ),
-              },
-              {
-                key: "status",
-                header: "Status",
-                render: (payout) => (
-                  <Badge dot tone={statusTone[payout.status] || "neutral"}>
-                    {payout.status}
-                  </Badge>
-                ),
-              },
-              {
-                key: "eligibility",
-                header: "Eligibility",
-                render: (payout) => (
-                  <Badge
-                    tone={
-                      payout.approvalReady
-                        ? "success"
-                        : payout.eligibility === "Needs Review"
-                          ? "warning"
-                          : "danger"
-                    }
-                  >
-                    {payout.eligibility}
-                  </Badge>
-                ),
-              },
-            ]}
-          />
-          {!filtered.length && (
-            <div className="company-empty">
-              <Icon name="wallet" size={24} />
-              <strong>No company payouts found</strong>
-              <span>
-                Completed trip earnings and payout requests will appear here.
-              </span>
-            </div>
-          )}
-        </Card>
-        <aside className="company-detail-rail">
-          <Card>
-            <PanelHeader title="Payout Details" />
-            {row ? (
-              <>
-                <div className="company-payout-total">
-                  <span className="tk-meta">Net payout</span>
-                  <strong>{formatNaira(row.netAmount)}</strong>
-                  <Badge tone={statusTone[row.status] || "neutral"}>
-                    {row.status}
-                  </Badge>
-                </div>
-                <div className="company-key-values">
-                  {[
-                    ["Payout ID", row.id],
-                    ["Job", row.jobId],
-                    ["Trips included", row.tripIds?.length || 0],
-                    ["Gross amount", formatNaira(row.grossAmount)],
-                    ["Deductions", formatNaira(row.deductions)],
-                    ["Eligibility", row.eligibility],
-                    [
-                      "Reconciliation",
-                      row.reconciliation?.ok ? "Balanced" : "Needs review",
-                    ],
-                    ["Requested", row.dateRequested],
-                  ].map(([label, value]) => (
-                    <div key={label}>
-                      <span>{label}</span>
-                      <strong>{value}</strong>
-                    </div>
-                  ))}
-                </div>
-                {!row.approvalReady && (
-                  <div className="company-payout-warning">
-                    Payment is held until every included trip is delivered and
-                    the amounts reconcile.
-                  </div>
-                )}
-                <Button
-                  fullWidth
-                  onClick={() => navigate(`/payouts/${row.id}`)}
-                >
-                  View Full Details
-                </Button>
-              </>
-            ) : (
-              <div className="company-empty">
-                <span>Select a payout to inspect it.</span>
-              </div>
-            )}
-          </Card>
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-function GenericTab({ tab, docs: documentRows, jobs, navigate }) {
-  const rows =
-    tab === "Documents" || tab === "Compliance"
-      ? documentRows.map(([name, status, date], i) => ({
-          id: i,
-          name,
-          status,
-          date,
-        }))
-      : tab === "Jobs"
-        ? jobs
-        : activity.map(([icon, title, sub, time], i) => ({
-            id: i,
-            title,
-            sub,
-            time,
-          }));
-  const columns =
-    tab === "Documents" || tab === "Compliance"
-      ? [
-          { key: "name", header: "Document" },
-          {
-            key: "status",
-            header: "Status",
-            render: (row) => <Badge tone="success">{row.status}</Badge>,
-          },
-          { key: "date", header: "Reviewed On" },
-        ]
-      : tab === "Jobs"
-        ? [
-            {
-              key: "id",
-              header: "Job ID",
-              render: (row) => (
-                <button
-                  className="company-blue company-button-link"
-                  onClick={() => navigate(`/jobs/${row.id}`)}
-                >
-                  {row.id}
-                </button>
-              ),
-            },
-            { key: "route", header: "Route" },
-            {
-              key: "status",
-              header: "Status",
-              render: (row) => (
-                <Badge tone={statusTone[row.status] || "neutral"}>
-                  {row.status}
-                </Badge>
-              ),
-            },
-            {
-              key: "amount",
-              header: "Value",
-              render: (row) => `₦${Number(row.amount || 0).toLocaleString()}`,
-            },
-          ]
-        : [
-            { key: "title", header: tab },
-            { key: "sub", header: "Source" },
-            { key: "time", header: "Updated" },
-          ];
-  return (
-    <Card pad="none">
-      <div className="company-list-head">
-        <div>
-          <h2 className="tk-section">{tab}</h2>
-          <p className="tk-meta">
-            Current {tab.toLowerCase()} records for this company.
-          </p>
-        </div>
-      </div>
-      <DataTable
-        rows={rows}
-        rowKey={(row) => row.id}
-        coloredHeader
-        columns={columns}
-      />
-    </Card>
-  );
+function CompanyDriverRail({ driver, navigate }) {
+  const profileQuery = useGetAdminDriverProfileQuery(driver.id);
+  const licenseQuery = useGetAdminDriverLicenseQuery(driver.id);
+  const tripsQuery = useGetAdminTripsQuery({ driverId: driver.id, page: 1, limit: 1 });
+  const profile = profileQuery.currentData, license = licenseQuery.currentData;
+  let documentUrl = null;
+  try { const url = new URL(license?.licenseUrl); if (['https:', 'http:'].includes(url.protocol)) documentUrl = url.href; } catch { /* A missing or unsafe document URL has no link. */ }
+  return <aside className="company-detail-rail"><Card><div className="company-panel-head"><h2 className="tk-section">Driver Details</h2><Status value={driver.status} /></div><div className="company-driver-head"><Avatar name={driver.name} size={76} /><div><h2 className="tk-title">{driver.name}</h2><small>{driver.id}</small><span><Icon name="phone" size={14} />{driver.phone || '—'}</span><span><Icon name="mail" size={14} />{driver.email || '—'}</span><span><Icon name="map-pin" size={14} />—</span></div></div><QueryError query={profileQuery} title="Driver profile unavailable" /><QueryError query={licenseQuery} title="Driver license unavailable" /><QueryError query={tripsQuery} title="Driver trips unavailable" />{profileQuery.isFetching || licenseQuery.isFetching ? <DriverTableLoading columns={2} label="Loading driver details" /> : <KeyValues rows={[["License Number", license?.licenseNumber || driver.license], ['License Type', null], ['Date of Birth', null], ['Address', null], ['Date Joined', companyDate(profile?.joined || driver.joined)], ['Status', <Status value={driver.status} />], ['Assigned Truck', driver.truckPlate], ['Total Trips', tripsQuery.error ? null : tripsQuery.currentData?.pagination?.total], ['Rating', null]]} />}<div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}><Button fullWidth icon="eye" onClick={() => navigate(`/drivers/detail?id=${encodeURIComponent(driver.id)}`)}>View Full Profile</Button><Button variant="outline" icon="file-text" fullWidth disabled={!documentUrl || licenseQuery.isFetching || Boolean(licenseQuery.error)} onClick={() => { if (documentUrl) window.open(documentUrl, '_blank', 'noopener,noreferrer'); }}>View Documents</Button></div></Card><Card><PanelHeader title="Recent Activity" /><p className="tk-meta">Driver activity history is unavailable.</p></Card></aside>;
 }

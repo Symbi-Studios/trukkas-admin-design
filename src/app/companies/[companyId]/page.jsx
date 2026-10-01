@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import { CompanyDetail } from '../../../screens/CompanyDetail.jsx';
+import { CompanyDetailLoading } from '../../../screens/CompaniesLoading.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('companyId'); }
 
@@ -13,5 +15,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function CompanyDetailPage() {
-  return <CompanyDetail />;
+  return <Suspense fallback={<CompanyDetailLoading />}><CompanyDetail /></Suspense>;
 }

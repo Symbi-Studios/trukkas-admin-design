@@ -1,4 +1,5 @@
-import { DriverDetail } from '../../../screens/DriverDetail.jsx';
+import { Suspense } from 'react';
+import { AdminDriverDetail } from '../../../screens/AdminDriverDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('driverId'); }
 
@@ -13,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function DriverDetailPage() {
-  return <DriverDetail />;
+  return <Suspense fallback={null}><AdminDriverDetail /></Suspense>;
 }

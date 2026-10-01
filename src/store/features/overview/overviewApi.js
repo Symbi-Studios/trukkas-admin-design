@@ -210,6 +210,7 @@ export const overviewApi = baseApi.injectEndpoints({
     getAdminOverview: builder.query({
       query: () => ({ url: '/admin/overview', method: 'GET' }),
       transformResponse: mapAdminOverviewResponse,
+      providesTags: [{ type: 'AdminFleet', id: 'OVERVIEW' }],
     }),
   }),
 });

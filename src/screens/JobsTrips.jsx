@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { Link, useNavigate } from "../router.js";
 import {
   Avatar,
@@ -21,13 +22,19 @@ import {
   StatCard,
   TextField,
 } from "../ds.js";
-import { useGetAdminJobsQuery } from "../store/features/jobs/jobsApi.js";
 import {
-  approveJob,
-  cancelJob,
-  createJob,
-  markJobDelivered,
-} from "../mock/api.js";
+  useGetAdminJobsQuery,
+  useGetAdminJobStatsQuery,
+  useGetAdminJobsPendingDocsQuery,
+  useGetAdminJobContainerTypesQuery,
+  useLazyExportAdminJobsQuery,
+  useLazyExportAdminJobSheetQuery,
+  useMarkAdminJobDeliveredMutation,
+  useValidateAdminJobDocumentsMutation,
+  useRejectAdminJobDocsMutation,
+} from "../store/features/jobs/jobsApi.js";
+import { useInterveneAdminTriangulationJobMutation } from "../store/features/triangulation/triangulationApi.js";
+import { createJob } from "../mock/api.js";
 import { statusTone } from "./JobDetail.jsx";
 import { getJobTripCounts, getJobTrips } from "../domain/jobTrips.js";
 import styles from "./JobsTrips.module.css";
@@ -40,9 +47,51 @@ const REQUEST_TYPES = [
 ];
 const DATE_OPTIONS = [
   "All Dates",
-  "May 24 – May 30, 2026",
-  "May 18 – May 23, 2026",
+  "Last 7 Days",
+  "Previous 7 Days",
 ];
+const TAB_API_VALUE = {
+  "Pending Approval": "pendingApproval", Bidding: "bidding", Assigned: "assigned",
+  "In Transit": "inTransit", Delivered: "delivered", Cancelled: "cancelled", Flagged: "flagged",
+  Rejected: "rejected",
+};
+const TRIP_TYPE_API_VALUE = {
+  "Import (Container)": "PORT_TO_DESTINATION", Export: "EXPORT",
+  "Transfer / Value Chain": "PORT_TO_PORT", "Break-Bulk": "BULK_BREAK",
+};
+const DELIVERY_ROLES = new Set(["SUPER_ADMIN", "OPS_ADMIN"]);
+
+function dateRange(value) {
+  if (value === "All Dates") return {};
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const from = new Date(start);
+  const to = new Date(start);
+  if (value === "Previous 7 Days") {
+    from.setDate(from.getDate() - 13);
+    to.setDate(to.getDate() - 7);
+  } else {
+    from.setDate(from.getDate() - 6);
+  }
+  to.setHours(23, 59, 59, 999);
+  return { dateFrom: from.toISOString(), dateTo: to.toISOString() };
+}
+
+function apiErrorMessage(error, fallback) {
+  const detail = error?.data?.message || error?.data?.error || error?.message || error?.error;
+  return Array.isArray(detail) ? detail.join(", ") : typeof detail === "string" && detail.trim() ? detail : fallback;
+}
+
+function downloadCsv(csv, filename) {
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 const naira = (number) => number == null
   ? "—"
   : `₦${Math.round(number).toLocaleString("en-NG")}`;
@@ -50,7 +99,9 @@ const shortType = (type) =>
   type === "Transfer / Value Chain" ? "Transfer" : type;
 
 function normalize(job) {
-  const tripCounts = getJobTripCounts(job);
+  const tripCounts = job.assignmentDataAvailable
+    ? { required: job.totalTrips ?? 0, assigned: job.assignedTrips ?? 0 }
+    : getJobTripCounts(job);
   const trips = getJobTrips(job);
   const truckingCompany = job.truckingCompany || job.truckCompany || null;
   return {
@@ -63,9 +114,10 @@ function normalize(job) {
         : "—"),
     displayType: job.requestType || job.cargoType || "—",
     displayForwarder: job.forwarder || "—",
-    displayCreated: job.createdAt || job.published || "—",
+    displayCreated: job.displayCreated || job.createdAt || job.published || "—",
     displayDeadline: job.displayDeadline || null,
-    displayCargo: job.cargoDetails || job.cargo || job.cargoType || "—",
+    displayCargo: job.displayCargo || job.cargoDetails || job.cargo || job.cargoType || "—",
+    displayCargoFilter: job.cargoType || "—",
     tripCounts,
     trips,
     displayAssignee: job.assignmentDataAvailable === false
@@ -117,38 +169,13 @@ function FilterControl({ name, value, options, menu, setMenu, onChange }) {
   );
 }
 
-function Inspector({ job, onClose, onAction, menu, setMenu }) {
+function Inspector({ job, onClose, onAction, menu, setMenu, canDeliver }) {
   if (!job) return null;
-  const pending = job.status === "Pending Approval";
-  const timeline = [
-    { title: "Job Created", description: job.displayCreated, state: "done" },
-    pending
-      ? {
-          title: "Pending Approval",
-          description: "Awaiting review",
-          state: "warning",
-        }
-      : {
-          title: job.status,
-          description: job.updatedAt || "Status from jobs list",
-          state: job.status === "Cancelled" ? "danger" : "current",
-        },
-    {
-      title: pending
-        ? "—"
-        : job.status === "Delivered"
-          ? "Delivered"
-          : job.displayDeadline
-            ? "Delivery Deadline"
-            : "Delivery",
-      description: pending
-        ? "Not started"
-        : job.status === "Delivered"
-          ? job.deliveryDate || "Delivery completed"
-          : job.displayDeadline || job.deliveryDate || "In progress",
-      state: job.status === "Delivered" ? "done" : "pending",
-    },
-  ];
+  const timeline = job.timeline.map((event) => ({
+    title: event.title,
+    description: event.timestamp ? new Date(event.timestamp).toLocaleString("en-NG") : "Upcoming",
+    state: event.completed ? "done" : "pending",
+  }));
   return (
     <aside className={styles.inspector} aria-label={`Selected job ${job.displayId || job.id}`}>
       <div className={styles.inspectorHead}>
@@ -230,7 +257,7 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
               <DropdownMenu
                 width={240}
                 items={[
-                  ...(job.actionsAvailable === false ? [] : pending
+                  ...(job.canValidateDocs
                     ? [
                         {
                           label: "Approve Job",
@@ -239,7 +266,11 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
                         },
                       ]
                     : []),
-                  ...(job.actionsAvailable === false ? [] : job.status === "In Transit"
+                  ...(job.canRejectDocs ? [{
+                    label: "Reject Documents", icon: "circle-x", tone: "danger",
+                    onClick: () => onAction("reject", job),
+                  }] : []),
+                  ...(job.canMarkDelivered && canDeliver
                     ? [
                         {
                           label: "Mark Delivered",
@@ -253,7 +284,7 @@ function Inspector({ job, onClose, onAction, menu, setMenu }) {
                     icon: "download",
                     onClick: () => onAction("export", job),
                   },
-                  ...(job.actionsAvailable !== false && job.status !== "Cancelled" && job.status !== "Delivered"
+                  ...(job.canCancel
                     ? [
                         { divider: true },
                         {
@@ -357,6 +388,8 @@ function JobsLoading() {
 
 export function JobsTrips() {
   const navigate = useNavigate();
+  const adminRole = useSelector((state) => state.auth.admin?.role);
+  const canDeliver = DELIVERY_ROLES.has(adminRole);
   const [tab, setTab] = useState("All Jobs");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -372,6 +405,8 @@ export function JobsTrips() {
   const [selectedJobId, setSelectedJobId] = useState("");
   const [rowMenu, setRowMenu] = useState(null);
   const [toast, setToast] = useState(null);
+  const [actionDialog, setActionDialog] = useState(null);
+  const [actionNote, setActionNote] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState({
     forwarder: "",
@@ -383,25 +418,54 @@ export function JobsTrips() {
     requiredTrucks: 1,
   });
 
+  const selectedRange = useMemo(() => dateRange(dateFilter), [dateFilter]);
+  const {
+    currentData: containerTypes = [],
+    isError: containerTypesError,
+    refetch: refetchContainerTypes,
+  } = useGetAdminJobContainerTypesQuery();
+  const containerTypeId = containerTypes.find((item) => item.name === cargoFilter)?.id;
+  const selectedTabFilter = TAB_API_VALUE[tab];
+  const selectedStatusFilter = TAB_API_VALUE[statusFilter];
+  const apiStatusFilter = selectedTabFilter || selectedStatusFilter;
+  const listFilters = {
+    statusFilter: apiStatusFilter,
+    search: query.trim() || undefined,
+    tripType: TRIP_TYPE_API_VALUE[typeFilter],
+    containerTypeId,
+    origin: originFilter === "All Locations" ? undefined : originFilter,
+    destination: destinationFilter === "All Locations" ? undefined : destinationFilter,
+    ...selectedRange,
+  };
   const {
     currentData: jobsResponse,
     isLoading: jobsLoading,
     isFetching: jobsFetching,
     isError: jobsError,
     refetch: refetchJobs,
-  } = useGetAdminJobsQuery({ page, limit: pageSize });
+  } = useGetAdminJobsQuery({ ...listFilters, page, limit: pageSize });
+  const {
+    currentData: statsResponse,
+    isError: statsError,
+    refetch: refetchStats,
+  } = useGetAdminJobStatsQuery(selectedRange);
+  const {
+    currentData: pendingDocsResponse,
+    isError: pendingDocsError,
+    refetch: refetchPendingDocs,
+  } = useGetAdminJobsPendingDocsQuery({ search: query.trim() || undefined, page: 1, limit: 3 }, {
+    skip: tab !== "Pending Approval",
+  });
+  const [exportJobs, { isFetching: exportingJobs }] = useLazyExportAdminJobsQuery();
+  const [exportJobSheet, { isFetching: exportingSheet }] = useLazyExportAdminJobSheetQuery();
+  const [markDelivered, { isLoading: markingDelivered }] = useMarkAdminJobDeliveredMutation();
+  const [validateDocs, { isLoading: validatingDocs }] = useValidateAdminJobDocumentsMutation();
+  const [rejectDocs, { isLoading: rejectingDocs }] = useRejectAdminJobDocsMutation();
+  const [interveneJob, { isLoading: cancellingJob }] = useInterveneAdminTriangulationJobMutation();
+  const actionBusy = markingDelivered || validatingDocs || rejectingDocs || cancellingJob;
   const jobsBusy = jobsLoading || jobsFetching;
   const rawJobs = jobsResponse?.rows || [];
-  const jobs = useMemo(
-    () =>
-      rawJobs
-        .map(normalize)
-        .sort(
-          (a, b) =>
-            Number(String(b.displayId).startsWith("JOB-")) - Number(String(a.displayId).startsWith("JOB-")),
-        ),
-    [rawJobs],
-  );
+  const jobs = useMemo(() => rawJobs.map(normalize), [rawJobs]);
 
   useEffect(() => {
     const onGlobalSearch = (event) => setQuery(event.detail || "");
@@ -426,6 +490,7 @@ export function JobsTrips() {
     dateFilter,
     query,
   ]);
+  useEffect(() => { setSelected([]); }, [page, pageSize, tab, statusFilter, typeFilter, cargoFilter, originFilter, destinationFilter, dateFilter, query]);
   useEffect(() => {
     if (!jobs.length) {
       if (selectedJobId && selectedJobId !== null) setSelectedJobId("");
@@ -435,106 +500,45 @@ export function JobsTrips() {
     if (!jobs.some((job) => job.id === selectedJobId)) setSelectedJobId(jobs[0].id);
   }, [jobs, selectedJobId]);
 
-  const counts = useMemo(
-    () => ({
-      total: jobsResponse?.pagination?.total ?? jobs.length,
-      pending: jobs.filter((job) => job.status === "Pending Approval").length,
-      bidding: jobs.filter((job) => job.status === "Bidding").length,
-      assigned: jobs.filter((job) => ["Awaiting Assignment", "Partially Assigned", "Assigned"].includes(job.status)).length,
-      inTransit: jobs.filter((job) => ["In Transit", "Partially Delivered", "Attention Required"].includes(job.status)).length,
-      delivered: jobs.filter((job) => job.status === "Delivered").length,
-      cancelled: jobs.filter((job) =>
-        ["Cancelled", "Rejected"].includes(job.status),
-      ).length,
-      flagged: jobs.filter((job) => job.status === "Rejected").length,
-      value: jobs.reduce((sum, job) => sum + job.displayValue, 0),
-      demurrage: jobs
-        .filter((job) => job.status === "In Transit")
-        .reduce((sum, job) => sum + job.displayValue * 0.04, 0),
-    }),
-    [jobs, jobsResponse?.pagination?.total],
-  );
-  const locations = useMemo(
-    () =>
-      [
-        ...new Set(
-          jobs.flatMap((job) => [job.origin, job.destination]).filter(Boolean),
-        ),
-      ].sort(),
-    [jobs],
-  );
-  const cargoTypes = useMemo(
-    () =>
-      [
-        ...new Set(
-          jobs.map((job) => job.cargoType || job.cargo).filter(Boolean),
-        ),
-      ].sort(),
-    [jobs],
-  );
+  const counts = {
+    total: statsResponse?.tabs.all ?? null,
+    pending: statsResponse?.tabs.pendingApproval ?? null,
+    bidding: statsResponse?.tabs.bidding ?? null,
+    assigned: statsResponse?.tabs.assigned ?? null,
+    inTransit: statsResponse?.tabs.inTransit ?? null,
+    delivered: statsResponse?.tabs.delivered ?? null,
+    cancelled: statsResponse?.tabs.cancelled ?? null,
+    flagged: statsResponse?.tabs.flagged ?? null,
+  };
+  const origins = useMemo(() => [...new Set(jobs.map((job) => job.origin).filter(Boolean))].sort(), [jobs]);
+  const destinations = useMemo(() => [...new Set(jobs.map((job) => job.destination).filter(Boolean))].sort(), [jobs]);
+  const cargoTypes = containerTypes.map((item) => item.name).sort();
   const tabFilters = {
     "All Jobs": () => true,
-    "Pending Approval": (job) => job.status === "Pending Approval",
-    Bidding: (job) => job.status === "Bidding",
-    Assigned: (job) => ["Awaiting Assignment", "Partially Assigned", "Assigned"].includes(job.status),
-    "In Transit": (job) => ["In Transit", "Partially Delivered", "Attention Required"].includes(job.status),
-    Delivered: (job) => job.status === "Delivered",
-    Cancelled: (job) => ["Cancelled", "Rejected"].includes(job.status),
-    Flagged: (job) => job.status === "Rejected",
+    "Pending Approval": (job) => job.stage === "pendingApproval",
+    Bidding: (job) => job.stage === "bidding",
+    Assigned: (job) => job.stage === "assigned",
+    "In Transit": (job) => job.stage === "inTransit",
+    Delivered: (job) => job.stage === "delivered",
+    Cancelled: (job) => job.stage === "cancelled",
+    Flagged: (job) => job.stage === "flagged",
   };
   const filtered = useMemo(
     () =>
-      jobs.filter((job) => {
-        const matchDate =
-          dateFilter === "All Dates" ||
-          (dateFilter.startsWith("May 24")
-            ? /May (2[4-9]|30)/.test(job.displayDeadline || job.displayCreated)
-            : /May (1[8-9]|2[0-3])/.test(job.displayDeadline || job.displayCreated));
-        return (
-          tabFilters[tab]?.(job) &&
-          (statusFilter === "All Statuses" || job.status === statusFilter) &&
-          (typeFilter === "All Types" || job.displayType === typeFilter) &&
-          (cargoFilter === "All Cargo" ||
-            (job.cargoType || job.cargo) === cargoFilter) &&
-          (originFilter === "All Locations" || job.origin === originFilter) &&
-          (destinationFilter === "All Locations" ||
-            job.destination === destinationFilter) &&
-          matchDate &&
-          (!query ||
-            [
-              job.displayId,
-              job.id,
-              job.displayForwarder,
-              job.displayRoute,
-              job.displayCargo,
-            ].some((value) =>
-              String(value || "")
-                .toLowerCase()
-                .includes(query.toLowerCase()),
-            ))
-        );
-      }),
-    [
-      jobs,
-      tab,
-      statusFilter,
-      typeFilter,
-      cargoFilter,
-      originFilter,
-      destinationFilter,
-      dateFilter,
-      query,
-    ],
+      jobs.filter((job) => tabFilters[tab]?.(job)
+        && (statusFilter === "All Statuses" || (selectedStatusFilter
+          ? job.stage === selectedStatusFilter
+          : job.status === statusFilter))),
+    [jobs, tab, statusFilter, selectedStatusFilter],
   );
   const paged = filtered;
   const pageCount = Math.max(1, jobsResponse?.pagination?.totalPages || 1);
-  const hasLocalFilters = Boolean(
-    query || tab !== "All Jobs" || statusFilter !== "All Statuses"
-    || typeFilter !== "All Types" || cargoFilter !== "All Cargo"
-    || originFilter !== "All Locations" || destinationFilter !== "All Locations"
-    || dateFilter !== "All Dates",
-  );
+  const hasLocalFilters = statusFilter !== "All Statuses" && Boolean(selectedTabFilter || !selectedStatusFilter);
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
+  const statCaption = dateFilter === "All Dates" ? "vs last week" : "vs previous period";
+  const card = (key) => statsResponse?.cards[key];
+  const statDelta = (key) => card(key)?.changePercent == null ? undefined : `${Math.abs(card(key).changePercent)}%`;
+  const statDirection = (key) => card(key)?.trend === "DOWN" ? "down" : "up";
 
   function resetFilters() {
     setStatusFilter("All Statuses");
@@ -579,34 +583,67 @@ export function JobsTrips() {
           .join(","),
       )
       .join("\n");
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    link.download = `trukkas-jobs-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadCsv(csv, `trukkas-jobs-selected-${new Date().toISOString().slice(0, 10)}.csv`);
     setToast({
       tone: "success",
       title: `${rows.length} job${rows.length === 1 ? "" : "s"} exported.`,
     });
   }
+  async function exportAllJobs() {
+    try {
+      const csv = await exportJobs(listFilters).unwrap();
+      downloadCsv(csv, `jobs-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      setToast({ tone: "success", title: "Jobs exported." });
+    } catch (error) {
+      setToast({ tone: "danger", title: apiErrorMessage(error, "Unable to export jobs.") });
+    }
+  }
+  function openAction(type, job) {
+    setActionNote("");
+    setActionDialog({ type, job });
+  }
   async function handleAction(action, job) {
     setMenu(null);
     setRowMenu(null);
+    if (actionBusy || (action === "deliver" && !canDeliver)) return;
     if (action === "view") {
       return navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`);
     }
-    if (action === "export") return exportRows([job]);
-    if (job.actionsAvailable === false) {
-      setToast({ tone: "warning", title: "Job actions are not connected yet." });
+    if (action === "export") {
+      try {
+        const csv = await exportJobSheet(job.id).unwrap();
+        downloadCsv(csv, `${job.displayId || job.id}-job-sheet.csv`);
+        setToast({ tone: "success", title: "Job sheet exported." });
+      } catch (error) {
+        setToast({ tone: "danger", title: apiErrorMessage(error, "Unable to export the job sheet.") });
+      }
       return;
     }
-    if (action === "approve") await approveJob(job.id);
-    if (action === "deliver") await markJobDelivered(job.id);
-    if (action === "cancel") await cancelJob(job.id);
-    setToast({
-      tone: action === "cancel" ? "warning" : "success",
-      title: `${job.displayId || job.id} ${action === "approve" ? "approved" : action === "deliver" ? "marked delivered" : "cancelled"}.`,
-    });
+    if (action === "approve") {
+      try {
+        await validateDocs(job.id).unwrap();
+        setToast({ tone: "success", title: `${job.displayId || job.id} documents validated.` });
+      } catch (error) {
+        setToast({ tone: "danger", title: apiErrorMessage(error, "Unable to validate job documents.") });
+      }
+      return;
+    }
+    if (["deliver", "reject", "cancel"].includes(action)) openAction(action, job);
+  }
+  async function confirmAction() {
+    if (!actionDialog || actionBusy) return;
+    const { type, job } = actionDialog;
+    if (type !== "deliver" && !actionNote.trim()) return;
+    try {
+      if (type === "deliver") await markDelivered({ id: job.id, note: actionNote }).unwrap();
+      if (type === "reject") await rejectDocs({ id: job.id, reason: actionNote }).unwrap();
+      if (type === "cancel") await interveneJob({ jobId: job.id, type: "CANCEL_JOB", notes: actionNote }).unwrap();
+      setActionDialog(null);
+      setActionNote("");
+      setToast({ tone: type === "cancel" ? "warning" : "success", title: `${job.displayId || job.id} ${type === "deliver" ? "marked delivered" : type === "reject" ? "documents rejected" : "cancelled"}.` });
+    } catch (error) {
+      setToast({ tone: "danger", title: apiErrorMessage(error, "Unable to update this job.") });
+    }
   }
   async function submitJob(event) {
     event.preventDefault();
@@ -767,7 +804,7 @@ export function JobsTrips() {
                     icon: "eye",
                     onClick: () => handleAction("view", job),
                   },
-                  ...(job.actionsAvailable === false ? [] : job.status === "Pending Approval"
+                  ...(job.canValidateDocs
                     ? [
                         {
                           label: "Approve Job",
@@ -776,7 +813,11 @@ export function JobsTrips() {
                         },
                       ]
                     : []),
-                  ...(job.actionsAvailable === false ? [] : job.status === "In Transit"
+                  ...(job.canRejectDocs ? [{
+                    label: "Reject Documents", icon: "circle-x", tone: "danger",
+                    onClick: () => handleAction("reject", job),
+                  }] : []),
+                  ...(job.canMarkDelivered && canDeliver
                     ? [
                         {
                           label: "Mark Delivered",
@@ -790,7 +831,7 @@ export function JobsTrips() {
                     icon: "download",
                     onClick: () => handleAction("export", job),
                   },
-                  ...(job.actionsAvailable !== false && job.status !== "Cancelled" && job.status !== "Delivered"
+                  ...(job.canCancel
                     ? [
                         { divider: true },
                         {
@@ -827,7 +868,7 @@ export function JobsTrips() {
             }
           >
             <Icon name="calendar-days" size={17} />
-            May 24, 2026 – May 30, 2026
+            {dateFilter}
             <Icon name="chevron-down" size={14} />
           </button>
           {/* <Button icon="plus" onClick={() => setCreateOpen(true)}>
@@ -859,52 +900,57 @@ export function JobsTrips() {
           </Button>
         </div>
       )}
+      {statsError && <Banner tone="warning" title="Unable to load job totals." action={<Button variant="outline" size="sm" onClick={refetchStats}>Retry</Button>} />}
+      {containerTypesError && <Banner tone="warning" title="Unable to load cargo filter options." action={<Button variant="outline" size="sm" onClick={refetchContainerTypes}>Retry</Button>} />}
       <section className={styles.metrics} aria-label="Job summary">
         <StatCard
           icon="clipboard-list"
           tint="blue"
           label="Total Jobs"
-          value={counts.total.toLocaleString()}
-          delta="12%"
-          caption="vs last week"
+          value={card("totalJobs")?.value?.toLocaleString("en-NG") ?? "—"}
+          delta={statDelta("totalJobs")}
+          direction={statDirection("totalJobs")}
+          caption={statCaption}
           style={{ minHeight: 92, padding: 13 }}
         />
         <StatCard
           icon="clock-3"
           tint="amber"
           label="Pending Approval"
-          value={counts.pending}
-          delta="29%"
-          direction="down"
-          caption="vs last week"
+          value={card("pendingApproval")?.value ?? "—"}
+          delta={statDelta("pendingApproval")}
+          direction={statDirection("pendingApproval")}
+          caption={statCaption}
           style={{ minHeight: 92, padding: 13 }}
         />
         <StatCard
           icon="truck"
           tint="blue"
           label="In Transit"
-          value={counts.inTransit}
-          delta="14%"
-          caption="vs last week"
+          value={card("inTransit")?.value ?? "—"}
+          delta={statDelta("inTransit")}
+          direction={statDirection("inTransit")}
+          caption={statCaption}
           style={{ minHeight: 92, padding: 13 }}
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Delivered"
-          value={counts.delivered}
-          delta="14%"
-          caption="vs last week"
+          value={card("delivered")?.value ?? "—"}
+          delta={statDelta("delivered")}
+          direction={statDirection("delivered")}
+          caption={statCaption}
           style={{ minHeight: 92, padding: 13 }}
         />
         <StatCard
           icon="circle-x"
           tint="red"
           label="Cancelled"
-          value={counts.cancelled}
-          delta="5%"
-          direction="down"
-          caption="vs last week"
+          value={card("cancelled")?.value ?? "—"}
+          delta={statDelta("cancelled")}
+          direction={statDirection("cancelled")}
+          caption={statCaption}
           style={{ minHeight: 92, padding: 13 }}
         />
         {/* <StatCard
@@ -944,10 +990,17 @@ export function JobsTrips() {
               key={name}
               onClick={() => setTab(name)}
             >
-              {name} <span>({count})</span>
+              {name} <span>({count ?? "—"})</span>
             </button>
           ))}
         </div>
+        {tab === "Pending Approval" && pendingDocsResponse?.pagination.total > 0 && (
+          <Banner tone="info" title={`${pendingDocsResponse.pagination.total} job${pendingDocsResponse.pagination.total === 1 ? "" : "s"} awaiting document upload`} style={{ margin: "12px 16px 0" }}>
+            {pendingDocsResponse.rows.map((job, index) => <span key={job.id}>{index > 0 ? " · " : ""}<Link to={`/jobs/detail?id=${encodeURIComponent(job.id)}`}>{job.displayId}</Link></span>)}
+            {pendingDocsResponse.pagination.total > pendingDocsResponse.rows.length ? " · more pending" : ""}
+          </Banner>
+        )}
+        {tab === "Pending Approval" && pendingDocsError && <Banner tone="warning" title="Unable to load jobs awaiting documents." action={<Button variant="outline" size="sm" onClick={refetchPendingDocs}>Retry</Button>} style={{ margin: "12px 16px 0" }} />}
         <div className={styles.filterBar}>
           <FilterControl
             name="Job Status"
@@ -956,14 +1009,11 @@ export function JobsTrips() {
               "All Statuses",
               "Pending Approval",
               "Bidding",
-              "Awaiting Assignment",
-              "Partially Assigned",
               "Assigned",
               "In Transit",
-              "Partially Delivered",
-              "Attention Required",
               "Delivered",
               "Cancelled",
+              "Flagged",
               "Rejected",
             ]}
             menu={menu}
@@ -989,7 +1039,7 @@ export function JobsTrips() {
           <FilterControl
             name="Origin"
             value={originFilter}
-            options={["All Locations", ...locations]}
+            options={["All Locations", ...origins]}
             menu={menu}
             setMenu={setMenu}
             onChange={setOriginFilter}
@@ -997,7 +1047,7 @@ export function JobsTrips() {
           <FilterControl
             name="Destination"
             value={destinationFilter}
-            options={["All Locations", ...locations]}
+            options={["All Locations", ...destinations]}
             menu={menu}
             setMenu={setMenu}
             onChange={setDestinationFilter}
@@ -1034,15 +1084,12 @@ export function JobsTrips() {
               <Button
                 variant="outline"
                 icon="download"
-                onClick={() =>
-                  exportRows(
-                    selected.length
-                      ? jobs.filter((job) => selected.includes(job.id))
-                      : filtered,
-                  )
-                }
+                disabled={exportingJobs || exportingSheet}
+                onClick={() => selected.length
+                  ? exportRows(jobs.filter((job) => selected.includes(job.id)))
+                  : void exportAllJobs()}
               >
-                Export
+                {exportingJobs ? "Exporting…" : "Export"}
               </Button>
               <IconButton icon="list" label="List view" tone="outline" />
               <IconButton icon="grid-2x2" label="Grid view" tone="outline" />
@@ -1103,10 +1150,37 @@ export function JobsTrips() {
               onAction={handleAction}
               menu={menu}
               setMenu={setMenu}
+              canDeliver={canDeliver}
             />
           )}
         </div>
       </Card>
+      <Modal
+        open={Boolean(actionDialog)}
+        onClose={() => { if (!actionBusy) setActionDialog(null); }}
+        title={actionDialog?.type === "deliver" ? "Mark Job Delivered" : actionDialog?.type === "reject" ? "Reject Documents" : "Cancel Job"}
+        description={actionDialog?.job?.displayId || ""}
+        footer={<>
+          <Button variant="outline" disabled={actionBusy} onClick={() => setActionDialog(null)}>Close</Button>
+          <Button disabled={actionBusy || (actionDialog?.type !== "deliver" && !actionNote.trim())} onClick={() => void confirmAction()}>
+            {actionBusy ? "Saving…" : actionDialog?.type === "deliver" ? "Mark Delivered" : actionDialog?.type === "reject" ? "Reject Documents" : "Cancel Job"}
+          </Button>
+        </>}
+      >
+        {actionDialog?.type === "deliver" && <Banner tone="warning" title="This completes the job and releases the trucker’s final payment." />}
+        {actionDialog?.type === "cancel" && <Banner tone="warning" title="This cancels the job and holds escrow for review." />}
+        <div style={{ marginTop: 14 }}>
+          <TextField
+            label={actionDialog?.type === "deliver" ? "Note (optional)" : "Reason"}
+            required={actionDialog?.type !== "deliver"}
+            value={actionNote}
+            maxLength={actionDialog?.type === "deliver" ? 500 : undefined}
+            disabled={actionBusy}
+            onChange={(event) => setActionNote(event.target.value)}
+            placeholder={actionDialog?.type === "deliver" ? "How was delivery confirmed?" : "Explain the decision"}
+          />
+        </div>
+      </Modal>
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}

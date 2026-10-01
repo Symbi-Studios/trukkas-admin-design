@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
   Avatar,
@@ -11,15 +12,24 @@ import {
   Card,
   DataTable,
   EmptyState,
+  Modal,
   Pagination,
   PageHeader,
   SectionCard,
   Skeleton,
   Tabs,
+  TextField,
   Timeline,
 } from "../ds.js";
-import { useGetAdminJobDetailQuery } from "../store/features/jobs/jobsApi.js";
+import {
+  useGetAdminJobDetailQuery,
+  useLazyExportAdminJobSheetQuery,
+  useMarkAdminJobDeliveredMutation,
+  useValidateAdminJobDocumentsMutation,
+  useRejectAdminJobDocsMutation,
+} from "../store/features/jobs/jobsApi.js";
 import { useGetAdminBidsQuery } from "../store/features/bids/bidsApi.js";
+import { useInterveneAdminTriangulationJobMutation } from "../store/features/triangulation/triangulationApi.js";
 import { statusTone } from "./JobDetail.jsx";
 import "./JobDetail.css";
 
@@ -32,6 +42,23 @@ const TABS = [
   "Financials",
   "Activity Log",
 ];
+const DELIVERY_ROLES = new Set(["SUPER_ADMIN", "OPS_ADMIN"]);
+
+function apiErrorMessage(error, fallback) {
+  const detail = error?.data?.message || error?.data?.error || error?.message || error?.error;
+  return Array.isArray(detail) ? detail.join(", ") : typeof detail === "string" && detail.trim() ? detail : fallback;
+}
+
+function downloadCsv(csv, filename) {
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 function shown(value) {
   return value == null || value === "" ? "—" : value;
@@ -110,10 +137,15 @@ function LoadingDetail() {
 
 export function AdminJobDetail() {
   const navigate = useNavigate();
+  const adminRole = useSelector((state) => state.auth.admin?.role);
   const searchParams = useSearchParams();
   const id = searchParams.get("id")?.trim() || "";
   const [tab, setTab] = useState("Overview");
   const [bidsPage, setBidsPage] = useState(1);
+  const [actionDialog, setActionDialog] = useState(null);
+  const [actionNote, setActionNote] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState(null);
   const { currentData: job, isLoading, isFetching, error, refetch } = useGetAdminJobDetailQuery(id, {
     skip: !id,
     refetchOnMountOrArgChange: true,
@@ -128,6 +160,42 @@ export function AdminJobDetail() {
     skip: !id || tab !== "Bids & Responses",
     refetchOnMountOrArgChange: true,
   });
+  const [exportJobSheet, { isFetching: exportingSheet }] = useLazyExportAdminJobSheetQuery();
+  const [markDelivered, { isLoading: markingDelivered }] = useMarkAdminJobDeliveredMutation();
+  const [validateDocs, { isLoading: validatingDocs }] = useValidateAdminJobDocumentsMutation();
+  const [rejectDocs, { isLoading: rejectingDocs }] = useRejectAdminJobDocsMutation();
+  const [interveneJob, { isLoading: cancellingJob }] = useInterveneAdminTriangulationJobMutation();
+  const actionBusy = markingDelivered || validatingDocs || rejectingDocs || cancellingJob;
+
+  function openAction(type) {
+    setActionNote("");
+    setActionError("");
+    setActionDialog(type);
+  }
+  async function exportSheet() {
+    try {
+      const csv = await exportJobSheet(id).unwrap();
+      downloadCsv(csv, `${job.displayId}-job-sheet.csv`);
+      setNotice({ tone: "success", title: "Job sheet exported." });
+    } catch (requestError) {
+      setNotice({ tone: "danger", title: apiErrorMessage(requestError, "Unable to export the job sheet.") });
+    }
+  }
+  async function confirmAction() {
+    if (!job || !actionDialog || actionBusy) return;
+    if (["reject", "cancel"].includes(actionDialog) && !actionNote.trim()) return;
+    try {
+      if (actionDialog === "validate") await validateDocs(job.id).unwrap();
+      if (actionDialog === "reject") await rejectDocs({ id: job.id, reason: actionNote }).unwrap();
+      if (actionDialog === "deliver") await markDelivered({ id: job.id, note: actionNote }).unwrap();
+      if (actionDialog === "cancel") await interveneJob({ jobId: job.id, type: "CANCEL_JOB", notes: actionNote }).unwrap();
+      setNotice({ tone: "success", title: actionDialog === "validate" ? "Documents validated." : actionDialog === "reject" ? "Documents rejected." : actionDialog === "deliver" ? "Job marked delivered." : "Job cancelled." });
+      setActionDialog(null);
+      setActionNote("");
+    } catch (requestError) {
+      setActionError(apiErrorMessage(requestError, "Unable to update this job."));
+    }
+  }
 
   if (!id) {
     return <Card><EmptyState icon="package" title="Job ID missing" description="Open a job from the Jobs page to view its details." action={<Button onClick={() => navigate("/jobs")}>Back to Jobs</Button>} /></Card>;
@@ -163,8 +231,14 @@ export function AdminJobDetail() {
         title={job.displayId}
         meta={<Badge tone={statusTone(job.status)} dot>{job.status}</Badge>}
         description={`Job ID ${job.id}`}
-        actions={<Button variant="outline" icon="arrow-left" onClick={() => navigate("/jobs")}>Back to Jobs</Button>}
+        actions={<span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Button variant="outline" icon="download" disabled={exportingSheet} onClick={() => void exportSheet()}>{exportingSheet ? "Exporting…" : "Export Job Sheet"}</Button>
+          {job.canMarkDelivered && DELIVERY_ROLES.has(adminRole) && <Button variant="outline" icon="circle-check" onClick={() => openAction("deliver")}>Mark Delivered</Button>}
+          {job.canCancel && <Button variant="outline" icon="ban" onClick={() => openAction("cancel")}>Cancel Job</Button>}
+          <Button variant="outline" icon="arrow-left" onClick={() => navigate("/jobs")}>Back to Jobs</Button>
+        </span>}
       />
+      {notice && <Banner tone={notice.tone} title={notice.title} />}
       <Tabs
         value={tab}
         onChange={setTab}
@@ -333,7 +407,10 @@ export function AdminJobDetail() {
       )}
       {tab === "Tracking & Updates" && <SectionCard title="Tracking Timeline">{timeline.length ? <Timeline items={timeline} /> : <EmptyState icon="route" title="No tracking timeline available" />}</SectionCard>}
       {tab === "Documents" && (
-        <SectionCard title="Documents" description={`Approval status: ${shown(job.documentApprovalStatus)}`}>
+        <SectionCard title="Documents" description={`Approval status: ${shown(job.documentApprovalStatus)}`} action={job.canValidateDocs && <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Button size="sm" variant="outline" onClick={() => openAction("validate")}>Validate Documents</Button>
+          <Button size="sm" variant="outline" onClick={() => openAction("reject")}>Reject Documents</Button>
+        </span>}>
           <div className="jd-finance-rows">
             {job.documents.map((document) => {
               const url = safeDocumentUrl(document.url);
@@ -357,7 +434,58 @@ export function AdminJobDetail() {
           </div>
         </SectionCard>
       )}
-      {tab === "Activity Log" && <SectionCard title="Activity Log"><EmptyState icon="clock" title="Activity log unavailable" description="The job response provides milestone events but no audit log with actors or detailed changes." /></SectionCard>}
+      {tab === "Activity Log" && (
+        <SectionCard title={`Activity Log (${job.activityLog.length})`} description="Recorded job, document, bid, trip and payment events.">
+          {job.activityLog.length ? (
+            <DataTable
+              rows={[...job.activityLog].sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime())}
+              rowKey={(event) => event.id}
+              columns={[
+                {
+                  key: "activity",
+                  header: "Activity",
+                  render: (event) => <span style={{ display: "grid", gap: 3 }}>
+                    <strong>{event.description}</strong>
+                    <small className="tk-meta">{[event.category, event.action].filter(Boolean).join(" · ")}</small>
+                  </span>,
+                },
+                {
+                  key: "actor",
+                  header: "Performed By",
+                  render: (event) => event.actor?.name || event.actor?.type || "System",
+                },
+                { key: "at", header: "Date & Time", render: (event) => dateTime(event.at) },
+              ]}
+            />
+          ) : <EmptyState icon="clock" title="No activity recorded" description="Activity will appear here as the job progresses." />}
+        </SectionCard>
+      )}
+      <Modal
+        open={Boolean(actionDialog)}
+        onClose={() => { if (!actionBusy) setActionDialog(null); }}
+        title={actionDialog === "validate" ? "Validate Documents" : actionDialog === "reject" ? "Reject Documents" : actionDialog === "deliver" ? "Mark Job Delivered" : "Cancel Job"}
+        description={job.displayId}
+        footer={<>
+          <Button variant="outline" disabled={actionBusy} onClick={() => setActionDialog(null)}>Close</Button>
+          <Button disabled={actionBusy || (["reject", "cancel"].includes(actionDialog) && !actionNote.trim())} onClick={() => void confirmAction()}>
+            {actionBusy ? "Saving…" : actionDialog === "validate" ? "Validate Documents" : actionDialog === "reject" ? "Reject Documents" : actionDialog === "deliver" ? "Mark Delivered" : "Cancel Job"}
+          </Button>
+        </>}
+      >
+        {actionDialog === "validate" && <Banner tone="info" title="Validated documents make this job visible to truckers for bidding." />}
+        {actionDialog === "deliver" && <Banner tone="warning" title="This completes the job and releases the trucker’s final payment." />}
+        {actionDialog === "cancel" && <Banner tone="warning" title="This cancels the job and holds escrow for review." />}
+        {actionError && <Banner tone="danger" title={actionError} style={{ marginTop: 12 }} />}
+        {actionDialog !== "validate" && <div style={{ marginTop: 14 }}><TextField
+          label={actionDialog === "deliver" ? "Note (optional)" : "Reason"}
+          required={actionDialog !== "deliver"}
+          value={actionNote}
+          maxLength={actionDialog === "deliver" ? 500 : undefined}
+          disabled={actionBusy}
+          onChange={(event) => setActionNote(event.target.value)}
+          placeholder={actionDialog === "deliver" ? "How was delivery confirmed?" : "Explain the decision"}
+        /></div>}
+      </Modal>
     </div>
   );
 }
