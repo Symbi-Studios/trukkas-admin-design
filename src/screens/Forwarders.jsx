@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Link } from "../router.js";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
   Button,
@@ -21,162 +21,16 @@ import {
   DropdownMenu,
   IconButton,
   Icon,
-  Avatar,
+  Avatar, Banner, Modal, EmptyState,
 } from "../ds.js";
 
-// Forwarders are individuals (people) who arrange freight movement on the platform.
-// An exporter is a forwarder who additionally holds a valid export license.
-const FORWARDERS = [
-  {
-    id: "FWD-000128",
-    name: "Michael Okafor",
-    email: "michael.okafor82@gmail.com",
-    phone: "+234 803 123 4567",
-    location: "Lagos, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: true,
-    jobs: 128,
-    spend: 245680000,
-    joined: "Jan 15, 2024",
-  },
-  {
-    id: "FWD-000129",
-    name: "Jide Adesina",
-    email: "jide.adesina@gmail.com",
-    phone: "+234 806 987 6543",
-    location: "Lagos, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: false,
-    jobs: 96,
-    spend: 186450000,
-    joined: "Feb 20, 2024",
-  },
-  {
-    id: "FWD-000130",
-    name: "Hauwa Muhammad",
-    email: "hauwa.muhammad@yahoo.com",
-    phone: "+234 802 345 6789",
-    location: "Kano, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: true,
-    jobs: 74,
-    spend: 142350000,
-    joined: "Mar 10, 2024",
-  },
-  {
-    id: "FWD-000131",
-    name: "Tunde Balogun",
-    email: "tunde.balogun@gmail.com",
-    phone: "+234 813 456 7890",
-    location: "Port Harcourt, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: false,
-    jobs: 63,
-    spend: 98760000,
-    joined: "Apr 5, 2024",
-  },
-  {
-    id: "FWD-000132",
-    name: "Amina Yusuf",
-    email: "amina.yusuf@gmail.com",
-    phone: "+234 805 678 9012",
-    location: "Kaduna, Nigeria",
-    status: "Pending",
-    verification: "Pending",
-    isExporter: false,
-    jobs: 12,
-    spend: 18450000,
-    joined: "May 8, 2024",
-  },
-  {
-    id: "FWD-000133",
-    name: "Emeka Nwosu",
-    email: "emeka.nwosu@gmail.com",
-    phone: "+234 817 234 5678",
-    location: "Enugu, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: false,
-    jobs: 55,
-    spend: 76540000,
-    joined: "Jun 12, 2024",
-  },
-  {
-    id: "FWD-000134",
-    name: "Blessing Ojo",
-    email: "blessing.ojo@yahoo.com",
-    phone: "+234 809 876 5432",
-    location: "Ibadan, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: true,
-    jobs: 47,
-    spend: 65230000,
-    joined: "Jul 1, 2024",
-  },
-  {
-    id: "FWD-000135",
-    name: "Samuel Eze",
-    email: "samuel.eze@gmail.com",
-    phone: "+234 804 321 0987",
-    location: "Abuja, Nigeria",
-    status: "Suspended",
-    verification: "Verified",
-    isExporter: false,
-    jobs: 0,
-    spend: 0,
-    joined: "Aug 18, 2024",
-  },
-  {
-    id: "FWD-000136",
-    name: "Salma Ibrahim",
-    email: "salma.ibrahim@gmail.com",
-    phone: "+234 816 765 4321",
-    location: "Jos, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: false,
-    jobs: 31,
-    spend: 42190000,
-    joined: "Sep 3, 2024",
-  },
-  {
-    id: "FWD-000137",
-    name: "Peter Obi",
-    email: "peter.obi@gmail.com",
-    phone: "+234 812 654 3210",
-    location: "Warri, Nigeria",
-    status: "Active",
-    verification: "Verified",
-    isExporter: true,
-    jobs: 34,
-    spend: 53780000,
-    joined: "Oct 10, 2024",
-  },
-];
+import { forwarderMoney, forwarderError, useGetAdminForwarderDirectoryQuery, useGetAdminPendingExporterLicensesQuery } from '../store/features/forwarders/forwardersApi.js';
+import { ForwardersLoading } from './ForwardersLoading.jsx';
+import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
+import { ForwarderActionModal, ForwarderAnnouncementModal, downloadForwarderCsv } from './ForwarderActions.jsx';
+import './ForwarderDetail.css';
 
-const STATS = {
-  total: 286,
-  active: 243,
-  pending: 18,
-  suspended: 5,
-  exporters: 64,
-  totalDelta: "18%",
-  activeDelta: "16%",
-  pendingDelta: "10%",
-  suspendedDelta: "29%",
-  exportersDelta: "9%",
-  totalJobs: 1842,
-  totalJobsDelta: "21%",
-  totalSpend: 3245680000,
-  totalSpendDelta: "23%",
-};
-
-const STATUSES = ["Active", "Pending", "Suspended"];
+const STATUSES = ["Active", "Pending", "Suspended", "Inactive", "Banned"];
 const VERIFICATIONS = ["Verified", "Pending", "Rejected"];
 const STATUS_TONE = {
   Active: "success",
@@ -188,18 +42,7 @@ const VERIFICATION_META = {
   Pending: { tone: "warning", icon: "hourglass" },
   Rejected: { tone: "danger", icon: "circle-x" },
 };
-const naira = (n) => `₦${n.toLocaleString("en-NG")}`;
-
-const OVERVIEW = [
-  { label: "Active", value: 243, color: "var(--tk-success)" },
-  { label: "Pending", value: 18, color: "var(--tk-warning)" },
-  { label: "Suspended", value: 5, color: "var(--tk-danger-solid)" },
-  { label: "Inactive", value: 20, color: "var(--tk-neutral)" },
-];
-
-const TOP_SPEND = FORWARDERS.filter((f) => f.spend > 0)
-  .sort((a, b) => b.spend - a.spend)
-  .slice(0, 5);
+const naira = forwarderMoney;
 
 function ForwarderCell({ f }) {
   return (
@@ -209,7 +52,7 @@ function ForwarderCell({ f }) {
       <Avatar name={f.name} size={32} />
       <span style={{ display: "grid", gap: 1, minWidth: 0 }}>
         <Link
-          to={`/forwarders/${f.id}`}
+          to={`/forwarders/detail?id=${encodeURIComponent(f.id)}`}
           style={{ font: "600 13px/18px var(--tk-font-sans)" }}
         >
           {f.name}
@@ -221,6 +64,20 @@ function ForwarderCell({ f }) {
 }
 
 export function Forwarders() {
+  const navigate = useNavigate();
+  const directoryQuery = useGetAdminForwarderDirectoryQuery();
+  const pendingQuery = useGetAdminPendingExporterLicensesQuery();
+  const FORWARDERS = directoryQuery.currentData || [];
+  const pendingLicenses = pendingQuery.error ? [] : pendingQuery.currentData?.rows || [];
+  const [action, setAction] = useState(null), [announcement, setAnnouncement] = useState(false), [requestsOpen, setRequestsOpen] = useState(false), [notice, setNotice] = useState(null), [pageSize, setPageSize] = useState(10);
+  const unavailable = (feature) => setNotice({ tone: 'info', text: `${feature} is not available yet.` });
+  const STATS = useMemo(() => {
+    const available = Boolean(directoryQuery.currentData) && !directoryQuery.error;
+    const count = (match) => available ? FORWARDERS.filter(match).length : '—';
+    return { total: available ? FORWARDERS.length : '—', active: count((row) => row.statusCode === 'ACTIVE'), exporters: count((row) => row.isExporter), suspended: count((row) => row.statusCode === 'SUSPENDED'), pending: available && FORWARDERS.every((row) => row.kycStatusCode) ? count((row) => ['PENDING', 'IN_REVIEW', 'PENDING_REVIEW'].includes(row.kycStatusCode)) : '—', totalSpend: null };
+  }, [directoryQuery.currentData, directoryQuery.error]);
+  const OVERVIEW = directoryQuery.currentData && !directoryQuery.error ? STATUSES.map((label, index) => ({ label, value: FORWARDERS.filter((row) => row.status === label).length, color: ['var(--tk-success)', 'var(--tk-warning)', 'var(--tk-danger-solid)', 'var(--tk-neutral)', 'var(--tk-ink-400)'][index] })) : [];
+
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("All Status");
@@ -231,8 +88,8 @@ export function Forwarders() {
   const [menuFor, setMenuFor] = useState(null);
 
   const locations = useMemo(
-    () => [...new Set(FORWARDERS.map((f) => f.location))],
-    [],
+    () => [...new Set(FORWARDERS.map((f) => f.location).filter((value) => value !== "—"))],
+    [directoryQuery.currentData],
   );
 
   const filtered = useMemo(
@@ -241,7 +98,7 @@ export function Forwarders() {
         const matchesQ =
           !q ||
           [f.name, f.id, f.email, f.phone].some((v) =>
-            v.toLowerCase().includes(q.toLowerCase()),
+            String(v || "").toLowerCase().includes(q.toLowerCase()),
           );
         const matchesStatus = status === "All Status" || f.status === status;
         const matchesVerification =
@@ -260,9 +117,16 @@ export function Forwarders() {
           matchesType
         );
       }),
-    [q, status, verification, location, type],
+    [directoryQuery.currentData, q, status, verification, location, type],
   );
 
+  useEffect(() => { setPage(1); }, [q, status, verification, location, type, pageSize]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  function exportList() {
+    downloadForwarderCsv('forwarders.csv', [['ID', 'Name', 'Type', 'Email', 'Phone', 'Location', 'Status', 'Verification', 'Total Jobs', 'Total Spend (NGN)', 'Joined'], ...filtered.map((row) => [row.id, row.name, row.isExporter ? 'Exporter' : 'Forwarder', row.email, row.phone, row.location, row.status, row.verification, row.jobs, row.spend, row.joined])]);
+  }
+  if (!directoryQuery.currentData && directoryQuery.isFetching) return <ForwardersLoading />;
   return (
     <>
       <PageHeader
@@ -271,45 +135,38 @@ export function Forwarders() {
         description="Manage and monitor all forwarders and exporters on the platform. Forwarders are individuals; an exporter is a forwarder holding a valid export license."
         actions={
           <>
-            <Button icon="plus">Add Forwarder</Button>
-            <Button variant="outline" icon="download" iconRight="chevron-down">
+            <Button icon="plus" onClick={() => unavailable("Adding a forwarder")}>Add Forwarder</Button>
+            <Button variant="outline" icon="download" iconRight="chevron-down" disabled={!directoryQuery.currentData || Boolean(directoryQuery.error)} onClick={exportList}>
               Export
             </Button>
-            <Button variant="outline" icon="sliders-horizontal">
+            <Button variant="outline" icon="sliders-horizontal" onClick={() => setOpenFilter("type")}>
               Filters
             </Button>
           </>
         }
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "var(--tk-space-4)",
-        }}
-      >
+      {notice && <Banner tone={notice.tone} action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice.text}</Banner>}
+      {directoryQuery.error && <Banner tone="danger" title="Unable to load forwarders" action={<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button>}>{forwarderError(directoryQuery.error)}</Banner>}
+      {directoryQuery.isFetching && <DriverLoadingNotice>Refreshing forwarders…</DriverLoadingNotice>}
+      {FORWARDERS.some((row) => row.profileUnavailable) && <Banner tone="warning" action={<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button>}>Some profiles could not be loaded. Their joined dates and verification statuses are unavailable.</Banner>}
+      <div className="fw-stats">
         <StatCard
           icon="users"
           label="Total Forwarders"
           value={STATS.total}
-          delta={STATS.totalDelta}
-          caption="vs last 30 days"
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Active Forwarders"
           value={STATS.active}
-          delta={STATS.activeDelta}
-          caption="vs last 30 days"
         />
         <StatCard
           icon="ship"
           tint="teal"
           label="Exporters"
           value={STATS.exporters}
-          delta={STATS.exportersDelta}
           caption="hold export license"
         />
         <StatCard
@@ -317,26 +174,20 @@ export function Forwarders() {
           tint="amber"
           label="Pending Verification"
           value={STATS.pending}
-          delta={STATS.pendingDelta}
           direction="down"
-          caption="vs last 30 days"
         />
         <StatCard
           icon="circle-x"
           tint="purple"
           label="Suspended"
           value={STATS.suspended}
-          delta={STATS.suspendedDelta}
           direction="down"
-          caption="vs last 30 days"
         />
         <StatCard
           icon="wallet"
           tint="blue"
           label="Total Spend (₦)"
           value={naira(STATS.totalSpend)}
-          delta={STATS.totalSpendDelta}
-          caption="vs last 30 days"
         />
       </div>
 
@@ -481,23 +332,16 @@ export function Forwarders() {
                   </span>
                 )}
               </span>
-              <FilterSelect label="More Filters" icon="layout-grid" />
+              <FilterSelect label="More Filters" icon="layout-grid" onClick={() => unavailable("Additional filters")} />
             </>
           }
         />
       </Card>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 320px",
-          gap: "var(--tk-grid-gap)",
-          alignItems: "start",
-        }}
-      >
+      <div className="fw-layout">
         <SectionCard pad="none">
-          <DataTable
-            rows={filtered}
+          {directoryQuery.error ? <EmptyState icon="users" title="Forwarder list unavailable" description="Retry to load the directory." /> : !filtered.length ? <EmptyState icon="users" title="No forwarders found" description="Try different filters or search terms." /> : <DataTable
+            rows={filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
             rowKey={(r) => r.id}
             columns={[
               {
@@ -559,23 +403,23 @@ export function Forwarders() {
                 key: "status",
                 header: "Status",
                 render: (r) => (
-                  <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
+                  <Badge tone={STATUS_TONE[r.status] || "neutral"}>{r.status}</Badge>
                 ),
               },
               {
                 key: "verification",
                 header: "Verification",
                 render: (r) => (
-                  <Badge tone={VERIFICATION_META[r.verification].tone}>
+                  <Badge tone={VERIFICATION_META[r.verification]?.tone || "neutral"}>
                     <Icon
-                      name={VERIFICATION_META[r.verification].icon}
+                      name={VERIFICATION_META[r.verification]?.icon || "info"}
                       size={11}
                     />
                     {r.verification}
                   </Badge>
                 ),
               },
-              { key: "jobs", header: "Total Jobs", align: "right" },
+              { key: "jobs", header: "Total Jobs", align: "right", render: (r) => r.jobs ?? "—" },
               {
                 key: "spend",
                 header: "Total Spend (₦)",
@@ -609,15 +453,10 @@ export function Forwarders() {
                         <DropdownMenu
                           width={200}
                           items={[
-                            { label: "View Details", icon: "eye" },
+                            { label: "View Details", icon: "eye", onClick: () => navigate(`/forwarders/detail?id=${encodeURIComponent(r.id)}`) },
                             { divider: true },
-                            ...STATUSES.filter((s) => s !== r.status).map(
-                              (s) => ({
-                                label: `Mark as ${s}`,
-                                icon: "circle-check",
-                                onClick: () => setMenuFor(null),
-                              }),
-                            ),
+                            ...(r.statusCode === 'SUSPENDED' ? [{ label: 'Reactivate Forwarder', icon: 'circle-check', onClick: () => { setMenuFor(null); setAction({ kind: 'activate', forwarder: r }); } }] : [{ label: 'Suspend Forwarder', icon: 'circle-alert', tone: 'danger', onClick: () => { setMenuFor(null); setAction({ kind: 'suspend', forwarder: r }); } }]),
+                            ...(pendingLicenses.some((row) => row.id === r.id) ? [{ label: 'Review Exporter License', icon: 'ship', onClick: () => { setMenuFor(null); setAction({ kind: 'review', forwarder: pendingLicenses.find((row) => row.id === r.id) }); } }] : []),
                           ]}
                         />
                       </span>
@@ -626,14 +465,14 @@ export function Forwarders() {
                 ),
               },
             ]}
-          />
+          />}
           <Pagination
-            page={page}
-            pageCount={29}
-            total={286}
-            pageSize={10}
-            onPage={setPage}
-            onPageSize={() => {}}
+            page={currentPage}
+            pageCount={pageCount}
+            total={directoryQuery.error ? null : filtered.length}
+            pageSize={pageSize}
+            onPage={(next) => setPage(Math.max(1, Math.min(pageCount, next)))}
+            onPageSize={setPageSize}
           />
         </SectionCard>
 
@@ -657,7 +496,7 @@ export function Forwarders() {
                 style={{ width: "100%" }}
                 items={OVERVIEW.map((o) => ({
                   ...o,
-                  display: `${o.value} (${Math.round((o.value / STATS.total) * 100)}%)`,
+                  display: `${o.value} (${STATS.total ? Math.round((o.value / STATS.total) * 100) : 0}%)`,
                 }))}
                 showShare={false}
               />
@@ -666,60 +505,35 @@ export function Forwarders() {
 
           <SectionCard title="Top Forwarders by Spend">
             <div style={{ display: "grid" }}>
-              {TOP_SPEND.map((f, i) => (
-                <div
-                  key={f.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "9px 0",
-                    borderTop: i ? "1px solid var(--tk-line)" : "none",
-                  }}
-                >
-                  <span className="tk-meta" style={{ width: 16 }}>
-                    {i + 1}
-                  </span>
-                  <span
-                    style={{
-                      flex: 1,
-                      font: "500 13px/18px var(--tk-font-sans)",
-                      color: "var(--tk-ink-900)",
-                    }}
-                  >
-                    {f.name}
-                  </span>
-                  <span
-                    style={{
-                      font: "700 13px/18px var(--tk-font-sans)",
-                      color: "var(--tk-success)",
-                    }}
-                  >
-                    {naira(f.spend)}
-                  </span>
-                </div>
-              ))}
+              <p className="tk-meta">Spending totals and rankings are not available yet.</p>
+
             </div>
             <div style={{ textAlign: "center", marginTop: 10 }}>
-              <a href="#">View full report →</a>
+              <Button variant="ghost" onClick={() => unavailable("The spending report")}>View full report →</Button>
             </div>
           </SectionCard>
 
           <QuickActionsCard
             items={[
-              { icon: "user-plus", label: "Add Forwarder" },
-              { icon: "shield-check", label: "Bulk Verify Forwarders" },
-              { icon: "download", label: "Export Forwarders List" },
-              { icon: "megaphone", label: "Send Announcement" },
+              { icon: "user-plus", label: "Add Forwarder", onClick: () => unavailable("Adding a forwarder") },
+              { icon: "shield-check", label: "Bulk Verify Forwarders", onClick: () => unavailable("Bulk forwarder verification") },
+              { icon: "download", label: "Export Forwarders List", onClick: () => { if (directoryQuery.currentData && !directoryQuery.error) exportList(); else unavailable("Exporting the unloaded directory"); } },
+              { icon: "megaphone", label: "Send Announcement", onClick: () => setAnnouncement(true) },
               {
                 icon: "clipboard-list",
                 label: "View Verification Requests",
-                hint: "18 pending requests",
+                hint: pendingQuery.currentData && !pendingQuery.error ? `${pendingQuery.currentData.count ?? pendingLicenses.length} exporter licenses pending` : "Exporter license requests",
+                onClick: () => setRequestsOpen(true),
               },
             ]}
           />
         </div>
       </div>
+      <Modal open={requestsOpen} title="Verification Requests" description="Exporter licenses awaiting review" width={640} onClose={() => setRequestsOpen(false)}>
+        {pendingQuery.isFetching ? <DriverTableLoading columns={3} label="Loading exporter license requests" /> : pendingQuery.error ? <Banner tone="danger" action={<Button variant="outline" onClick={pendingQuery.refetch}>Retry</Button>}>{forwarderError(pendingQuery.error)}</Banner> : !pendingLicenses.length ? <EmptyState title="No pending exporter licenses" description="Submitted licenses awaiting review will appear here." /> : pendingLicenses.map((row) => <div key={row.id} className="fd-row"><span style={{ flex: 1 }}>{row.name}<small className="tk-meta" style={{ display: 'block' }}>{row.submitted}</small></span><Button variant="outline" onClick={() => { setRequestsOpen(false); setAction({ kind: 'review', forwarder: row }); }}>Review</Button></div>)}
+      </Modal>
+      {action && <ForwarderActionModal key={`${action.kind}:${action.forwarder.id}`} action={action} onClose={() => setAction(null)} onDone={(text) => setNotice({ tone: 'success', text })} />}
+      {announcement && <ForwarderAnnouncementModal onClose={() => setAnnouncement(false)} onDone={(text) => setNotice({ tone: 'success', text })} />}
     </>
   );
 }

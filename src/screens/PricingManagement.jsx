@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSelector } from 'react-redux';
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -22,21 +23,21 @@ import {
   Modal,
   TextField,
   Select,
-  EmptyState,
+  EmptyState, Banner,
 } from "../ds.js";
 import { useCollection } from "../mock/useCollection.js";
 import {
   addServicePricing,
   setServicePricingStatus,
-  setSurchargeStatus,
   approvePriceException,
   rejectPriceException,
 } from "../mock/api.js";
-import {
-  pricingSummary,
-  priceApprovalSummary,
-} from "../mock/fixtures/pricing.js";
 import { formatNaira } from "../mock/format.js";
+
+import { pricingError, useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery } from '../store/features/pricing/pricingApi.js';
+import { PricingLoading, PricingSettingModal } from './PricingSettings.jsx';
+import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
+import './PricingManagement.css';
 
 const TABS = [
   "Service Pricing",
@@ -81,18 +82,20 @@ function FilterButton({ label, value, options, active, onChange }) {
 }
 
 function RowMenu({ items, id, menuFor, setMenuFor }) {
+  const enabledItems = items.filter((item) => !item.disabled);
   return (
     <span style={{ position: "relative" }}>
       <IconButton
         icon="ellipsis-vertical"
+        disabled={!enabledItems.length}
         onClick={() => setMenuFor(menuFor === id ? null : id)}
       />
-      {menuFor === id && (
+      {menuFor === id && enabledItems.length > 0 && (
         <span
           style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }}
           onMouseLeave={() => setMenuFor(null)}
         >
-          <DropdownMenu width={200} items={items} />
+          <DropdownMenu width={200} items={enabledItems} />
         </span>
       )}
     </span>
@@ -176,14 +179,23 @@ function ApprovalTile({ label, value, tone }) {
 export function PricingManagement() {
   const navigate = useNavigate();
   const services = useCollection("servicePricing") || [];
-  const pricingRules = useCollection("pricingRules") || [];
-  const surcharges = useCollection("surcharges") || [];
+  const configQuery = useGetAdminPricingConfigQuery();
+  const config = configQuery.error ? null : configQuery.currentData;
+  const [setting, setSetting] = useState(null), [notice, setNotice] = useState(null);
+  const canEditConfig = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
+  const pricingRules = config?.rules || [];
+  const pricingSummary = { activePriceLists: '—', totalServices: '—', avgPriceChange: '—', priceExceptions: '—', surchargesActive: '—', currency: config?.currency || '—' };
+  const priceApprovalSummary = { pending: '—', approved: '—', rejected: '—' };
   const priceLists = useCollection("priceLists") || [];
   const exceptions = useCollection("priceExceptions") || [];
   const history = useCollection("priceHistory") || [];
   const recentChanges = history.slice(0, 5);
 
   const [tab, setTab] = useState("Service Pricing");
+  const terminalQuery = useGetAdminPricingTerminalRatesQuery(undefined, { skip: tab !== 'Surcharges & Fees' });
+  const terminalRates = terminalQuery.error ? [] : terminalQuery.currentData?.rows || [];
+  const surcharges = [...(config?.fees || []), ...terminalRates];
+  const demoTab = !['Surcharges & Fees', 'Pricing Rules'].includes(tab);
   const [q, setQ] = useState("");
   const [serviceType, setServiceType] = useState("All Services");
   const [jobType, setJobType] = useState("All Job Types");
@@ -272,6 +284,7 @@ export function PricingManagement() {
     setPage(1);
   }
 
+  if (!configQuery.currentData && configQuery.isFetching) return <PricingLoading />;
   return (
     <>
       <PageHeader
@@ -280,7 +293,7 @@ export function PricingManagement() {
         description="Manage service rates, pricing rules and surcharges across Trukkas."
         actions={
           <>
-            <FilterSelect label="May 24 – May 30, 2026" icon="calendar" />
+            <FilterSelect label="Current settings" icon="calendar" />
             <Button variant="outline" icon="filter">
               Filters
             </Button>
@@ -291,53 +304,45 @@ export function PricingManagement() {
         }
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "var(--tk-space-4)",
-        }}
-      >
+      {notice && <Banner tone="success" action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice}</Banner>}
+      {configQuery.error && <Banner tone="danger" title="Unable to load platform pricing" action={<Button variant="outline" onClick={configQuery.refetch}>Retry</Button>}>{pricingError(configQuery.error)}</Banner>}
+      {configQuery.isFetching && <DriverLoadingNotice>Refreshing pricing settings…</DriverLoadingNotice>}
+      <div className="pricing-stats">
         <StatCard
           icon="list-checks"
           tint="blue"
           label="Active Price Lists"
           value={pricingSummary.activePriceLists}
-          delta={pricingSummary.activePriceListsDelta}
-          caption="vs May 17 – May 23"
+          caption="Summary unavailable"
         />
         <StatCard
           icon="package"
           tint="purple"
           label="Total Services"
           value={pricingSummary.totalServices}
-          delta={pricingSummary.totalServicesDelta}
-          caption="vs May 17 – May 23"
+          caption="Summary unavailable"
         />
         <StatCard
           icon="trending-up"
           tint="teal"
           label="Avg. Price Change"
           value={pricingSummary.avgPriceChange}
-          delta={pricingSummary.avgPriceChangeDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption="Summary unavailable"
         />
         <StatCard
           icon="triangle-alert"
           tint="amber"
           label="Price Exceptions"
           value={pricingSummary.priceExceptions}
-          delta={pricingSummary.priceExceptionsDelta}
-          caption="vs May 17 – May 23"
+          caption="Summary unavailable"
         />
         <StatCard
           icon="badge-percent"
           tint="green"
           label="Surcharges Active"
           value={pricingSummary.surchargesActive}
-          delta={pricingSummary.surchargesActiveDelta}
-          caption="vs May 17 – May 23"
+          caption="Summary unavailable"
         />
         <StatCard
           icon="coins"
@@ -348,25 +353,20 @@ export function PricingManagement() {
         />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 320px",
-          gap: "var(--tk-grid-gap)",
-          alignItems: "start",
-        }}
-      >
+      <div className="pricing-layout">
         <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
           <Tabs
             value={tab}
             onChange={(v) => {
               setTab(v);
+              setMenuFor(null);
               setPage(1);
             }}
             style={{ padding: "0 var(--tk-card-pad)" }}
             items={TABS}
           />
 
+          {demoTab && <Banner title="Demo data" style={{ margin: '14px var(--tk-card-pad)' }}>This section uses sample records. Changes here affect the prototype only.</Banner>}
           {tab === "Service Pricing" && (
             <>
               <TableToolbar
@@ -731,6 +731,12 @@ export function PricingManagement() {
           )}
 
           {tab === "Surcharges & Fees" && (
+            <>
+            <Banner style={{ margin: '14px var(--tk-card-pad)' }}>Global fee changes require Super Admin access. Terminal rates can be edited by admins. Flat amounts are in Naira.</Banner>
+            {terminalQuery.isFetching && <><DriverLoadingNotice>Loading terminal rates…</DriverLoadingNotice><DriverTableLoading columns={5} label="Loading terminal rates" /></>}
+            {terminalQuery.error && <Banner tone="danger" title="Unable to load terminal rates" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>{pricingError(terminalQuery.error)}</Banner>}
+            {terminalQuery.currentData?.warnings.length > 0 && <Banner tone="warning" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>Terminal rates could not be loaded for: {terminalQuery.currentData.warnings.join(', ')}.</Banner>}
+            {!surcharges.length && !terminalQuery.isFetching && <EmptyState title="Pricing fees unavailable" description="Retry to load the current pricing settings." />}
             <DataTable
               rows={surcharges}
               rowKey={(r) => r.id}
@@ -788,30 +794,13 @@ export function PricingManagement() {
                       menuFor={menuFor}
                       setMenuFor={setMenuFor}
                       items={[
-                        {
-                          label: "Edit",
-                          icon: "pencil",
-                          onClick: () => setMenuFor(null),
-                        },
-                        {
-                          label:
-                            r.status === "Active" ? "Deactivate" : "Activate",
-                          icon: "circle-slash",
-                          tone: "danger",
-                          onClick: () => {
-                            setSurchargeStatus(
-                              r.id,
-                              r.status === "Active" ? "Inactive" : "Active",
-                            );
-                            setMenuFor(null);
-                          },
-                        },
+                        { label: 'Edit', icon: 'pencil', disabled: !r.editable || (r.source === 'config' ? !canEditConfig || configQuery.isFetching : terminalQuery.isFetching), onClick: () => { setMenuFor(null); if (r.editable && (r.source === 'terminal' || canEditConfig)) setSetting(r); } },
                       ]}
                     />
                   ),
                 },
               ]}
-            />
+            /></>
           )}
 
           {tab === "Price Lists" && (
@@ -850,6 +839,9 @@ export function PricingManagement() {
           )}
 
           {tab === "Pricing Rules" && (
+            <>
+            {!canEditConfig && <Banner style={{ margin: '14px var(--tk-card-pad)' }}>Platform rules can be edited by Super Admins.</Banner>}
+            {!pricingRules.length && !configQuery.isFetching && <EmptyState title="Pricing rules unavailable" description="Retry to load platform configuration." />}
             <DataTable
               rows={pricingRules}
               rowKey={(r) => r.id}
@@ -894,8 +886,9 @@ export function PricingManagement() {
                   header: "Rate / Value",
                   render: (r) => <b>{r.rate}</b>,
                 },
+                { key: 'action', header: '', width: 80, render: (r) => <Button variant="outline" size="sm" disabled={!canEditConfig || !r.editable || configQuery.isFetching} onClick={() => setSetting(r)}>Edit</Button> },
               ]}
-            />
+            /></>
           )}
 
           {tab === "Approvals" && (
@@ -1143,12 +1136,14 @@ export function PricingManagement() {
               </a>
             }
           >
+            <p className="tk-meta">Demo rate history</p>
             {recentChanges.map((c) => (
               <PriceChangeRow key={c.id} c={c} />
             ))}
           </SectionCard>
 
           <SectionCard title="Price Approval Summary">
+            <p className="tk-meta">Approval totals are unavailable.</p>
             <div
               style={{
                 display: "grid",
@@ -1176,11 +1171,12 @@ export function PricingManagement() {
         </div>
       </div>
 
+      {setting && <PricingSettingModal key={setting.id} row={setting} onClose={() => setSetting(null)} onDone={setNotice} />}
       <Modal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         title="Add Pricing"
-        description="Create a new service pricing entry."
+        description="Demo pricing entry. Changes are saved only for this prototype session."
         width={560}
         footer={
           <>

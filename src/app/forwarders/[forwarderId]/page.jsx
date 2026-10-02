@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+import { ForwarderDetailLoading } from '../../../screens/ForwardersLoading.jsx';
 import { ForwarderDetail } from '../../../screens/ForwarderDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('forwarderId'); }
@@ -13,5 +15,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function ForwarderDetailPage() {
-  return <ForwarderDetail />;
+  return <Suspense fallback={<ForwarderDetailLoading />}><ForwarderDetail /></Suspense>;
 }

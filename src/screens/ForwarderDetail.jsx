@@ -1,111 +1,83 @@
 'use client';
 
-import { useState } from 'react';
-import { useNavigate } from '../router.js';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from '../router.js';
+import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
 import {
   Button, Badge, Tag, SectionCard, LabelValue, Card, PageHeader, DropdownMenu, DataTable, Tabs,
-  Timeline, QuickActionsCard, Icon, Avatar, EmptyState,
+  Timeline, QuickActionsCard, Icon, Avatar, EmptyState, Banner, Pagination,
 } from '../ds.js';
 import './ForwarderDetail.css';
 
-// A forwarder is an individual, not a company. isExporter marks a forwarder who
-// additionally holds a valid export license.
-const FORWARDER = {
-  name: 'Michael Okafor', status: 'Active', customerId: 'FWD-000128', isExporter: true,
-  jobs: 128, spend: 245680000, balance: 12450000, memberSince: 'Jan 15, 2024',
-  lastActivity: 'May 8, 2026 10:45 AM',
-  dob: 'Mar 22, 1985 (41 years)', gender: 'Male', nationality: 'Nigerian',
-  nin: '2345 6789 0123', phone: '+234 803 123 4567', altPhone: '+234 809 876 5432',
-  email: 'michael.okafor82@gmail.com', address: '12 Logistics Avenue, Apapa, Lagos State, Nigeria',
-  license: 'FWD/LAS/2021/03456', licenseExpiry: 'Aug 12, 2027',
-  exportLicense: 'EXP/NG/2022/01187', exportLicenseExpiry: 'Jan 30, 2027',
-  yearsExperience: '9 years', languages: 'English, Igbo',
-  services: ['Freight Forwarding', 'Customs Clearance', 'Container Haulage', 'Warehousing Coordination', 'Export Documentation'],
-  coverage: 'Nigeria (Nationwide)', cargoTypes: 'General Cargo, Break-bulk, Containers, Machinery, Vehicles',
-  routes: 'Apapa – Kano, Apapa – Port Harcourt, Apapa – Onne, Apapa – Kaduna',
-  network: 'Coordinates with 15+ partner truck companies and 100+ trucks',
-  other: 'Independent freight forwarder with a strong track record across nationwide haulage and export documentation, focused on safety, compliance and timely delivery.',
-  emergencyContact: 'Ngozi Okafor (Wife)', emergencyPhone: '+234 812 345 6789',
-  creditLimit: 50000000, lastPaymentDate: 'Apr 28, 2026', lastPaymentAmount: 35000000,
-  outstandingCount: 2, outstandingAmount: 18450000, paymentTerms: '30 Days',
-};
+import { forwarderMoney, forwarderError, forwarderVerification, useGetAdminForwarderProfileQuery, useGetAdminPendingExporterLicensesQuery, useGetAdminForwarderDestinationsQuery, useGetAdminForwarderJobsQuery, useGetAdminForwarderTransactionsQuery, useGetAdminForwarderActivityQuery } from '../store/features/forwarders/forwardersApi.js';
+import { ForwarderDetailLoading } from './ForwardersLoading.jsx';
+import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
+import { ForwarderActionModal, ForwarderAnnouncementModal, downloadForwarderCsv } from './ForwarderActions.jsx';
 
-const SERVICE_AREAS = [
-  { name: 'Lagos (Base)', state: 'Lagos State, Nigeria' },
-  { name: 'Port Harcourt', state: 'Rivers State, Nigeria' },
-  { name: 'Kano', state: 'Kano State, Nigeria' },
-];
-
-const JOBS = [
-  { id: 'JB-2026-0842', cargo: 'General Cargo', route: 'Apapa Port → Kano', status: 'In Transit', date: 'May 8, 2026', amount: 36450000 },
-  { id: 'JB-2026-0784', cargo: 'Break-bulk', route: 'Apapa Port → Port Harcourt', status: 'Delivered', date: 'Apr 30, 2026', amount: 28760000 },
-  { id: 'JB-2026-0711', cargo: 'Machinery', route: 'Lagos → Kaduna', status: 'Completed', date: 'Apr 22, 2026', amount: 24180000 },
-  { id: 'JB-2026-0662', cargo: 'General Cargo', route: 'Apapa Port → Onne Port', status: 'Completed', date: 'Apr 15, 2026', amount: 19850000 },
-  { id: 'JB-2026-0591', cargo: 'Containers', route: 'Apapa Port → Kano', status: 'Completed', date: 'Apr 5, 2026', amount: 42500000 },
-];
-
-const NOTES = [
-  { text: 'Credit limit increased to ₦50,000,000', author: 'Trukkas Admin', time: 'Apr 20, 2026 02:15 PM' },
-  { text: 'Requested additional trucks for the Kano route', author: 'Michael Okafor', time: 'Apr 12, 2026 11:35 AM' },
-  { text: 'Export license re-verified', author: 'Trukkas Admin', time: 'Mar 28, 2026 09:10 AM' },
-];
-
-const DOCUMENTS = [
-  { id: 'd1', name: 'National ID Card', validity: 'NIN: 2345 6789 0123', status: 'Valid' },
-  { id: 'd2', name: 'Passport Photograph', validity: 'Verified on file', status: 'Valid' },
-  { id: 'd3', name: 'Freight Forwarding License', validity: 'Valid until Aug 12, 2027', status: 'Valid' },
-  { id: 'd4', name: 'Export License', validity: 'Valid until Jan 30, 2027', status: 'Valid' },
-  { id: 'd5', name: 'Proof of Address', validity: 'Valid until Sept 5, 2026', status: 'Expiring Soon' },
-];
-const DOC_TONE = { Valid: 'success', 'Expiring Soon': 'warning', Expired: 'danger' };
-
-const ACTIVITY = [
-  { title: 'Credit limit increased to ₦50,000,000', time: 'Apr 20, 2026 02:15 PM', state: 'done', icon: 'wallet' },
-  { title: 'Job JB-2026-0842 dispatched', time: 'May 8, 2026 09:20 AM', state: 'current', icon: 'route' },
-  { title: 'Export license re-verified', time: 'Mar 28, 2026 09:10 AM', state: 'done', icon: 'ship' },
-  { title: 'Forwarder profile onboarded', time: 'Jan 15, 2024 10:00 AM', state: 'done', icon: 'user' },
-];
-
-const VERIFICATION_CHECKS = [
-  { label: 'National ID Verification', status: 'Verified' },
-  { label: 'Freight Forwarding License', status: 'Verified' },
-  { label: 'Export License', status: 'Verified' },
-  { label: 'Bank Account Verification', status: 'Verified' },
-  { label: 'Address Verification', status: 'Verified' },
-  { label: 'Background Check', status: 'Review Needed' },
-];
-
-const PERFORMANCE = [
-  { icon: 'route', label: 'Total Jobs', value: '128', delta: '18%', caption: 'vs last 30 days' },
-  { icon: 'circle-check', label: 'Completed Jobs', value: '119', caption: '93% completion rate' },
-  { icon: 'timer', label: 'On-Time Delivery', value: '94%', delta: '6%', caption: 'vs last 30 days' },
-  { icon: 'wallet', label: 'Total Spend', value: '₦245.7M', delta: '23%', caption: 'vs last 30 days' },
-  { icon: 'shield-check', label: 'Payment Reliability', value: '98%', caption: 'On-time settlements' },
-  { icon: 'star', label: 'Partner Rating', value: '4.8 / 5', caption: 'Based on 42 reviews' },
-];
+function QueryError({ query, title = 'Unable to load data' }) {
+  return <Banner tone="danger" title={title} action={<Button variant="outline" onClick={query.refetch}>Retry</Button>}>{forwarderError(query.error)}</Banner>;
+}
+const DOC_TONE = { Verified: 'success', Pending: 'warning', Rejected: 'danger' };
 
 const JOB_TONE = { 'In Transit': 'info', Delivered: 'success', Completed: 'success' };
 const TAB_ITEMS = ['Overview', 'Personal Information', 'Verification', 'Banking & Financial', 'Performance', 'Jobs & Shipments', 'Documents', 'Activity Log', 'Notes'];
-const naira = (n) => `₦${n.toLocaleString('en-NG')}`;
+const naira = forwarderMoney;
 
 function JobsTable({ rows }) {
+  if (!rows.length) return <EmptyState title="No jobs found" description="Jobs for this forwarder will appear here." />;
   return (
-    <DataTable rows={rows} rowKey={(r) => r.id}
+    <>{rows.some((row) => row.detailUnavailable) && <Banner>Some job details are unavailable. Cargo, amounts, and detail links are shown only for matching jobs.</Banner>}<DataTable rows={rows} rowKey={(r) => r.id}
       columns={[
-        { key: 'id', header: 'Job ID', render: (r) => <a style={{ color: 'var(--tk-blue)', font: '600 13px/18px var(--tk-font-sans)', cursor: 'pointer' }}>{r.id}</a> },
+        { key: 'id', header: 'Job ID', render: (r) => r.detailId ? <Link to={`/jobs/detail?id=${encodeURIComponent(r.detailId)}`}>{r.id}</Link> : <strong>{r.id || '—'}</strong> },
         { key: 'cargo', header: 'Cargo Type' },
         { key: 'route', header: 'Origin → Destination' },
         { key: 'status', header: 'Status', render: (r) => <Badge tone={JOB_TONE[r.status]}>{r.status}</Badge> },
         { key: 'date', header: 'Job Date' },
         { key: 'amount', header: 'Amount (₦)', render: (r) => <strong style={{ color: 'var(--tk-ink-900)' }}>{naira(r.amount)}</strong> },
-      ]} />
+      ]} /></>
   );
 }
 
 export function ForwarderDetail() {
-  const navigate = useNavigate();
+  const navigate = useNavigate(), params = useParams(), search = useSearchParams();
+  const id = search.get('id') || params.forwarderId || '';
+  const requestedTab = search.get('tab');
+  const canViewActivity = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
   const [tab, setTab] = useState('Overview');
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const [page, setPage] = useState(1), [jobTab, setJobTab] = useState('all'), [action, setAction] = useState(null), [announcement, setAnnouncement] = useState(false), [notice, setNotice] = useState(null);
+  useEffect(() => { setTab(({ verification: 'Verification', documents: 'Documents', jobs: 'Jobs & Shipments' })[requestedTab] || 'Overview'); setPage(1); setJobTab('all'); setAction(null); setAnnouncement(false); setNotice(null); setMoreOpen(false); }, [id, requestedTab]);
+  const profileQuery = useGetAdminForwarderProfileQuery(id, { skip: !id });
+  const FORWARDER = profileQuery.currentData;
+  const valid = FORWARDER?.role === 'FORWARDER';
+  const destinationsQuery = useGetAdminForwarderDestinationsQuery(id, { skip: !valid || tab !== 'Overview' });
+  const pendingQuery = useGetAdminPendingExporterLicensesQuery(undefined, { skip: !valid || !['Verification', 'Documents'].includes(tab) });
+  const pendingLicense = !pendingQuery.error ? pendingQuery.currentData?.rows.find((row) => row.id === id) : null;
+  const licenseStatus = pendingLicense?.status || FORWARDER?.exporterLicenseStatus || (FORWARDER?.isExporter ? 'VERIFIED' : null);
+  const licenseUrl = pendingLicense?.url || FORWARDER?.exporterLicenseUrl;
+  const jobsQuery = useGetAdminForwarderJobsQuery({ id, tab: tab === 'Jobs & Shipments' ? jobTab : 'all', page: tab === 'Jobs & Shipments' ? page : 1, limit: tab === 'Jobs & Shipments' ? 10 : 5 }, { skip: !valid || !['Overview', 'Jobs & Shipments'].includes(tab) });
+  const completedQuery = useGetAdminForwarderJobsQuery({ id, tab: 'completed', page: 1, limit: 1 }, { skip: !valid || tab !== 'Performance' });
+  const transactionsQuery = useGetAdminForwarderTransactionsQuery({ id, page, limit: 10 }, { skip: !valid || tab !== 'Banking & Financial' });
+  const activityQuery = useGetAdminForwarderActivityQuery(id, { skip: !valid || !canViewActivity || tab !== 'Activity Log' });
+  const savedDestinations = destinationsQuery.currentData || [], JOBS = jobsQuery.currentData?.rows || [];
+  const DOCUMENTS = ['National ID Card', 'Passport Photograph', 'Freight Forwarding License', 'Export License', 'Proof of Address'].map((name, index) => ({ id: name, name, validity: '—', status: index === 3 ? forwarderVerification(licenseStatus) : '—', url: index === 3 ? licenseUrl : null }));
+  const VERIFICATION_CHECKS = ['National ID Verification', 'Freight Forwarding License', 'Export License', 'Bank Account Verification', 'Address Verification', 'Background Check'].map((label, index) => ({ label, status: index === 2 ? forwarderVerification(licenseStatus) : '—' }));
+  const PERFORMANCE = [
+    { icon: 'route', label: 'Total Jobs', value: FORWARDER?.jobs ?? '—', caption: '' },
+    { icon: 'circle-check', label: 'Completed Jobs', value: completedQuery.error ? '—' : completedQuery.currentData?.pagination?.total ?? '—', caption: '' },
+    { icon: 'timer', label: 'On-Time Delivery', value: '—', caption: '' },
+    { icon: 'wallet', label: 'Total Spend', value: naira(FORWARDER?.spend), caption: '' },
+    { icon: 'shield-check', label: 'Payment Reliability', value: '—', caption: '' },
+    { icon: 'star', label: 'Partner Rating', value: '—', caption: '' },
+  ];
+  function changeTab(next) { setTab(next); setPage(1); }
+  const unavailable = (feature) => setNotice({ tone: 'info', text: `${feature} is not available yet.` });
+  function exportProfile() { downloadForwarderCsv('forwarder-profile.csv', [['Field', 'Value'], ['ID', id], ['Name', FORWARDER.name], ['Email', FORWARDER.email], ['Phone', FORWARDER.phone], ['Status', FORWARDER.status], ['Account Type', FORWARDER.isExporter ? 'Exporter' : 'Forwarder'], ['Verification', FORWARDER.verification], ['Total Jobs', FORWARDER.jobs], ['Wallet Balance (NGN)', FORWARDER.balance], ['Joined', FORWARDER.memberSince], ['Last Login', FORWARDER.lastActivity]]); }
+  const success = (text) => setNotice({ tone: 'success', text });
+  if (profileQuery.isFetching && !FORWARDER) return <ForwarderDetailLoading />;
+  if (!id || profileQuery.error || !valid) return <SectionCard title="Forwarder Details">{profileQuery.error ? <QueryError query={profileQuery} title="Unable to load forwarder" /> : <EmptyState title={!id ? 'Select a forwarder' : 'Forwarder not found'} description="Choose a forwarder from the directory." />}<Button variant="outline" onClick={() => navigate('/forwarders')}>Back to Forwarders</Button></SectionCard>;
 
   return (
     <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
@@ -118,17 +90,17 @@ export function ForwarderDetail() {
         description="Review the forwarder profile, verification, jobs, financial standing and activity."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/forwarders')}>Back to Forwarders</Button>
-          <Button icon="pencil">Edit Forwarder</Button>
+          <Button icon="pencil" onClick={() => unavailable("Editing a forwarder")}>Edit Forwarder</Button>
           <span style={{ position: 'relative' }}>
             <Button variant="outline" iconRight="chevron-down" onClick={() => setMoreOpen((o) => !o)}>More Actions</Button>
             {moreOpen && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Export Forwarder Report', icon: 'download', onClick: () => setMoreOpen(false) },
+                  { label: 'Export Forwarder Report', icon: 'download', onClick: () => { setMoreOpen(false); exportProfile(); } },
                   { label: 'Print Profile', icon: 'file-text', onClick: () => { setMoreOpen(false); window.print(); } },
-                  { label: 'View Audit Log', icon: 'scroll-text', onClick: () => { setMoreOpen(false); setTab('Activity Log'); } },
+                  { label: 'View Audit Log', icon: 'scroll-text', onClick: () => { setMoreOpen(false); changeTab('Activity Log'); } },
                   { divider: true },
-                  { label: 'Suspend Forwarder', icon: 'circle-alert', tone: 'danger', onClick: () => setMoreOpen(false) },
+                  { label: FORWARDER.statusCode === 'SUSPENDED' ? 'Reactivate Forwarder' : 'Suspend Forwarder', icon: 'circle-alert', tone: 'danger', onClick: () => { setMoreOpen(false); setAction({ kind: FORWARDER.statusCode === 'SUSPENDED' ? 'activate' : 'suspend', forwarder: FORWARDER }); } },
                 ]} />
               </span>
             )}
@@ -136,13 +108,15 @@ export function ForwarderDetail() {
         </>}
       />
 
+      {notice && <Banner tone={notice.tone} action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice.text}</Banner>}
+      {profileQuery.isFetching && <DriverLoadingNotice>Refreshing forwarder details…</DriverLoadingNotice>}
       <Card>
         <div className="fd-identity">
           <Avatar name={FORWARDER.name} size={56} />
           <div style={{ flex: 1, minWidth: 240, display: 'grid', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <h2 className="tk-title">{FORWARDER.name}</h2>
-              <Badge tone="success">{FORWARDER.status}</Badge>
+              <Badge tone={FORWARDER.statusCode === 'ACTIVE' ? 'success' : FORWARDER.statusCode === 'SUSPENDED' ? 'danger' : 'neutral'}>{FORWARDER.status}</Badge>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <Tag>Forwarder</Tag>
@@ -153,13 +127,13 @@ export function ForwarderDetail() {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: '1px solid var(--tk-line)', marginTop: 18, paddingTop: 16 }}>
           {[
-            { label: 'Status', value: <Badge tone="success">{FORWARDER.status}</Badge> },
-            { label: 'Verification Status', value: <Badge tone="success">Verified</Badge> },
-            { label: 'Total Jobs', value: FORWARDER.jobs },
+            { label: 'Status', value: <Badge tone={FORWARDER.statusCode === 'ACTIVE' ? 'success' : FORWARDER.statusCode === 'SUSPENDED' ? 'danger' : 'neutral'}>{FORWARDER.status}</Badge> },
+            { label: 'Verification Status', value: <Badge tone={DOC_TONE[FORWARDER.verification] || 'neutral'}>{FORWARDER.verification}</Badge> },
+            { label: 'Total Jobs', value: FORWARDER.jobs ?? '—' },
             { label: 'Total Spend (₦)', value: naira(FORWARDER.spend) },
-            { label: 'Current Balance (₦)', value: naira(FORWARDER.balance), hint: 'Available credit' },
+            { label: 'Current Balance (₦)', value: naira(FORWARDER.balance), hint: 'Wallet balance' },
             { label: 'Member Since', value: FORWARDER.memberSince },
-            { label: 'Last Activity', value: FORWARDER.lastActivity },
+            { label: 'Last Login', value: FORWARDER.lastActivity },
           ].map((f, i) => (
             <div key={f.label} style={{ flex: '1 1 140px', padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
               <div className="tk-meta" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -171,7 +145,7 @@ export function ForwarderDetail() {
         </div>
       </Card>
 
-      <Tabs items={TAB_ITEMS} value={tab} onChange={setTab} />
+      <Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} />
 
       {tab === 'Overview' && (
         <>
@@ -206,7 +180,7 @@ export function ForwarderDetail() {
                   <div>
                     <span className="tk-meta" style={{ display: 'block', marginBottom: 6 }}>Services Offered</span>
                     <div className="fd-tag-row">
-                      {FORWARDER.services.map((s) => <Tag key={s} tone="blue">{s}</Tag>)}
+                      {!FORWARDER.services.length && <span className="tk-meta">—</span>}{FORWARDER.services.map((s) => <Tag key={s} tone="blue">{s}</Tag>)}
                     </div>
                   </div>
                   <LabelValue label="Coverage Area" value={FORWARDER.coverage} />
@@ -230,11 +204,11 @@ export function ForwarderDetail() {
               <SectionCard title="Account Summary" icon="wallet">
                 <LabelValue label="Current Balance" value={naira(FORWARDER.balance)} />
                 <LabelValue label="Credit Limit" value={naira(FORWARDER.creditLimit)} />
-                <LabelValue label="Available Credit" value={naira(FORWARDER.creditLimit - FORWARDER.balance)} />
+                <LabelValue label="Available Credit" value={naira(FORWARDER.availableCredit)} />
                 <LabelValue label="Payment Terms" value={FORWARDER.paymentTerms} />
                 <LabelValue label="Last Payment" value={`${FORWARDER.lastPaymentDate} · ${naira(FORWARDER.lastPaymentAmount)}`} />
                 <LabelValue label="Outstanding Invoices" value={`${FORWARDER.outstandingCount} · ${naira(FORWARDER.outstandingAmount)}`} />
-                <Button variant="outline" icon="chart-column" fullWidth style={{ marginTop: 10 }} onClick={() => setTab('Banking & Financial')}>
+                <Button variant="outline" icon="chart-column" fullWidth style={{ marginTop: 10 }} onClick={() => changeTab('Banking & Financial')}>
                   View Financial Overview →
                 </Button>
               </SectionCard>
@@ -244,45 +218,40 @@ export function ForwarderDetail() {
               <SectionCard title="Address & Service Areas" icon="map-pin">
                 <span className="tk-meta" style={{ display: 'block', marginBottom: 4 }}>Base Address</span>
                 <p style={{ margin: '0 0 8px', font: '400 13px/19px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{FORWARDER.address}</p>
-                <a href="#" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <Icon name="map-pin" size={13} />View on Map
-                </a>
+                <span className="tk-meta">Service coverage is not available yet.</span>
                 <div style={{ marginTop: 14, borderTop: '1px solid var(--tk-line)', paddingTop: 10 }}>
-                  <span className="tk-meta" style={{ display: 'block', marginBottom: 6 }}>Also Active In ({SERVICE_AREAS.length - 1})</span>
-                  {SERVICE_AREAS.map((b, i) => (
-                    <div key={b.name} className="fd-row" style={{ borderTop: i ? '1px solid var(--tk-line)' : 'none' }}>
+                  <span className="tk-meta" style={{ display: 'block', marginBottom: 6 }}>Saved Destinations ({destinationsQuery.currentData ? savedDestinations.length : '—'})</span>
+                  {destinationsQuery.isFetching ? <DriverTableLoading columns={2} label="Loading saved destinations" /> : destinationsQuery.error ? <QueryError query={destinationsQuery} title="Unable to load saved destinations" /> : !savedDestinations.length ? <span className="tk-meta">No saved destinations.</span> : savedDestinations.map((b, i) => (
+                    <div key={b.id} className="fd-row" style={{ borderTop: i ? '1px solid var(--tk-line)' : 'none' }}>
                       <Icon name="map-pin" size={15} color="var(--tk-blue)" />
                       <span style={{ flex: 1, display: 'grid', gap: 1 }}>
                         <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{b.name}</span>
-                        <span className="tk-meta">{b.state}</span>
+                        <span className="tk-meta">{b.address}</span>
                       </span>
+                      {b.mapUrl && <a href={b.mapUrl} target="_blank" rel="noopener noreferrer">Map ↗</a>}
                     </div>
                   ))}
                 </div>
               </SectionCard>
 
               <QuickActionsCard items={[
-                { icon: 'plus', label: 'Create Job for this Forwarder', onClick: () => setTab('Jobs & Shipments') },
-                { icon: 'shield-check', label: 'Add Verification Request', onClick: () => setTab('Verification') },
-                { icon: 'megaphone', label: 'Send Announcement' },
-                { icon: 'file-text', label: 'Add Note', onClick: () => setTab('Notes') },
-                { icon: 'download', label: 'Download Forwarder Profile' },
+                { icon: 'plus', label: 'Create Job for this Forwarder', onClick: () => unavailable('Creating a job for a forwarder') },
+                { icon: 'shield-check', label: 'Add Verification Request', onClick: () => unavailable('Adding a verification request') },
+                { icon: 'megaphone', label: 'Send Announcement', onClick: () => setAnnouncement(true) },
+                { icon: 'file-text', label: 'Add Note', onClick: () => { changeTab('Notes'); unavailable('Adding a note'); } },
+                { icon: 'download', label: 'Download Forwarder Profile', onClick: exportProfile },
               ]} />
             </div>
           </div>
 
           <div className="fd-bottom">
-            <SectionCard title="Recent Jobs" pad="none" action={<a onClick={() => setTab('Jobs & Shipments')} style={{ cursor: 'pointer' }}>View all jobs →</a>}>
-              <JobsTable rows={JOBS} />
+            <SectionCard title="Recent Jobs" pad="none" action={<a onClick={() => changeTab('Jobs & Shipments')} style={{ cursor: 'pointer' }}>View all jobs →</a>}>
+              {jobsQuery.isFetching ? <DriverTableLoading columns={6} label="Loading recent jobs" /> : jobsQuery.error ? <QueryError query={jobsQuery} title="Unable to load jobs" /> : <JobsTable rows={JOBS} />}
             </SectionCard>
 
-            <SectionCard title="Notes" action={<a onClick={() => setTab('Notes')} style={{ cursor: 'pointer' }}>View all notes →</a>}>
-              {NOTES.map((n, i) => (
-                <div key={i} style={{ padding: i ? '10px 0' : '0 0 10px', borderTop: i ? '1px solid var(--tk-line)' : 'none' }}>
-                  <p style={{ margin: '0 0 4px', font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{n.text}</p>
-                  <span className="tk-meta">{n.author} · {n.time}</span>
-                </div>
-              ))}
+            <SectionCard title="Notes" action={<a onClick={() => changeTab('Notes')} style={{ cursor: 'pointer' }}>View all notes →</a>}>
+              <p className="tk-meta">Notes are not available yet.</p>
+
             </SectionCard>
           </div>
         </>
@@ -312,32 +281,40 @@ export function ForwarderDetail() {
 
       {tab === 'Verification' && (
         <SectionCard title="Verification Checklist">
+          {pendingQuery.isFetching && <DriverLoadingNotice>Loading exporter license review…</DriverLoadingNotice>}
+          {pendingQuery.error && <QueryError query={pendingQuery} title="Unable to load exporter license requests" />}
+          <LabelValue label="Account Verification" value={FORWARDER.verification} />
           {VERIFICATION_CHECKS.map((c) => (
             <div key={c.label} className="fd-row">
-              <Icon name={c.status === 'Verified' ? 'badge-check' : 'triangle-alert'} size={17}
-                color={c.status === 'Verified' ? 'var(--tk-success)' : 'var(--tk-warning)'} />
+              <Icon name={c.status === 'Verified' ? 'badge-check' : c.status === 'Pending' ? 'hourglass' : 'info'} size={17}
+                color={c.status === 'Verified' ? 'var(--tk-success)' : c.status === 'Pending' ? 'var(--tk-warning)' : 'var(--tk-ink-400)'} />
               <span style={{ flex: 1, font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{c.label}</span>
-              <Badge tone={c.status === 'Verified' ? 'success' : 'warning'}>{c.status}</Badge>
+              <Badge tone={DOC_TONE[c.status] || 'neutral'}>{c.status}</Badge>
             </div>
           ))}
+          {licenseUrl && <a href={licenseUrl} target="_blank" rel="noopener noreferrer">Open exporter license ↗</a>}
+          {pendingLicense && <Button variant="outline" disabled={pendingQuery.isFetching} onClick={() => setAction({ kind: 'review', forwarder: { ...pendingLicense, name: FORWARDER.name } })}>Review Exporter License</Button>}
         </SectionCard>
       )}
 
       {tab === 'Banking & Financial' && (
-        <SectionCard title="Account Summary" icon="wallet">
+        <><SectionCard title="Account Summary" icon="wallet">
           <div className="fd-info-grid">
             <LabelValue layout="stack" label="Current Balance" value={naira(FORWARDER.balance)} />
             <LabelValue layout="stack" label="Credit Limit" value={naira(FORWARDER.creditLimit)} />
-            <LabelValue layout="stack" label="Available Credit" value={naira(FORWARDER.creditLimit - FORWARDER.balance)} />
+            <LabelValue layout="stack" label="Available Credit" value={naira(FORWARDER.availableCredit)} />
             <LabelValue layout="stack" label="Payment Terms" value={FORWARDER.paymentTerms} />
             <LabelValue layout="stack" label="Last Payment" value={`${FORWARDER.lastPaymentDate} · ${naira(FORWARDER.lastPaymentAmount)}`} />
             <LabelValue layout="stack" label="Outstanding Invoices" value={`${FORWARDER.outstandingCount} · ${naira(FORWARDER.outstandingAmount)}`} />
           </div>
         </SectionCard>
+        <SectionCard title="Wallet Transactions" pad="none">
+          {transactionsQuery.isFetching ? <DriverTableLoading columns={5} label="Loading transactions" /> : transactionsQuery.error ? <QueryError query={transactionsQuery} title="Unable to load transactions" /> : !transactionsQuery.currentData?.rows.length ? <EmptyState title="No wallet transactions" description="Wallet transactions for this forwarder will appear here." /> : <><DataTable rows={transactionsQuery.currentData.rows} rowKey={(row) => row.id} columns={[{ key: 'label', header: 'Transaction' }, { key: 'type', header: 'Type' }, { key: 'amount', header: 'Amount (₦)', render: (row) => naira(row.amount) }, { key: 'status', header: 'Status' }, { key: 'date', header: 'Date' }]} /><Pagination page={page} pageSize={10} pageCount={Math.max(1, transactionsQuery.currentData?.pagination?.totalPages || 1)} total={transactionsQuery.currentData?.pagination?.total} onPage={(next) => setPage(Math.max(1, Math.min(transactionsQuery.currentData?.pagination?.totalPages || 1, next)))} /></>}
+        </SectionCard></>
       )}
 
       {tab === 'Performance' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
+        <>{completedQuery.isFetching && <DriverLoadingNotice>Loading completed jobs…</DriverLoadingNotice>}{completedQuery.error && <QueryError query={completedQuery} title="Unable to load completed job count" />}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
           {PERFORMANCE.map((p) => (
             <Card key={p.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <span style={{ width: 38, height: 38, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-success-soft)',
@@ -353,23 +330,27 @@ export function ForwarderDetail() {
               </div>
             </Card>
           ))}
-        </div>
+        </div></>
       )}
 
       {tab === 'Jobs & Shipments' && (
-        <SectionCard title="Jobs & Shipments" pad="none" count={JOBS.length}>
-          <JobsTable rows={JOBS} />
+        <SectionCard title="Jobs & Shipments" pad="none" count={!jobsQuery.error ? jobsQuery.currentData?.pagination?.total : undefined}>
+          <Tabs items={['all', 'active', 'completed', 'cancelled']} value={jobTab} onChange={(next) => { setJobTab(next); setPage(1); }} />
+          {jobsQuery.isFetching ? <DriverTableLoading columns={6} label="Loading jobs" /> : jobsQuery.error ? <QueryError query={jobsQuery} title="Unable to load jobs" /> : <><JobsTable rows={JOBS} /><Pagination page={page} pageSize={10} pageCount={Math.max(1, jobsQuery.currentData?.pagination?.totalPages || 1)} total={jobsQuery.currentData?.pagination?.total} onPage={(next) => setPage(Math.max(1, Math.min(jobsQuery.currentData?.pagination?.totalPages || 1, next)))} /></>}
         </SectionCard>
       )}
 
       {tab === 'Documents' && (
-        <SectionCard title="Documents" count={DOCUMENTS.length}>
+        <SectionCard title="Documents">
+          {pendingQuery.isFetching && <DriverLoadingNotice>Loading exporter license…</DriverLoadingNotice>}
+          {pendingQuery.error && <QueryError query={pendingQuery} title="Unable to load exporter license requests" />}
           {DOCUMENTS.map((d) => (
             <div key={d.id} className="fd-row">
               <Icon name="file-text" size={17} color="var(--tk-blue)" />
               <span style={{ flex: 1, font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{d.name}</span>
               <span className="tk-meta">{d.validity}</span>
-              <Badge tone={DOC_TONE[d.status]}>{d.status}</Badge>
+              <Badge tone={DOC_TONE[d.status] || 'neutral'}>{d.status}</Badge>
+              {d.url && <a href={d.url} target="_blank" rel="noopener noreferrer">Open ↗</a>}
             </div>
           ))}
         </SectionCard>
@@ -377,29 +358,13 @@ export function ForwarderDetail() {
 
       {tab === 'Activity Log' && (
         <SectionCard title="Activity Log">
-          <Timeline items={ACTIVITY} />
+          {!canViewActivity ? <Banner>Account audit logs are available to Super Admins only.</Banner> : activityQuery.isFetching ? <DriverTableLoading columns={3} label="Loading account audit logs" /> : activityQuery.error ? <QueryError query={activityQuery} title="Unable to load account audit logs" /> : activityQuery.currentData?.length ? <Timeline items={activityQuery.currentData} /> : <EmptyState title="No account audit logs" description="Admin actions recorded against this forwarder will appear here." />}
         </SectionCard>
       )}
 
-      {tab === 'Notes' && (
-        NOTES.length ? (
-          <SectionCard title="Notes" count={NOTES.length}>
-            {NOTES.map((n, i) => (
-              <div key={i} className="fd-row" style={{ alignItems: 'flex-start' }}>
-                <Icon name="file-text" size={16} color="var(--tk-blue)" style={{ marginTop: 2 }} />
-                <div>
-                  <p style={{ margin: '0 0 4px', font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{n.text}</p>
-                  <span className="tk-meta">{n.author} · {n.time}</span>
-                </div>
-              </div>
-            ))}
-          </SectionCard>
-        ) : (
-          <SectionCard title="Notes">
-            <EmptyState icon="file-text" title="No notes yet" description="Notes added about this forwarder will appear here." />
-          </SectionCard>
-        )
-      )}
+      {tab === 'Notes' && <SectionCard title="Notes"><EmptyState icon="file-text" title="Notes unavailable" description="Forwarder notes are not available yet." /></SectionCard>}
+      {action && <ForwarderActionModal key={`${action.kind}:${id}`} action={action} onClose={() => setAction(null)} onDone={success} />}
+      {announcement && <ForwarderAnnouncementModal forwarder={FORWARDER} onClose={() => setAnnouncement(false)} onDone={success} />}
     </div>
   );
 }

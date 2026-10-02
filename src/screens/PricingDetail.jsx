@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from '../router.js';
 import {
-  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon,
+  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Banner,
 } from '../ds.js';
 import { useCollection } from '../mock/useCollection.js';
 import { setServicePricingStatus } from '../mock/api.js';
@@ -70,6 +70,7 @@ export function PricingDetail() {
           </span>
         </>} />
 
+      <Banner title="Demo pricing entry">This service rate is sample data. Changes affect the prototype only.</Banner>
       <Card style={{ display: 'grid', gap: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ width: 56, height: 56, borderRadius: 'var(--tk-r-lg)', background: 'var(--tk-blue-soft)',
