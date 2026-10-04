@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { PayoutDetail } from '../../../screens/PayoutDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('payoutId'); }
@@ -13,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function PayoutDetailPage() {
-  return <PayoutDetail />;
+  return <Suspense fallback={null}><PayoutDetail /></Suspense>;
 }

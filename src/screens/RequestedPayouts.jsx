@@ -18,13 +18,18 @@ import {
   IconButton,
   DropdownMenu,
   EmptyState,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { formatNaira } from "../mock/format.js";
-import { getCompanyPayoutSummary, normalizePayouts } from "../domain/payouts.js";
+import {
+  useGetAdminPayoutDirectoryQuery, useGetAdminPayoutWithdrawalStatsQuery,
+  payoutSummary, payoutMoney as formatNaira, payoutDetailUrl, payoutCompanyUrl, payoutJobUrl,
+} from "../store/features/payouts/payoutsApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverTableLoading } from "./DriversLoading.jsx";
 import "./RequestedPayouts.css";
 
 const PAGE_SIZE = 10;
+const EMPTY_ROWS = [];
 
 const STATUS_TONE = {
   "Pending Review": "warning",
@@ -87,8 +92,8 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
 
 function exportPayouts(rows) {
   const headers = ["Payout ID", "Company / Driver", "Type", "Job IDs", "Trip IDs", "Gross", "Deductions", "Net", "Status", "Eligibility"];
-  const values = rows.map((payout) => [payout.id, payout.party, payout.type, (payout.jobIds || []).join(" | "), (payout.tripIds || []).join(" | "), payout.grossAmount, payout.deductions, payout.netAmount, payout.status, payout.eligibility]);
-  const csv = [headers, ...values].map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
+  const values = rows.map((payout) => [payout.id, payout.party, payout.type, payout.jobIds?.join(" | ") ?? "—", payout.tripIds?.join(" | ") ?? "—", payout.grossAmount, payout.deductions, payout.netAmount, payout.status, payout.eligibility]);
+  const csv = [headers, ...values].map((row) => row.map((value) => `"${String(value ?? "—").replaceAll('"', '""')}"`).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -99,9 +104,10 @@ function exportPayouts(rows) {
 
 export function RequestedPayouts() {
   const navigate = useNavigate();
-  const payoutRows = useCollection("payoutRequests") || [];
-  const jobs = useCollection("jobs") || [];
-  const all = useMemo(() => normalizePayouts(payoutRows, jobs), [payoutRows, jobs]);
+  const directoryQuery = useGetAdminPayoutDirectoryQuery();
+  const statsQuery = useGetAdminPayoutWithdrawalStatsQuery();
+  const directory = directoryQuery.error ? null : directoryQuery.currentData;
+  const all = directory?.rows || EMPTY_ROWS;
 
   const [tab, setTab] = useState("All Requests");
   const [q, setQ] = useState("");
@@ -126,22 +132,9 @@ export function RequestedPayouts() {
     if (requestedStatus) setStatus(requestedStatus);
   }, []);
 
-  const companySummary = useMemo(() => getCompanyPayoutSummary(all), [all]);
-  const totalRequested = useMemo(
-    () => all.filter((p) => p.status !== "Rejected").reduce((sum, p) => sum + Number(p.netAmount ?? p.amount ?? 0), 0),
-    [all],
-  );
-
-  const counts = useMemo(
-    () => ({
-      "All Requests": all.length,
-      Pending: all.filter((p) => p.status === "Pending Review").length,
-      Approved: all.filter((p) => p.status === "Approved").length,
-      Rejected: all.filter((p) => p.status === "Rejected").length,
-      Processing: all.filter((p) => p.status === "Processing").length,
-    }),
-    [all],
-  );
+  const summary = useMemo(() => payoutSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.currentData, statsQuery.error]);
+  const counts = summary.counts;
+  const metric = (value, loading = !directory && directoryQuery.isFetching) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
 
   const tabFiltered = useMemo(() => {
     if (tab === "Pending")
@@ -162,7 +155,7 @@ export function RequestedPayouts() {
           (party === "All Parties" || p.partyType === party) &&
           (date === "All Request Dates" || p.dateRequested === date) &&
           (!q ||
-            [p.id, p.jobId, ...(p.jobIds || []), ...(p.tripIds || []), p.party, p.partyId, p.companyId, p.payment?.bank].some(
+            [p.id, p.reference, p.jobId, ...(p.jobIds || []), ...(p.tripIds || []), p.party, p.partyId, p.companyId, p.payment?.bank].some(
               (v) => v && v.toLowerCase().includes(q.toLowerCase()),
             )),
       ),
@@ -175,12 +168,12 @@ export function RequestedPayouts() {
     {
       value: "All Requests",
       label: "All Requests",
-      count: counts["All Requests"],
+      count: counts["All Requests"] ?? "—",
     },
-    { value: "Pending", label: "Pending", count: counts.Pending },
-    { value: "Approved", label: "Approved", count: counts.Approved },
-    { value: "Rejected", label: "Rejected", count: counts.Rejected },
-    { value: "Processing", label: "Processing", count: counts.Processing },
+    { value: "Pending", label: "Pending", count: counts.Pending ?? "—" },
+    { value: "Approved", label: "Approved", count: counts.Approved ?? "—" },
+    { value: "Rejected", label: "Rejected", count: counts.Rejected ?? "—" },
+    { value: "Processing", label: "Processing", count: counts.Processing ?? "—" },
   ];
 
   return (
@@ -197,35 +190,35 @@ export function RequestedPayouts() {
           icon="clock"
           tint="navy"
           label="Total Requests"
-          value={all.length}
+          value={metric(summary.totalRequests)}
           caption="all payout requests"
         />
         <StatCard
           icon="hourglass"
           tint="amber"
           label="Pending Review"
-          value={counts.Pending}
-          caption={`${companySummary.held ? formatNaira(companySummary.held) : "No funds"} held`}
+          value={metric(summary.pending, statsQuery.isFetching && !statsQuery.currentData && !directory)}
+          caption={`${formatNaira(summary.companyHeld)} held`}
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Approved"
-          value={all.filter((p) => ["Approved", "Processing", "Completed"].includes(p.status)).length}
-          caption={`${formatNaira(companySummary.paid)} company payouts paid`}
+          value={metric(summary.approved, statsQuery.isFetching && !statsQuery.currentData)}
+          caption={`${formatNaira(summary.companyPaid)} company payouts paid`}
         />
         <StatCard
           icon="circle-x"
           tint="red"
           label="Rejected"
-          value={counts.Rejected}
+          value={metric(summary.rejected, statsQuery.isFetching && !statsQuery.currentData)}
           caption="requires no further payment"
         />
         <StatCard
           icon="database"
           tint="blue"
           label="Total Requested Amount"
-          value={formatNaira(totalRequested)}
+          value={metric(formatNaira(summary.totalRequestedAmount))}
           caption="net of rejected requests"
         />
       </div>
@@ -248,7 +241,7 @@ export function RequestedPayouts() {
             style={{ border: "none", flex: 1 }}
             items={TABS}
           />
-          <Button variant="outline" icon="download" onClick={() => exportPayouts(filtered)}>
+          <Button variant="outline" icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportPayouts(filtered)}>
             Export
           </Button>
         </div>
@@ -259,7 +252,7 @@ export function RequestedPayouts() {
               <FilterButton
                 label="Request Dates"
                 value={date}
-                options={["All Request Dates", ...new Set(all.map((payout) => payout.dateRequested))]}
+                options={["All Request Dates", ...new Set(all.map((payout) => payout.dateRequested).filter((value) => value !== "—"))]}
                 active={date !== "All Request Dates"}
                 onChange={(value) => { setDate(value); setPage(1); }}
               />
@@ -319,18 +312,18 @@ export function RequestedPayouts() {
           }
         />
 
-        {filtered.length === 0 ? (
+        {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading payout requests" /> : filtered.length === 0 ? (
           <EmptyState
             icon="banknote"
             title="No payout requests found"
-            description="Try adjusting your filters or search."
+            description={directoryQuery.error ? getApiErrorMessage(directoryQuery.error) : "Try adjusting your filters or search."}
           />
         ) : (
           <>
             <DataTable
               rows={paged}
-              rowKey={(r) => r.id}
-              onRowClick={(r) => navigate(`/payouts/${r.id}`)}
+              rowKey={(r) => r.key}
+              onRowClick={(r) => navigate(payoutDetailUrl(r))}
               columns={[
                 {
                   key: "id",
@@ -360,8 +353,8 @@ export function RequestedPayouts() {
                     >
                       <Avatar name={r.party} size={28} />
                       <span style={{ display: "grid", gap: 2 }}>
-                        {r.partyType === "company" ? (
-                          <Link to={`/companies/${encodeURIComponent(r.companyId || r.partyId)}`} onClick={(e) => e.stopPropagation()}>{r.party}</Link>
+                        {r.companyId ? (
+                          <Link to={payoutCompanyUrl(r.companyId)} onClick={(e) => e.stopPropagation()}>{r.party}</Link>
                         ) : <span className="tk-label">{r.party}</span>}
                         <span className="tk-meta">{r.partyId}</span>
                       </span>
@@ -382,15 +375,15 @@ export function RequestedPayouts() {
                   header: "Job / Trips",
                   render: (r) => (
                     <span style={{ display: "grid", gap: 2 }}>
-                      <Link
-                        to={`/jobs/${r.jobId}`}
+                      {r.jobId ? <Link
+                        to={payoutJobUrl(r.jobId)}
                         className="tk-mono"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.jobId}
-                      </Link>
+                      </Link> : <span className="tk-mono">—</span>}
                       <span className="tk-meta">{r.route}</span>
-                      <span className="tk-meta">{r.tripIds?.length || 0} trip{r.tripIds?.length === 1 ? "" : "s"}</span>
+                      <span className="tk-meta">{r.tripIds?.length ?? "—"} trip{r.tripIds?.length === 1 ? "" : "s"}</span>
                     </span>
                   ),
                 },
@@ -398,7 +391,7 @@ export function RequestedPayouts() {
                   key: "amount",
                   header: "Gross / Net",
                   align: "right",
-                  render: (r) => <span style={{ display: "grid", gap: 2 }}><span className="tk-meta">{formatNaira(r.grossAmount ?? r.amount)}</span><b>{formatNaira(r.netAmount ?? r.amount)}</b></span>,
+                  render: (r) => <span style={{ display: "grid", gap: 2 }}><span className="tk-meta">{formatNaira(r.grossAmount)}</span><b>{formatNaira(r.netAmount)}</b></span>,
                 },
                 {
                   key: "eligibility",
@@ -406,9 +399,9 @@ export function RequestedPayouts() {
                   render: (r) => r.partyType === "company" ? (
                     <span style={{ display: "grid", gap: 3 }}>
                       <Badge tone={r.approvalReady ? "success" : r.eligibility === "Needs Review" ? "warning" : "danger"}>{r.eligibility}</Badge>
-                      <span className="tk-meta">{r.reconciliation?.ok ? "Reconciled" : "Needs reconciliation"}</span>
+                      <span className="tk-meta">{r.reconciliation?.ok == null ? "—" : r.reconciliation.ok ? "Reconciled" : "Needs reconciliation"}</span>
                     </span>
-                  ) : <span className="tk-meta">Driver payout</span>,
+                  ) : <span className="tk-meta">{r.partyType === "driver" ? "Driver payout" : "—"}</span>,
                 },
                 {
                   key: "status",
@@ -433,7 +426,7 @@ export function RequestedPayouts() {
                   width: 44,
                   render: (r) => (
                     <RowMenu
-                      id={r.id}
+                      id={r.key}
                       menuFor={menuFor}
                       setMenuFor={setMenuFor}
                       items={[
@@ -442,7 +435,7 @@ export function RequestedPayouts() {
                           icon: "eye",
                           onClick: () => {
                             setMenuFor(null);
-                            navigate(`/payouts/${r.id}`);
+                            navigate(payoutDetailUrl(r));
                           },
                         },
                         {
@@ -454,7 +447,7 @@ export function RequestedPayouts() {
                           },
                         },
                         { divider: true },
-                        { label: "Download Documents", icon: "file-text" },
+                        { label: "Download Documents", icon: "file-text", onClick: () => { setMenuFor(null); window.alert("Downloading payout documents is not available yet."); } },
                       ]}
                     />
                   ),

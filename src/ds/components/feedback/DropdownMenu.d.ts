@@ -4,6 +4,7 @@ export interface MenuItem {
   icon?: string;
   tone?: 'default' | 'danger';
   onClick?: () => void;
+  disabled?: boolean;
   trailing?: React.ReactNode;
   /** uppercase group heading instead of a row */
   section?: string;

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { TransactionDetail } from '../../../screens/TransactionDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('transactionId'); }
@@ -13,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function TransactionDetailPage() {
-  return <TransactionDetail />;
+  return <Suspense fallback={null}><TransactionDetail /></Suspense>;
 }

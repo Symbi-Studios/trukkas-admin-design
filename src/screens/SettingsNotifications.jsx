@@ -2,38 +2,13 @@
 
 import { useState } from "react";
 import { useNavigate } from "../router.js";
-import {
-  PageHeader,
-  Button,
-  SectionCard,
-  Card,
-  Checkbox,
-  Switch,
-  TextField,
-  Select,
-  Tabs,
-  Badge,
-  QuickActionsCard,
-  Banner,
-  Icon,
-  EmptyState,
-} from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import {
-  NOTIFICATION_FREQUENCIES,
-  notificationPreview,
-  notificationChannelsStatus,
-  notificationQuickActions,
-  NOTIFICATION_TABS,
-} from "../mock/fixtures/settings.js";
-import {
-  updateNotificationChannels,
-  updateQuietHours,
-  toggleEventNotification,
-  setEventNotificationFrequency,
-  saveNotificationPreferences,
-  resetNotificationPreferences,
-} from "../mock/api.js";
+import { PageHeader, Button, SectionCard, Card, Tabs, Badge, QuickActionsCard, Banner, Icon, EmptyState } from '../ds.js';
+import { SettingsCheckbox as Checkbox, SettingsSwitch as Switch, SettingsTextField as TextField, SettingsSelect as Select, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { NOTIFICATION_FREQUENCIES, notificationQuickActions, NOTIFICATION_TABS, eventNotificationGroups as notificationEventControls, notificationChannelsStatus as notificationChannelControls } from '../mock/fixtures/settings.js';
+
 
 const TIMEZONES = [
   "(GMT+01:00) Lagos, Nigeria",
@@ -84,6 +59,8 @@ function EventRow({ event, onToggle, onFrequency }) {
   );
 }
 
+const notificationPreview = { icon: 'truck', title: '—', body: '—', time: '—' };
+
 function NotificationPreviewCard({ channel }) {
   if (channel === "Email") {
     return (
@@ -97,7 +74,7 @@ function NotificationPreviewCard({ channel }) {
         }}
       >
         <span className="tk-meta">
-          From: Trukkas &lt;notifications@trukkas.com&gt;
+          From: Trukkas &lt;{'—'}&gt;
         </span>
         <span
           style={{
@@ -204,23 +181,31 @@ function NotificationPreviewCard({ channel }) {
 }
 
 export function SettingsNotifications() {
+  const editor = useSettingsEditor('notifications');
+  const updateNotificationChannels = editor.change('settingsNotificationChannels');
+  const updateQuietHours = editor.change('settingsQuietHours');
+  const toggleEventNotification = () => editor.unavailable('Toggle Event Notification');
+  const setEventNotificationFrequency = () => editor.unavailable('Set Event Notification Frequency');
+  const saveNotificationPreferences = () => editor.save();
+  const resetNotificationPreferences = () => editor.unavailable('Reset Notification Preferences');
+  const notificationChannelsStatus = notificationChannelControls.map(({ label, icon }) => ({ label, icon, detail: '—', status: '—' }));
   const navigate = useNavigate();
-  const channels = useCollection("settingsNotificationChannels")?.[0];
-  const quiet = useCollection("settingsQuietHours")?.[0];
-  const groups = useCollection("settingsEventNotifications") || [];
+  const channels = editor.group('settingsNotificationChannels');
+  const quiet = editor.group('settingsQuietHours');
+  const groups = notificationEventControls.map(({ group, icon, events }) => ({ group, icon, events: events.map(({ key, label, hint }) => ({ key, label, hint, inApp: null, email: null, sms: null, frequency: null })) }));
   const [subTab, setSubTab] = useState("Notification Preferences");
   const [previewChannel, setPreviewChannel] = useState("In-App");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!channels || !quiet) return null;
 
   async function handleSave() {
     setSaving(true);
-    await saveNotificationPreferences();
+    const confirmed = await saveNotificationPreferences();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -248,6 +233,7 @@ export function SettingsNotifications() {
         }
       />
 
+      <SettingsReadNotice error={editor.error} />
       <Card pad="none">
         <Tabs
           value={subTab}
@@ -495,6 +481,7 @@ export function SettingsNotifications() {
                   <button
                     key={c.label}
                     type="button"
+                    onClick={() => editor.unavailable('Manage Notification Channel')}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -538,7 +525,11 @@ export function SettingsNotifications() {
               </div>
             </SectionCard>
 
-            <QuickActionsCard items={notificationQuickActions} />
+            <QuickActionsCard items={editor.quickActions(notificationQuickActions, {
+              'Manage Email Templates': () => setSubTab('Email Templates'),
+              'Manage SMS Templates': () => setSubTab('SMS Templates'),
+              'Notification Groups': () => setSubTab('Notification Groups'),
+            })} />
 
             <Banner tone="info">
               Tip: Use notification groups to set different preferences for

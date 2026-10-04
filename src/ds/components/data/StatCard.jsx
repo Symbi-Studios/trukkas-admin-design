@@ -30,7 +30,7 @@ export function StatCard({
   style,
 }) {
   const [bg, fg] = TINT[tint] || TINT.blue;
-  const good = direction === "up";
+  const good = direction !== "down";
   const labelBelow = labelPosition === "bottom";
   const labelEl = (
     <span
@@ -97,7 +97,7 @@ export function StatCard({
                     color: good ? "var(--tk-success)" : "var(--tk-danger)",
                   }}
                 >
-                  <Icon name={good ? "arrow-up" : "arrow-down"} size={12} />
+                  {direction != null && <Icon name={good ? "arrow-up" : "arrow-down"} size={12} />}
                   {delta}
                 </span>
               )}

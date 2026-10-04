@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useNavigate, useParams, Link } from "../router.js";
 import {
   PageHeader,
@@ -19,17 +20,14 @@ import {
   Textarea,
   Banner,
   Avatar,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
 import {
-  approvePayoutRequest,
-  disapprovePayoutRequest,
-  requestPayoutInfo,
-  raisePayoutIssue,
-  createPayoutRefund,
-} from "../mock/api.js";
-import { formatNaira } from "../mock/format.js";
-import { normalizePayouts } from "../domain/payouts.js";
+  useGetAdminPayoutDirectoryQuery, useApproveAdminPayoutWithdrawalMutation, useRejectAdminPayoutWithdrawalMutation,
+  payoutMoney as formatNaira, payoutCompanyUrl, payoutJobUrl, payoutTransactionUrl,
+} from "../store/features/payouts/payoutsApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverLoadingNotice } from "./DriversLoading.jsx";
 
 const STATUS_TONE = {
   "Pending Review": "warning",
@@ -48,15 +46,6 @@ const TILE_TINT = {
   Rejected: ["var(--tk-danger-soft)", "var(--tk-danger)", "circle-x"],
   Processing: ["var(--tk-blue-soft)", "var(--tk-blue)", "loader"],
   Completed: ["var(--tk-success-soft)", "var(--tk-success)", "banknote"],
-};
-
-const APPROVAL_STEPS = ["Submitted", "Under Review", "Approved", "Processed"];
-const APPROVAL_STATE = {
-  "Pending Review": ["done", "current", "pending", "pending"],
-  Approved: ["done", "done", "done", "pending"],
-  Rejected: ["done", "done", "danger", "pending"],
-  Processing: ["done", "done", "done", "current"],
-  Completed: ["done", "done", "done", "done"],
 };
 
 function StatusStepper({ steps }) {
@@ -230,7 +219,7 @@ function BreakdownRow({ label, value }) {
         }}
       >
         {neg ? "- " : ""}
-        {formatNaira(Math.abs(value))}
+        {formatNaira(value == null ? null : Math.abs(value))}
       </span>
     </div>
   );
@@ -240,7 +229,7 @@ function TripAllocation({ payout }) {
   if (payout.partyType !== "company") return null;
   return (
     <SectionCard
-      title={`Trip Allocation (${payout.allocations?.length || 0})`}
+      title={`Trip Allocation (${payout.allocations?.length ?? "—"})`}
       description="The company is paid once for the job, with the gross amount allocated across its truck trips."
     >
       <div style={{ display: "grid", gap: "var(--tk-space-2)" }}>
@@ -258,38 +247,39 @@ function TripAllocation({ payout }) {
             }}
           >
             <span>
-              <Link
-                to={`/jobs/${allocation.jobId || payout.jobId}?tripId=${allocation.tripId}`}
+              {allocation.jobId || payout.jobId ? <Link
+                to={`${payoutJobUrl(allocation.jobId || payout.jobId)}${allocation.tripId ? `&tripId=${encodeURIComponent(allocation.tripId)}` : ""}`}
                 className="tk-mono"
               >
-                {allocation.tripId}
-              </Link>
+                {allocation.tripId ?? "—"}
+              </Link> : <span className="tk-mono">{allocation.tripId ?? "—"}</span>}
               <span className="tk-meta" style={{ display: "block" }}>
-                {allocation.trip?.truckPlate || "Truck not resolved"}
+                {allocation.trip?.truckPlate ?? "—"}
               </span>
             </span>
             <span>
               <span className="tk-label">
-                {allocation.trip?.driverName || "Driver not resolved"}
+                {allocation.trip?.driverName ?? "—"}
               </span>
               <span className="tk-meta" style={{ display: "block" }}>
-                {allocation.trip?.status || "Legacy reference"}
+                {allocation.trip?.status ?? "—"}
               </span>
             </span>
             <strong>{formatNaira(allocation.amount)}</strong>
           </div>
         ))}
+        {!payout.allocations?.length && "—"}
       </div>
       <Banner
         tone={payout.approvalReady ? "success" : "warning"}
         style={{ marginTop: "var(--tk-space-3)" }}
         title={
-          payout.approvalReady
+          payout.approvalReady == null ? "—" : payout.approvalReady
             ? "Ready for approval"
             : `Payment held — ${payout.eligibility}`
         }
       >
-        {payout.reconciliation?.ok
+        {payout.reconciliation?.ok == null ? "—" : payout.reconciliation.ok
           ? "Gross allocations and net payout reconcile."
           : payout.reconciliation?.issues?.join(" ")}
       </Banner>
@@ -298,26 +288,41 @@ function TripAllocation({ payout }) {
 }
 
 export function PayoutDetail() {
-  const { payoutId } = useParams();
+  const params = useParams(), search = useSearchParams();
+  const payoutId = search.get("id") || params.payoutId || "";
+  const source = search.get("source");
   const navigate = useNavigate();
-  const payoutRows = useCollection("payoutRequests") || [];
-  const jobs = useCollection("jobs") || [];
-  const rows = normalizePayouts(payoutRows, jobs);
-  const r = rows.find((x) => x.id === payoutId);
+  const directoryQuery = useGetAdminPayoutDirectoryQuery();
+  const matches = (directoryQuery.error ? [] : directoryQuery.currentData?.rows || []).filter((row) => row.id === payoutId && (!source || row.source === source));
+  const r = matches.length === 1 ? matches[0] : null;
+  const [approveWithdrawal, approveState] = useApproveAdminPayoutWithdrawalMutation();
+  const [rejectWithdrawal, rejectState] = useRejectAdminPayoutWithdrawalMutation();
+  const busy = approveState.isLoading || rejectState.isLoading || directoryQuery.isFetching;
+  const operationPending = useRef(false), flashTimer = useRef(null);
 
   const [menu, setMenu] = useState(false);
   const [modal, setModal] = useState(null);
   const [remark, setRemark] = useState("");
   const [note, setNote] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
-  const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState(null);
   const [showAllDocs, setShowAllDocs] = useState(false);
+
+  useEffect(() => {
+    setMenu(false); setModal(null); setRemark(""); setNote(""); setRefundAmount(""); setBanner(null); setShowAllDocs(false);
+    return () => clearTimeout(flashTimer.current);
+  }, [payoutId, source]);
+
+  if (!directoryQuery.currentData && directoryQuery.isFetching) return <>
+    <Card><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
+    <DriverLoadingNotice>Loading payout details…</DriverLoadingNotice>
+    <Card><Skeleton width="40%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
+  </>;
 
   if (!r) {
     return (
       <Card>
-        <span className="tk-body">No payout found with ID {payoutId}.</span>
+        <span className="tk-body">{directoryQuery.error ? getApiErrorMessage(directoryQuery.error) : matches.length > 1 ? "Select this payout from the payout list to identify its source." : <>No payout found with ID {payoutId}.</>}</span>
         <div style={{ marginTop: 12 }}>
           <Button
             variant="outline"
@@ -332,63 +337,62 @@ export function PayoutDetail() {
   }
 
   function flash(text, tone = "success") {
+    clearTimeout(flashTimer.current);
     setBanner({ text, tone });
-    setTimeout(() => setBanner(null), 3500);
+    flashTimer.current = setTimeout(() => setBanner(null), 3500);
+  }
+
+  const unavailable = (feature) => flash(`${feature} is not available yet.`, "info");
+
+  async function copy(value, message) {
+    if (!navigator.clipboard) { unavailable("Copying to the clipboard"); return; }
+    try { await navigator.clipboard.writeText(value); flash(message); }
+    catch { flash("Could not copy to the clipboard.", "danger"); }
+  }
+
+  function openDocument(document) {
+    if (!document.url || !/^https?:\/\//i.test(document.url)) { unavailable("Payout document download"); return; }
+    window.open(document.url, "_blank", "noopener,noreferrer");
   }
 
   async function handleApprove() {
-    setBusy(true);
+    if (operationPending.current || busy || !r.canApprove) return;
+    if (remark.trim()) { flash("The approval API cannot save remarks. Clear the remark before approving.", "info"); return; }
+    operationPending.current = true;
     try {
-      await approvePayoutRequest(r.id);
-      flash(`${r.id} approved and paid out.`);
+      const result = await approveWithdrawal({ id: r.id, key: r.key }).unwrap();
+      flash(result.message);
     } catch (error) {
-      flash(
-        error.message || "This payout is not ready for approval.",
-        "danger",
-      );
+      flash(getApiErrorMessage(error), "danger");
     } finally {
-      setBusy(false);
+      operationPending.current = false;
     }
   }
 
   async function handleDisapproveSubmit() {
-    setBusy(true);
-    await disapprovePayoutRequest(r.id, remark.trim());
-    setBusy(false);
-    setModal(null);
-    setRemark("");
-    flash(`${r.id} disapproved.`);
+    if (operationPending.current || busy || !r.canReject) return;
+    operationPending.current = true;
+    try {
+      const result = await rejectWithdrawal({ id: r.id, key: r.key, reason: remark }).unwrap();
+      setModal(null); setRemark(""); flash(result.message);
+    } catch (error) { setModal(null); flash(getApiErrorMessage(error), "danger"); }
+    finally { operationPending.current = false; }
   }
 
   async function handleRequestInfoSubmit() {
     if (!note.trim()) return;
-    setBusy(true);
-    await requestPayoutInfo(r.id, note.trim());
-    setBusy(false);
-    setModal(null);
-    setNote("");
-    flash("Requester notified — more information requested.");
+    setModal(null); unavailable("Requesting more payout information");
   }
 
   async function handleIssueSubmit() {
     if (!note.trim()) return;
-    setBusy(true);
-    await raisePayoutIssue(r.id, note.trim());
-    setBusy(false);
-    setModal(null);
-    setNote("");
-    flash("Issue raised. Our finance team will review this payout.");
+    setModal(null); unavailable("Raising a payout issue");
   }
 
   async function handleRefundSubmit() {
     const value = Number(refundAmount);
     if (!value || value <= 0) return;
-    setBusy(true);
-    await createPayoutRefund(r.id, value);
-    setBusy(false);
-    setModal(null);
-    setRefundAmount("");
-    flash(`Refund of ${formatNaira(value)} created against ${r.id}.`);
+    setModal(null); unavailable("Creating a payout refund");
   }
 
   const [tileBg, tileFg, tileIcon] =
@@ -400,48 +404,8 @@ export function PayoutDetail() {
   // Completed — Payout Details (093)
   // -------------------------------------------------------------------
   if (r.status === "Completed") {
-    const payoutSteps = [
-      {
-        title: "Initiated",
-        time: `${r.dateRequested} ${r.dateRequestedTime}`,
-        state: "done",
-        icon: "check",
-      },
-      { title: "Approved", time: r.approvedOn, state: "done", icon: "check" },
-      { title: "Processing", time: r.approvedOn, state: "done", icon: "check" },
-      { title: "Completed", time: r.processedOn, state: "done", icon: "check" },
-    ];
-
-    const activity = [
-      {
-        title: "Payout initiated",
-        time: `${r.dateRequested} ${r.dateRequestedTime}`,
-        description: "System created payout request.",
-        state: "done",
-        icon: "check",
-      },
-      {
-        title: "Payout approved",
-        time: r.approvedOn,
-        description: "Approved by Trukkas Admin.",
-        state: "done",
-        icon: "check",
-      },
-      {
-        title: "Payment processing",
-        time: r.approvedOn,
-        description: `Funds sent to ${r.payment.bank}.`,
-        state: "done",
-        icon: "banknote",
-      },
-      {
-        title: "Payout completed",
-        time: r.processedOn,
-        description: `${isDriver ? "Driver's" : "Company's"} account credited successfully.`,
-        state: "done",
-        icon: "check",
-      },
-    ];
+    const payoutSteps = r.payoutSteps;
+    const activity = r.activity;
 
     return (
       <>
@@ -462,10 +426,7 @@ export function PayoutDetail() {
                 variant="outline"
                 icon="share-2"
                 onClick={() => {
-                  navigator.clipboard?.writeText(
-                    typeof window !== "undefined" ? window.location.href : r.id,
-                  );
-                  flash("Link copied to clipboard.");
+                  copy(window.location.href, "Link copied to clipboard.");
                 }}
               >
                 Share
@@ -493,9 +454,8 @@ export function PayoutDetail() {
                           label: "Copy Payout ID",
                           icon: "copy",
                           onClick: () => {
-                            navigator.clipboard?.writeText(r.id);
+                            copy(r.id, "Payout ID copied.");
                             setMenu(false);
-                            flash("Payout ID copied.");
                           },
                         },
                         {
@@ -503,7 +463,7 @@ export function PayoutDetail() {
                           icon: "file-text",
                           onClick: () => {
                             setMenu(false);
-                            flash("Preparing statement…");
+                            unavailable("Payout statement download");
                           },
                         },
                       ]}
@@ -563,15 +523,10 @@ export function PayoutDetail() {
                     color: "var(--tk-ink-900)",
                   }}
                 >
-                  {isDriver
-                    ? "Final payout to driver"
-                    : "Final payout to company"}{" "}
-                  for {r.jobId}
+                  {r.description}
                 </div>
                 <div className="tk-meta" style={{ marginTop: 3 }}>
-                  Funds released from escrow to{" "}
-                  {isDriver ? "driver's" : "company's"} wallet ({r.payment.bank}
-                  ).
+                  {r.descriptionNote}
                 </div>
               </div>
             </div>
@@ -581,7 +536,7 @@ export function PayoutDetail() {
                 value={
                   <CopyableId
                     id={r.id}
-                    onCopy={(id) => flash(`${id} copied.`)}
+                    onCopy={(id) => copy(id, `${id} copied.`)}
                   />
                 }
               />
@@ -614,7 +569,7 @@ export function PayoutDetail() {
                 value={
                   r.relatedTransaction ? (
                     <Link
-                      to={`/transactions/${r.relatedTransaction}`}
+                      to={payoutTransactionUrl(r.relatedTransaction)}
                       className="tk-mono"
                     >
                       {r.relatedTransaction}
@@ -681,11 +636,11 @@ export function PayoutDetail() {
                     <LabelValue
                       label="Company"
                       value={
-                        <Link
-                          to={`/companies/${encodeURIComponent(r.companyId || r.partyId)}?tab=payouts`}
+                        r.companyId ? <Link
+                          to={payoutCompanyUrl(r.companyId)}
                         >
                           {r.companyName || r.party}
-                        </Link>
+                        </Link> : "—"
                       }
                     />
                   )}
@@ -716,9 +671,9 @@ export function PayoutDetail() {
                   <LabelValue
                     label="Job ID"
                     value={
-                      <Link to={`/jobs/${r.jobId}`} className="tk-mono">
+                      r.jobId ? <Link to={payoutJobUrl(r.jobId)} className="tk-mono">
                         {r.jobId}
-                      </Link>
+                      </Link> : <span className="tk-mono">—</span>
                     }
                   />
                   <LabelValue
@@ -753,6 +708,7 @@ export function PayoutDetail() {
               {r.breakdown.map((b) => (
                 <BreakdownRow key={b.label} label={b.label} value={b.value} />
               ))}
+              {!r.breakdown.length && "—"}
               <div
                 style={{
                   display: "flex",
@@ -778,7 +734,7 @@ export function PayoutDetail() {
                     color: "var(--tk-ink-900)",
                   }}
                 >
-                  {formatNaira(r.amount)}
+                  {formatNaira(r.netAmount)}
                 </span>
               </div>
             </SectionCard>
@@ -796,7 +752,7 @@ export function PayoutDetail() {
               <LabelValue
                 label="Reference"
                 value={
-                  <span className="tk-mono">PAYOUT-{r.id.split("-")[1]}</span>
+                  <span className="tk-mono">{r.reference}</span>
                 }
               />
             </SectionCard>
@@ -808,7 +764,7 @@ export function PayoutDetail() {
                   variant="ghost"
                   icon="pencil"
                   onClick={() =>
-                    flash("Notes editing is not available in this preview.")
+                    unavailable("Payout notes editing")
                   }
                 >
                   Edit
@@ -833,7 +789,7 @@ export function PayoutDetail() {
                 style={{ marginTop: 14 }}
                 title="Payout Completed"
               >
-                {`Funds have been successfully paid to the ${isDriver ? "driver's" : "company's"} bank account.`}
+                {r.descriptionNote}
               </Banner>
             </SectionCard>
 
@@ -849,8 +805,8 @@ export function PayoutDetail() {
                 <RelatedRecordRow
                   icon="coins"
                   id={r.relatedSettlement}
-                  description={`Final settlement for ${r.jobId}`}
-                  status="Completed"
+                  description="—"
+                  status="—"
                   to={`/settlements/${r.relatedSettlement}`}
                 />
               )}
@@ -858,33 +814,34 @@ export function PayoutDetail() {
                 <RelatedRecordRow
                   icon="repeat"
                   id={r.relatedTransaction}
-                  description={`Escrow release to ${isDriver ? "driver" : "company"} (${formatNaira(r.amount)})`}
-                  status="Completed"
-                  to={`/transactions/${r.relatedTransaction}`}
+                  description="—"
+                  status="—"
+                  to={payoutTransactionUrl(r.relatedTransaction)}
                 />
               )}
               {r.escrowId && (
                 <RelatedRecordRow
                   icon="lock"
                   id={r.escrowId}
-                  description={`Escrow for ${r.jobId}`}
-                  status="Completed"
+                  description="—"
+                  status="—"
                   to={`/escrow/${r.escrowId}`}
                 />
               )}
-              <RelatedRecordRow
+              {r.jobId && <RelatedRecordRow
                 icon="package"
                 id={r.jobId}
                 description={r.job.route}
-                status="Completed"
-                to={`/jobs/${r.jobId}`}
-              />
-              <RelatedRecordRow
+                status={r.job.status}
+                to={payoutJobUrl(r.jobId)}
+              />}
+              {r.job.tripId !== "—" && <RelatedRecordRow
                 icon="radio-tower"
                 id={r.job.tripId}
                 description={r.job.route}
-                status="Completed"
-              />
+                status={r.job.status}
+              />}
+              {!r.relatedSettlement && !r.relatedTransaction && !r.escrowId && !r.jobId && r.job.tripId === "—" && "—"}
             </SectionCard>
 
             <SectionCard
@@ -895,7 +852,7 @@ export function PayoutDetail() {
                 </a>
               }
             >
-              <Timeline items={activity} />
+              {activity.length ? <Timeline items={activity} /> : "—"}
             </SectionCard>
 
             <SectionCard title="Actions">
@@ -908,7 +865,7 @@ export function PayoutDetail() {
                   icon="rotate-ccw"
                   fullWidth
                   onClick={() => {
-                    setRefundAmount(String(r.amount));
+                    setRefundAmount(r.amount == null ? "" : String(r.amount));
                     setModal("refund");
                   }}
                 >
@@ -1024,60 +981,8 @@ export function PayoutDetail() {
   // -------------------------------------------------------------------
   // Pending / Approved / Processing / Rejected — Payout Request Details (092)
   // -------------------------------------------------------------------
-  const approvalStates =
-    APPROVAL_STATE[r.status] || APPROVAL_STATE["Pending Review"];
-  const approvalIcons = [
-    "check",
-    "search",
-    r.status === "Rejected" ? "x" : "check",
-    "banknote",
-  ];
-  const approvalSteps = APPROVAL_STEPS.map((title, i) => ({
-    title:
-      i === 2 ? (r.status === "Rejected" ? "Rejected" : "Approved") : title,
-    state: approvalStates[i],
-    icon: approvalIcons[i],
-  }));
-
-  const activity = [
-    {
-      title: "Payout request submitted",
-      time: `${r.dateRequested} ${r.dateRequestedTime}`,
-      description: `Requested by ${r.requestedBy}.`,
-      state: "done",
-      icon: "check",
-    },
-    {
-      title:
-        r.status === "Rejected"
-          ? "Disapproved"
-          : r.status === "Pending Review"
-            ? "Under review"
-            : "Approved",
-      description:
-        r.status === "Rejected"
-          ? r.adminRemark || "Rejected by admin."
-          : r.status === "Pending Review"
-            ? "Pending admin review."
-            : "Approved by admin.",
-      state:
-        r.status === "Rejected"
-          ? "danger"
-          : r.status === "Pending Review"
-            ? "current"
-            : "done",
-      icon: r.status === "Rejected" ? "x" : "check",
-    },
-    {
-      title: "Payment processed",
-      description:
-        r.status === "Processing"
-          ? "Payment is being processed."
-          : "Awaiting processing.",
-      state: r.status === "Processing" ? "current" : "pending",
-      icon: "lock-open",
-    },
-  ];
+  const approvalSteps = r.approvalSteps;
+  const activity = r.activity;
 
   const canReview = r.status === "Pending Review" || r.status === "Processing";
 
@@ -1142,8 +1047,7 @@ export function PayoutDetail() {
                       color: "var(--tk-ink-700)",
                     }}
                   >
-                    {isDriver ? "Driver payout" : "Company payout"} for{" "}
-                    {r.jobId}
+                    {r.description}
                   </div>
                   <span className="tk-meta">
                     Requested on {r.dateRequested} at {r.dateRequestedTime}
@@ -1156,7 +1060,7 @@ export function PayoutDetail() {
                   value={
                     <CopyableId
                       id={r.id}
-                      onCopy={(id) => flash(`${id} copied.`)}
+                      onCopy={(id) => copy(id, `${id} copied.`)}
                     />
                   }
                 />
@@ -1185,7 +1089,7 @@ export function PayoutDetail() {
                   value={
                     r.relatedTransaction ? (
                       <Link
-                        to={`/transactions/${r.relatedTransaction}`}
+                        to={payoutTransactionUrl(r.relatedTransaction)}
                         className="tk-mono"
                       >
                         {r.relatedTransaction}
@@ -1267,9 +1171,9 @@ export function PayoutDetail() {
                 <LabelValue
                   label="Company (if any)"
                   value={
-                    !isDriver ? (
+                    r.companyId ? (
                       <Link
-                        to={`/companies/${encodeURIComponent(r.companyId || r.partyId)}?tab=payouts`}
+                        to={payoutCompanyUrl(r.companyId)}
                       >
                         {r.requester.company}
                       </Link>
@@ -1294,9 +1198,9 @@ export function PayoutDetail() {
                 <LabelValue
                   label="Job ID"
                   value={
-                    <Link to={`/jobs/${r.jobId}`} className="tk-mono">
+                    r.jobId ? <Link to={payoutJobUrl(r.jobId)} className="tk-mono">
                       {r.jobId}
-                    </Link>
+                    </Link> : <span className="tk-mono">—</span>
                   }
                 />
                 <LabelValue
@@ -1336,6 +1240,7 @@ export function PayoutDetail() {
             {r.breakdown.map((b) => (
               <BreakdownRow key={b.label} label={b.label} value={b.value} />
             ))}
+            {!r.breakdown.length && "—"}
             <div
               style={{
                 display: "flex",
@@ -1361,7 +1266,7 @@ export function PayoutDetail() {
                   color: "var(--tk-ink-900)",
                 }}
               >
-                {formatNaira(r.amount)}
+                {formatNaira(r.netAmount)}
               </span>
             </div>
           </SectionCard>
@@ -1430,21 +1335,22 @@ export function PayoutDetail() {
                     name={d.name}
                     size={d.file}
                     kind={d.kind}
-                    onOpen={() => flash(`Downloading ${d.file}…`)}
+                    onOpen={() => openDocument(d)}
                     style={{ flex: 1 }}
                   />
                   <Button
                     variant="ghost"
                     icon="download"
-                    onClick={() => flash(`Downloading ${d.file}…`)}
+                    onClick={() => openDocument(d)}
                   />
                 </div>
               ))}
+              {!docs.length && "—"}
             </div>
           </SectionCard>
 
           <SectionCard title="Activity Timeline">
-            <Timeline items={activity} />
+            {activity.length ? <Timeline items={activity} /> : "—"}
           </SectionCard>
 
           <SectionCard title="Admin Remarks (Optional)">
@@ -1462,16 +1368,16 @@ export function PayoutDetail() {
                 <Button
                   icon="circle-check"
                   fullWidth
-                  disabled={busy || !r.approvalReady}
+                  disabled={busy || !r.canApprove}
                   onClick={handleApprove}
                 >
                   {busy
                     ? "Processing…"
-                    : r.approvalReady
+                    : r.canApprove
                       ? "Approve Payout"
                       : "Approval Blocked"}
                 </Button>
-                {!r.approvalReady && r.partyType === "company" && (
+                {r.approvalReady === false && r.partyType === "company" && (
                   <span className="tk-meta">
                     Complete and reconcile every included trip before approving
                     this payout.
@@ -1481,7 +1387,7 @@ export function PayoutDetail() {
                   variant="danger"
                   icon="x"
                   fullWidth
-                  disabled={busy}
+                  disabled={busy || !r.canReject}
                   onClick={() => setModal("disapprove")}
                 >
                   Disapprove
@@ -1506,8 +1412,8 @@ export function PayoutDetail() {
                   }
                 >
                   {r.status === "Rejected"
-                    ? r.adminRemark || "This request has been disapproved."
-                    : "No further action needed right now."}
+                    ? r.adminRemark ?? "—"
+                    : r.descriptionNote}
                 </Banner>
                 <Button
                   variant="outline"
@@ -1535,7 +1441,7 @@ export function PayoutDetail() {
             </Button>
             <Button
               variant="danger"
-              disabled={busy}
+              disabled={busy || !r.canReject}
               onClick={handleDisapproveSubmit}
             >
               {busy ? "Processing…" : "Disapprove Payout"}

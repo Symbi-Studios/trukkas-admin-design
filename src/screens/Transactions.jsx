@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -23,16 +24,16 @@ import {
   AlertRow,
   EmptyState,
   FilterSelect,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { retryTransaction, reverseTransaction } from "../mock/api.js";
 import {
-  transactionSummary,
-  transactionVolumeBreakdown,
-  transactionStatusBreakdown,
-  transactionAlerts,
-} from "../mock/fixtures/transactions.js";
-import { formatNaira } from "../mock/format.js";
+  useGetAdminTransactionLedgerQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
+  transactionInsights, transactionNumber, transactionMoney as formatNaira, transactionAmount, transactionDetailUrl,
+} from "../store/features/transactions/transactionsApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverTableLoading } from "./DriversLoading.jsx";
+
+const EMPTY_ROWS = [];
 
 const TABS = [
   "All Transactions",
@@ -110,12 +111,12 @@ const DEFAULT_FILTERS = {
 };
 
 function relatedKind(relatedTo) {
-  if (!relatedTo) return "System";
+  if (!relatedTo || relatedTo === "—") return null;
   if (relatedTo.startsWith("JOB-")) return "Job";
   if (relatedTo.startsWith("TRIP-")) return "Trip";
   if (relatedTo === "WALLET") return "Wallet";
   if (relatedTo.startsWith("TRX-")) return "Transaction";
-  return "System";
+  return null;
 }
 
 function downloadCsv(rows) {
@@ -139,9 +140,9 @@ function downloadCsv(rows) {
     r.type,
     r.relatedTo,
     r.party,
-    (r.pos ? "" : "-") + r.amount,
+    transactionAmount(r),
     r.status,
-    r.balanceAfter,
+    r.balanceAfter ?? "—",
   ]);
   const csv = [header, ...body]
     .map((row) =>
@@ -211,7 +212,14 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
 
 export function Transactions() {
   const navigate = useNavigate();
-  const all = useCollection("transactionRows") || [];
+  const ledgerQuery = useGetAdminTransactionLedgerQuery();
+  const ledger = ledgerQuery.error ? null : ledgerQuery.currentData;
+  const all = ledger?.rows || EMPTY_ROWS;
+  const canReverse = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
+  const [retryTransaction, retryState] = useRetryAdminTransactionMutation();
+  const [reverseTransaction, reverseState] = useReverseAdminTransactionMutation();
+  const operationPending = useRef(false);
+  const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching;
 
   const [tab, setTab] = useState("All Transactions");
   const [dateLabel, setDateLabel] = useState("May 24 – May 30, 2026");
@@ -223,10 +231,33 @@ export function Transactions() {
   const [menuFor, setMenuFor] = useState(null);
   const [selected, setSelected] = useState([]);
 
+  const insights = useMemo(() => transactionInsights(ledger?.rows, applied.from, applied.to), [ledger, applied.from, applied.to]);
+  const transactionSummary = insights.summary;
+  const transactionVolumeBreakdown = insights.volume;
+  const transactionStatusBreakdown = insights.statuses;
+  const transactionAlerts = insights.alerts;
+  const metric = (value) => !ledger && ledgerQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value;
+  const unavailable = (feature) => window.alert(`${feature} is not available yet.`);
+
+  async function handleMutation(row, reverse = false) {
+    if (operationPending.current || busy) return;
+    setMenuFor(null);
+    if (reverse && !canReverse) { window.alert("Reversing transactions requires Super Admin access."); return; }
+    if (row.statusCode !== (reverse ? "COMPLETED" : "FAILED")) return;
+    operationPending.current = true;
+    try {
+      await (reverse ? reverseTransaction : retryTransaction)(row.id).unwrap();
+    } catch (error) {
+      window.alert(getApiErrorMessage(error));
+    } finally {
+      operationPending.current = false;
+    }
+  }
+
   const partyOptions = useMemo(
     () => [
       "All Parties",
-      ...Array.from(new Set(all.map((r) => r.party))).sort(),
+      ...Array.from(new Set(all.map((r) => r.party).filter((value) => value !== "—"))).sort(),
     ],
     [all],
   );
@@ -260,23 +291,24 @@ export function Transactions() {
 
   const filtered = useMemo(() => {
     const { type, status, related, party, from, to } = applied;
-    const fromD = from ? new Date(from) : null;
-    const toD = to ? new Date(to) : null;
+    const fromD = from ? Date.parse(`${from}T00:00:00+01:00`) : null;
+    const toD = to ? Date.parse(`${to}T23:59:59.999+01:00`) : null;
     return tabFiltered.filter((r) => {
-      const rd = new Date(r.date);
+      const rd = r.timestamp;
       const inRange =
-        (!fromD || isNaN(rd) || rd >= fromD) &&
-        (!toD || isNaN(rd) || rd <= toD);
+        (!from || (Number.isFinite(fromD) && rd != null && rd >= fromD)) &&
+        (!to || (Number.isFinite(toD) && rd != null && rd <= toD));
       return (
         (type === "All Types" || r.type === type) &&
         (status === "All Statuses" || r.status === status) &&
         (related === RELATED_OPTIONS[0] ||
-          relatedKind(r.relatedTo) === related) &&
+          (r.relatedKind || relatedKind(r.relatedTo)) === related) &&
         (party === "All Parties" || r.party === party) &&
         inRange &&
         (!q ||
           [
             r.id,
+            r.displayId,
             r.relatedTo,
             r.party,
             r.description,
@@ -299,6 +331,7 @@ export function Transactions() {
     setApplied(DEFAULT_FILTERS);
     setQ("");
     setPage(1);
+    if (ledgerQuery.error) ledgerQuery.refetch();
   }
   function jumpToStatus(status) {
     const next = { ...DEFAULT_FILTERS, status };
@@ -343,6 +376,7 @@ export function Transactions() {
             <Button
               variant="outline"
               icon="download"
+              disabled={!ledger || ledgerQuery.isFetching}
               onClick={() =>
                 downloadCsv(
                   selected.length
@@ -368,7 +402,7 @@ export function Transactions() {
           icon="receipt"
           tint="navy"
           label="Total Transactions"
-          value={transactionSummary.totalTransactions.toLocaleString("en-NG")}
+          value={metric(transactionNumber(transactionSummary.totalTransactions))}
           delta={transactionSummary.totalTransactionsDelta}
           caption="vs May 17 – May 23"
         />
@@ -376,7 +410,7 @@ export function Transactions() {
           icon="trending-up"
           tint="green"
           label="Total Inflow"
-          value={formatNaira(transactionSummary.totalInflow)}
+          value={metric(formatNaira(transactionSummary.totalInflow))}
           delta={transactionSummary.totalInflowDelta}
           caption="vs May 17 – May 23"
         />
@@ -384,7 +418,7 @@ export function Transactions() {
           icon="trending-down"
           tint="red"
           label="Total Outflow"
-          value={formatNaira(transactionSummary.totalOutflow)}
+          value={metric(formatNaira(transactionSummary.totalOutflow))}
           delta={transactionSummary.totalOutflowDelta}
           direction="down"
           caption="vs May 17 – May 23"
@@ -393,7 +427,7 @@ export function Transactions() {
           icon="arrow-left-right"
           tint="blue"
           label="Net Movement"
-          value={formatNaira(transactionSummary.netMovement)}
+          value={metric(formatNaira(transactionSummary.netMovement))}
           delta={transactionSummary.netMovementDelta}
           caption="vs May 17 – May 23"
         />
@@ -401,7 +435,7 @@ export function Transactions() {
           icon="circle-check"
           tint="green"
           label="Successful Transactions"
-          value={`${transactionSummary.successfulCount.toLocaleString("en-NG")} (${transactionSummary.successfulPct})`}
+          value={metric(transactionSummary.successfulCount == null ? "—" : `${transactionNumber(transactionSummary.successfulCount)} (${transactionSummary.successfulPct})`)}
           delta={transactionSummary.successfulDelta}
           caption="vs May 17 – May 23"
         />
@@ -409,7 +443,7 @@ export function Transactions() {
           icon="circle-x"
           tint="red"
           label="Failed / Reversed"
-          value={`${transactionSummary.failedReversedCount.toLocaleString("en-NG")} (${transactionSummary.failedReversedPct})`}
+          value={metric(transactionSummary.failedReversedCount == null ? "—" : `${transactionNumber(transactionSummary.failedReversedCount)} (${transactionSummary.failedReversedPct})`)}
           delta={transactionSummary.failedReversedDelta}
           direction="down"
           caption="vs May 17 – May 23"
@@ -525,11 +559,11 @@ export function Transactions() {
             onClear={filtersActive || q ? handleReset : undefined}
           />
 
-          {filtered.length === 0 ? (
+          {!ledger && ledgerQuery.isFetching ? <DriverTableLoading columns={10} label="Loading transactions" /> : filtered.length === 0 ? (
             <EmptyState
               icon="receipt"
               title="No transactions found"
-              description="Try adjusting your filters or search."
+              description={ledgerQuery.error ? getApiErrorMessage(ledgerQuery.error) : "Try adjusting your filters or search."}
             />
           ) : (
             <>
@@ -554,8 +588,8 @@ export function Transactions() {
                     key: "id",
                     header: "Reference",
                     render: (r) => (
-                      <Link to={`/transactions/${r.id}`} className="tk-mono">
-                        {r.id}
+                      <Link to={transactionDetailUrl(r.id)} className="tk-mono">
+                        {r.displayId}
                       </Link>
                     ),
                   },
@@ -606,8 +640,7 @@ export function Transactions() {
                             : "var(--tk-danger)",
                         }}
                       >
-                        {r.pos ? "+" : "-"}
-                        {r.amount.toLocaleString("en-NG")}
+                        {transactionAmount(r)}
                       </span>
                     ),
                   },
@@ -622,7 +655,7 @@ export function Transactions() {
                     key: "balanceAfter",
                     header: "Balance After",
                     align: "right",
-                    render: (r) => r.balanceAfter.toLocaleString("en-NG"),
+                    render: (r) => transactionNumber(r.balanceAfter),
                   },
                   {
                     key: "x",
@@ -639,14 +672,14 @@ export function Transactions() {
                             icon: "eye",
                             onClick: () => {
                               setMenuFor(null);
-                              navigate(`/transactions/${r.id}`);
+                              navigate(transactionDetailUrl(r.id));
                             },
                           },
                           {
                             label: "Copy Reference",
                             icon: "copy",
                             onClick: () => {
-                              navigator.clipboard?.writeText(r.id);
+                              navigator.clipboard?.writeText(r.displayId);
                               setMenuFor(null);
                             },
                           },
@@ -657,8 +690,7 @@ export function Transactions() {
                                   label: "Retry Transaction",
                                   icon: "rotate-ccw",
                                   onClick: () => {
-                                    retryTransaction(r.id);
-                                    setMenuFor(null);
+                                    handleMutation(r);
                                   },
                                 },
                               ]
@@ -670,13 +702,12 @@ export function Transactions() {
                                   icon: "undo-2",
                                   tone: "danger",
                                   onClick: () => {
-                                    reverseTransaction(r.id);
-                                    setMenuFor(null);
+                                    handleMutation(r, true);
                                   },
                                 },
                               ]
                             : []),
-                          { label: "Download Receipt", icon: "file-text" },
+                          { label: "Download Receipt", icon: "file-text", onClick: () => { setMenuFor(null); unavailable("Downloading receipts"); } },
                         ]}
                       />
                     ),
@@ -720,9 +751,9 @@ export function Transactions() {
               <DonutChart
                 size={180}
                 thickness={18}
-                centerValue={`₦${(transactionVolumeBreakdown.reduce((s, d) => s + d.amount, 0) / 1000000).toFixed(2)}M`}
+                centerValue="—"
                 centerLabel="Total Volume"
-                data={transactionVolumeBreakdown.map((d) => ({
+                data={transactionVolumeBreakdown.filter((d) => d.pct != null).map((d) => ({
                   label: d.label,
                   value: d.pct,
                   color: d.color,
@@ -733,7 +764,7 @@ export function Transactions() {
                 items={transactionVolumeBreakdown.map((d) => ({
                   label: d.label,
                   value: d.pct,
-                  display: `${formatNaira(d.amount)} (${d.pct}%)`,
+                  display: d.amount == null || d.pct == null ? "—" : `${formatNaira(d.amount)} (${d.pct}%)`,
                   color: d.color,
                 }))}
                 showShare={false}
@@ -790,7 +821,7 @@ export function Transactions() {
                     color: "var(--tk-ink-900)",
                   }}
                 >
-                  {s.count.toLocaleString("en-NG")} transactions
+                  {transactionNumber(s.count)} transactions
                 </span>
                 <span className="tk-meta">{s.pct}</span>
               </div>
@@ -811,6 +842,7 @@ export function Transactions() {
               </a>
             }
           >
+            {!all.length && !ledgerQuery.isFetching && <span className="tk-meta">—</span>}
             {all.slice(0, 5).map((r) => (
               <div
                 key={r.id}
@@ -838,14 +870,14 @@ export function Transactions() {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Link
-                    to={`/transactions/${r.id}`}
+                    to={transactionDetailUrl(r.id)}
                     style={{
                       display: "block",
                       font: "600 13px/18px var(--tk-font-sans)",
                       color: "var(--tk-ink-900)",
                     }}
                   >
-                    {r.id}
+                    {r.displayId}
                   </Link>
                   <span
                     className="tk-meta"
@@ -866,8 +898,7 @@ export function Transactions() {
                       color: r.pos ? "var(--tk-success)" : "var(--tk-danger)",
                     }}
                   >
-                    {r.pos ? "+" : "-"}
-                    {formatNaira(r.amount)}
+                    {transactionAmount(r, true)}
                   </div>
                   <span className="tk-meta">
                     {r.date === "Just now" ? "just now" : `${r.date} ${r.time}`}
@@ -891,6 +922,7 @@ export function Transactions() {
               </a>
             }
           >
+            {!transactionAlerts.length && <span className="tk-meta">—</span>}
             {transactionAlerts.map((a, i) => (
               <AlertRow
                 key={i}

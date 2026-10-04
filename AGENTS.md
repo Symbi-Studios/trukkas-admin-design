@@ -10,6 +10,22 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Trukkas Admin project instructions
 
+## MANDATORY: API integration must preserve the existing UI
+
+**STOP: An API integration task does not authorize design, structure, static-copy, or interaction changes. These rules take precedence over other integration guidance in this file. Only an explicit user request for the specific UI change permits an exception.**
+
+- Preserve the screen exactly: layout, page and section structure, tabs, cards, tables, columns, forms, buttons, menus, icons, spacing, colors, typography, responsive behavior, navigation, and existing interactions. Do not add, remove, rename, reorder, redesign, or restructure any of them to accommodate an API.
+- Do not add new UI sections, controls, banners, badges, explanatory notices, demo labels, styles, or replacement components during integration. Do not change static headings, labels, descriptions, or other fixed text. Change only the dynamic values that genuinely require backend data and the wiring needed for existing controls.
+- Adapt backend DTOs at the RTK Query API boundary to the existing screen's view model. Necessary API/data-layer code is permitted; it must not introduce UI changes or unrelated refactors. Do not force the screen to match the backend response shape or invent UI for newly returned fields.
+- If an API omits a required dynamic value, returns null, or returns a value that cannot be parsed safely, display `—` in that existing value's location. Do not substitute sample records, mock totals, invented defaults, estimated values, or unrelated data. Preserve valid `0` and `false` values. Do not manufacture rows or counts for unavailable collections.
+- If no API supports a screen or section being integrated, preserve its existing structure and put `—` in backend-dependent value locations. Do not keep sample values as if they were live data. Leave unrelated screens outside the integration scope unchanged.
+- Wire only documented, supported operations to existing actions. When an existing action has no API, do not fake a successful server update or invent an endpoint. Preserve its design, report the missing operation, and use the established unavailable-action behavior where one exists.
+- **Use our existing loader format.** Reuse the relevant established loading components, skeletons, placement, and loading/error/empty patterns from integrated screens. Do not introduce a different loader, loading layout, or new status presentation.
+- Do not add, remove, rewrite, or change tests during API integration. Do not run tests unless the user explicitly requests them. Report only checks actually performed.
+- Before finishing, review the diff for unintended design, structure, static-text, styling, and interaction changes. Remove accidental changes made during the current task before reporting completion.
+- Report all remaining API gaps directly in chat, with the screen/section, HTTP method, exact existing request path and relevant query parameters, and the response fields needed for each existing UI area. For missing write operations, include the required request-body fields and response data.
+- If there is no documented API for the screen or operation, say so explicitly and propose the request method/path and expected response fields. Clearly label proposed contracts as proposed, not existing. Distinguish undocumented/unconfirmed fields from fields confirmed absent in an actual response. Do not create a Markdown report unless the user explicitly asks for one.
+
 ## Project structure and runtime
 
 - This repository is a JavaScript/JSX admin console using Next.js 16.3.4, React 18, and the App Router, with TypeScript/TSX enabled for gradual adoption. Routes live in `src/app/`; the shared shell is in `src/App.jsx`; screen components are in `src/screens/`.
@@ -23,7 +39,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - `src/mock/api.js` is the async data-action layer. It currently reads and updates the in-memory store in `src/mock/db.js`, seeded from `src/mock/fixtures/`.
 - Screens subscribe to collections through `src/mock/useCollection.js`. Pure domain rules live under `src/domain/`.
-- Keep the prototype working while integrating incrementally. For an API-backed feature, add endpoints with `baseApi.injectEndpoints(...)` in `src/store/features/<feature>/`, adapt API response DTOs to the screen's existing view model there, and handle loading, empty, error, and permission states in the UI. Components use generated RTK Query hooks; do not scatter raw `fetch` calls or wire-format assumptions across screens.
+- Integrate incrementally using `baseApi.injectEndpoints(...)` in `src/store/features/<feature>/`. Adapt API response DTOs to the screen's existing view model there and reuse existing loading, empty, error, and permission patterns without redesigning or adding UI. Components use generated RTK Query hooks; do not scatter raw `fetch` calls or wire-format assumptions across screens.
 - API integration must fit the existing UI and user flow. Do not change screens, layouts, copy, or interactions to match an API's schema or behavior unless the user explicitly asks for UI changes; adapt API data at the API boundary instead.
 - Retain mock-backed screens and fixtures that have not been migrated. Remove the mock store only as part of an explicitly requested complete cutover after checking all consumers.
 - Redux Toolkit configuration lives in `src/store/store.js`, the client provider in `src/store/StoreProvider.jsx`, and shared RTK Query transport and refresh logic in `src/store/api/baseApi.js`. Add each API domain under `src/store/features/` using the same injected-endpoint pattern. Use `builder.query` for reads and `builder.mutation` for writes.
@@ -42,7 +58,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - When reporting what is missing from an integration, be concise and copy-ready for the user to send to the backend developer. Name the screen and exact endpoint for every requested field or operation.
 - Separate fields already returned from fields still needed. Say whether each field belongs in the list response, a detail response, a summary, or another endpoint; do not describe missing data vaguely.
-- Include the complete request path and query parameters, request body for writes, and a representative full 200 JSON response for each proposed or changed contract. Mark examples as proposed when they are not in the current OpenAPI spec, and do not present guessed fields or endpoints as existing API behavior.
+- Include the HTTP method, complete request path and relevant query parameters, request-body fields for writes, and expected response fields. Provide representative JSON when needed to clarify nested structures or when the user asks. Mark proposed paths/contracts and examples as proposed when they are not in the current OpenAPI spec; do not present guesses as existing API behavior.
 - Group requested fields by the UI they support (table, filters, summary cards, detail sections, map, or actions). For maps, specify coordinate shape and whether locations are job addresses or live GPS positions.
 - If the user asks for a short answer, provide one compact message they can forward to the backend developer, keeping the endpoint names and required response fields explicit.
 - When preparing text for WhatsApp, preserve literal formatting markers such as `*bold*`, underscores, and other symbols. Put the message in a plain code block when needed so those characters remain visible and copyable.
@@ -58,4 +74,4 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Preserve existing route conventions, responsive behavior, design-system usage, and the mock/API contracts of unaffected screens.
 - Before changing Next.js APIs or conventions, read the relevant installed guide under `node_modules/next/dist/docs/`; the managed block above is generated by this installed Next version and must remain intact.
-- Do not add tests or claim checks passed unless the current task asks for them. Use only the validation requested by the user or required by the task.
+- Do not add or modify tests during API integration. Do not run tests unless the user explicitly requests them, and never claim checks passed unless they were actually performed. Use only the validation requested by the user or required by the task.

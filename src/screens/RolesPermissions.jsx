@@ -1,14 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, Card, TableToolbar, SearchField, FilterSelect,
-  DataTable, Pagination, Badge, Tag, DropdownMenu, IconButton, Icon, Tabs, LabelValue,
+  DataTable, Pagination, Badge, Tag, DropdownMenu, IconButton, Icon, Tabs, LabelValue, Skeleton,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { rolesSummary } from '../mock/fixtures/roles.js';
-import { deleteRole } from '../mock/api.js';
+import { useGetAdminRolesDirectoryQuery, roleSummary, emptyRoleDetail, ROLE_CAPABILITIES } from '../store/features/roles/rolesApi.js';
+import { DriverTableLoading } from './DriversLoading.jsx';
 
 const PAGE_SIZE = 8;
 const STATUSES = ['Active', 'Inactive'];
@@ -60,7 +60,7 @@ function ModuleRow({ mod, open, onToggle }) {
               </span>
             </div>
           ))}
-          {!mod.actions && <span className="tk-meta">Full access to this module.</span>}
+          {!mod.actions && <span className="tk-meta">{mod.fullAccess === true ? 'Full access to this module.' : '—'}</span>}
         </div>
       )}
     </div>
@@ -69,23 +69,34 @@ function ModuleRow({ mod, open, onToggle }) {
 
 export function RolesPermissions() {
   const navigate = useNavigate();
-  const roles = useCollection('roles') || [];
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const directory = useGetAdminRolesDirectoryQuery(undefined, { skip: !authenticated });
+  const roles = authenticated && !directory.isError ? directory.currentData : undefined;
+  const rolesSummary = roleSummary(roles);
+  const loading = authenticated && directory.isFetching;
+  const value = (content) => loading ? <Skeleton as="span" width={60} height={23} /> : content;
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('All Status');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [menuFor, setMenuFor] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [panelTab, setPanelTab] = useState('Permissions');
   const [openModule, setOpenModule] = useState('Jobs & Trips');
   const [permQ, setPermQ] = useState('');
 
-  const filtered = useMemo(() => roles.filter((r) => (
+  const filtered = useMemo(() => (roles || []).filter((r) => (
     (status === 'All Status' || r.status === status) &&
-    (!q || [r.name, r.description].some((s) => s && s.toLowerCase().includes(q.toLowerCase())))
+    (!q || [r.name, r.description].some((s) => s && s !== '—' && s.toLowerCase().includes(q.toLowerCase())))
   )), [roles, status, q]);
 
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const selected = roles.find((r) => r.id === selectedId) || roles[2] || roles[0];
+  const filtersAvailable = Boolean(roles) && (status === 'All Status' || roles.every((role) => role.statusCode != null))
+    && (!q || roles.every((role) => role.name !== '—'));
+  const total = filtersAvailable ? filtered.length : null;
+  const pageCount = total == null ? null : Math.max(1, Math.ceil(total / pageSize));
+  const paged = filtersAvailable ? filtered.slice((page - 1) * pageSize, page * pageSize) : [];
+  const selected = (selectedId ? roles?.find((role) => role.id === selectedId) : roles?.[2] || roles?.[0]) || emptyRoleDetail;
+  useEffect(() => { if (pageCount != null && page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
   const visibleModules = useMemo(() => {
     if (!selected) return [];
@@ -100,15 +111,15 @@ export function RolesPermissions() {
       <PageHeader crumbs={['Administration', 'Roles & Permissions']} title="Roles & Permissions"
         description="Create, manage and configure roles and their permissions."
         actions={<>
-          <Button variant="outline" icon="grid-2x2">Permissions Matrix</Button>
+          <Button variant="outline" icon="grid-2x2" disabled={!ROLE_CAPABILITIES.matrix}>Permissions Matrix</Button>
           <Button icon="plus" onClick={() => navigate('/roles/new')}>Create New Role</Button>
         </>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>
-        <StatCard icon="users-round" tint="blue" label="Total Roles" value={rolesSummary.totalRoles} caption={rolesSummary.totalCaption} />
-        <StatCard icon="file-text" tint="blue" label="System Roles" value={rolesSummary.systemRoles} caption={rolesSummary.systemCaption} />
-        <StatCard icon="user-round-cog" tint="blue" label="Custom Roles" value={rolesSummary.customRoles} caption={rolesSummary.customCaption} />
-        <StatCard icon="shield-check" tint="blue" label="Permissions" value={rolesSummary.permissions} caption={rolesSummary.permissionsCaption} />
+        <StatCard icon="users-round" tint="blue" label="Total Roles" value={value(rolesSummary.totalRoles)} caption={rolesSummary.totalCaption} />
+        <StatCard icon="file-text" tint="blue" label="System Roles" value={value(rolesSummary.systemRoles)} caption={rolesSummary.systemCaption} />
+        <StatCard icon="user-round-cog" tint="blue" label="Custom Roles" value={value(rolesSummary.customRoles)} caption={rolesSummary.customCaption} />
+        <StatCard icon="shield-check" tint="blue" label="Permissions" value={value(rolesSummary.permissions)} caption={rolesSummary.permissionsCaption} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
@@ -123,7 +134,7 @@ export function RolesPermissions() {
               onChange={(v) => { setStatus(v); setPage(1); }} />}
             onClear={resetFilters} />
 
-          <DataTable rows={paged} rowKey={(r) => r.id} onRowClick={(r) => setSelectedId(r.id)}
+          {loading ? <DriverTableLoading columns={6} label="Loading roles" /> : <DataTable rows={paged} rowKey={(r) => r.id} onRowClick={(r) => setSelectedId(r.id)}
             columns={[
               { key: 'name', header: 'Role Name', render: (r) => (
                 <span style={{ display: 'grid', gap: 2 }}>
@@ -141,18 +152,18 @@ export function RolesPermissions() {
                     <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
                       <DropdownMenu width={200} items={[
                         { label: 'View Role', icon: 'eye', onClick: () => { setSelectedId(r.id); setMenuFor(null); } },
-                        { label: 'Edit Role', icon: 'pencil', onClick: () => setMenuFor(null) },
-                        { label: 'Duplicate Role', icon: 'copy', onClick: () => setMenuFor(null) },
+                        { label: 'Edit Role', icon: 'pencil', disabled: !ROLE_CAPABILITIES.edit },
+                        { label: 'Duplicate Role', icon: 'copy', disabled: !ROLE_CAPABILITIES.duplicate },
                         { divider: true },
-                        { label: 'Delete Role', icon: 'trash-2', tone: 'danger', onClick: () => { deleteRole(r.id); setMenuFor(null); } },
+                        { label: 'Delete Role', icon: 'trash-2', tone: 'danger', disabled: !ROLE_CAPABILITIES.delete },
                       ]} />
                     </span>
                   )}
                 </span>) },
-            ]} />
-          <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length}
-            pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-            onPage={setPage} onPageSize={() => {}} />
+            ]} />}
+          <Pagination page={page} pageSize={pageSize} total={total}
+            pageCount={pageCount}
+            onPage={(next) => { if (pageCount != null) setPage(Math.max(1, Math.min(next, pageCount))); }} onPageSize={(size) => { setPageSize(size); setPage(1); }} />
         </SectionCard>
 
         {selected && (
@@ -164,21 +175,21 @@ export function RolesPermissions() {
               </span>
               <div style={{ flex: 1, display: 'grid', gap: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 className="tk-section">{selected.name}</h3>
+                  <h3 className="tk-section">{value(selected.name)}</h3>
                   <Badge dot>{selected.status}</Badge>
                 </div>
                 <span className="tk-meta">{selected.type} Role · Created on {selected.createdOn}</span>
               </div>
-              <IconButton icon="pencil" tone="outline" label="Edit Role" />
+              <IconButton icon="pencil" tone="outline" label="Edit Role" disabled={!ROLE_CAPABILITIES.edit} />
             </div>
             <span style={{ font: '400 13px/19px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{selected.permissionSummary}</span>
 
             <div style={{ borderTop: '1px solid var(--tk-line)', paddingTop: 4 }}>
-              <LabelValue label="Role ID" value={selected.id} />
-              <LabelValue label="Role Name" value={selected.name} />
-              <LabelValue label="Role Type" value={selected.type} />
-              <LabelValue label="Created By" value={selected.createdBy} />
-              <LabelValue label="Last Updated" value={selected.lastUpdated} />
+              <LabelValue label="Role ID" value={value(selected.id)} />
+              <LabelValue label="Role Name" value={value(selected.name)} />
+              <LabelValue label="Role Type" value={value(selected.type)} />
+              <LabelValue label="Created By" value={value(selected.createdBy)} />
+              <LabelValue label="Last Updated" value={value(selected.lastUpdated)} />
             </div>
 
             <Tabs value={panelTab} onChange={setPanelTab}
@@ -196,14 +207,14 @@ export function RolesPermissions() {
                       onToggle={() => setOpenModule(openModule === m.name ? null : m.name)} />
                   ))}
                 </div>
-                <a href="#" style={{ textAlign: 'center', font: '600 13px/1 var(--tk-font-sans)' }}>View All Modules</a>
+                <a href="#" aria-disabled={!ROLE_CAPABILITIES.matrix} onClick={(event) => event.preventDefault()} style={{ textAlign: 'center', font: '600 13px/1 var(--tk-font-sans)' }}>View All Modules</a>
               </div>
             )}
             {panelTab === 'Users' && (
               <span className="tk-meta">{selected.users} users currently hold the {selected.name} role.</span>
             )}
             {panelTab === 'Activity Log' && (
-              <span className="tk-meta">Role last updated {selected.lastUpdated} by {selected.createdBy}.</span>
+              <span className="tk-meta">Role last updated {selected.lastUpdated} by {selected.updatedBy}.</span>
             )}
           </Card>
         )}

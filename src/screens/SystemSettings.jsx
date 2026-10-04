@@ -1,14 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  PageHeader, Button, SectionCard, TextField, Select, Switch, QuickActionsCard, Logo,
-} from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import {
-  systemStatus, platformVersion, generalQuickActions,
-} from '../mock/fixtures/settings.js';
-import { updatePlatformInfo, updateOperationalGeneral, updateNotificationGeneral, resetPlatformSettings } from '../mock/api.js';
+import { PageHeader, Button, SectionCard, QuickActionsCard, Logo } from '../ds.js';
+import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { systemStatus as systemStatusTemplate, generalQuickActions } from '../mock/fixtures/settings.js';
+
 import { SettingsTabStrip, SettingsStatusCard, SettingsDangerZone } from './settingsShared.jsx';
 
 const TIMEZONES = ['(GMT+01:00) Lagos, Nigeria', '(GMT+00:00) Accra, Ghana', '(GMT+03:00) Nairobi, Kenya', '(GMT+02:00) Johannesburg, South Africa'];
@@ -43,11 +42,19 @@ function ColorField({ label, value, onChange }) {
 }
 
 export function SystemSettings() {
-  const platformInfo = useCollection('settingsPlatformInfo')?.[0];
-  const operational = useCollection('settingsOperationalGeneral')?.[0];
-  const notif = useCollection('settingsNotificationGeneral')?.[0];
+  const editor = useSettingsEditor('general');
+  const updatePlatformInfo = editor.change('settingsPlatformInfo');
+  const updateOperationalGeneral = editor.change('settingsOperationalGeneral');
+  const updateNotificationGeneral = editor.change('settingsNotificationGeneral');
+  const resetPlatformSettings = () => editor.unavailable('Reset Platform Settings');
+  const systemStatus = { headline: '—', caption: '—', lastChecked: '—', items: (systemStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const platformVersion = { currentVersion: '—', lastUpdated: '—', environment: '—', buildNumber: '—' };
+  const platformInfo = editor.group('settingsPlatformInfo');
+  const operational = editor.group('settingsOperationalGeneral');
+  const notif = editor.group('settingsNotificationGeneral');
   const [saved, setSaved] = useState(null);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!platformInfo || !operational || !notif) return null;
 
   function flash(key) { setSaved(key); setTimeout(() => setSaved(null), 1500); }
@@ -57,11 +64,12 @@ export function SystemSettings() {
       <PageHeader title="System Settings"
         description="Configure and manage your Trukkas platform settings, integrations, and preferences." />
       <SettingsTabStrip active="general" />
+      <SettingsReadNotice error={editor.error} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
           <SectionCard title="Platform Information" icon="building-2"
-            action={<Button size="sm" onClick={() => { updatePlatformInfo(platformInfo); flash('platform'); }}>
+            action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsPlatformInfo')) flash('platform'); }}>
               {saved === 'platform' ? 'Saved ✓' : 'Save Changes'}</Button>}>
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Basic information about your Trukkas platform.</span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
@@ -81,13 +89,13 @@ export function SystemSettings() {
           </SectionCard>
 
           <SectionCard title="Operational Settings" icon="settings"
-            action={<Button size="sm" onClick={() => { updateOperationalGeneral(operational); flash('operational'); }}>
+            action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsOperationalGeneral')) flash('operational'); }}>
               {saved === 'operational' ? 'Saved ✓' : 'Save Changes'}</Button>}>
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Configure core operational preferences.</span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
               <TextField label="Default Job Expiry (Hours)" type="number" value={operational.defaultJobExpiryHours}
                 hint="How long a job stays open for bids."
-                onChange={(e) => updateOperationalGeneral({ defaultJobExpiryHours: Number(e.target.value) })} />
+                onChange={(e) => updateOperationalGeneral({ defaultJobExpiryHours: e.target.value })} />
               <Select label="Default Currency" options={CURRENCIES} value={operational.defaultCurrency}
                 onChange={(e) => updateOperationalGeneral({ defaultCurrency: e.target.value })} />
               <Select label="Distance Unit" options={DISTANCE_UNITS} value={operational.distanceUnit}
@@ -104,7 +112,7 @@ export function SystemSettings() {
           </SectionCard>
 
           <SectionCard title="Notification Settings" icon="bell"
-            action={<Button size="sm" onClick={() => { updateNotificationGeneral(notif); flash('notif'); }}>
+            action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsNotificationGeneral')) flash('notif'); }}>
               {saved === 'notif' ? 'Saved ✓' : 'Save Changes'}</Button>}>
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Manage system notifications and alerts.</span>
             <ToggleGrid onToggle={(key, v) => updateNotificationGeneral({ [key]: v })} items={[
@@ -143,10 +151,10 @@ export function SystemSettings() {
                 <span style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{platformVersion.buildNumber}</span>
               </div>
             </div>
-            <Button variant="outline" fullWidth icon="refresh-cw">Check for Updates</Button>
+            <Button variant="outline" fullWidth icon="refresh-cw" onClick={() => editor.unavailable('Check for Updates')}>Check for Updates</Button>
           </SectionCard>
 
-          <QuickActionsCard items={generalQuickActions} />
+          <QuickActionsCard items={editor.quickActions(generalQuickActions)} />
 
           <SettingsDangerZone onConfirm={() => resetPlatformSettings()} />
         </div>

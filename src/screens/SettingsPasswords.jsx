@@ -1,36 +1,40 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  PageHeader, Button, SectionCard, TextField, Switch, Checkbox, Avatar, DataTable, Pagination,
-} from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { activeSessionsTotal } from '../mock/fixtures/settings.js';
-import {
-  updatePasswordRequirements, updateSessionSettings, updateLoginNotifications, terminateSession,
-  savePasswordSettings, resetPasswordSettings, resetAllUserSessions,
-} from '../mock/api.js';
+import { PageHeader, Button, SectionCard, Avatar, DataTable, Pagination } from '../ds.js';
+import { SettingsTextField as TextField, SettingsSwitch as Switch, SettingsCheckbox as Checkbox, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
 import { SettingsTabStrip, SettingsDangerZone, SettingsMetaFooter } from './settingsShared.jsx';
 
 function Field({ children }) { return <div style={{ marginBottom: 14 }}>{children}</div>; }
 
 export function SettingsPasswords() {
-  const req = useCollection('settingsPasswordRequirements')?.[0];
-  const sessionSettings = useCollection('settingsSessionSettings')?.[0];
-  const loginNotif = useCollection('settingsLoginNotifications')?.[0];
-  const sessions = useCollection('settingsActiveSessions') || [];
-  const meta = useCollection('settingsMeta')?.[0];
+  const editor = useSettingsEditor('passwords');
+  const updatePasswordRequirements = editor.change('settingsPasswordRequirements');
+  const updateSessionSettings = editor.change('settingsSessionSettings');
+  const updateLoginNotifications = editor.change('settingsLoginNotifications');
+  const terminateSession = () => editor.unavailable('Terminate Session');
+  const savePasswordSettings = () => editor.save();
+  const resetPasswordSettings = () => editor.unavailable('Reset Password Settings');
+  const resetAllUserSessions = () => editor.unavailable('Reset All User Sessions');
+  const activeSessionsTotal = null;
+  const req = editor.group('settingsPasswordRequirements');
+  const sessionSettings = editor.group('settingsSessionSettings');
+  const loginNotif = editor.group('settingsLoginNotifications');
+  const sessions = [];
+  const meta = editor.group('settingsMeta');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!req || !sessionSettings || !loginNotif) return null;
 
   async function handleSave() {
     setSaving(true);
-    await savePasswordSettings();
+    const confirmed = await savePasswordSettings();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -42,6 +46,7 @@ export function SettingsPasswords() {
           <Button icon="save" disabled={saving} onClick={handleSave}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Changes'}</Button>
         </>} />
       <SettingsTabStrip active="passwords" />
+      <SettingsReadNotice error={editor.error} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
@@ -49,7 +54,7 @@ export function SettingsPasswords() {
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Set password rules and complexity requirements for all users.</span>
             <Field><TextField label="Minimum password length" type="number" value={req.minPasswordLength}
               suffix={<span className="tk-meta">characters</span>}
-              onChange={(e) => updatePasswordRequirements({ minPasswordLength: Number(e.target.value) })} /></Field>
+              onChange={(e) => updatePasswordRequirements({ minPasswordLength: e.target.value })} /></Field>
             <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
               <Checkbox checked={req.requireUppercase} label="Require at least one uppercase letter (A–Z)"
                 onChange={(v) => updatePasswordRequirements({ requireUppercase: v })} />
@@ -67,10 +72,10 @@ export function SettingsPasswords() {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
               <TextField label="Password history" type="number" value={req.passwordHistory}
                 hint="Number of previous passwords to remember and prevent reuse."
-                onChange={(e) => updatePasswordRequirements({ passwordHistory: Number(e.target.value) })} />
+                onChange={(e) => updatePasswordRequirements({ passwordHistory: e.target.value })} />
               <TextField label="Password expiry (days)" type="number" value={req.passwordExpiryDays}
                 hint="Require users to change their password after this period."
-                onChange={(e) => updatePasswordRequirements({ passwordExpiryDays: Number(e.target.value) })} />
+                onChange={(e) => updatePasswordRequirements({ passwordExpiryDays: e.target.value })} />
             </div>
             <Switch checked={req.notifyBeforePasswordExpiry} label="Notify users before password expiry"
               hint="Send reminder emails 7 days before expiry."
@@ -102,7 +107,8 @@ export function SettingsPasswords() {
                 { key: 'actions', header: 'Actions', render: (r) => (
                   <Button variant="danger" size="sm" onClick={() => terminateSession(r.id)}>Terminate</Button>) },
               ]} />
-            <Pagination page={1} pageSize={5} total={activeSessionsTotal} pageCount={3} onPage={() => {}} />
+            {'—'}
+            <Pagination page={1} pageSize={5} total={activeSessionsTotal} pageCount={null} onPage={() => editor.unavailable('Session pagination')} />
           </SectionCard>
         </div>
 
@@ -111,10 +117,10 @@ export function SettingsPasswords() {
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Configure user session behavior and inactivity rules.</span>
             <Field><TextField label="Session timeout (minutes)" type="number" value={sessionSettings.sessionTimeoutMinutes}
               hint="Automatically log out users after this period of inactivity."
-              onChange={(e) => updateSessionSettings({ sessionTimeoutMinutes: Number(e.target.value) })} /></Field>
+              onChange={(e) => updateSessionSettings({ sessionTimeoutMinutes: e.target.value })} /></Field>
             <Field><TextField label="Maximum concurrent sessions" type="number" value={sessionSettings.maxConcurrentSessions}
               hint="Limit the number of active sessions per user."
-              onChange={(e) => updateSessionSettings({ maxConcurrentSessions: Number(e.target.value) })} /></Field>
+              onChange={(e) => updateSessionSettings({ maxConcurrentSessions: e.target.value })} /></Field>
             <Field><Switch checked={sessionSettings.showActiveSessionsToUsers} label="Show active sessions to users"
               hint="Allow users to view and manage their active sessions."
               onChange={(v) => updateSessionSettings({ showActiveSessionsToUsers: v })} /></Field>
@@ -126,7 +132,7 @@ export function SettingsPasswords() {
               onChange={(v) => updateSessionSettings({ rememberMePersistentLogin: v })} /></Field>
             <TextField label="Persistent login duration (days)" type="number" value={sessionSettings.persistentLoginDurationDays}
               hint="How long to keep users signed in when 'Remember me' is enabled."
-              onChange={(e) => updateSessionSettings({ persistentLoginDurationDays: Number(e.target.value) })} />
+              onChange={(e) => updateSessionSettings({ persistentLoginDurationDays: e.target.value })} />
           </SectionCard>
 
           <SectionCard title="Login Notifications" icon="bell">

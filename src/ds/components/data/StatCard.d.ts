@@ -10,7 +10,7 @@ export interface StatCardProps {
   value: React.ReactNode;
   /** e.g. "24%" — rendered with an arrow, green up / red down */
   delta?: React.ReactNode;
-  direction?: 'up' | 'down';
+  direction?: 'up' | 'down' | null;
   /** grey trailing caption, e.g. "vs last month" or "43.2% of total" — ignored when labelPosition="bottom" */
   caption?: React.ReactNode;
   /** optional <Sparkline/> under the figure */

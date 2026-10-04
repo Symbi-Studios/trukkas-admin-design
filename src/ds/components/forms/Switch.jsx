@@ -1,5 +1,5 @@
 import React from 'react';
-export function Switch({ checked, label, hint, disabled, onChange, style }) {
+export function Switch({ checked, unknown = false, label, hint, disabled, onChange, style }) {
   return (
     <label style={{ display: 'inline-flex', alignItems: hint ? 'flex-start' : 'center', gap: 12,
                     cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, ...style }}>
@@ -9,7 +9,7 @@ export function Switch({ checked, label, hint, disabled, onChange, style }) {
                  transition: 'var(--tk-transition)', display: 'flex',
                  justifyContent: checked ? 'flex-end' : 'flex-start' }}>
         <span style={{ width: 18, height: 18, borderRadius: 999, background: '#fff',
-                       boxShadow: '0 1px 2px rgba(0,8,36,.2)', transition: 'var(--tk-transition)' }} />
+                       boxShadow: '0 1px 2px rgba(0,8,36,.2)', transition: 'var(--tk-transition)' }}>{unknown ? '—' : null}</span>
       </span>
       {label && (
         <span style={{ display: 'grid', gap: 2 }}>

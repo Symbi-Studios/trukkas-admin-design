@@ -1,14 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
 import { useNavigate, useParams, Link } from '../router.js';
 import {
   PageHeader, Button, Badge, Card, SectionCard, LabelValue, CopyableId, DropdownMenu, Icon,
-  Timeline, AttachmentCard, Modal, TextField, Textarea, Banner,
+  Timeline, AttachmentCard, Modal, TextField, Textarea, Banner, Skeleton,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { retryTransaction, reverseTransaction, createRefund, reportTransactionIssue } from '../mock/api.js';
-import { formatNaira } from '../mock/format.js';
+import {
+  useGetAdminTransactionLedgerQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
+  transactionMoney as formatNaira, transactionAmount, transactionJobUrl,
+} from '../store/features/transactions/transactionsApi.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { DriverLoadingNotice } from './DriversLoading.jsx';
 
 const STATUS_TONE = { Completed: 'success', Pending: 'warning', Failed: 'danger', Reversed: 'orange' };
 const TYPE_TONE = {
@@ -74,23 +79,41 @@ function Fact({ role, tint = 'blue', name, id, email, phone }) {
 }
 
 export function TransactionDetail() {
-  const { transactionId } = useParams();
+  const params = useParams(), search = useSearchParams();
+  const transactionId = search.get('id') || params.transactionId || '';
   const navigate = useNavigate();
-  const rows = useCollection('transactionRows') || [];
+  const ledgerQuery = useGetAdminTransactionLedgerQuery();
+  const rows = ledgerQuery.error ? [] : ledgerQuery.currentData?.rows || [];
   const r = rows.find((x) => x.id === transactionId);
+  const canReverse = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
+  const [retryTransaction, retryState] = useRetryAdminTransactionMutation();
+  const [reverseTransaction, reverseState] = useReverseAdminTransactionMutation();
+  const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching;
+  const operationPending = useRef(false);
+  const flashTimer = useRef(null);
 
   const [menu, setMenu] = useState(false);
   const [modal, setModal] = useState(null);
   const [refundAmount, setRefundAmount] = useState('');
   const [issueNote, setIssueNote] = useState('');
-  const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState(null);
   const [showAllDocs, setShowAllDocs] = useState(false);
+
+  useEffect(() => {
+    setMenu(false); setModal(null); setRefundAmount(''); setIssueNote(''); setBanner(null); setShowAllDocs(false);
+    return () => clearTimeout(flashTimer.current);
+  }, [transactionId]);
+
+  if (!ledgerQuery.currentData && ledgerQuery.isFetching) return <>
+    <Card><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
+    <DriverLoadingNotice>Loading transaction details…</DriverLoadingNotice>
+    <Card><Skeleton width="40%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
+  </>;
 
   if (!r) {
     return (
       <Card>
-        <span className="tk-body">No transaction found with reference {transactionId}.</span>
+        <span className="tk-body">{ledgerQuery.error ? getApiErrorMessage(ledgerQuery.error) : <>No transaction found with reference {transactionId}.</>}</span>
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/transactions')}>Back to Transactions</Button>
         </div>
@@ -98,78 +121,85 @@ export function TransactionDetail() {
     );
   }
 
-  function flash(text) {
-    setBanner(text);
-    setTimeout(() => setBanner(null), 3500);
+  function flash(text, tone = 'success') {
+    clearTimeout(flashTimer.current);
+    setBanner({ text, tone });
+    flashTimer.current = setTimeout(() => setBanner(null), 3500);
+  }
+
+  const unavailable = (feature) => flash(`${feature} is not available yet.`, 'info');
+
+  async function copy(value, message) {
+    if (!navigator.clipboard) { unavailable('Copying to the clipboard'); return; }
+    try { await navigator.clipboard.writeText(value); flash(message); }
+    catch { flash('Could not copy to the clipboard.', 'danger'); }
   }
 
   async function handleRetry() {
-    setBusy(true);
-    await retryTransaction(r.id);
-    setBusy(false);
-    flash('Transaction retried and marked as completed.');
+    if (operationPending.current || busy || r.statusCode !== 'FAILED') return;
+    operationPending.current = true;
+    try {
+      const response = await retryTransaction(r.id).unwrap();
+      flash(response.message || `Transaction status: ${response.status}`);
+    } catch (error) { flash(getApiErrorMessage(error), 'danger'); }
+    finally { operationPending.current = false; }
   }
 
   async function handleReverse() {
-    setBusy(true);
-    await reverseTransaction(r.id);
-    setBusy(false);
-    flash('Transaction reversed. A reversal entry has been created.');
+    if (operationPending.current || busy || r.statusCode !== 'COMPLETED') return;
+    if (!canReverse) { flash('Reversing transactions requires Super Admin access.', 'info'); return; }
+    operationPending.current = true;
+    try {
+      const response = await reverseTransaction(r.id).unwrap();
+      flash(response.message || `Transaction status: ${response.status}`);
+    } catch (error) { flash(getApiErrorMessage(error), 'danger'); }
+    finally { operationPending.current = false; }
   }
 
   async function handleRefundSubmit() {
     const value = Number(refundAmount);
     if (!value || value <= 0) return;
-    setBusy(true);
-    await createRefund(r.id, value);
-    setBusy(false);
     setModal(null);
-    setRefundAmount('');
-    flash(`Refund of ${formatNaira(value)} created for ${r.id}.`);
+    unavailable('Creating transaction refunds');
   }
 
   async function handleIssueSubmit() {
     if (!issueNote.trim()) return;
-    setBusy(true);
-    await reportTransactionIssue(r.id, issueNote.trim());
-    setBusy(false);
     setModal(null);
-    setIssueNote('');
-    flash('Issue reported. Our finance team will review this transaction.');
+    unavailable('Reporting transaction issues');
   }
 
   const docs = showAllDocs ? r.documents : r.documents.slice(0, 2);
 
   return (
     <>
-      <PageHeader crumbs={['Transactions', r.id]} title="Transaction Details"
+      <PageHeader crumbs={['Transactions', r.displayId]} title="Transaction Details"
         description="View full details, status and history of this transaction."
         actions={<>
           <Button variant="outline" icon="printer" onClick={() => window.print()}>Print</Button>
           <Button variant="outline" icon="share-2" onClick={() => {
-            navigator.clipboard?.writeText(typeof window !== 'undefined' ? window.location.href : r.id);
-            flash('Link copied to clipboard.');
+            copy(window.location.href, 'Link copied to clipboard.');
           }}>Share</Button>
           {r.status === 'Failed' && (
             <Button icon="rotate-ccw" disabled={busy} onClick={handleRetry}>{busy ? 'Retrying…' : 'Retry Transaction'}</Button>
           )}
           {r.status === 'Completed' && (
-            <Button variant="danger" icon="undo-2" disabled={busy} onClick={handleReverse}>{busy ? 'Reversing…' : 'Reverse'}</Button>
+            <Button variant="danger" icon="undo-2" disabled={busy || !canReverse} onClick={handleReverse}>{busy ? 'Reversing…' : 'Reverse'}</Button>
           )}
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More</Button>
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Copy Transaction ID', icon: 'copy', onClick: () => { navigator.clipboard?.writeText(r.id); setMenu(false); flash('Transaction ID copied.'); } },
-                  { label: 'Download Statement', icon: 'file-text', onClick: () => { setMenu(false); flash('Preparing statement…'); } },
+                  { label: 'Copy Transaction ID', icon: 'copy', onClick: () => { setMenu(false); copy(r.id, 'Transaction ID copied.'); } },
+                  { label: 'Download Statement', icon: 'file-text', onClick: () => { setMenu(false); unavailable('Downloading transaction statements'); } },
                 ]} />
               </span>
             )}
           </span>
         </>} />
 
-      {banner && <Banner tone="success" title={banner} />}
+      {banner && <Banner tone={banner.tone} title={banner.text} />}
 
       <Card style={{ display: 'grid', gap: 18 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(220px, 320px)', gap: 24, alignItems: 'start' }}>
@@ -184,7 +214,7 @@ export function TransactionDetail() {
               <div style={{ display: 'grid', gap: 6 }}>
                 <Badge tone={TYPE_TONE[r.type]}>{r.type}</Badge>
                 <div style={{ font: '700 30px/36px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>
-                  {r.pos ? '+' : '-'}{formatNaira(r.amount)}
+                  {transactionAmount(r, true)}
                 </div>
               </div>
             </div>
@@ -194,13 +224,13 @@ export function TransactionDetail() {
             </div>
           </div>
           <div>
-            <LabelValue label="Transaction ID" value={<CopyableId id={r.id} onCopy={(id) => flash(`${id} copied.`)} />} />
+            <LabelValue label="Transaction ID" value={<CopyableId id={r.id} onCopy={(id) => copy(id, `${id} copied.`)} />} />
             <LabelValue label="Date & Time" value={`${r.date}, ${r.time}`} />
             <LabelValue label="Status" value={<Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>} />
             <LabelValue label="Reference" value={<span className="tk-mono">{r.relatedTo}</span>} />
             <LabelValue label="Related To" value={
               r.jobInfo
-                ? <Link to={`/jobs/${r.jobInfo.jobId}`} style={{ color: 'var(--tk-blue)', font: '600 14px/20px var(--tk-font-sans)' }}>Job Details →</Link>
+                ? <Link to={transactionJobUrl(r.jobInfo.jobId)} style={{ color: 'var(--tk-blue)', font: '600 14px/20px var(--tk-font-sans)' }}>Job Details →</Link>
                 : '—'
             } />
           </div>
@@ -210,12 +240,13 @@ export function TransactionDetail() {
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
           <SectionCard title="Parties Involved" pad="none" style={{ padding: '0 var(--tk-card-pad) 8px' }}>
+            {!r.parties.length && <span className="tk-meta">—</span>}
             {r.parties.map((p, i) => <Fact key={i} {...p} />)}
           </SectionCard>
 
           {r.jobInfo && (
             <SectionCard title="Job / Trip Information">
-              <LabelValue label="Job ID" value={<Link to={`/jobs/${r.jobInfo.jobId}`} className="tk-mono">{r.jobInfo.jobId}</Link>} />
+              <LabelValue label="Job ID" value={<Link to={transactionJobUrl(r.jobInfo.jobId)} className="tk-mono">{r.jobInfo.jobId}</Link>} />
               {r.jobInfo.route && <LabelValue label="Route" value={r.jobInfo.route} />}
               <LabelValue label="Cargo Type" value={r.jobInfo.cargoType} />
               {r.jobInfo.truck && <LabelValue label="Truck" value={<span className="tk-mono">{r.jobInfo.truck}</span>} />}
@@ -223,9 +254,10 @@ export function TransactionDetail() {
             </SectionCard>
           )}
 
-          {r.breakdown && (
+          {r.showBreakdown && (
             <SectionCard title="Amount Breakdown">
-              {r.breakdown.map((b) => (
+              {!r.breakdown?.length && <span className="tk-meta">—</span>}
+              {r.breakdown?.map((b) => (
                 <LabelValue key={b.label} label={b.label} value={formatNaira(b.value)} />
               ))}
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
@@ -253,10 +285,12 @@ export function TransactionDetail() {
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
           <SectionCard title="Transaction Status">
+            {!r.timeline.length && <span className="tk-meta">—</span>}
             <StatusStepper steps={r.timeline} />
           </SectionCard>
 
           <SectionCard title="Activity Timeline">
+            {!r.timeline.length && <span className="tk-meta">—</span>}
             <Timeline items={r.timeline} />
           </SectionCard>
 
@@ -266,9 +300,13 @@ export function TransactionDetail() {
             </a>
           )}>
             <div style={{ display: 'grid', gap: 10 }}>
+              {!docs.length && <span className="tk-meta">—</span>}
               {docs.map((d) => (
                 <AttachmentCard key={d.name} name={d.name} size={d.size} kind={d.kind}
-                  onOpen={() => flash(`Downloading ${d.name}…`)} style={{ width: '100%' }} />
+                  onOpen={() => {
+                    if (d.url && /^https?:\/\//i.test(d.url)) window.open(d.url, '_blank', 'noopener,noreferrer');
+                    else unavailable('Downloading this document');
+                  }} style={{ width: '100%' }} />
               ))}
             </div>
           </SectionCard>
@@ -276,10 +314,10 @@ export function TransactionDetail() {
           <SectionCard title="Actions">
             <div style={{ display: 'grid', gap: 10 }}>
               <Button variant="secondary" icon="package" fullWidth disabled={!r.jobInfo}
-                onClick={() => r.jobInfo && navigate(`/jobs/${r.jobInfo.jobId}`)}>
+                onClick={() => r.jobInfo && navigate(transactionJobUrl(r.jobInfo.jobId))}>
                 View Related Job
               </Button>
-              <Button variant="outline" icon="rotate-ccw" fullWidth onClick={() => { setRefundAmount(String(r.amount)); setModal('refund'); }}>
+              <Button variant="outline" icon="rotate-ccw" fullWidth onClick={() => { setRefundAmount(r.amount == null ? '' : String(r.amount)); setModal('refund'); }}>
                 Create Refund
               </Button>
               <Button variant="danger" icon="flag" fullWidth onClick={() => setModal('issue')}>

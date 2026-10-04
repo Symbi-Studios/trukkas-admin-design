@@ -1,7 +1,7 @@
 import React from 'react';
 
 /** Multi-series line/area chart with a light dashed grid. series = [{ name, color, points:number[] }] */
-export function LineChart({ series = [], labels = [], height = 200, area = false, yTicks = 5, style }) {
+export function LineChart({ series = [], labels = [], height = 200, area = false, yTicks = 5, format = (value) => Math.round(value), style }) {
   const W = 640, H = height, padL = 34, padB = 24, padT = 10, padR = 6;
   const all = series.flatMap(s => s.points);
   const max = Math.max(1, ...all);
@@ -17,7 +17,7 @@ export function LineChart({ series = [], labels = [], height = 200, area = false
             <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="var(--tk-line)" strokeDasharray="3 4" />
             <text x={padL - 8} y={y(v) + 4} textAnchor="end"
                   style={{ font: '400 10px var(--tk-font-sans)', fill: 'var(--tk-ink-300)' }}>
-              {Math.round(v)}
+              {format(v)}
             </text>
           </g>
         );

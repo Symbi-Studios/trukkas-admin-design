@@ -1,13 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useSelector } from 'react-redux';
 import {
   Avatar, Badge, Button, Card, Icon, LabelValue, PageHeader, ProgressBar,
   SectionCard, Switch, Tabs, TextField, Timeline,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { changeUserPassword, updateUserProfile } from '../mock/api.js';
-import { userActivityFor } from '../mock/fixtures/users.js';
+import { useGetManagedUserProfileQuery, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
+import { useGetAdminAuditDirectoryQuery } from '../store/features/audit/auditApi.js';
+import { adaptAdminSelfProfile, profileActivity, profileUnavailable } from '../store/features/profile/profileValues.js';
+import { DriverDetailLoading, DriverLoadingNotice } from './DriversLoading.jsx';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import './AdminProfile.css';
 
 function Notice({ children }) {
@@ -20,28 +23,35 @@ function Notice({ children }) {
   );
 }
 
-function OverviewTab({ user, notify }) {
+function OverviewTab({ user, notify, canEdit }) {
   const [form, setForm] = useState({
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-    location: user.location,
+    name: user.name === '—' ? '' : user.name,
+    email: user.email === '—' ? '' : user.email,
+    phone: user.phone ?? '',
+    location: user.location ?? '',
   });
-  const [saving, setSaving] = useState(false);
+  const [saveAdmin, { isLoading: saving }] = useUpdateManagedAdminMutation();
 
   function field(key) {
     return {
       value: form[key],
+      placeholder: user[key] == null || user[key] === '—' ? '—' : undefined,
       onChange: (event) => setForm((current) => ({ ...current, [key]: event.target.value })),
     };
   }
 
   async function saveProfile(event) {
     event.preventDefault();
-    setSaving(true);
-    await updateUserProfile(user.id, form);
-    setSaving(false);
-    notify('Personal information updated.');
+    if (saving) return;
+    const unsupported = ['email', 'phone', 'location'].filter((key) => form[key] !== (user[key] == null || user[key] === '—' ? '' : user[key]));
+    if (unsupported.length) { profileUnavailable(`Update ${unsupported.join(', ')}`); return; }
+    if (!canEdit) { profileUnavailable('Save Personal Information'); return; }
+    if (!form.name.trim()) return;
+    if (form.name.trim() === user.name) { window.alert('There are no changes to save.'); return; }
+    try {
+      await saveAdmin({ id: user.id, name: form.name.trim() }).unwrap();
+      notify('Personal information updated.');
+    } catch (error) { window.alert(getApiErrorMessage(error)); }
   }
 
   return (
@@ -64,7 +74,7 @@ function OverviewTab({ user, notify }) {
             <span className="tk-profile-icon-tile"><Icon name="key-round" size={20} /></span>
             <div>
               <Badge tone="purple">{user.role}</Badge>
-              <p className="tk-profile-role-copy">Full administrative access across the Trukkas platform.</p>
+              <p className="tk-profile-role-copy">{user.permissionsCaption}</p>
             </div>
           </div>
           <LabelValue label="Department" value={user.department} />
@@ -84,16 +94,13 @@ function OverviewTab({ user, notify }) {
 }
 
 function SecurityTab({ user, notify }) {
-  const [twoFactor, setTwoFactor] = useState(user.twoFactor);
-  const [loginNotifications, setLoginNotifications] = useState(user.loginNotifications);
+  const twoFactor = user.twoFactor;
+  const loginNotifications = user.loginNotifications;
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
   const [error, setError] = useState('');
 
-  async function toggleSetting(key, value) {
-    if (key === 'twoFactor') setTwoFactor(value);
-    else setLoginNotifications(value);
-    await updateUserProfile(user.id, { [key]: value });
-    notify(key === 'twoFactor' ? `Two-factor authentication ${value ? 'enabled' : 'disabled'}.` : 'Login notification preference updated.');
+  function toggleSetting(key) {
+    profileUnavailable(key === 'twoFactor' ? 'Change Two-factor Authentication' : 'Change Login Notifications');
   }
 
   async function submitPassword(event) {
@@ -106,10 +113,8 @@ function SecurityTab({ user, notify }) {
       setError('New passwords do not match.');
       return;
     }
-    await changeUserPassword(user.id);
-    setPasswords({ current: '', next: '', confirm: '' });
     setError('');
-    notify('Password changed successfully.');
+    profileUnavailable('Change Password');
   }
 
   const passwordField = (key) => ({
@@ -134,9 +139,9 @@ function SecurityTab({ user, notify }) {
 
         <SectionCard title="Sign-in protection" icon="shield-check">
           <div className="tk-profile-switches">
-            <Switch checked={twoFactor} onChange={(value) => toggleSetting('twoFactor', value)}
+            <Switch checked={twoFactor === true} unknown={twoFactor == null} onChange={(value) => toggleSetting('twoFactor', value)}
               label="Two-factor authentication" hint="Require a verification code when signing in." />
-            <Switch checked={loginNotifications} onChange={(value) => toggleSetting('loginNotifications', value)}
+            <Switch checked={loginNotifications === true} unknown={loginNotifications == null} onChange={(value) => toggleSetting('loginNotifications', value)}
               label="Login notifications" hint="Email me when my account signs in on a new device." />
           </div>
         </SectionCard>
@@ -144,11 +149,11 @@ function SecurityTab({ user, notify }) {
 
       <div className="tk-profile-stack">
         <SectionCard title="Security health" icon="shield">
-          <ProgressBar value={user.passwordStrengthPct} color="var(--tk-success)" label="Password strength" caption={user.passwordStrength} />
+          <ProgressBar value={user.passwordStrengthPct} color={user.passwordStrengthPct == null ? 'var(--tk-viz-track)' : 'var(--tk-success)'} label="Password strength" caption={user.passwordStrength} />
           <div className="tk-profile-security-list">
-            <div><Icon name="circle-check" size={16} /><span>Work email verified</span></div>
-            <div><Icon name="circle-check" size={16} /><span>Phone number verified</span></div>
-            <div><Icon name="circle-check" size={16} /><span>No failed sign-in attempts</span></div>
+            <div><Icon name="circle-check" size={16} /><span>{user.emailVerified == null ? '—' : user.emailVerified ? 'Work email verified' : 'Work email not verified'}</span></div>
+            <div><Icon name="circle-check" size={16} /><span>{user.phoneVerified == null ? '—' : user.phoneVerified ? 'Phone number verified' : 'Phone number not verified'}</span></div>
+            <div><Icon name="circle-check" size={16} /><span>{user.failedLogins == null ? '—' : user.failedLogins === 0 ? 'No failed sign-in attempts' : `${user.failedLogins} failed sign-in attempts`}</span></div>
           </div>
         </SectionCard>
 
@@ -156,9 +161,9 @@ function SecurityTab({ user, notify }) {
           <div className="tk-profile-session">
             <span className="tk-profile-icon-tile"><Icon name="laptop" size={20} /></span>
             <div>
-              <strong>Chrome on macOS</strong>
-              <span>Lagos, Nigeria · 197.210.45.12</span>
-              <Badge dot tone="success">Active now</Badge>
+              <strong>{user.session.device}</strong>
+              <span>{user.session.location} · {user.session.ip}</span>
+              <Badge dot tone="success">{user.session.status}</Badge>
             </div>
           </div>
         </SectionCard>
@@ -167,25 +172,21 @@ function SecurityTab({ user, notify }) {
   );
 }
 
-function ActivityTab({ user }) {
-  const activity = useMemo(() => userActivityFor(user).map((item) => ({
-    title: item.text,
-    description: `${item.description} · ${item.location} · ${item.ip}`,
-    time: item.time,
-    icon: item.icon,
-    state: item.text === 'Password Changed' ? 'warning' : 'done',
-  })), [user]);
+function ActivityTab({ user, canRead }) {
+  const query = useGetAdminAuditDirectoryQuery({ owner: user.id }, { skip: !canRead });
+  const activity = useMemo(() => profileActivity(!query.error && canRead ? query.currentData?.rows : null, user.id), [query.currentData, query.error, canRead, user.id]);
 
   return (
     <div className="tk-profile-activity-layout">
       <SectionCard title="Recent activity" description="A record of your latest actions across Trukkas." icon="history">
-        <Timeline items={activity} />
+        {query.isFetching ? <DriverLoadingNotice>Loading recent activity…</DriverLoadingNotice> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <Timeline items={activity || []} />}
+        {!query.isFetching && !query.error && !activity?.length && '—'}
       </SectionCard>
       <SectionCard title="Activity summary" icon="chart-no-axes-column-increasing">
         <div className="tk-profile-stat-grid">
-          <div><strong>{user.totalLogins}</strong><span>Total sign-ins</span></div>
-          <div><strong>{user.activeSessions}</strong><span>Active session</span></div>
-          <div><strong>{user.failedLogins}</strong><span>Failed attempts</span></div>
+          <div><strong>{user.totalLogins ?? '—'}</strong><span>Total sign-ins</span></div>
+          <div><strong>{user.activeSessions ?? '—'}</strong><span>Active session</span></div>
+          <div><strong>{user.failedLogins ?? '—'}</strong><span>Failed attempts</span></div>
         </div>
         <p className="tk-profile-muted">Activity is retained for security and audit purposes.</p>
       </SectionCard>
@@ -194,12 +195,16 @@ function ActivityTab({ user }) {
 }
 
 export function AdminProfile() {
-  const users = useCollection('users') || [];
-  const user = users.find((row) => row.you) || users[0];
+  const admin = useSelector((state) => state.auth.admin);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const canRead = authenticated && admin?.role === 'SUPER_ADMIN' && Boolean(admin?.id);
+  const query = useGetManagedUserProfileQuery({ id: admin?.id, source: 'admin' }, { skip: !canRead });
+  const user = adaptAdminSelfProfile(authenticated ? admin : null, canRead && !query.error ? query.currentData : null);
   const [tab, setTab] = useState('overview');
   const [notice, setNotice] = useState('');
 
-  if (!user) return null;
+  if (canRead && (query.isLoading || (query.isFetching && !query.currentData))) return <DriverDetailLoading />;
+  if (canRead && query.error) return <Card><DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice></Card>;
 
   function notify(message) {
     setNotice(message);
@@ -224,15 +229,15 @@ export function AdminProfile() {
             <span>{user.email}</span>
             <div className="tk-profile-meta-line">
               <span><Icon name="building-2" size={14} />{user.entity}</span>
-              <span><Icon name="map-pin" size={14} />{user.location}</span>
-              <span><span className="tk-profile-online-dot" />Active now</span>
+              <span><Icon name="map-pin" size={14} />{user.location ?? '—'}</span>
+              <span><span className="tk-profile-online-dot" />{user.online == null ? '—' : user.online ? 'Active now' : 'Offline'}</span>
             </div>
           </div>
         </div>
         <div className="tk-profile-hero-stats">
-          <div><span>Access</span><strong>Full platform</strong></div>
-          <div><span>2FA</span><strong>{user.twoFactor ? 'Protected' : 'Not enabled'}</strong></div>
-          <div><span>Last sign-in</span><strong>Today, 10:24 AM</strong></div>
+          <div><span>Access</span><strong>{user.permissionsCaption}</strong></div>
+          <div><span>2FA</span><strong>{user.twoFactor == null ? '—' : user.twoFactor ? 'Protected' : 'Not enabled'}</strong></div>
+          <div><span>Last sign-in</span><strong>{user.lastSignIn}</strong></div>
         </div>
       </Card>
 
@@ -244,9 +249,9 @@ export function AdminProfile() {
         ]} />
       </Card>
 
-      {tab === 'overview' && <OverviewTab user={user} notify={notify} />}
-      {tab === 'security' && <SecurityTab user={user} notify={notify} />}
-      {tab === 'activity' && <ActivityTab user={user} />}
+      {tab === 'overview' && <OverviewTab key={`${user.id}:${user.name}:${user.email}`} user={user} notify={notify} canEdit={canRead} />}
+      {tab === 'security' && <SecurityTab key={user.id} user={user} notify={notify} />}
+      {tab === 'activity' && <ActivityTab key={user.id} user={user} canRead={canRead} />}
     </>
   );
 }

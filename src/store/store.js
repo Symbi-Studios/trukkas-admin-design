@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { baseApi } from './api/baseApi.js';
 import { authReducer } from './features/auth/authSlice.js';
+import { reportsReducer } from './features/reports/reportsSlice.js';
 import { persistAuth, readStoredAuth } from './features/auth/authStorage.js';
 
 // The App Router renders on the server too, so create a store per layout instance.
@@ -9,6 +10,7 @@ export function makeStore() {
   const store = configureStore({
     reducer: {
       auth: authReducer,
+      reports: reportsReducer,
       [baseApi.reducerPath]: baseApi.reducer,
     },
     preloadedState: storedAuth ? { auth: storedAuth } : undefined,

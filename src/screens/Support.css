@@ -364,6 +364,12 @@
   font-size: 11px;
   color: var(--tk-ink-700);
 }
+.support-page .feedback-ring {
+  background: var(--tk-surface-soft);
+}
+.support-page .feedback-ring:after {
+  content: "—";
+}
 .feedback-ring {
   width: 94px;
   height: 94px;

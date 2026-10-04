@@ -1,35 +1,28 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, Card, Select, FilterSelect,
   DataTable, DonutChart, LegendList, LineChart, BarChart, Sparkline, RankBarList, Tabs,
-  Icon, Modal, TextField, Banner,
+  Icon, Modal, TextField, Banner, Skeleton,
 } from '../ds.js';
-import { updateReportDraft, scheduleReport } from '../mock/api.js';
-import {
-  dashboardSummary, operationsOverview, revenuePayoutsTrend, jobsByStatus, jobsByType,
-  geographicalDistribution, topPerformingEntities, financialSummary, userEngagement,
-  complianceOverview, alertsExceptions, REPORT_TYPES,
-} from '../mock/fixtures/reports.js';
-import { formatNaira } from '../mock/format.js';
+import { useReportDraft, useReportEntities } from '../store/features/reports/useReportDraft.js';
+import { REPORT_TYPES } from '../store/features/reports/reportsConfig.js';
+import { currentReportRange, reportComparisonRange, reportDateLabel, reportRangeQuery } from '../store/features/reports/reportDraft.js';
+import { useGetAdminReportJobStatsQuery, REPORT_CAPABILITIES, emptyReportOverview, reportCount, reportMoney as formatNaira, reportPercent, reportChange } from '../store/features/reports/reportsApi.js';
 
 const COMPARE_OPTIONS = ['Previous 7 days', 'Previous Period', 'Previous Month', 'Previous Year'];
 const GROUP_BY_OPTIONS = ['Daily', 'Weekly', 'Monthly'];
 const OVERVIEW_METRICS = ['Jobs', 'Trips', 'Revenue'];
 const SORT_OPTIONS = ['By Revenue', 'By Jobs', 'By Growth'];
 
-function periodKey(v) { return v.toLowerCase(); }
-
-function scaleOverview(points, metric) {
-  if (metric === 'Trips') return points.map((p) => Math.round(p * 1.35));
-  if (metric === 'Revenue') return points.map((p) => Math.round(p * 0.62));
-  return points;
-}
-
 export function ReportsAnalytics() {
   const navigate = useNavigate();
+  const { updateReportDraft } = useReportDraft();
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const [range] = useState(currentReportRange);
 
   const [entityTypeFilter, setEntityTypeFilter] = useState('All Types');
   const [entityFilter, setEntityFilter] = useState('All Entities');
@@ -40,25 +33,27 @@ export function ReportsAnalytics() {
   const [sortEntities, setSortEntities] = useState('By Revenue');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({ reportType: 'operations', frequency: 'Weekly', recipients: '' });
-  const [busy, setBusy] = useState(false);
-  const [banner, setBanner] = useState(null);
-
-  function flash(text) { setBanner(text); setTimeout(() => setBanner(null), 3500); }
-
-  const entityOptions = useMemo(() => ['All Entities', ...topPerformingEntities.map((e) => e.entity)], []);
-
-  const filteredEntities = useMemo(() => {
-    let rows = topPerformingEntities.filter((e) => (
-      (entityTypeFilter === 'All Types' || e.entityType === entityTypeFilter) &&
-      (entityFilter === 'All Entities' || e.entity === entityFilter)
-    ));
-    if (sortEntities === 'By Jobs') rows = [...rows].sort((a, b) => b.jobs - a.jobs);
-    else if (sortEntities === 'By Growth') rows = [...rows].sort((a, b) => parseFloat(b.growth) - parseFloat(a.growth));
-    else rows = [...rows].sort((a, b) => b.revenue - a.revenue);
-    return rows;
-  }, [entityTypeFilter, entityFilter, sortEntities]);
-
+  const busy = false;
+  const { options: entityOptions } = useReportEntities(entityTypeFilter);
   const filtersActive = entityTypeFilter !== 'All Types' || entityFilter !== 'All Entities';
+  const comparison = reportComparisonRange(range, compareTo);
+  const args = reportRangeQuery(range);
+  const compareArgs = reportRangeQuery(comparison);
+  const jobs = useGetAdminReportJobStatsQuery(args, { skip: !authenticated || filtersActive || !args });
+  const previous = useGetAdminReportJobStatsQuery(compareArgs, { skip: !authenticated || filtersActive || !compareArgs });
+  const overview = authenticated && !filtersActive && !jobs.isError && jobs.currentData ? jobs.currentData : emptyReportOverview();
+  const { dashboardSummary, operationsOverview, jobsByStatus, jobsByType, geographicalDistribution,
+    topPerformingEntities: filteredEntities, financialSummary, userEngagement, complianceOverview, alertsExceptions, trendData } = overview;
+  const comparisonAvailable = authenticated && !filtersActive && !previous.isError && previous.currentData;
+  const totalChange = comparisonAvailable ? reportChange(dashboardSummary.totalJobs, previous.currentData.dashboardSummary.totalJobs) : null;
+  const completedChange = comparisonAvailable ? reportChange(dashboardSummary.completedJobs, previous.currentData.dashboardSummary.completedJobs) : null;
+  const comparisonCaption = 'vs ' + reportDateLabel(comparison);
+  const loading = !filtersActive && jobs.isFetching;
+  const value = (content) => loading ? <Skeleton as="span" width={90} height={23} /> : content;
+  const banner = authenticated && jobs.isError && !filtersActive ? (jobs.error?.status === 403 ? 'You do not have permission to view reports.' : 'Unable to load report data. Please try again.') : null;
+  const statusChartData = jobsByStatus.every((status) => status.count != null)
+    && jobsByStatus.reduce((total, status) => total + status.count, 0) === dashboardSummary.totalJobs
+    ? jobsByStatus.map((status) => ({ label: status.label, value: status.count, color: status.color })) : [];
 
   function clearAll() {
     setEntityTypeFilter('All Types'); setEntityFilter('All Entities');
@@ -66,19 +61,10 @@ export function ReportsAnalytics() {
   }
 
   function goExport(reportType) {
-    updateReportDraft({ reportType });
+    updateReportDraft({ reportType, ...range, filters: { entityType: entityTypeFilter, entity: entityFilter, status: 'All Statuses', location: 'All Locations', minAmount: '', maxAmount: '' } });
     navigate('/reports/export');
   }
 
-  async function handleSchedule() {
-    setBusy(true);
-    await scheduleReport(scheduleForm);
-    setBusy(false);
-    setScheduleOpen(false);
-    flash(`${REPORT_TYPES.find((r) => r.id === scheduleForm.reportType)?.title || 'Report'} scheduled ${scheduleForm.frequency.toLowerCase()}.`);
-  }
-
-  const trendData = revenuePayoutsTrend[periodKey(groupBy)];
 
   return (
     <>
@@ -90,13 +76,13 @@ export function ReportsAnalytics() {
           <Button icon="plus" onClick={() => goExport('custom')}>Custom Report</Button>
         </>} />
 
-      {banner && <Banner tone="success" title={banner} />}
+      {banner && <Banner tone="error" title={banner} />}
 
       <Card style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
-        <FilterSelect label="May 14 – May 20, 2024" icon="calendar" />
+        <FilterSelect label={reportDateLabel(range)} icon="calendar" />
         <Select label="Compare to" value={compareTo} options={COMPARE_OPTIONS} onChange={(e) => setCompareTo(e.target.value)} style={{ minWidth: 160 }} />
         <Select label="Group By" value={groupBy} options={GROUP_BY_OPTIONS} onChange={(e) => setGroupBy(e.target.value)} style={{ minWidth: 130 }} />
-        <Select label="Entity Type" value={entityTypeFilter} options={['All Types', 'Forwarder', 'Exporter', 'Truck Company']} onChange={(e) => setEntityTypeFilter(e.target.value)} style={{ minWidth: 150 }} />
+        <Select label="Entity Type" value={entityTypeFilter} options={['All Types', 'Forwarder', 'Exporter', 'Truck Company']} onChange={(e) => { setEntityTypeFilter(e.target.value); setEntityFilter('All Entities'); }} style={{ minWidth: 150 }} />
         <Select label="Entity" value={entityFilter} options={entityOptions} onChange={(e) => setEntityFilter(e.target.value)} style={{ minWidth: 190 }} />
         <Button variant="outline" icon="filter" onClick={() => setShowFilters((s) => !s)}>Filters</Button>
         <div style={{ flex: 1 }} />
@@ -107,12 +93,12 @@ export function ReportsAnalytics() {
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--tk-space-4)' }}>
-        <StatCard icon="calendar-days" tint="navy" label="Total Jobs" value={dashboardSummary.totalJobs.toLocaleString('en-NG')} delta={dashboardSummary.totalJobsDelta} caption="vs May 7 – May 13" sparkline={<Sparkline points={dashboardSummary.totalJobsTrend} color="var(--tk-viz-1)" />} />
-        <StatCard icon="circle-check" tint="green" label="Completed Jobs" value={dashboardSummary.completedJobs.toLocaleString('en-NG')} delta={dashboardSummary.completedJobsDelta} caption="vs May 7 – May 13" sparkline={<Sparkline points={dashboardSummary.completedJobsTrend} color="var(--tk-viz-2)" />} />
-        <StatCard icon="banknote" tint="purple" label="Total Revenue" value={formatNaira(dashboardSummary.totalRevenue)} delta={dashboardSummary.totalRevenueDelta} caption="vs May 7 – May 13" sparkline={<Sparkline points={dashboardSummary.totalRevenueTrend} color="var(--tk-viz-5)" />} />
-        <StatCard icon="wallet" tint="amber" label="Total Payouts" value={formatNaira(dashboardSummary.totalPayouts)} delta={dashboardSummary.totalPayoutsDelta} caption="vs May 7 – May 13" sparkline={<Sparkline points={dashboardSummary.totalPayoutsTrend} color="var(--tk-viz-3)" />} />
-        <StatCard icon="users" tint="teal" label="Active Users" value={dashboardSummary.activeUsers.toLocaleString('en-NG')} delta={dashboardSummary.activeUsersDelta} caption="vs May 7 – May 13" sparkline={<Sparkline points={dashboardSummary.activeUsersTrend} color="var(--tk-viz-6)" />} />
-        <StatCard icon="shield-check" tint="blue" label="Compliance Rate" value={`${dashboardSummary.complianceRate}%`} delta={dashboardSummary.complianceRateDelta} caption="vs May 7 – May 13" sparkline={<Sparkline points={dashboardSummary.complianceRateTrend} color="var(--tk-viz-2)" />} />
+        <StatCard icon="calendar-days" tint="navy" label="Total Jobs" value={value(reportCount(dashboardSummary.totalJobs))} delta={reportPercent(totalChange)} direction={totalChange == null ? null : totalChange < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalJobsTrend} color="var(--tk-viz-1)" />} />
+        <StatCard icon="circle-check" tint="green" label="Completed Jobs" value={value(reportCount(dashboardSummary.completedJobs))} delta={reportPercent(completedChange)} direction={completedChange == null ? null : completedChange < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.completedJobsTrend} color="var(--tk-viz-2)" />} />
+        <StatCard icon="banknote" tint="purple" label="Total Revenue" value={formatNaira(dashboardSummary.totalRevenue)} delta={dashboardSummary.totalRevenueDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalRevenueTrend} color="var(--tk-viz-5)" />} />
+        <StatCard icon="wallet" tint="amber" label="Total Payouts" value={formatNaira(dashboardSummary.totalPayouts)} delta={dashboardSummary.totalPayoutsDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalPayoutsTrend} color="var(--tk-viz-3)" />} />
+        <StatCard icon="users" tint="teal" label="Active Users" value={reportCount(dashboardSummary.activeUsers)} delta={dashboardSummary.activeUsersDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.activeUsersTrend} color="var(--tk-viz-6)" />} />
+        <StatCard icon="shield-check" tint="blue" label="Compliance Rate" value={reportPercent(dashboardSummary.complianceRate)} delta={dashboardSummary.complianceRateDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.complianceRateTrend} color="var(--tk-viz-2)" />} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.1fr 0.9fr', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
@@ -127,7 +113,7 @@ export function ReportsAnalytics() {
             ))}
           </div>
           <LineChart height={220} labels={operationsOverview.labels}
-            series={operationsOverview.series.map((s) => ({ ...s, points: scaleOverview(s.points, overviewMetric) }))} />
+            series={operationsOverview.series} format={() => '—'} />
         </SectionCard>
 
         <SectionCard title="Revenue & Payouts Trend">
@@ -139,7 +125,7 @@ export function ReportsAnalytics() {
               <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--tk-viz-2)' }} />Payouts (₦)
             </span>
           </div>
-          <BarChart height={190} labels={trendData.labels} format={(v) => `${Math.round(v)}M`}
+          <BarChart height={190} labels={trendData.labels} format={() => '—'}
             series={[
               { name: 'Revenue', color: 'var(--tk-viz-1)', points: trendData.revenue },
               { name: 'Payouts', color: 'var(--tk-viz-2)', points: trendData.payouts },
@@ -149,10 +135,10 @@ export function ReportsAnalytics() {
 
         <SectionCard title="Jobs by Status" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
           <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-            <DonutChart size={150} thickness={20} centerValue={dashboardSummary.totalJobs} centerLabel="Total"
-              data={jobsByStatus.map((s) => ({ label: s.label, value: s.count, color: s.color }))} />
+            <DonutChart size={150} thickness={20} centerValue={loading ? '—' : reportCount(dashboardSummary.totalJobs)} centerLabel="Total"
+              data={statusChartData} />
             <LegendList style={{ width: '100%' }}
-              items={jobsByStatus.map((s) => ({ label: s.label, value: s.count, display: `${s.count} (${s.pct})`, color: s.color }))}
+              items={jobsByStatus.map((s) => ({ label: s.label, value: s.count, display: `${reportCount(s.count)} (${s.pct})`, color: s.color }))}
               showShare={false} />
           </div>
         </SectionCard>
@@ -171,7 +157,7 @@ export function ReportsAnalytics() {
                   <span className="tk-meta">{r.entityType}</span>
                 </span>) },
               { key: 'jobs', header: 'Jobs', align: 'right' },
-              { key: 'revenue', header: 'Revenue (₦)', align: 'right', render: (r) => r.revenue.toLocaleString('en-NG') },
+              { key: 'revenue', header: 'Revenue (₦)', align: 'right', render: (r) => reportCount(r.revenue) },
               { key: 'growth', header: 'Growth', align: 'right', render: (r) => (
                 <span style={{ color: 'var(--tk-success)', font: '600 13px/18px var(--tk-font-sans)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <Icon name="arrow-up" size={12} />{r.growth}
@@ -181,17 +167,17 @@ export function ReportsAnalytics() {
 
         <SectionCard title="Jobs by Type" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
           <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-            <DonutChart size={150} thickness={20} centerValue={dashboardSummary.totalJobs} centerLabel="Total"
-              data={jobsByType.map((s) => ({ label: s.label, value: s.count, color: s.color }))} />
+            <DonutChart size={150} thickness={20} centerValue={loading ? '—' : reportCount(dashboardSummary.totalJobs)} centerLabel="Total"
+              data={jobsByType.filter((s) => s.count != null).map((s) => ({ label: s.label, value: s.count, color: s.color }))} />
             <LegendList style={{ width: '100%' }}
-              items={jobsByType.map((s) => ({ label: s.label, value: s.count, display: `${s.count} (${s.pct})`, color: s.color }))}
+              items={jobsByType.map((s) => ({ label: s.label, value: s.count, display: `${reportCount(s.count)} (${s.pct})`, color: s.color }))}
               showShare={false} />
           </div>
         </SectionCard>
 
         <SectionCard title="Geographical Distribution" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
           <RankBarList numbered={false}
-            items={geographicalDistribution.map((g) => ({ label: g.label, value: g.count, display: `${g.count} (${g.pct})` }))} />
+            items={geographicalDistribution.map((g) => ({ label: g.label, value: g.count, display: `${reportCount(g.count)} (${g.pct})` }))} />
         </SectionCard>
       </div>
 
@@ -201,22 +187,22 @@ export function ReportsAnalytics() {
             <div>
               <div className="tk-meta">Total Revenue</div>
               <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.totalRevenue)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>▲ {financialSummary.totalRevenueDelta}</div>
+              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{financialSummary.totalRevenueDelta}</div>
             </div>
             <div>
               <div className="tk-meta">Total Payouts</div>
               <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.totalPayouts)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>▲ {financialSummary.totalPayoutsDelta}</div>
+              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{financialSummary.totalPayoutsDelta}</div>
             </div>
             <div>
               <div className="tk-meta">Outstanding Payments</div>
               <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.outstandingPayments)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-danger)' }}>▼ {financialSummary.outstandingPaymentsDelta}</div>
+              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-danger)' }}>{financialSummary.outstandingPaymentsDelta}</div>
             </div>
             <div>
               <div className="tk-meta">Escrow Balance</div>
               <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.escrowBalance)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>▲ {financialSummary.escrowBalanceDelta}</div>
+              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{financialSummary.escrowBalanceDelta}</div>
             </div>
           </div>
         </SectionCard>
@@ -224,15 +210,15 @@ export function ReportsAnalytics() {
         <SectionCard icon="users" title="User Engagement" footer={<Button variant="outline" fullWidth onClick={() => goExport('audit')}>View User Report</Button>}>
           <div style={{ display: 'grid', gap: 12 }}>
             {[
-              { label: 'Active Users', value: userEngagement.activeUsers.toLocaleString('en-NG'), delta: userEngagement.activeUsersDelta },
-              { label: 'New Users', value: userEngagement.newUsers.toLocaleString('en-NG'), delta: userEngagement.newUsersDelta },
-              { label: 'User Sessions', value: userEngagement.userSessions.toLocaleString('en-NG'), delta: userEngagement.userSessionsDelta },
+              { label: 'Active Users', value: reportCount(userEngagement.activeUsers), delta: userEngagement.activeUsersDelta },
+              { label: 'New Users', value: reportCount(userEngagement.newUsers), delta: userEngagement.newUsersDelta },
+              { label: 'User Sessions', value: reportCount(userEngagement.userSessions), delta: userEngagement.userSessionsDelta },
             ].map((s) => (
               <div key={s.label} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
                 <span className="tk-meta">{s.label}</span>
                 <span>
                   <b style={{ font: '700 15px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)', marginRight: 8 }}>{s.value}</b>
-                  <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>▲ {s.delta}</span>
+                  <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{s.delta}</span>
                 </span>
               </div>
             ))}
@@ -276,7 +262,7 @@ export function ReportsAnalytics() {
         description="Automatically generate and deliver a report on a recurring basis."
         footer={<>
           <Button variant="outline" onClick={() => setScheduleOpen(false)}>Cancel</Button>
-          <Button disabled={busy || !scheduleForm.recipients.trim()} onClick={handleSchedule}>{busy ? 'Scheduling…' : 'Schedule'}</Button>
+          <Button disabled={!REPORT_CAPABILITIES.schedule || busy || !scheduleForm.recipients.trim()}>{busy ? 'Scheduling…' : 'Schedule'}</Button>
         </>}>
         <div style={{ display: 'grid', gap: 14 }}>
           <Select label="Report Type" value={scheduleForm.reportType}

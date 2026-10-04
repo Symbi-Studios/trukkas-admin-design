@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHeader, Button, SectionCard, Select, Switch, Banner, Icon } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { complianceStandards, thirdPartyProcessors, dataProtectionStatus } from '../mock/fixtures/settings.js';
-import {
-  updateDataPrivacyConsent, updateDataEncryption, updateDataRetentionSecurity, updateDataExportAccess,
-  updateDataDeletion, saveDataProtectionSettings, resetDataProtectionSettings,
-} from '../mock/api.js';
+import { PageHeader, Button, SectionCard, Banner, Icon } from '../ds.js';
+import { SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { dataProtectionStatus as dataProtectionStatusTemplate } from '../mock/fixtures/settings.js';
+
 import { SettingsTabStrip, SettingsDangerZone, SettingsMetaFooter } from './settingsShared.jsx';
 
 const RETENTION_OPTIONS = ['1 year', '3 years', '5 years', '7 years', 'Indefinite'];
@@ -24,23 +24,34 @@ function RetentionRow({ label, hint, value, onChange }) {
 }
 
 export function SettingsDataProtection() {
-  const consent = useCollection('settingsDataPrivacyConsent')?.[0];
-  const encryption = useCollection('settingsDataEncryption')?.[0];
-  const retention = useCollection('settingsDataRetentionSecurity')?.[0];
-  const exportAccess = useCollection('settingsDataExportAccess')?.[0];
-  const deletion = useCollection('settingsDataDeletion')?.[0];
-  const meta = useCollection('settingsMeta')?.[0];
+  const editor = useSettingsEditor('data-protection');
+  const updateDataPrivacyConsent = editor.change('settingsDataPrivacyConsent');
+  const updateDataEncryption = editor.change('settingsDataEncryption');
+  const updateDataRetentionSecurity = editor.change('settingsDataRetentionSecurity');
+  const updateDataExportAccess = editor.change('settingsDataExportAccess');
+  const updateDataDeletion = editor.change('settingsDataDeletion');
+  const saveDataProtectionSettings = () => editor.save();
+  const resetDataProtectionSettings = () => editor.unavailable('Reset Data Protection Settings');
+  const complianceStandards = [];
+  const thirdPartyProcessors = [];
+  const dataProtectionStatus = { headline: '—', caption: '—', lastChecked: '—', items: (dataProtectionStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const consent = editor.group('settingsDataPrivacyConsent');
+  const encryption = editor.group('settingsDataEncryption');
+  const retention = editor.group('settingsDataRetentionSecurity');
+  const exportAccess = editor.group('settingsDataExportAccess');
+  const deletion = editor.group('settingsDataDeletion');
+  const meta = editor.group('settingsMeta');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!consent || !encryption || !retention || !exportAccess || !deletion) return null;
 
   async function handleSave() {
     setSaving(true);
-    await saveDataProtectionSettings();
+    const confirmed = await saveDataProtectionSettings();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -52,6 +63,7 @@ export function SettingsDataProtection() {
           <Button icon="save" disabled={saving} onClick={handleSave}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Changes'}</Button>
         </>} />
       <SettingsTabStrip active="data-protection" />
+      <SettingsReadNotice error={editor.error} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr)) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
@@ -116,7 +128,7 @@ export function SettingsDataProtection() {
             <Field><Switch checked={exportAccess.notifyUsersWhenDataReady} label="Notify users when data is ready"
               hint="Send an email notification when export is completed."
               onChange={(v) => updateDataExportAccess({ notifyUsersWhenDataReady: v })} /></Field>
-            <Button variant="outline" fullWidth iconRight="chevron-right">Manage Data Export Requests</Button>
+            <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => editor.unavailable('Manage Data Export Requests')}>Manage Data Export Requests</Button>
           </SectionCard>
         </div>
 
@@ -150,15 +162,16 @@ export function SettingsDataProtection() {
                   </div>
                 </div>
               ))}
+              {'—'}
             </div>
-            <Button variant="outline" fullWidth iconRight="chevron-right">View Compliance Details</Button>
+            <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => editor.unavailable('View Compliance Details')}>View Compliance Details</Button>
           </SectionCard>
 
           <SectionCard title="Third-Party Data Processors" icon="share-2">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 10 }}>Manage third-party services that process your data.</span>
             <div style={{ display: 'grid' }}>
               {thirdPartyProcessors.map((p, i) => (
-                <button key={p.label} type="button"
+                <button key={p.label} type="button" onClick={() => editor.unavailable('Manage Third-Party Data Processor')}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 2px', border: 0,
                            borderTop: i ? '1px solid var(--tk-line)' : 'none', background: 'transparent',
                            cursor: 'pointer', textAlign: 'left' }}>
@@ -173,11 +186,12 @@ export function SettingsDataProtection() {
                   <Icon name="chevron-right" size={15} color="var(--tk-ink-300)" />
                 </button>
               ))}
+              {'—'}
             </div>
           </SectionCard>
 
           <SettingsDangerZone title="Permanently Delete All Platform Data" hint="This action cannot be undone."
-            onConfirm={() => {}} />
+            onConfirm={() => editor.unavailable('Permanently Delete All Platform Data')} />
           <SettingsMetaFooter meta={meta} />
         </div>
       </div>

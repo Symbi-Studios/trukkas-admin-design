@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -17,9 +18,14 @@ import {
   Select,
   TextField,
   Textarea,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { createSupportTicket } from "../mock/api.js";
+import {
+  useGetAdminSupportTicketDirectoryQuery, useGetAdminSupportTicketStatsQuery, useGetAdminTicketAgentsQuery,
+  ticketWithAgents, ticketSummary, ticketDetailUrl, TICKET_PRIORITY_CODES,
+} from "../store/features/tickets/ticketsApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverTableLoading } from "./DriversLoading.jsx";
 import "./Support.css";
 
 const PAGE_SIZE = 6;
@@ -34,8 +40,10 @@ const priorityTone = { High: "danger", Medium: "warning", Low: "neutral" };
 
 export function SupportTickets() {
   const navigate = useNavigate();
-  const tickets = useCollection("supportTickets") || [];
+  const admin = useSelector((state) => state.auth.admin);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const [q, setQ] = useState("");
+  const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [priority, setPriority] = useState("All");
   const [category, setCategory] = useState("All");
@@ -49,36 +57,36 @@ export function SupportTickets() {
     priority: "Medium",
     description: "",
   });
-  const categories = [...new Set(tickets.map((t) => t.category))];
+  useEffect(() => { const timer = setTimeout(() => setSearch(q.trim()), 250); return () => clearTimeout(timer); }, [q]);
+  const directory = useGetAdminSupportTicketDirectoryQuery(undefined, { skip: !authenticated });
+  const serverFilters = Boolean(search || priority !== "All");
+  const searched = useGetAdminSupportTicketDirectoryQuery({ search, priority: TICKET_PRIORITY_CODES[priority] }, { skip: !authenticated || !serverFilters });
+  const statsQuery = useGetAdminSupportTicketStatsQuery(undefined, { skip: !authenticated });
+  const agentsQuery = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated || admin?.role !== "SUPER_ADMIN" });
+  const agents = authenticated && admin?.role === "SUPER_ADMIN" && !agentsQuery.error ? agentsQuery.currentData : undefined;
+  const tickets = authenticated && !directory.error ? directory.currentData : undefined;
+  const source = serverFilters ? searched : directory;
+  const rows = authenticated && !source.error ? source.currentData : undefined;
+  const loading = authenticated && (source.isFetching || q.trim() !== search);
+  const summary = ticketSummary(tickets, authenticated && !statsQuery.error ? statsQuery.currentData : undefined);
+  const value = (content) => directory.isFetching ? <Skeleton as="span" width={54} height={23} /> : content;
+  const categories = [...new Set((tickets || []).map((t) => t.category).filter((name) => name !== "—"))];
+  const filtersAvailable = Boolean(rows) && !["In Progress", "Pending"].includes(status)
+    && (status === "All" || rows.every((ticket) => ticket.statusCode))
+    && (category === "All" || rows.every((ticket) => ticket.categoryKnown));
   const filtered = useMemo(
     () =>
-      tickets.filter(
+      (rows || []).filter(
         (t) =>
           (status === "All" || t.status === status) &&
-          (priority === "All" || t.priority === priority) &&
-          (category === "All" || t.category === category) &&
-          (!q ||
-            [t.id, t.subject, t.customer, t.company].some((v) =>
-              v.toLowerCase().includes(q.toLowerCase()),
-            )),
+          (category === "All" || t.category === category),
       ),
-    [tickets, q, status, priority, category],
+    [rows, status, category],
   );
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const counts = {
-    open: tickets.filter((t) => t.status === "Open").length,
-    progress: tickets.filter((t) => t.status === "In Progress").length,
-    pending: tickets.filter((t) => t.status === "Pending").length,
-    resolved: tickets.filter(
-      (t) => t.status === "Resolved" || t.status === "Closed",
-    ).length,
-  };
-
-  async function submitTicket() {
-    const ticket = await createSupportTicket(form);
-    setCreate(false);
-    navigate("/tickets/" + ticket.id);
-  }
+  const total = filtersAvailable ? filtered.length : null;
+  const pageCount = total == null ? null : Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const paged = filtersAvailable ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((ticket) => ticketWithAgents(ticket, agents)) : [];
+  useEffect(() => { if (pageCount != null && page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
   return (
     <div className="support-page">
@@ -96,40 +104,45 @@ export function SupportTickets() {
         <StatCard
           icon="ticket"
           label="Total Tickets"
-          value={tickets.length}
-          delta="12%"
+          value={value(summary.total)}
+          delta="—"
+          direction={null}
           caption="from last 7 days"
         />
         <StatCard
           icon="circle-dot"
           tint="blue"
           label="Open"
-          value={counts.open}
-          delta="8%"
+          value={value(summary.open)}
+          delta="—"
+          direction={null}
           caption="from last 7 days"
         />
         <StatCard
           icon="loader-circle"
           tint="purple"
           label="In Progress"
-          value={counts.progress}
-          delta="4%"
+          value={value(summary.progress)}
+          delta="—"
+          direction={null}
           caption="from last 7 days"
         />
         <StatCard
           icon="clock-3"
           tint="amber"
           label="Pending"
-          value={counts.pending}
-          delta="2%"
+          value={value(summary.pending)}
+          delta="—"
+          direction={null}
           caption="from last 7 days"
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Resolved"
-          value={counts.resolved}
-          delta="18%"
+          value={value(summary.resolved)}
+          delta="—"
+          direction={null}
           caption="from last 7 days"
         />
       </div>
@@ -206,10 +219,10 @@ export function SupportTickets() {
             Reset
           </Button>
         </div>
-        <DataTable
+        {loading ? <DriverTableLoading columns={7} label="Loading tickets" /> : <DataTable
           rows={paged}
           rowKey={(r) => r.id}
-          onRowClick={(r) => navigate("/tickets/" + r.id)}
+          onRowClick={(r) => navigate(ticketDetailUrl(r.id))}
           columns={[
             {
               key: "subject",
@@ -267,7 +280,7 @@ export function SupportTickets() {
                   aria-label={"Open " + r.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigate("/tickets/" + r.id);
+                    navigate(ticketDetailUrl(r.id));
                   }}
                 >
                   <Icon name="ellipsis-vertical" size={16} />
@@ -275,8 +288,8 @@ export function SupportTickets() {
               ),
             },
           ]}
-        />
-        {!paged.length && (
+        />}
+        {!loading && !paged.length && (
           <div
             style={{
               padding: 40,
@@ -284,19 +297,19 @@ export function SupportTickets() {
               color: "var(--tk-ink-400)",
             }}
           >
-            No tickets match your filters.
+            {source.error ? getApiErrorMessage(source.error) : !filtersAvailable ? "—" : "No tickets match your filters."}
           </div>
         )}
         <Pagination
           page={page}
-          pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
+          pageCount={pageCount}
           pageSize={PAGE_SIZE}
-          total={filtered.length}
+          total={total}
           onPage={(p) =>
-            setPage(
+            pageCount != null && setPage(
               Math.min(
                 Math.max(p, 1),
-                Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
+                pageCount,
               ),
             )
           }
@@ -314,8 +327,7 @@ export function SupportTickets() {
               Cancel
             </Button>
             <Button
-              disabled={!form.subject || !form.customer}
-              onClick={submitTicket}
+              disabled
             >
               Create Ticket
             </Button>
@@ -344,7 +356,7 @@ export function SupportTickets() {
             <Select
               label="Category"
               value={form.category}
-              options={categories}
+              options={[...new Set([form.category, ...categories])]}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
             />
             <Select

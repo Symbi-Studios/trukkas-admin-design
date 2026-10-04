@@ -1,17 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, FilterSelect,
   DataTable, Pagination, Badge, Avatar, Tag, DropdownMenu, IconButton, Modal, TextField, Select,
-  DonutChart, LegendList, StatusDot,
+  DonutChart, LegendList, StatusDot, Skeleton,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
 import {
-  usersSummary, usersByRole, usersByStatus, recentUserActivity,
-} from '../mock/fixtures/users.js';
-import { addUser, deactivateUser, activateUser, lockUserAccount, unlockUserAccount, deleteUser } from '../mock/api.js';
+  useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation,
+  managedUserSummary, managedUserRoleChart, managedUserStatusChart, managedUsersCsv,
+} from '../store/features/users/usersApi.js';
+import { DriverTableLoading, DriverLoadingNotice } from './DriversLoading.jsx';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 const PAGE_SIZE = 8;
 const ROLES = ['Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Finance Manager', 'Viewer', 'Driver'];
@@ -37,28 +39,49 @@ function FilterButton({ value, options, active, onChange }) {
 
 export function UserManagement() {
   const navigate = useNavigate();
-  const users = useCollection('users') || [];
+  const admin = useSelector((state) => state.auth.admin);
+  const query = useGetUserManagementDirectoryQuery({ includeAdmins: admin?.role === 'SUPER_ADMIN' }, { refetchOnMountOrArgChange: true });
+  const statsQuery = useGetUserManagementStatsQuery();
+  const directory = query.error ? null : query.currentData;
+  const users = useMemo(() => directory?.rows || [], [directory]);
+  const usersSummary = managedUserSummary(directory?.rows, statsQuery.error ? null : statsQuery.currentData);
+  const usersByRole = managedUserRoleChart(directory?.rows, directory?.adminsIncluded);
+  const usersByStatus = managedUserStatusChart(directory?.rows, usersSummary);
+  const [changeAccess, accessState] = useChangeManagedUserAccessMutation();
+  const [editAdmin, editState] = useUpdateManagedAdminMutation();
+  const submitting = useRef(false);
+  const unavailable = (action) => { setMenuFor(null); window.alert(`${action} is not supported through this control by the documented API.`); };
+  const profilePath = (user) => `/users/detail?id=${encodeURIComponent(user.backendId)}&source=${user.source}`;
+  const metric = (value) => query.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
   const [q, setQ] = useState('');
   const [role, setRole] = useState('All Roles');
   const [status, setStatus] = useState('All Statuses');
   const [entity, setEntity] = useState('All Entities');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState([]);
   const [menuFor, setMenuFor] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
-  const entities = useMemo(() => Array.from(new Set(users.map((u) => u.entity))).sort(), [users]);
+  const entities = useMemo(() => Array.from(new Set(users.map((u) => u.entity).filter((value) => value !== '—'))).sort(), [users]);
+  const filterAvailable = (role === 'All Roles' || role === 'Driver' || (role === 'Super Admin' && directory?.adminsIncluded)) && status !== 'Locked';
 
   const filtered = useMemo(() => users.filter((u) => (
     (role === 'All Roles' || u.role === role) &&
     (status === 'All Statuses' || u.status === status) &&
     (entity === 'All Entities' || u.entity === entity) &&
-    (!q || [u.name, u.email, u.entity].some((s) => s && s.toLowerCase().includes(q.toLowerCase())))
+    (!q || [u.name, u.email, u.phone, u.entity].some((s) => s !== '—' && s && s.toLowerCase().includes(q.toLowerCase())))
   )), [users, role, status, entity, q]);
 
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  useEffect(() => {
+    setPage((value) => Math.max(1, Math.min(value, pageCount)));
+    const ids = new Set(filtered.map((user) => user.id));
+    setSelected((values) => values.filter((id) => ids.has(id)));
+  }, [filtered, pageCount]);
 
   function resetFilters() {
     setRole('All Roles'); setStatus('All Statuses'); setEntity('All Entities'); setQ(''); setPage(1);
@@ -67,24 +90,56 @@ export function UserManagement() {
   function resetForm() { setAddOpen(false); setForm(EMPTY_FORM); setSaving(false); }
 
   async function handleSave() {
-    setSaving(true);
-    await addUser(form);
-    resetForm();
+    unavailable('Creating an admin with this form (the API requires a password and does not accept an entity)');
+  }
+
+  async function updateAccess(user) {
+    setMenuFor(null);
+    if (submitting.current || accessState.isLoading) return;
+    if (user.source !== 'user' || !['ACTIVE', 'SUSPENDED'].includes(user.statusCode)) { unavailable('Changing access'); return; }
+    const operation = user.statusCode === 'SUSPENDED' ? 'activate' : 'suspend';
+    const reason = operation === 'suspend' ? window.prompt('Reason for suspending this user:') : null;
+    if (operation === 'suspend' && !reason?.trim()) return;
+    submitting.current = true;
+    try { const result = await changeAccess({ id: user.backendId, source: user.source, operation, reason }).unwrap(); window.alert(result.message); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { submitting.current = false; }
+  }
+
+  async function editUser(user) {
+    setMenuFor(null);
+    if (submitting.current || editState.isLoading) return;
+    if (user.source !== 'admin' || admin?.role !== 'SUPER_ADMIN') { unavailable('Edit User'); return; }
+    const name = window.prompt('Full Name', user.name === '—' ? '' : user.name);
+    if (!name?.trim() || name.trim() === user.name) return;
+    submitting.current = true;
+    try { const result = await editAdmin({ id: user.backendId, name }).unwrap(); window.alert(result.message); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { submitting.current = false; }
+  }
+
+  function exportUsers() {
+    if (!directory || query.isFetching) { window.alert('Load the complete user directory before exporting.'); return; }
+    const rows = selected.length ? filtered.filter((user) => selected.includes(user.id)) : filtered;
+    if (!rows.length) { window.alert('There are no users to export.'); return; }
+    const url = URL.createObjectURL(new Blob([managedUsersCsv(rows)], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'users.csv'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function rowMenuItems(u) {
     const items = [
-      { label: 'View Profile', icon: 'eye', onClick: () => { setMenuFor(null); navigate('/users/' + u.id); } },
-      { label: 'Edit User', icon: 'pencil', onClick: () => setMenuFor(null) },
-      { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => setMenuFor(null) },
+      { label: 'View Profile', icon: 'eye', onClick: () => { setMenuFor(null); navigate(profilePath(u)); } },
+      { label: 'Edit User', icon: 'pencil', onClick: () => editUser(u) },
+      { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => unavailable('Reset Password') },
       { divider: true },
     ];
-    if (u.status === 'Locked') items.push({ label: 'Unlock Account', icon: 'lock-open', onClick: () => { unlockUserAccount(u.id); setMenuFor(null); } });
-    else items.push({ label: 'Lock Account', icon: 'lock', onClick: () => { lockUserAccount(u.id); setMenuFor(null); } });
-    if (u.status === 'Inactive') items.push({ label: 'Activate User', icon: 'user-check', onClick: () => { activateUser(u.id); setMenuFor(null); } });
-    else items.push({ label: 'Deactivate User', icon: 'user-x', onClick: () => { deactivateUser(u.id); setMenuFor(null); } });
+    if (u.status === 'Locked') items.push({ label: 'Unlock Account', icon: 'lock-open', onClick: () => unavailable('Unlock Account') });
+    else items.push({ label: 'Lock Account', icon: 'lock', onClick: () => unavailable('Lock Account') });
+    if (['Inactive', 'Suspended'].includes(u.status)) items.push({ label: 'Activate User', icon: 'user-check', onClick: () => updateAccess(u) });
+    else items.push({ label: 'Deactivate User', icon: 'user-x', onClick: () => updateAccess(u) });
     items.push({ divider: true });
-    items.push({ label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => { deleteUser(u.id); setMenuFor(null); } });
+    items.push({ label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => unavailable('Delete User') });
     return items;
   }
 
@@ -93,21 +148,21 @@ export function UserManagement() {
       <PageHeader crumbs={['Administration', 'User Management']} title="User Management"
         description="Manage users, view their roles, permissions and account status."
         actions={<>
-          <Button variant="outline" icon="upload">Import Users</Button>
-          <Button variant="outline" icon="download">Export Users</Button>
+          <Button variant="outline" icon="upload" onClick={() => unavailable('Import Users')}>Import Users</Button>
+          <Button variant="outline" icon="download" onClick={exportUsers}>Export Users</Button>
           <Button icon="plus" onClick={() => setAddOpen(true)}>Add New User</Button>
         </>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>
-        <StatCard icon="users-round" tint="amber" label="Total Users" value={usersSummary.total}
+        <StatCard icon="users-round" tint="amber" label="Total Users" value={metric(usersSummary.total)}
           delta={usersSummary.totalCaption} direction={usersSummary.totalDirection} />
-        <StatCard icon="shield-check" tint="green" label="Active Users" value={usersSummary.active}
+        <StatCard icon="shield-check" tint="green" label="Active Users" value={metric(usersSummary.active)}
           delta={usersSummary.activeCaption} direction={usersSummary.activeDirection} />
-        <StatCard icon="user-round-x" tint="purple" label="Inactive Users" value={usersSummary.inactive}
+        <StatCard icon="user-round-x" tint="purple" label="Inactive Users" value={metric(usersSummary.inactive)}
           delta={usersSummary.inactiveCaption} direction={usersSummary.inactiveDirection} />
-        <StatCard icon="lock" tint="red" label="Locked Users" value={usersSummary.locked}
+        <StatCard icon="lock" tint="red" label="Locked Users" value={metric(usersSummary.locked)}
           delta={usersSummary.lockedCaption} direction={usersSummary.lockedDirection} />
-        <StatCard icon="user-round-plus" tint="blue" label="New This Month" value={usersSummary.newThisMonth}
+        <StatCard icon="user-round-plus" tint="blue" label="New This Month" value={metric(usersSummary.newThisMonth)}
           delta={usersSummary.newThisMonthCaption} direction={usersSummary.newThisMonthDirection} />
       </div>
 
@@ -118,25 +173,25 @@ export function UserManagement() {
               onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
             filters={<>
               <FilterButton value={role} options={['All Roles', ...ROLES]} active={role !== 'All Roles'}
-                onChange={(v) => { setRole(v); setPage(1); }} />
+                onChange={(v) => { setRole(v); setPage(1); if (!['All Roles', 'Driver'].includes(v) && !(v === 'Super Admin' && directory?.adminsIncluded)) unavailable('Filtering this role'); }} />
               <FilterButton value={status} options={['All Statuses', ...STATUSES]} active={status !== 'All Statuses'}
-                onChange={(v) => { setStatus(v); setPage(1); }} />
+                onChange={(v) => { setStatus(v); setPage(1); if (v === 'Locked') unavailable('Filtering locked accounts'); }} />
               <FilterButton value={entity} options={['All Entities', ...entities]} active={entity !== 'All Entities'}
                 onChange={(v) => { setEntity(v); setPage(1); }} />
-              <Button variant="outline" icon="list-filter">More Filters</Button>
+              <Button variant="outline" icon="list-filter" onClick={() => unavailable('More Filters')}>More Filters</Button>
             </>}
             onClear={resetFilters} />
 
-          <DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
+          {query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
             columns={[
               { key: 'user', header: 'User', render: (r) => (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-                      onClick={() => navigate('/users/' + r.id)}>
+                      onClick={() => navigate(profilePath(r))}>
                   <Avatar name={r.name} size={36} />
                   <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.name}</span>
-                      {r.you && <Tag tone="blue">You</Tag>}
+                      {r.source === 'admin' && r.backendId === admin?.id && <Tag tone="blue">You</Tag>}
                     </span>
                     <span className="tk-meta">{r.email}</span>
                   </span>
@@ -155,17 +210,18 @@ export function UserManagement() {
                     </span>
                   )}
                 </span>) },
-            ]} />
-          <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length}
-            pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-            onPage={setPage} onPageSize={() => {}} />
+            ]} />}
+          {!query.isFetching && !query.error && !filterAvailable && '—'}
+          <Pagination page={page} pageSize={pageSize} total={directory && filterAvailable ? filtered.length : undefined}
+            pageCount={pageCount}
+            onPage={(value) => setPage(Math.max(1, Math.min(value, pageCount)))} onPageSize={(value) => { setPageSize(value); setPage(1); }} />
         </SectionCard>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
           <SectionCard title="Users by Role">
             <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-              <DonutChart size={168} thickness={22} centerValue={usersSummary.total} centerLabel="Total"
-                data={usersByRole} />
+              <DonutChart size={168} thickness={22} centerValue={query.isFetching ? '—' : usersSummary.total ?? '—'} centerLabel="Total"
+                data={directory && users.every((user) => usersByRole.some((item) => item.value != null && item.label === user.role)) ? usersByRole.filter((item) => item.value != null) : []} />
               <LegendList style={{ width: '100%' }} items={usersByRole} showShare={false} />
             </div>
           </SectionCard>
@@ -181,18 +237,9 @@ export function UserManagement() {
               ))}
             </div>
           </SectionCard>
-          <SectionCard title="Recent User Activity" action={<a href="#">View All</a>}>
+          <SectionCard title="Recent User Activity" action={<a href="#" onClick={(event) => { event.preventDefault(); unavailable('View All User Activity'); }}>View All</a>}>
             <div style={{ display: 'grid', gap: 16 }}>
-              {recentUserActivity.map((a, i) => (
-                <div key={i} style={{ display: 'flex', gap: 10 }}>
-                  <Avatar name={a.name} size={32} />
-                  <div style={{ display: 'grid', gap: 1, minWidth: 0 }}>
-                    <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{a.name}</span>
-                    <span className="tk-meta">{a.action}</span>
-                    <span className="tk-meta">{a.time}</span>
-                  </div>
-                </div>
-              ))}
+              {'—'}
             </div>
           </SectionCard>
         </div>

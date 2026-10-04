@@ -1,16 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHeader, Button, SectionCard, TextField, Select, Textarea, Switch, Icon, QuickActionsCard } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import {
-  ACCESS_CONTROL_OPTIONS, securityStatus, recentSecurityEvents, securityQuickActions,
-} from '../mock/fixtures/settings.js';
-import {
-  updateAuthSettings, updatePasswordPolicyOverview, updateSessionManagementOverview,
-  updateIpDeviceRestrictionsOverview, updateDataProtectionOverview, updateSecurityAlertsOverview,
-  saveSecuritySettings, resetSecuritySettings,
-} from '../mock/api.js';
+import { PageHeader, Button, SectionCard, Icon, QuickActionsCard } from '../ds.js';
+import { SettingsTextField as TextField, SettingsSelect as Select, SettingsTextarea as Textarea, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { ACCESS_CONTROL_OPTIONS, securityStatus as securityStatusTemplate, securityQuickActions } from '../mock/fixtures/settings.js';
+
 import { SettingsTabStrip, SettingsDangerZone, SettingsMetaFooter } from './settingsShared.jsx';
 
 const PASSWORD_RULES = [
@@ -23,24 +20,35 @@ const PASSWORD_RULES = [
 function Field({ children }) { return <div style={{ marginBottom: 14 }}>{children}</div>; }
 
 export function SettingsSecurity() {
-  const auth = useCollection('settingsAuth')?.[0];
-  const passwordPolicy = useCollection('settingsPasswordPolicyOverview')?.[0];
-  const sessionMgmt = useCollection('settingsSessionManagementOverview')?.[0];
-  const ipRestrictions = useCollection('settingsIpDeviceRestrictionsOverview')?.[0];
-  const dataProtection = useCollection('settingsDataProtectionOverview')?.[0];
-  const securityAlerts = useCollection('settingsSecurityAlertsOverview')?.[0];
-  const meta = useCollection('settingsMeta')?.[0];
+  const editor = useSettingsEditor('security');
+  const updateAuthSettings = editor.change('settingsAuth');
+  const updatePasswordPolicyOverview = editor.change('settingsPasswordPolicyOverview');
+  const updateSessionManagementOverview = editor.change('settingsSessionManagementOverview');
+  const updateIpDeviceRestrictionsOverview = editor.change('settingsIpDeviceRestrictionsOverview');
+  const updateDataProtectionOverview = editor.change('settingsDataProtectionOverview');
+  const updateSecurityAlertsOverview = editor.change('settingsSecurityAlertsOverview');
+  const saveSecuritySettings = () => editor.save();
+  const resetSecuritySettings = () => editor.unavailable('Reset Security Settings');
+  const securityStatus = { headline: '—', caption: '—', lastChecked: '—', items: (securityStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const recentSecurityEvents = [];
+  const auth = editor.group('settingsAuth');
+  const passwordPolicy = editor.group('settingsPasswordPolicyOverview');
+  const sessionMgmt = editor.group('settingsSessionManagementOverview');
+  const ipRestrictions = editor.group('settingsIpDeviceRestrictionsOverview');
+  const dataProtection = editor.group('settingsDataProtectionOverview');
+  const securityAlerts = editor.group('settingsSecurityAlertsOverview');
+  const meta = editor.group('settingsMeta');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!auth || !passwordPolicy || !sessionMgmt || !ipRestrictions || !dataProtection || !securityAlerts) return null;
 
   async function handleSave() {
     setSaving(true);
-    await saveSecuritySettings();
+    const confirmed = await saveSecuritySettings();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -52,6 +60,7 @@ export function SettingsSecurity() {
           <Button icon="save" disabled={saving} onClick={handleSave}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Changes'}</Button>
         </>} />
       <SettingsTabStrip active="security" />
+      <SettingsReadNotice error={editor.error} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--tk-grid-gap)' }}>
@@ -78,7 +87,7 @@ export function SettingsSecurity() {
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Set password requirements for all users.</span>
             <Field><TextField label="Minimum password length" type="number" value={passwordPolicy.minPasswordLength}
               suffix={<span className="tk-meta">characters</span>}
-              onChange={(e) => updatePasswordPolicyOverview({ minPasswordLength: Number(e.target.value) })} /></Field>
+              onChange={(e) => updatePasswordPolicyOverview({ minPasswordLength: e.target.value })} /></Field>
             <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
               {PASSWORD_RULES.map((rule) => (
                 <div key={rule} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -89,7 +98,7 @@ export function SettingsSecurity() {
             </div>
             <Field><TextField label="Password expiry (days)" type="number" value={passwordPolicy.passwordExpiryDays}
               hint="Users will be prompted to change their password after this period."
-              onChange={(e) => updatePasswordPolicyOverview({ passwordExpiryDays: Number(e.target.value) })} /></Field>
+              onChange={(e) => updatePasswordPolicyOverview({ passwordExpiryDays: e.target.value })} /></Field>
             <Switch checked={passwordPolicy.preventReuseOfPreviousPasswords} label="Prevent reuse of previous passwords"
               hint="Block users from reusing last 5 passwords."
               onChange={(v) => updatePasswordPolicyOverview({ preventReuseOfPreviousPasswords: v })} />
@@ -100,10 +109,10 @@ export function SettingsSecurity() {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
               <TextField label="Session timeout (minutes)" type="number" value={sessionMgmt.sessionTimeoutMinutes}
                 hint="Automatically log out inactive users."
-                onChange={(e) => updateSessionManagementOverview({ sessionTimeoutMinutes: Number(e.target.value) })} />
+                onChange={(e) => updateSessionManagementOverview({ sessionTimeoutMinutes: e.target.value })} />
               <TextField label="Maximum concurrent sessions" type="number" value={sessionMgmt.maxConcurrentSessions}
                 hint="Limit the number of active sessions per user."
-                onChange={(e) => updateSessionManagementOverview({ maxConcurrentSessions: Number(e.target.value) })} />
+                onChange={(e) => updateSessionManagementOverview({ maxConcurrentSessions: e.target.value })} />
             </div>
             <Field><Switch checked={sessionMgmt.showActiveSessionsToUsers} label="Show active sessions to users"
               hint="Allow users to view and manage their active sessions."
@@ -174,7 +183,7 @@ export function SettingsSecurity() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Recent Security Events" action={<a href="#">View All</a>}>
+          <SectionCard title="Recent Security Events" action={<a href="#" onClick={(event) => { event.preventDefault(); editor.unavailable('View All Security Events'); }}>View All</a>}>
             <div style={{ display: 'grid', gap: 14 }}>
               {recentSecurityEvents.map((e, i) => (
                 <div key={i} style={{ display: 'flex', gap: 10 }}>
@@ -189,10 +198,11 @@ export function SettingsSecurity() {
                   </div>
                 </div>
               ))}
+              {'—'}
             </div>
           </SectionCard>
 
-          <QuickActionsCard items={securityQuickActions} />
+          <QuickActionsCard items={editor.quickActions(securityQuickActions)} />
           <SettingsDangerZone title="Reset Security Settings" hint="Restore all security settings to system defaults. Use with caution."
             onConfirm={() => resetSecuritySettings()} />
           <SettingsMetaFooter meta={meta} />

@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHeader, Button, SectionCard, TextField, Select, Switch, QuickActionsCard } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { financeStatus, financeQuickActions } from '../mock/fixtures/settings.js';
-import {
-  updateFinancialPolicies, updatePlatformFees, updateEscrowSettingsForm, updatePayoutSettingsForm,
-  updateInvoicingReceipts, updateAccountingTax, saveFinanceSettings, resetFinanceSettings,
-} from '../mock/api.js';
+import { PageHeader, Button, SectionCard, QuickActionsCard } from '../ds.js';
+import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { financeStatus as financeStatusTemplate, financeQuickActions } from '../mock/fixtures/settings.js';
+
 import { SettingsTabStrip, SettingsStatusCard, SettingsDangerZone, SettingsMetaFooter } from './settingsShared.jsx';
 
 const CURRENCIES = ['Nigerian Naira (NGN)', 'US Dollar (USD)', 'Ghanaian Cedi (GHS)', 'Kenyan Shilling (KES)'];
@@ -33,24 +33,34 @@ function MiniSwitch({ checked, label, onChange }) {
 }
 
 export function SettingsFinance() {
-  const policies = useCollection('settingsFinancialPolicies')?.[0];
-  const fees = useCollection('settingsPlatformFees')?.[0];
-  const escrow = useCollection('settingsEscrow')?.[0];
-  const payout = useCollection('settingsPayout')?.[0];
-  const invoicing = useCollection('settingsInvoicing')?.[0];
-  const tax = useCollection('settingsAccountingTax')?.[0];
-  const meta = useCollection('settingsMeta')?.[0];
+  const editor = useSettingsEditor('finance');
+  const updateFinancialPolicies = editor.change('settingsFinancialPolicies');
+  const updatePlatformFees = editor.change('settingsPlatformFees');
+  const updateEscrowSettingsForm = editor.change('settingsEscrow');
+  const updatePayoutSettingsForm = editor.change('settingsPayout');
+  const updateInvoicingReceipts = editor.change('settingsInvoicing');
+  const updateAccountingTax = editor.change('settingsAccountingTax');
+  const saveFinanceSettings = () => editor.save();
+  const resetFinanceSettings = () => editor.unavailable('Reset Finance Settings');
+  const financeStatus = { headline: '—', caption: '—', lastChecked: '—', items: (financeStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const policies = editor.group('settingsFinancialPolicies');
+  const fees = editor.group('settingsPlatformFees');
+  const escrow = editor.group('settingsEscrow');
+  const payout = editor.group('settingsPayout');
+  const invoicing = editor.group('settingsInvoicing');
+  const tax = editor.group('settingsAccountingTax');
+  const meta = editor.group('settingsMeta');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!policies || !fees || !escrow || !payout || !invoicing || !tax) return null;
 
   async function handleSave() {
     setSaving(true);
-    await saveFinanceSettings();
+    const confirmed = await saveFinanceSettings();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -62,6 +72,7 @@ export function SettingsFinance() {
           <Button icon="save" disabled={saving} onClick={handleSave}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Changes'}</Button>
         </>} />
       <SettingsTabStrip active="finance" />
+      <SettingsReadNotice error={editor.error} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--tk-grid-gap)' }}>
@@ -122,7 +133,7 @@ export function SettingsFinance() {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
               <TextField label="Escrow Hold Period (Days)" type="number" value={escrow.escrowHoldPeriodDays}
                 hint="Period to hold funds after job completion."
-                onChange={(e) => updateEscrowSettingsForm({ escrowHoldPeriodDays: Number(e.target.value) })} />
+                onChange={(e) => updateEscrowSettingsForm({ escrowHoldPeriodDays: e.target.value })} />
               <div style={{ display: 'grid', gap: 6 }}>
                 <Select label="Auto-release on POD" options={AUTO_RELEASE} value={escrow.autoReleaseOnPod}
                   onChange={(e) => updateEscrowSettingsForm({ autoReleaseOnPod: e.target.value })} />
@@ -167,7 +178,7 @@ export function SettingsFinance() {
                 hint="Example: RCP-2026-0001"
                 onChange={(e) => updateInvoicingReceipts({ receiptNumberFormat: e.target.value })} />
               <TextField label="Default Invoice Terms (Days)" type="number" value={invoicing.defaultInvoiceTermsDays}
-                onChange={(e) => updateInvoicingReceipts({ defaultInvoiceTermsDays: Number(e.target.value) })} />
+                onChange={(e) => updateInvoicingReceipts({ defaultInvoiceTermsDays: e.target.value })} />
               <Select label="Invoice Logo" options={INVOICE_LOGOS} value={invoicing.invoiceLogo}
                 onChange={(e) => updateInvoicingReceipts({ invoiceLogo: e.target.value })} />
             </div>
@@ -205,7 +216,7 @@ export function SettingsFinance() {
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
           <SettingsStatusCard title="Finance Status" headline={financeStatus.headline} caption={financeStatus.caption}
             items={financeStatus.items} />
-          <QuickActionsCard items={financeQuickActions} />
+          <QuickActionsCard items={editor.quickActions(financeQuickActions)} />
           <SettingsDangerZone title="Reset Finance Settings" hint="Restore all financial settings to default values."
             onConfirm={() => resetFinanceSettings()} />
           <SettingsMetaFooter meta={meta} />

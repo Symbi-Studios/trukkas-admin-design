@@ -1,6 +1,8 @@
 import * as React from 'react';
 export interface SwitchProps {
   checked?: boolean;
+  /** Show an unknown backend value in the existing switch thumb. */
+  unknown?: boolean;
   label?: React.ReactNode;
   /** explanatory line under the label, e.g. "Can create, edit and deactivate user accounts." */
   hint?: React.ReactNode;

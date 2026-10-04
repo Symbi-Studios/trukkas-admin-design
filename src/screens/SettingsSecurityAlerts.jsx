@@ -1,15 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHeader, Button, SectionCard, TextField, Select, Switch, Icon, QuickActionsCard, Banner } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import {
-  DIGEST_FREQUENCIES, securityAlertsStatus, recentSecurityAlerts, securityAlertsQuickActions, securityTip,
-} from '../mock/fixtures/settings.js';
-import {
-  toggleSecurityAlertChannel, updateAlertDelivery, updateSecurityAlertsQuietHours,
-  saveSecurityAlertsSettings, resetSecurityAlertsSettings,
-} from '../mock/api.js';
+import { PageHeader, Button, SectionCard, Icon, QuickActionsCard, Banner } from '../ds.js';
+import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { DIGEST_FREQUENCIES, securityAlertsStatus as securityAlertsStatusTemplate, securityAlertsQuickActions, securityTip, securityAlertEvents as securityAlertControls } from '../mock/fixtures/settings.js';
+
 import { SettingsTabStrip, SettingsMetaFooter } from './settingsShared.jsx';
 
 function AlertEventRow({ event, onToggle }) {
@@ -38,21 +36,29 @@ function AlertEventRow({ event, onToggle }) {
 }
 
 export function SettingsSecurityAlerts() {
-  const events = useCollection('settingsSecurityAlertEvents') || [];
-  const delivery = useCollection('settingsAlertDelivery')?.[0];
-  const quiet = useCollection('settingsSecurityAlertsQuietHours')?.[0];
-  const meta = useCollection('settingsMeta')?.[0];
+  const editor = useSettingsEditor('security-alerts');
+  const toggleSecurityAlertChannel = () => editor.unavailable('Toggle Security Alert Channel');
+  const updateAlertDelivery = editor.change('settingsAlertDelivery');
+  const updateSecurityAlertsQuietHours = editor.change('settingsSecurityAlertsQuietHours');
+  const saveSecurityAlertsSettings = () => editor.save();
+  const resetSecurityAlertsSettings = () => editor.unavailable('Reset Security Alerts Settings');
+  const securityAlertsStatus = { headline: '—', caption: '—', lastChecked: '—', items: (securityAlertsStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const recentSecurityAlerts = [];
+  const events = securityAlertControls.map(({ key, icon, label, description }) => ({ key, icon, label, description, inApp: null, email: null, sms: null }));
+  const delivery = editor.group('settingsAlertDelivery');
+  const quiet = editor.group('settingsSecurityAlertsQuietHours');
+  const meta = editor.group('settingsMeta');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!delivery || !quiet) return null;
 
   async function handleSave() {
     setSaving(true);
-    await saveSecurityAlertsSettings();
+    const confirmed = await saveSecurityAlertsSettings();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -64,6 +70,7 @@ export function SettingsSecurityAlerts() {
           <Button icon="save" disabled={saving} onClick={handleSave}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Changes'}</Button>
         </>} />
       <SettingsTabStrip active="security-alerts" />
+      <SettingsReadNotice error={editor.error} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
@@ -135,7 +142,7 @@ export function SettingsSecurityAlerts() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Recent Security Alerts" action={<a href="#">View All</a>}>
+          <SectionCard title="Recent Security Alerts" action={<a href="#" onClick={(event) => { event.preventDefault(); editor.unavailable('View All Security Events'); }}>View All</a>}>
             <div style={{ display: 'grid', gap: 14, marginBottom: 14 }}>
               {recentSecurityAlerts.map((a, i) => (
                 <div key={i} style={{ display: 'flex', gap: 10 }}>
@@ -150,11 +157,12 @@ export function SettingsSecurityAlerts() {
                   </div>
                 </div>
               ))}
+              {'—'}
             </div>
-            <Button variant="outline" fullWidth iconRight="chevron-right">View All Security Events</Button>
+            <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => editor.unavailable('View All Security Events')}>View All Security Events</Button>
           </SectionCard>
 
-          <QuickActionsCard items={securityAlertsQuickActions} />
+          <QuickActionsCard items={editor.quickActions(securityAlertsQuickActions)} />
 
           <Banner tone="info" title="Security Tip">{securityTip}</Banner>
           <SettingsMetaFooter meta={meta} />

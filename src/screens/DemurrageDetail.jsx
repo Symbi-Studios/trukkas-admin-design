@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useNavigate, useParams } from "../router.js";
 import {
   PageHeader,
@@ -14,76 +15,82 @@ import {
   Modal,
   Textarea,
   Select,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { updateDemurrage } from "../mock/api.js";
-const money = (n) =>
-  "₦" + Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
-function download(name, text) {
-  const u = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-  const a = document.createElement("a");
-  a.href = u;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(u);
-}
+import {
+  useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageCalculationQuery, useGetAdminDemurrageJobContextQuery,
+  mergeDemurrageDetail, demurrageMoney as money, demurrageDays as days, demurrageJobUrl,
+} from "../store/features/demurrage/demurrageApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverLoadingNotice } from "./DriversLoading.jsx";
 export function DemurrageDetail() {
-  const navigate = useNavigate(),
-    { demurrageId } = useParams(),
-    rows = useCollection("demurrage") || [],
-    r = rows.find((x) => x.id === demurrageId),
-    [tab, setTab] = useState("Overview"),
+  const navigate = useNavigate(), params = useParams(), search = useSearchParams();
+  const demurrageId = search.get("jobId") || search.get("id") || params.demurrageId || "";
+  const directoryQuery = useGetAdminDemurrageDirectoryQuery();
+  const matches = (directoryQuery.error ? [] : directoryQuery.currentData?.rows || []).filter((row) => row.jobApiId === demurrageId || (row.id !== "—" && row.id === demurrageId));
+  const entry = matches.length === 1 ? matches[0] : null;
+  const calculationQuery = useGetAdminDemurrageCalculationQuery(entry?.jobApiId, { skip: !entry });
+  const jobQuery = useGetAdminDemurrageJobContextQuery(entry?.jobApiId, { skip: !entry });
+  const r = useMemo(() => entry ? mergeDemurrageDetail(entry, calculationQuery.error ? null : calculationQuery.currentData, jobQuery.error ? null : jobQuery.currentData) : null,
+    [entry, calculationQuery.currentData, calculationQuery.error, jobQuery.currentData, jobQuery.error]);
+  const operationPending = useRef(false), toastTimer = useRef(null), noteDirty = useRef(false);
+  const [tab, setTab] = useState("Overview"),
     [menu, setMenu] = useState(false),
-    [note, setNote] = useState(r?.note || ""),
+    [note, setNote] = useState(""),
     [dispute, setDispute] = useState(false),
     [reason, setReason] = useState("Incorrect charge calculation"),
+    [details, setDetails] = useState(""),
     [toast, setToast] = useState("");
+  useEffect(() => {
+    setTab("Overview"); setMenu(false); setDispute(false); setNote(""); setDetails(""); setToast("");
+    setReason("Incorrect charge calculation"); noteDirty.current = false;
+    return () => clearTimeout(toastTimer.current);
+  }, [demurrageId]);
+  useEffect(() => { if (!noteDirty.current && r) setNote(r.note); }, [r]);
+  useEffect(() => {
+    const error = calculationQuery.error || jobQuery.error;
+    if (error) notify(getApiErrorMessage(error));
+  }, [calculationQuery.error, jobQuery.error]);
   function notify(s) {
+    clearTimeout(toastTimer.current);
     setToast(s);
-    setTimeout(() => setToast(""), 1600);
+    toastTimer.current = setTimeout(() => setToast(""), 1600);
   }
+  if ((!directoryQuery.currentData && directoryQuery.isFetching) || (entry && ((!calculationQuery.currentData && calculationQuery.isFetching) || (!jobQuery.currentData && jobQuery.isFetching)))) return <>
+    <Card><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
+    <DriverLoadingNotice>Loading demurrage details…</DriverLoadingNotice>
+    <Card><Skeleton width="40%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
+  </>;
   if (!r)
     return (
       <Card>
-        <p>Demurrage record not found.</p>
+        <p>{directoryQuery.error ? getApiErrorMessage(directoryQuery.error) : "Demurrage record not found."}</p>
         <Button variant="outline" onClick={() => navigate("/demurrage")}>
           Back to Demurrage
         </Button>
       </Card>
     );
-  const subtotal = r.rate * r.daysOver,
-    vat = subtotal,
-    invoiceRows = [
-      {
-        id: "INV-2026-000112",
-        date: "May 28, 2026",
-        period: "May 22 – May 28, 2026",
-        days: 7,
-        rate: r.rate,
-        amount: subtotal,
-        status: r.paid ? "Paid" : "Unpaid",
-      },
-      {
-        id: "INV-2026-000111",
-        date: "May 22, 2026",
-        period: "May 22, 2026",
-        days: 1,
-        rate: r.rate,
-        amount: r.rate,
-        status: r.paid ? "Paid" : "Unpaid",
-      },
-    ];
+  const subtotal = r.subtotal, vat = r.vat, invoiceRows = r.invoices;
   async function saveNote() {
-    await updateDemurrage(r.id, { note });
-    notify("Admin note saved");
+    notify("Saving demurrage notes is not available yet.");
   }
   async function raiseDispute() {
-    await updateDemurrage(r.id, {
-      status: "Dispute",
-      note: (r.note ? r.note + "\n" : "") + "Dispute: " + reason,
-    });
     setDispute(false);
-    notify("Dispute raised");
+    notify("Raising a demurrage dispute is not available yet.");
+  }
+  function openInvoice(url) {
+    if (!url || !/^https?:\/\//i.test(url)) { notify("Demurrage invoice download is not available yet."); return; }
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+  async function recalculate() {
+    if (operationPending.current || calculationQuery.isFetching || directoryQuery.isFetching) return;
+    operationPending.current = true; setMenu(false);
+    try {
+      const result = await calculationQuery.refetch().unwrap();
+      await directoryQuery.refetch().unwrap();
+      notify(result.message || "Demurrage calculation refreshed.");
+    } catch (error) { notify(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
   }
   return (
     <div className="grid grid-cols-1 gap-tk-section-gap min-w-0">
@@ -104,12 +111,7 @@ export function DemurrageDetail() {
             <Button
               variant="outline"
               icon="download"
-              onClick={() =>
-                download(
-                  r.id + "-invoice.txt",
-                  `Demurrage Invoice\n${r.id}\n${r.jobId}\nTotal: ${money(r.charge)}`,
-                )
-              }
+              onClick={() => openInvoice(r.invoiceUrl)}
             >
               Download Invoice
             </Button>
@@ -144,31 +146,21 @@ export function DemurrageDetail() {
                         label: "Mark as Resolved",
                         icon: "circle-check",
                         onClick: () => {
-                          updateDemurrage(r.id, {
-                            status: "Resolved",
-                            paid: r.charge,
-                          });
                           setMenu(false);
-                          notify("Marked as resolved");
+                          notify("Marking demurrage as resolved is not available yet.");
                         },
                       },
                       {
                         label: "Recalculate Charge",
                         icon: "calculator",
-                        onClick: () => {
-                          updateDemurrage(r.id, {
-                            charge: r.rate * r.daysOver * 2,
-                          });
-                          setMenu(false);
-                          notify("Charge recalculated");
-                        },
+                        onClick: recalculate,
                       },
                       {
                         label: "Email Customer",
                         icon: "mail",
                         onClick: () => {
                           setMenu(false);
-                          notify("Invoice emailed to customer");
+                          notify("Emailing demurrage invoices is not available yet.");
                         },
                       },
                       { divider: true },
@@ -212,7 +204,7 @@ export function DemurrageDetail() {
                 {r.status}
               </Badge>
             }
-            sub={(r.daysOver || 0) + " days overdue"}
+            sub={r.daysOver == null ? "—" : r.daysOver + " days overdue"}
           />
           <Head
             label="Charge Amount"
@@ -221,7 +213,7 @@ export function DemurrageDetail() {
           />
           <Head
             label="Days Over"
-            value={(r.daysOver ?? 0) + " days"}
+            value={days(r.daysOver)}
             sub={r.overSince}
             danger
           />
@@ -260,7 +252,7 @@ export function DemurrageDetail() {
                   <Row label="Discharge Date" value={r.dischargeDate} />
                 </SectionCard>
                 <SectionCard title="Demurrage Rule" icon="clipboard-list">
-                  <Row label="Free Days" value={r.freeDays + " days"} />
+                  <Row label="Free Days" value={days(r.freeDays)} />
                   <Row label="Free Period" value={r.freePeriod} />
                   <Row
                     label="Charge Start Date"
@@ -274,17 +266,17 @@ export function DemurrageDetail() {
                     label="Applicable Rate"
                     value={money(r.rate) + " / day"}
                   />
-                  <Row label="Rate Type" value="Standard Rate" />
+                  <Row label="Rate Type" value={r.rateType} />
                 </SectionCard>
                 <SectionCard title="Charge Summary" icon="briefcase-business">
                   <Row label="Charge Start Date" value={r.chargeStart} />
                   <Row
                     label="Total Days Used"
-                    value={(r.daysUsed ?? 0) + " days"}
+                    value={days(r.daysUsed)}
                   />
                   <Row
                     label="Billable Days"
-                    value={(r.daysOver ?? 0) + " days"}
+                    value={days(r.daysOver)}
                   />
                   <Row label="Daily Rate" value={money(r.rate)} />
                   <hr
@@ -305,17 +297,17 @@ export function DemurrageDetail() {
                     }
                   />
                   <Row label="Job Type" value={r.jobType} />
-                  <Row label="Route" value="Tin Can Port → Apapa Port" />
+                  <Row label="Route" value={r.route} />
                   <Row
                     label="Assigned To"
-                    value={r.assignedTo || "Speed Line Logistics"}
+                    value={r.assignedTo}
                   />
-                  <Row label="Created On" value="May 12, 2026 · 09:15 AM" />
+                  <Row label="Created On" value={r.createdOn} />
                   <Button
                     variant="outline"
                     fullWidth
                     style={{ marginTop: 8 }}
-                    onClick={() => notify("Related job opened")}
+                    onClick={() => navigate(demurrageJobUrl(r.jobApiId))}
                   >
                     View Job Details
                   </Button>
@@ -324,11 +316,11 @@ export function DemurrageDetail() {
                   <strong style={{ fontSize: 10 }}>Forwarder (Customer)</strong>
                   <Row
                     label={r.customer}
-                    value={<Badge tone="success">Verified</Badge>}
+                    value={<Badge tone="success">{r.customerVerification}</Badge>}
                   />
                   <Row
                     label="Email"
-                    value={r.customerEmail || "operations@example.com"}
+                    value={r.customerEmail}
                   />
                   <Row label="Phone" value={r.customerPhone || "—"} />
                   <hr
@@ -336,10 +328,10 @@ export function DemurrageDetail() {
                   />
                   <strong style={{ fontSize: 10 }}>Shipping Line</strong>
                   <Row
-                    label={r.shippingLine || "Mediterranean Shipping Co."}
-                    value={<Badge tone="success">Verified</Badge>}
+                    label={r.shippingLine}
+                    value={<Badge tone="success">{r.lineVerification}</Badge>}
                   />
-                  <Row label="Email" value={r.lineEmail || "lagos@msc.com"} />
+                  <Row label="Email" value={r.lineEmail} />
                   <Row label="Phone" value={r.linePhone || "—"} />
                 </SectionCard>
                 <SectionCard title="Admin Notes">
@@ -347,7 +339,7 @@ export function DemurrageDetail() {
                     className="w-full box-border min-h-18 p-2.25 border border-tk-line-strong rounded-[7px] outline-none resize-y font-tk-sans text-tk-meta focus:border-tk-blue focus:shadow-tk-focus"
                     placeholder="Add a note about this demurrage (visible to admins only)..."
                     value={note}
-                    onChange={(e) => setNote(e.target.value)}
+                    onChange={(e) => { noteDirty.current = true; setNote(e.target.value); }}
                   />
                   <div
                     style={{
@@ -357,7 +349,7 @@ export function DemurrageDetail() {
                       marginTop: 9,
                     }}
                   >
-                    <small className="tk-meta">Last updated May 28, 2026</small>
+                    <small className="tk-meta">Last updated {r.noteUpdatedAt}</small>
                     <Button
                       size="sm"
                       variant="outline"
@@ -372,7 +364,7 @@ export function DemurrageDetail() {
               <SectionCard title="Recent Demurrage Invoices" pad="none">
                 <DataTable
                   rows={invoiceRows}
-                  rowKey={(x) => x.id}
+                  rowKey={(x, index) => x.id === "—" ? index : x.id}
                   columns={[
                     {
                       key: "id",
@@ -415,19 +407,14 @@ export function DemurrageDetail() {
                             size="sm"
                             icon="eye"
                             aria-label="Preview invoice"
-                            onClick={() => notify("Invoice preview opened")}
+                            onClick={() => openInvoice(x.url)}
                           />
                           <Button
                             variant="outline"
                             size="sm"
                             icon="download"
                             aria-label="Download invoice"
-                            onClick={() =>
-                              download(
-                                x.id + ".txt",
-                                `${x.id}\n${money(x.amount)}`,
-                              )
-                            }
+                            onClick={() => openInvoice(x.url)}
                           />
                         </span>
                       ),
@@ -440,7 +427,7 @@ export function DemurrageDetail() {
                   style={{ margin: 8 }}
                   onClick={() => setTab("Documents")}
                 >
-                  View all invoices (2)
+                  View all invoices ({r.invoiceCount ?? "—"})
                 </Button>
               </SectionCard>
             </>
@@ -449,7 +436,7 @@ export function DemurrageDetail() {
               tab={tab}
               r={r}
               invoices={invoiceRows}
-              onDownload={download}
+              onDownload={openInvoice}
             />
           )}
         </div>
@@ -459,38 +446,38 @@ export function DemurrageDetail() {
               [
                 "container",
                 "Discharge Completed",
-                "May 15, 2026 · 08:42 AM",
-                "Container discharged at Apapa Port",
+                r.timeline.dischargeCompleted.date,
+                r.timeline.dischargeCompleted.detail,
               ],
               [
                 "calendar",
                 "Free Period Started",
-                "May 15, 2026",
-                "7 days free period granted",
+                r.timeline.freeStarted.date,
+                r.timeline.freeStarted.detail,
               ],
               [
                 "circle-check",
                 "Free Period Ended",
-                "May 21, 2026 · 11:59 PM",
-                "Free period has ended",
+                r.timeline.freeEnded.date,
+                r.timeline.freeEnded.detail,
               ],
               [
                 "circle-alert",
                 "Demurrage Started",
-                "May 22, 2026 · 12:00 AM",
-                "Demurrage charge started",
+                r.timeline.chargeStarted.date,
+                r.timeline.chargeStarted.detail,
               ],
               [
                 "clock-3",
                 "Current Status",
-                "May 28, 2026 · 10:24 AM",
-                (r.daysOver || 0) + " days overdue and ongoing",
+                r.timeline.current.date,
+                r.timeline.current.detail,
               ],
               [
                 "history",
                 "Last Updated",
-                "May 28, 2026 · 10:24 AM",
-                "Demurrage recalculated",
+                r.timeline.updated.date,
+                r.timeline.updated.detail,
               ],
             ].map((x, i) => (
               <Timeline
@@ -513,7 +500,7 @@ export function DemurrageDetail() {
               label={<b>Outstanding</b>}
               value={
                 <b style={{ color: "var(--tk-danger)" }}>
-                  {money(r.charge - r.paid)}
+                  {money(r.outstanding)}
                 </b>
               }
             />
@@ -560,6 +547,8 @@ export function DemurrageDetail() {
           rows={4}
           style={{ marginTop: 12 }}
           placeholder="Describe the issue..."
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
         />
       </Modal>
       {toast && (
@@ -630,31 +619,29 @@ function TabContent({ tab, r, invoices, onDownload }) {
   const content = {
     Calculation: (
       <>
-        <Row label="Formula" value="Daily Rate × Billable Days + VAT" />
+        <Row label="Formula" value={r.formula} />
         <Row label="Daily Rate" value={money(r.rate)} />
-        <Row label="Billable Days" value={r.daysOver} />
+        <Row label="Billable Days" value={r.daysOver ?? "—"} />
         <Row label="Calculated Total" value={money(r.charge)} />
       </>
     ),
     
     Disputes: (
       <p className="tk-meta">
-        {r.status === "Dispute"
-          ? "This charge is currently under dispute."
-          : "No disputes have been raised for this charge."}
+        {r.disputeSummary}
       </p>
     ),
     History: (
       <>
         {[
-          ["Created", "May 22, 2026"],
-          ["Recalculated", "May 28, 2026"],
-          ["Customer notified", "May 28, 2026"],
+          ["Created", r.history.created],
+          ["Recalculated", r.history.recalculated],
+          ["Customer notified", r.history.notified],
         ].map((x) => (
           <Row key={x[0]} label={x[0]} value={x[1]} />
         ))}
       </>
     ),
   };
-  return <SectionCard title={tab}>{content[tab]}</SectionCard>;
+  return <SectionCard title={tab}>{content[tab] ?? "—"}</SectionCard>;
 }

@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import { UserDetail } from '../../../screens/UserDetail.jsx';
+import { DriverDetailLoading } from '../../../screens/DriversLoading.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('userId'); }
 
@@ -13,5 +15,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function UserDetailPage() {
-  return <UserDetail />;
+  return <Suspense fallback={<DriverDetailLoading />}><UserDetail /></Suspense>;
 }

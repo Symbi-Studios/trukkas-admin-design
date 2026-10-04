@@ -7,6 +7,7 @@ export interface LineChartProps {
   /** fills under a single series — the Operational Activity chart on the dashboard */
   area?: boolean;
   yTicks?: number;
+  format?: (value: number) => React.ReactNode;
   style?: React.CSSProperties;
 }
 export declare function LineChart(props: LineChartProps): JSX.Element;

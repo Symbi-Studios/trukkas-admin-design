@@ -1,30 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import {
-  PageHeader,
-  Button,
-  SectionCard,
-  TextField,
-  Select,
-  Switch,
-  QuickActionsCard,
-} from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import {
-  operationsStatus,
-  operationsQuickActions,
-} from "../mock/fixtures/settings.js";
-import {
-  updateJobTripSettings,
-  updateBiddingAssignment,
-  updateDispatchTracking,
-  updateDocumentCompliance,
-  updateTimingSlas,
-  updateOperationsCommunication,
-  saveOperationsSettings,
-  resetOperationsSettings,
-} from "../mock/api.js";
+import { PageHeader, Button, SectionCard, QuickActionsCard } from '../ds.js';
+import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { operationsStatus as operationsStatusTemplate, operationsQuickActions } from '../mock/fixtures/settings.js';
+
 import {
   SettingsTabStrip,
   SettingsStatusCard,
@@ -58,25 +41,35 @@ function Field({ children }) {
 }
 
 export function SettingsOperations() {
-  const jobTrip = useCollection("settingsJobTrip")?.[0];
-  const bidding = useCollection("settingsBiddingAssignment")?.[0];
-  const dispatch = useCollection("settingsDispatchTracking")?.[0];
-  const docCompliance = useCollection("settingsDocumentCompliance")?.[0];
-  const timing = useCollection("settingsTimingSlas")?.[0];
-  const comms = useCollection("settingsOperationsCommunication")?.[0];
-  const meta = useCollection("settingsMeta")?.[0];
+  const editor = useSettingsEditor('operations');
+  const updateJobTripSettings = editor.change('settingsJobTrip');
+  const updateBiddingAssignment = editor.change('settingsBiddingAssignment');
+  const updateDispatchTracking = editor.change('settingsDispatchTracking');
+  const updateDocumentCompliance = editor.change('settingsDocumentCompliance');
+  const updateTimingSlas = editor.change('settingsTimingSlas');
+  const updateOperationsCommunication = editor.change('settingsOperationsCommunication');
+  const saveOperationsSettings = () => editor.save();
+  const resetOperationsSettings = () => editor.unavailable('Reset Operations Settings');
+  const operationsStatus = { headline: '—', caption: '—', lastChecked: '—', items: (operationsStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const jobTrip = editor.group('settingsJobTrip');
+  const bidding = editor.group('settingsBiddingAssignment');
+  const dispatch = editor.group('settingsDispatchTracking');
+  const docCompliance = editor.group('settingsDocumentCompliance');
+  const timing = editor.group('settingsTimingSlas');
+  const comms = editor.group('settingsOperationsCommunication');
+  const meta = editor.group('settingsMeta');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!jobTrip || !bidding || !dispatch || !docCompliance || !timing || !comms)
     return null;
 
   async function handleSave() {
     setSaving(true);
-    await saveOperationsSettings();
+    const confirmed = await saveOperationsSettings();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -101,6 +94,7 @@ export function SettingsOperations() {
         }
       />
       <SettingsTabStrip active="operations" />
+      <SettingsReadNotice error={editor.error} />
 
       <div
         style={{
@@ -132,7 +126,7 @@ export function SettingsOperations() {
                 hint="How long a job stays open for bids."
                 onChange={(e) =>
                   updateJobTripSettings({
-                    defaultJobExpiryHours: Number(e.target.value),
+                    defaultJobExpiryHours: e.target.value,
                   })
                 }
               />
@@ -202,7 +196,7 @@ export function SettingsOperations() {
                 hint="How long bids stay open by default."
                 onChange={(e) =>
                   updateBiddingAssignment({
-                    defaultBiddingDurationHours: Number(e.target.value),
+                    defaultBiddingDurationHours: e.target.value,
                   })
                 }
               />
@@ -386,7 +380,7 @@ export function SettingsOperations() {
                 value={timing.defaultLoadingTimeHours}
                 onChange={(e) =>
                   updateTimingSlas({
-                    defaultLoadingTimeHours: Number(e.target.value),
+                    defaultLoadingTimeHours: e.target.value,
                   })
                 }
               />
@@ -398,7 +392,7 @@ export function SettingsOperations() {
                 value={timing.defaultUnloadingTimeHours}
                 onChange={(e) =>
                   updateTimingSlas({
-                    defaultUnloadingTimeHours: Number(e.target.value),
+                    defaultUnloadingTimeHours: e.target.value,
                   })
                 }
               />
@@ -411,7 +405,7 @@ export function SettingsOperations() {
                 hint="Trigger delay alerts after this period."
                 onChange={(e) =>
                   updateTimingSlas({
-                    delayThresholdHours: Number(e.target.value),
+                    delayThresholdHours: e.target.value,
                   })
                 }
               />
@@ -503,7 +497,7 @@ export function SettingsOperations() {
             caption={operationsStatus.caption}
             items={operationsStatus.items}
           />
-          <QuickActionsCard items={operationsQuickActions} />
+          <QuickActionsCard items={editor.quickActions(operationsQuickActions)} />
           <SettingsDangerZone
             title="Reset Operations Settings"
             hint="Restore all operational settings to default values."

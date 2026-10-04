@@ -6,7 +6,7 @@ import {
   PageHeader, Button, Badge, Tag, Card, SectionCard, LabelValue, DataTable, DropdownMenu,
   Avatar, Icon,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
+import { unavailableFeeRule } from '../store/features/fees/feesApi.js';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
   const TINT = {
@@ -32,11 +32,13 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 export function FeeRuleDetail() {
   const { ruleId } = useParams();
   const navigate = useNavigate();
-  const rules = useCollection('feeRules') || [];
-  const r = rules.find((x) => x.id === ruleId);
+  // The API exposes global settings, not records identifiable by a fee-rule ID.
+  const r = unavailableFeeRule;
+  // No documented lookup exists to confirm that this rule ID is missing.
+  const confirmedMissing = false;
   const [menu, setMenu] = useState(false);
 
-  if (!r) {
+  if (confirmedMissing) {
     return (
       <Card>
         <span className="tk-body">No fee rule found with ID {ruleId}.</span>
@@ -53,7 +55,7 @@ export function FeeRuleDetail() {
         description="Detailed information about this fee rule and how it is applied."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/fees')}>Back to Fee Rules</Button>
-          <Button variant="outline" icon="pencil">Edit Fee Rule</Button>
+          <Button variant="outline" icon="pencil" disabled>Edit Fee Rule</Button>
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
@@ -157,7 +159,7 @@ export function FeeRuleDetail() {
         <span style={{ position: 'relative' }}>
           <Button variant="outline" iconRight="chevron-down" size="sm">View Full Audit Log</Button>
         </span>}>
-        <DataTable rows={r.auditHistory} rowKey={(row, i) => row.date + i}
+        <DataTable rows={r.auditHistory || []} rowKey={(row, i) => row.date + i}
           columns={[
             { key: 'date', header: 'Date & Time' },
             { key: 'action', header: 'Action', render: (row) => <Badge tone={row.action === 'Created' ? 'info' : 'warning'}>{row.action}</Badge> },

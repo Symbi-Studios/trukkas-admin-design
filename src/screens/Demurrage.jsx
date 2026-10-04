@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -17,10 +18,16 @@ import {
   Modal,
   TextField,
   Select,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { createDemurrage } from "../mock/api.js";
+import {
+  useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageRulesQuery, useUpdateAdminDemurrageRulesMutation, useLazyGetAdminDemurrageBulkCalculationQuery,
+  demurrageMoney as money, demurrageSummary, demurrageDetailUrl,
+} from "../store/features/demurrage/demurrageApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverTableLoading } from "./DriversLoading.jsx";
 const PAGE_SIZE = 8;
+const EMPTY_ROWS = [];
 const STATUS_TONE = {
   Active: "danger",
   Upcoming: "warning",
@@ -28,13 +35,11 @@ const STATUS_TONE = {
   Dispute: "purple",
 };
 const DEMURRAGE_SUMMARY = [
-  { label: "Active", value: 72, display: "₦18.6M (72%)", color: "#f14b67" },
-  { label: "Upcoming", value: 14, display: "₦7.3M (14%)", color: "#f2b400" },
-  { label: "Resolved", value: 12, display: "₦32.3M (12%)", color: "#0da56a" },
-  { label: "Disputes", value: 2, display: "₦2.2M (2%)", color: "#762ce8" },
+  { label: "Active", value: null, display: "—", color: "#f14b67" },
+  { label: "Upcoming", value: null, display: "—", color: "#f2b400" },
+  { label: "Resolved", value: null, display: "—", color: "#0da56a" },
+  { label: "Disputes", value: null, display: "—", color: "#762ce8" },
 ];
-const money = (n) =>
-  "₦" + Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
 function exportCsv(rows) {
   const csv = [
     [
@@ -54,14 +59,14 @@ function exportCsv(rows) {
       r.vessel,
       r.customer,
       r.freeDays,
-      r.daysUsed ?? "",
+      r.daysUsed ?? "—",
       r.charge,
       r.status,
-      r.daysOver ?? "",
+      r.daysOver ?? "—",
     ]),
   ]
     .map((x) =>
-      x.map((v) => '"' + String(v).replaceAll('"', '""') + '"').join(","),
+      x.map((v) => '"' + String(v ?? "—").replaceAll('"', '""') + '"').join(","),
     )
     .join("\n");
   const u = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -72,8 +77,16 @@ function exportCsv(rows) {
   URL.revokeObjectURL(u);
 }
 export function Demurrage() {
-  const navigate = useNavigate(),
-    rows = useCollection("demurrage") || [];
+  const navigate = useNavigate();
+  const directoryQuery = useGetAdminDemurrageDirectoryQuery();
+  const rulesQuery = useGetAdminDemurrageRulesQuery();
+  const [updateRules, updateState] = useUpdateAdminDemurrageRulesMutation();
+  const [calculateBulk, bulkState] = useLazyGetAdminDemurrageBulkCalculationQuery();
+  const canSaveRules = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
+  const directory = directoryQuery.error ? null : directoryQuery.currentData;
+  const rows = directory?.rows || EMPTY_ROWS;
+  const summary = useMemo(() => demurrageSummary(directory), [directory]);
+  const toastTimer = useRef(null), savingRules = useRef(false), rulesDirty = useRef(false), bulkPending = useRef(false);
   const [tab, setTab] = useState("All Demurrage"),
     [q, setQ] = useState(""),
     [status, setStatus] = useState("All"),
@@ -88,47 +101,67 @@ export function Demurrage() {
       jobId: "",
       container: "",
       customer: "",
-      freeDays: 7,
-      daysOver: 1,
-      rate: 75000,
+      freeDays: "",
+      daysOver: "",
+      rate: "",
     }),
+    [ruleForm, setRuleForm] = useState({ freeDays: "", rate: "" }),
     [toast, setToast] = useState("");
+
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => { if (directoryQuery.error) notify(getApiErrorMessage(directoryQuery.error)); }, [directoryQuery.error]);
+  useEffect(() => {
+    if (!rules || rulesDirty.current) return;
+    const values = rulesQuery.error ? null : rulesQuery.currentData;
+    setRuleForm({ freeDays: values?.freeDays ?? "", rate: values?.rate ?? "" });
+  }, [rules, rulesQuery.currentData, rulesQuery.error]);
+  const metric = (value) => !directory && directoryQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
   const filtered = useMemo(
     () =>
       rows.filter(
         (r) =>
-          (tab === "All Demurrage" || r.status === tab.replace(/s$/, "")) &&
+          (tab === "All Demurrage" || r.status === (tab === "Disputes" ? "Dispute" : tab)) &&
           (status === "All" || r.status === status) &&
           (jobType === "All" || r.jobType === jobType) &&
           (!q ||
             [r.jobId, r.container, r.customer, r.vessel].some((v) =>
-              v.toLowerCase().includes(q.toLowerCase()),
+              v?.toLowerCase().includes(q.toLowerCase()),
             )) &&
           (!date ||
-            r.chargeStart.includes(
-              new Date(date + "T12:00:00").toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              }),
-            )),
+            r.chargeDate === date),
       ),
     [rows, tab, status, jobType, q, date],
   );
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   function notify(s) {
+    clearTimeout(toastTimer.current);
     setToast(s);
-    setTimeout(() => setToast(""), 1600);
+    toastTimer.current = setTimeout(() => setToast(""), 1600);
   }
   async function submit() {
     if (!form.jobId || !form.container || !form.customer) return;
-    const r = await createDemurrage({
-      ...form,
-      freeDays: +form.freeDays,
-      daysOver: +form.daysOver,
-      rate: +form.rate,
-    });
     setCreate(false);
-    navigate("/demurrage/" + r.id);
+    notify("Creating a demurrage charge is not available yet.");
+  }
+  async function saveRules() {
+    if (savingRules.current || updateState.isLoading || !canSaveRules) return;
+    savingRules.current = true;
+    try {
+      const result = await updateRules(ruleForm).unwrap();
+      setRules(false); notify(result.message);
+    } catch (error) { setRules(false); notify(getApiErrorMessage(error)); }
+    finally { savingRules.current = false; }
+  }
+  async function bulkCalculate() {
+    if (bulkPending.current || bulkState.isFetching || directoryQuery.isFetching) return;
+    if (!directory || !paged.length) { notify("Load demurrage records before calculating."); return; }
+    bulkPending.current = true;
+    try {
+      const result = await calculateBulk(paged.map((row) => row.jobApiId)).unwrap();
+      notify(`Bulk calculation completed for ${result.count} visible records.`);
+    } catch (error) { notify(getApiErrorMessage(error)); }
+    finally { bulkPending.current = false; }
   }
   return (
     <div className="grid grid-cols-1 gap-tk-section-gap min-w-0">
@@ -137,7 +170,7 @@ export function Demurrage() {
         title="Demurrage"
         description="Track and manage demurrage and detention charges across all shipments and containers."
         actions={
-          <Button icon="download" onClick={() => exportCsv(filtered)}>
+          <Button icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportCsv(filtered)}>
             Export Report
           </Button>
         }
@@ -147,36 +180,36 @@ export function Demurrage() {
           icon="calendar-x"
           tint="red"
           label="Active Demurrage"
-          value="27"
-          caption="₦18,645,000.00 Total Charges"
+          value={metric(summary.active)}
+          caption={`${money(summary.activeAmount)} Total Charges`}
         />
         <StatCard
           icon="calendar-clock"
           tint="amber"
           label="Upcoming Charges"
-          value="16"
-          caption="₦7,250,000.00 Est. Total Charges"
+          value={metric(summary.upcoming)}
+          caption={`${money(summary.upcomingAmount)} Est. Total Charges`}
         />
         <StatCard
           icon="inbox"
           label="Resolved (This Month)"
-          value="42"
-          caption="₦32,280,000.00 Total Resolved"
+          value={metric(summary.resolvedThisMonth)}
+          caption={`${money(summary.resolvedAmountThisMonth)} Total Resolved`}
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Collected (This Month)"
-          value="₦24,680,000.00"
-          delta="68.4%"
+          value={metric(money(summary.collectedThisMonth))}
+          delta={summary.collectionRateThisMonth == null ? "—" : `${summary.collectionRateThisMonth}%`}
           caption="Collection Rate"
         />
         <StatCard
           icon="circle-alert"
           tint="purple"
           label="Disputes"
-          value="4"
-          caption="₦2,150,000.00 In Dispute"
+          value={metric(summary.disputes)}
+          caption={`${money(summary.disputeAmount)} In Dispute`}
         />
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_310px] gap-4 items-start max-[1200px]:grid-cols-1">
@@ -190,10 +223,10 @@ export function Demurrage() {
               }}
               items={[
                 { label: "All Demurrage", value: "All Demurrage" },
-                { label: "Active", value: "Active", count: 27 },
-                { label: "Upcoming", value: "Upcoming", count: 16 },
-                { label: "Resolved", value: "Resolved", count: 42 },
-                { label: "Disputes", value: "Disputes", count: 4 },
+                { label: "Active", value: "Active", count: summary.active ?? "—" },
+                { label: "Upcoming", value: "Upcoming", count: summary.upcoming ?? "—" },
+                { label: "Resolved", value: "Resolved", count: summary.resolved ?? "—" },
+                { label: "Disputes", value: "Disputes", count: summary.disputes ?? "—" },
               ]}
               style={{ padding: "0 16px" }}
             />
@@ -232,7 +265,7 @@ export function Demurrage() {
                 }}
               >
                 <option>All</option>
-                {[...new Set(rows.map((r) => r.jobType))].map((x) => (
+                {[...new Set(rows.map((r) => r.jobType).filter((value) => value !== "—"))].map((x) => (
                   <option key={x}>{x}</option>
                 ))}
               </select>
@@ -242,7 +275,7 @@ export function Demurrage() {
                 style={{ width: 145 }}
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => { setDate(e.target.value); setPage(1); }}
               />
               <Button
                 variant="outline"
@@ -258,10 +291,10 @@ export function Demurrage() {
                 Reset
               </Button>
             </div>
-            <DataTable
+            {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable
               rows={paged}
-              rowKey={(r) => r.id}
-              onRowClick={(r) => navigate("/demurrage/" + r.id)}
+              rowKey={(r) => r.key}
+              onRowClick={(r) => navigate(demurrageDetailUrl(r))}
               columns={[
                 {
                   key: "jobId",
@@ -325,7 +358,7 @@ export function Demurrage() {
                   render: (r) => (
                     <span className="grid gap-0.5 whitespace-nowrap">
                       <strong className="text-tk-meta text-tk-ink-700">
-                        {r.freeDays}
+                        {r.freeDays ?? "—"}
                       </strong>
                       <small className="text-tk-micro text-tk-ink-400">
                         {r.freePeriod}
@@ -339,7 +372,7 @@ export function Demurrage() {
                   render: (r) => (
                     <span className="grid gap-0.5 whitespace-nowrap">
                       <strong className="text-tk-meta text-tk-ink-700">
-                        {r.daysUsed ?? "-"}
+                        {r.daysUsed ?? "—"}
                       </strong>
                       <small className="text-tk-micro text-tk-ink-400">
                         {r.usedPeriod}
@@ -356,7 +389,7 @@ export function Demurrage() {
                         {money(r.charge)}
                       </strong>
                       <small className="text-tk-micro text-tk-ink-400">
-                        {r.rate
+                        {r.rate != null
                           ? money(r.rate) + "/day"
                           : r.status === "Upcoming"
                             ? "Within Free Days"
@@ -383,7 +416,7 @@ export function Demurrage() {
                           (r.daysOver ? "text-tk-danger" : "text-tk-ink-700")
                         }
                       >
-                        {r.daysOver ?? "-"}
+                        {r.daysOver ?? "—"}
                         {r.daysOver != null ? " days" : ""}
                       </strong>
                       <small className="text-tk-micro text-tk-ink-400">
@@ -402,15 +435,15 @@ export function Demurrage() {
                       icon="ellipsis"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate("/demurrage/" + r.id);
+                        navigate(demurrageDetailUrl(r));
                       }}
                     />
                   ),
                 },
               ]}
-            />
+            />}
             <Pagination
-              page={page}
+              page={currentPage}
               pageCount={Math.max(1, Math.ceil(filtered.length / pageSize))}
               pageSize={pageSize}
               total={filtered.length}
@@ -449,10 +482,10 @@ export function Demurrage() {
               <DonutChart
                 size={180}
                 thickness={18}
-                centerValue="₦25.9M"
+                centerValue="—"
                 centerLabel="Total Charges"
                 style={{ flex: "0 0 auto" }}
-                data={DEMURRAGE_SUMMARY}
+                data={[]}
               />
               <LegendList
                 items={DEMURRAGE_SUMMARY}
@@ -463,19 +496,19 @@ export function Demurrage() {
             <div className="border-t border-tk-line mt-3.5 pt-1.5">
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Total Charges</span>
-                <b>₦25,895,000.00</b>
+                <b>—</b>
               </div>
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Total Collected</span>
-                <b>₦24,680,000.00</b>
+                <b>—</b>
               </div>
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Outstanding</span>
-                <b>₦1,215,000.00</b>
+                <b>—</b>
               </div>
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Collection Rate</span>
-                <b>93.2%</b>
+                <b>—</b>
               </div>
             </div>
           </SectionCard>
@@ -490,21 +523,19 @@ export function Demurrage() {
               icon="clipboard-list"
               title="Demurrage Rules"
               hint="Manage free days and rate rules"
-              onClick={() => setRules(true)}
+              onClick={() => { rulesDirty.current = false; setRules(true); if (rulesQuery.error) notify(getApiErrorMessage(rulesQuery.error)); }}
             />
             <Action
               icon="calculator"
               title="Bulk Demurrage Calculation"
               hint="Calculate demurrage for multiple jobs"
-              onClick={() =>
-                notify("Bulk calculation completed for visible records")
-              }
+              onClick={bulkCalculate}
             />
             <Action
               icon="file-chart-column"
               title="Demurrage Reports"
               hint="View and export demurrage reports"
-              onClick={() => exportCsv(filtered)}
+              onClick={() => directory && !directoryQuery.isFetching ? exportCsv(filtered) : notify("Load demurrage records before exporting." )}
             />
           </SectionCard>
           <SectionCard
@@ -526,11 +557,11 @@ export function Demurrage() {
               </button>
             }
           >
-            {rows.slice(0, 4).map((r) => (
+            {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={3} label="Loading recent demurrage" /> : rows.slice(0, 4).map((r) => (
               <button
                 className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-1.75 py-2 border-b border-tk-line text-tk-micro w-full border-l-0 border-r-0 border-t-0 bg-transparent cursor-pointer text-left"
-                key={r.id}
-                onClick={() => navigate("/demurrage/" + r.id)}
+                key={r.key}
+                onClick={() => navigate(demurrageDetailUrl(r))}
               >
                 <span>
                   <strong className="text-tk-blue">{r.jobId}</strong>
@@ -556,6 +587,7 @@ export function Demurrage() {
                 </span>
               </button>
             ))}
+            {!directoryQuery.isFetching && !rows.length && "—"}
           </SectionCard>
         </div>
       </div>
@@ -600,12 +632,14 @@ export function Demurrage() {
             <TextField
               label="Free Days"
               type="number"
+              placeholder="—"
               value={form.freeDays}
               onChange={(e) => setForm({ ...form, freeDays: e.target.value })}
             />
             <TextField
               label="Days Over"
               type="number"
+              placeholder="—"
               value={form.daysOver}
               onChange={(e) => setForm({ ...form, daysOver: e.target.value })}
             />
@@ -613,6 +647,7 @@ export function Demurrage() {
           <TextField
             label="Daily Rate (₦)"
             type="number"
+            placeholder="—"
             value={form.rate}
             onChange={(e) => setForm({ ...form, rate: e.target.value })}
           />
@@ -626,21 +661,22 @@ export function Demurrage() {
         width={520}
         footer={
           <Button
-            onClick={() => {
-              setRules(false);
-              notify("Demurrage rules saved");
-            }}
+            disabled={!canSaveRules || updateState.isLoading || rulesQuery.isFetching || ruleForm.freeDays === "" || ruleForm.rate === ""}
+            onClick={saveRules}
           >
             Save Rules
           </Button>
         }
       >
         <div className="grid grid-cols-2 gap-3 max-[760px]:grid-cols-1">
-          <TextField label="Default Free Days" type="number" defaultValue="7" />
+          <TextField label="Default Free Days" type="number" placeholder="—" value={ruleForm.freeDays} disabled={!canSaveRules || updateState.isLoading} onChange={(e) => { rulesDirty.current = true; setRuleForm({ ...ruleForm, freeDays: e.target.value }); }} />
           <TextField
             label="Default Daily Rate (₦)"
             type="number"
-            defaultValue="75000"
+            placeholder="—"
+            value={ruleForm.rate}
+            disabled={!canSaveRules || updateState.isLoading}
+            onChange={(e) => { rulesDirty.current = true; setRuleForm({ ...ruleForm, rate: e.target.value }); }}
           />
         </div>
       </Modal>

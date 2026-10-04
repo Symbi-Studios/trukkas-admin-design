@@ -1,16 +1,15 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, Card, SectionCard, ChoiceCard, Select, TextField, Checkbox, Radio,
   Icon, Modal, Banner,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { updateReportDraft, toggleReportColumn, setReportColumnGroup, setAllReportColumns, saveReportTemplate } from '../mock/api.js';
-import {
-  REPORT_TYPES, ENTITY_TYPE_OPTIONS, STATUS_OPTIONS, LOCATION_OPTIONS, verificationPerformanceRows,
-} from '../mock/fixtures/reports.js';
+import { useReportDraft, useReportEntities } from '../store/features/reports/useReportDraft.js';
+import { REPORT_TYPES, ENTITY_TYPE_OPTIONS, STATUS_OPTIONS, LOCATION_OPTIONS } from '../store/features/reports/reportsConfig.js';
+import { REPORT_CAPABILITIES, unavailableReportPreview, reportCount } from '../store/features/reports/reportsApi.js';
+import { reportRangeQuery } from '../store/features/reports/reportDraft.js';
 
 const STEPS = [
   { n: 1, label: 'Report Type', hint: 'Select the type of report to export' },
@@ -31,19 +30,13 @@ function selectedColumns(columnGroups) {
 
 export function ExportReport() {
   const navigate = useNavigate();
-  const draft = (useCollection('reportDraft') || [])[0];
+  const { draft, updateReportDraft } = useReportDraft();
   const [saveOpen, setSaveOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [banner, setBanner] = useState(null);
+  const busy = false;
+  const banner = null;
   const sectionRefs = useRef({});
-
-  function flash(text) { setBanner(text); setTimeout(() => setBanner(null), 3500); }
-
-  const entityOptions = useMemo(
-    () => ['All Entities', ...Array.from(new Set(verificationPerformanceRows.map((r) => r.entity)))],
-    [],
-  );
+  const { options: entityOptions } = useReportEntities(draft.filters.entityType);
 
   if (!draft) return null;
 
@@ -56,15 +49,6 @@ export function ExportReport() {
     sectionRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  async function handleSaveTemplate() {
-    if (!templateName.trim()) return;
-    setBusy(true);
-    await saveReportTemplate(templateName.trim());
-    setBusy(false);
-    setSaveOpen(false);
-    setTemplateName('');
-    flash(`Template "${templateName.trim()}" saved.`);
-  }
 
   return (
     <>
@@ -114,9 +98,9 @@ export function ExportReport() {
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
                 <Select label="" value={draft.dateRangePreset} options={DATE_PRESETS} style={{ minWidth: 170 }}
                   onChange={(e) => updateReportDraft({ dateRangePreset: e.target.value })} />
-                <TextField type="date" value={draft.dateFrom} onChange={(e) => updateReportDraft({ dateFrom: e.target.value })} style={{ minWidth: 160 }} />
+                <TextField type="date" value={draft.dateFrom} onChange={(e) => updateReportDraft({ dateFrom: e.target.value, dateRangePreset: 'Custom Range' })} style={{ minWidth: 160 }} />
                 <Icon name="arrow-right" size={16} color="var(--tk-ink-300)" style={{ marginBottom: 12 }} />
-                <TextField type="date" value={draft.dateTo} onChange={(e) => updateReportDraft({ dateTo: e.target.value })} style={{ minWidth: 160 }} />
+                <TextField type="date" value={draft.dateTo} onChange={(e) => updateReportDraft({ dateTo: e.target.value, dateRangePreset: 'Custom Range' })} style={{ minWidth: 160 }} />
               </div>
             </SectionCard>
 
@@ -124,7 +108,7 @@ export function ExportReport() {
               <p className="tk-meta" style={{ margin: '-8px 0 12px' }}>Apply additional filters to narrow down your report data.</p>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
                 <Select label="Entity Type" value={draft.filters.entityType} options={ENTITY_TYPE_OPTIONS} style={{ minWidth: 150 }}
-                  onChange={(e) => updateReportDraft({ filters: { ...draft.filters, entityType: e.target.value } })} />
+                  onChange={(e) => updateReportDraft({ filters: { ...draft.filters, entityType: e.target.value, entity: 'All Entities' } })} />
                 <Select label="Entity" value={draft.filters.entity} options={entityOptions} style={{ minWidth: 190 }}
                   onChange={(e) => updateReportDraft({ filters: { ...draft.filters, entity: e.target.value } })} />
                 <Select label="Status" value={draft.filters.status} options={STATUS_OPTIONS} style={{ minWidth: 150 }}
@@ -181,7 +165,7 @@ export function ExportReport() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <Button variant="outline" onClick={() => navigate('/reports')}>Cancel</Button>
-              <Button iconRight="arrow-right" onClick={() => navigate('/reports/export/preview')}>
+              <Button iconRight="arrow-right" disabled={!reportRangeQuery(draft) || selCount === 0} onClick={() => navigate('/reports/export/preview')}>
                 Preview & Export Report
               </Button>
             </div>
@@ -191,9 +175,9 @@ export function ExportReport() {
             <SectionCard title="Your Report Summary">
               <p className="tk-meta" style={{ margin: '-8px 0 12px' }}>Review your selections before exporting.</p>
               <SummaryRow icon={reportType.icon} tint={reportType.tint} label="Report Type" value={`${reportType.title} Report`} />
-              <SummaryRow icon="calendar" tint="blue" label="Date Range" value={`${draft.dateFrom} – ${draft.dateTo}`} />
+              <SummaryRow icon="calendar" tint="blue" label="Date Range" value={`${draft.dateFrom || '—'} – ${draft.dateTo || '—'}`} />
               <SummaryRow icon="filter" tint="green" label="Filters"
-                value={`${draft.filters.entityType}, ${draft.filters.entity}, ${draft.filters.status}${extraFilterCount ? `, +${extraFilterCount} more filters` : ''}`} />
+                value={`${draft.filters.entityType}, ${entityOptions.find((option) => option.value === draft.filters.entity)?.label || '—'}, ${draft.filters.status}${extraFilterCount ? `, +${extraFilterCount} more filters` : ''}`} />
               <SummaryRow icon="list-checks" tint="amber" label="Columns" value={`${selCount} columns selected`} />
               <SummaryRow icon="file" tint="blue" label="Format" value={{ xlsx: 'Excel (.xlsx)', csv: 'CSV (.csv)', pdf: 'PDF (.pdf)', json: 'JSON (.json)' }[draft.format]} />
               <SummaryRow icon="send" tint="green" label="Delivery" value={{ download: 'Download now', email: 'Email me', schedule: `Schedule (${draft.scheduleFrequency})` }[draft.delivery]} />
@@ -202,7 +186,7 @@ export function ExportReport() {
               <Icon name="database" size={18} color="var(--tk-blue)" style={{ flex: '0 0 auto' }} />
               <div>
                 <div style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-blue-ink)' }}>Estimated Data</div>
-                <div className="tk-meta">This report will include approximately {verificationPerformanceRows.reduce((s, r) => s + r.totalVerifications, 0).toLocaleString('en-NG')} records across {verificationPerformanceRows.length} entities.</div>
+                <div className="tk-meta">This report will include approximately {reportCount(unavailableReportPreview.totalRecords)} records across {reportCount(unavailableReportPreview.entityCount)} entities.</div>
               </div>
             </div>
           </div>
@@ -213,7 +197,7 @@ export function ExportReport() {
         description="Save your current selections so you can reuse them later."
         footer={<>
           <Button variant="outline" onClick={() => setSaveOpen(false)}>Cancel</Button>
-          <Button disabled={busy || !templateName.trim()} onClick={handleSaveTemplate}>{busy ? 'Saving…' : 'Save Template'}</Button>
+          <Button disabled={!REPORT_CAPABILITIES.templates || busy || !templateName.trim()}>{busy ? 'Saving…' : 'Save Template'}</Button>
         </>}>
         <TextField label="Template Name" required placeholder="e.g. Weekly Verification Snapshot"
           value={templateName} onChange={(e) => setTemplateName(e.target.value)} />
@@ -244,6 +228,7 @@ function SummaryRow({ icon, tint, label, value }) {
 }
 
 function ColumnPicker({ draft, sectionRefs }) {
+  const { toggleReportColumn, setReportColumnGroup, setAllReportColumns } = useReportDraft();
   const [search, setSearch] = useState('');
   const scrollerRef = useRef(null);
   const selCount = selectedColumns(draft.columnGroups);

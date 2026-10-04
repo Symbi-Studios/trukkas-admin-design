@@ -41,7 +41,7 @@ function redactInlineText(value) {
 }
 
 function sanitizeForLog(value, key = '', parents = [], seen = new WeakSet()) {
-  if (sensitiveField.test(key)) return REDACTED;
+  if (sensitiveField.test(key) || /^(subject|content|senderId|assignedTo|author|summary|seoTitle|metaDescription|tags|guide)$/i.test(key)) return REDACTED;
   if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
   if (typeof value === 'string') return redactInlineText(value);
   if (typeof value !== 'object') return String(value);
@@ -124,8 +124,13 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
     ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips'].includes(api.endpoint)
     || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')
   );
+  // Free-text audit actions and notes can contain personal details that field-
+  // name redaction cannot reliably identify. Keep the request/status log only.
+  const auditResponse = !result.error && (typeof args === 'string' ? args : args.url).split('?')[0] === '/admin/audit-logs';
   const responseBody = csvResponse
     ? '[CSV content omitted]'
+    : auditResponse
+      ? '[Audit log content omitted]'
     : result.error
       ? (result.error.data ?? { error: result.error.error ?? result.error.status })
       : result.data;

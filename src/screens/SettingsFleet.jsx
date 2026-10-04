@@ -1,16 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHeader, Button, SectionCard, Card, TextField, Select, Switch, Checkbox, QuickActionsCard, EmptyState, Tabs } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import {
-  FLEET_TABS, fleetStatus, fleetQuickActions,
-  TRUCK_STATUSES, OWNERSHIP_TYPES, HOME_LOCATIONS, FUEL_UNITS, WEIGHT_UNITS, ACCESS_LEVELS, RETENTION_YEARS,
-} from '../mock/fixtures/settings.js';
-import {
-  updateFleetPreferences, updateAssetNumbering, updateDefaultReminders, updateFleetVisibility,
-  updateDeletionArchiving, updateFleetDataRetention, saveFleetSettings, resetFleetSettings,
-} from '../mock/api.js';
+import { PageHeader, Button, SectionCard, Card, QuickActionsCard, EmptyState, Tabs } from '../ds.js';
+import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsCheckbox as Checkbox, SettingsReadNotice } from './settingsValues.jsx';
+import { useSettingsEditor } from './useSettingsEditor.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
+
+import { FLEET_TABS, fleetStatus as fleetStatusTemplate, fleetQuickActions, TRUCK_STATUSES, OWNERSHIP_TYPES, HOME_LOCATIONS, FUEL_UNITS, WEIGHT_UNITS, ACCESS_LEVELS, RETENTION_YEARS } from '../mock/fixtures/settings.js';
+
 import { SettingsTabStrip, SettingsStatusCard, SettingsDangerZone, SettingsMetaFooter } from './settingsShared.jsx';
 
 const DISTANCE_UNITS = ['Kilometers (km)', 'Miles (mi)'];
@@ -18,25 +15,35 @@ const DISTANCE_UNITS = ['Kilometers (km)', 'Miles (mi)'];
 function Field({ children }) { return <div style={{ marginBottom: 14 }}>{children}</div>; }
 
 export function SettingsFleet() {
-  const prefs = useCollection('settingsFleetPreferences')?.[0];
-  const numbering = useCollection('settingsAssetNumbering')?.[0];
-  const reminders = useCollection('settingsDefaultReminders')?.[0];
-  const visibility = useCollection('settingsFleetVisibility')?.[0];
-  const deletion = useCollection('settingsDeletionArchiving')?.[0];
-  const retention = useCollection('settingsFleetDataRetention')?.[0];
-  const meta = useCollection('settingsMeta')?.[0];
+  const editor = useSettingsEditor('fleet');
+  const updateFleetPreferences = editor.change('settingsFleetPreferences');
+  const updateAssetNumbering = editor.change('settingsAssetNumbering');
+  const updateDefaultReminders = editor.change('settingsDefaultReminders');
+  const updateFleetVisibility = editor.change('settingsFleetVisibility');
+  const updateDeletionArchiving = editor.change('settingsDeletionArchiving');
+  const updateFleetDataRetention = editor.change('settingsFleetDataRetention');
+  const saveFleetSettings = () => editor.save();
+  const resetFleetSettings = () => editor.unavailable('Reset Fleet Settings');
+  const fleetStatus = { headline: '—', caption: '—', lastChecked: '—', items: (fleetStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const prefs = editor.group('settingsFleetPreferences');
+  const numbering = editor.group('settingsAssetNumbering');
+  const reminders = editor.group('settingsDefaultReminders');
+  const visibility = editor.group('settingsFleetVisibility');
+  const deletion = editor.group('settingsDeletionArchiving');
+  const retention = editor.group('settingsFleetDataRetention');
+  const meta = editor.group('settingsMeta');
   const [subTab, setSubTab] = useState('General');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  if (editor.loading) return <DriverDetailLoading />;
   if (!prefs || !numbering || !reminders || !visibility || !deletion || !retention) return null;
 
   async function handleSave() {
     setSaving(true);
-    await saveFleetSettings();
+    const confirmed = await saveFleetSettings();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
   }
 
   return (
@@ -48,6 +55,7 @@ export function SettingsFleet() {
           <Button icon="save" disabled={saving} onClick={handleSave}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Changes'}</Button>
         </>} />
         <SettingsTabStrip active="fleet" />
+      <SettingsReadNotice error={editor.error} />
 
     
 
@@ -106,16 +114,16 @@ export function SettingsFleet() {
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
                 <TextField label="Maintenance Reminder (Days)" type="number" value={reminders.maintenanceReminderDays}
                   hint="Days before due date to send reminder."
-                  onChange={(e) => updateDefaultReminders({ maintenanceReminderDays: Number(e.target.value) })} />
+                  onChange={(e) => updateDefaultReminders({ maintenanceReminderDays: e.target.value })} />
                 <TextField label="Inspection Reminder (Days)" type="number" value={reminders.inspectionReminderDays}
                   hint="Days before due date to send reminder."
-                  onChange={(e) => updateDefaultReminders({ inspectionReminderDays: Number(e.target.value) })} />
+                  onChange={(e) => updateDefaultReminders({ inspectionReminderDays: e.target.value })} />
                 <TextField label="Insurance Reminder (Days)" type="number" value={reminders.insuranceReminderDays}
                   hint="Days before due date to send reminder."
-                  onChange={(e) => updateDefaultReminders({ insuranceReminderDays: Number(e.target.value) })} />
+                  onChange={(e) => updateDefaultReminders({ insuranceReminderDays: e.target.value })} />
                 <TextField label="Permit Renewal Reminder (Days)" type="number" value={reminders.permitRenewalReminderDays}
                   hint="Days before due date to send reminder."
-                  onChange={(e) => updateDefaultReminders({ permitRenewalReminderDays: Number(e.target.value) })} />
+                  onChange={(e) => updateDefaultReminders({ permitRenewalReminderDays: e.target.value })} />
               </div>
               <Field><Switch checked={reminders.sendEmailNotifications} label="Send email notifications"
                 hint="Notify fleet managers via email."
@@ -173,7 +181,7 @@ export function SettingsFleet() {
           <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
             <SettingsStatusCard title="Fleet Settings Status" headline={fleetStatus.headline} caption={fleetStatus.caption}
               items={fleetStatus.items} />
-            <QuickActionsCard items={fleetQuickActions} />
+            <QuickActionsCard items={editor.quickActions(fleetQuickActions)} />
             <SettingsDangerZone title="Reset Fleet Settings" hint="Restore all fleet settings to default values."
               onConfirm={() => resetFleetSettings()} />
             <SettingsMetaFooter meta={meta} />

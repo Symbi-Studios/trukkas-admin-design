@@ -29,7 +29,7 @@ export function DropdownMenu({ items = [], width = 240, open = true, style }) {
 function MenuRow({ item, danger }) {
   const [hot, setHot] = React.useState(false);
   return (
-    <button type="button" role="menuitem" onClick={item.onClick}
+    <button type="button" role="menuitem" disabled={item.disabled} onClick={item.disabled ? undefined : item.onClick}
       onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 10px',
                border: 0, borderRadius: 'var(--tk-r-sm)', cursor: 'pointer', textAlign: 'left',

@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -14,9 +15,11 @@ import {
   Badge,
   Icon,
   DropdownMenu,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { publishAnnouncement, updateAnnouncement } from "../mock/api.js";
+import { useGetAdminAnnouncementDirectoryQuery, useGetAdminAnnouncementStatusCountsQuery, usePublishAdminAnnouncementMutation, announcementCount, announcementDetailUrl, announcementEditUrl, announcementCopyUrl, announcementUnavailable, ANNOUNCEMENT_STATUSES } from "../store/features/announcements/announcementsApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverTableLoading, DriverLoadingNotice } from "./DriversLoading.jsx";
 import "./Engagement.css";
 const PAGE_SIZE = 8;
 const TONE = {
@@ -38,10 +41,10 @@ const ICON = {
 function csvExport(rows) {
   const csv = [
     ["Announcement", "Type", "Audience", "Status", "Date", "Views"],
-    ...rows.map((r) => [r.t, r.type, r.aud, r.st, r.d, r.v ?? ""]),
+    ...rows.map((r) => [r.t, r.type, r.aud, r.st, r.d, r.v ?? "—"]),
   ]
     .map((x) =>
-      x.map((v) => '"' + String(v).replaceAll('"', '""') + '"').join(","),
+      x.map((v) => '"' + (/^[=+@\-\t\r]/.test(String(v)) ? "'" : "") + String(v).replaceAll('"', '""') + '"').join(","),
     )
     .join("\n");
   const u = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -52,8 +55,9 @@ function csvExport(rows) {
   URL.revokeObjectURL(u);
 }
 export function Announcements() {
-  const navigate = useNavigate(),
-    rows = useCollection("announcements") || [];
+  const navigate = useNavigate();
+  const owner = useSelector((state) => state.auth.admin?.id);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const [tab, setTab] = useState("All Announcements"),
     [q, setQ] = useState(""),
     [status, setStatus] = useState("All"),
@@ -62,26 +66,56 @@ export function Announcements() {
     [page, setPage] = useState(1),
     [menu, setMenu] = useState(null),
     [toast, setToast] = useState("");
+  const directory = useGetAdminAnnouncementDirectoryQuery({ owner }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const countsQuery = useGetAdminAnnouncementStatusCountsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const tabStatus = tab === 'All Announcements' ? null : ANNOUNCEMENT_STATUSES[tab === 'Drafts' ? 'Draft' : tab];
+  const chosenStatus = status === 'All' ? null : ANNOUNCEMENT_STATUSES[status];
+  const conflict = Boolean(tabStatus && chosenStatus && tabStatus !== chosenStatus);
+  const serverStatus = chosenStatus || tabStatus;
+  const statusQuery = useGetAdminAnnouncementDirectoryQuery({ owner, status: serverStatus }, { skip: !authenticated || !serverStatus || conflict, refetchOnMountOrArgChange: true });
+  const source = serverStatus ? statusQuery : directory;
+  const allRows = authenticated && !directory.error ? directory.currentData : undefined;
+  const rows = conflict ? [] : authenticated && !source.error ? source.currentData : undefined;
+  const loading = !conflict && authenticated && source.isFetching;
+  const available = Boolean(rows) && (type === 'All' || rows.every((row) => row.typeKnown))
+    && (audience === 'All' || rows.every((row) => row.audienceKnown)) && (!q.trim() || rows.every((row) => row.searchKnown));
+  const counts = authenticated && !countsQuery.error ? countsQuery.currentData : undefined;
+  const totalViews = allRows?.every((row) => row.v != null) ? allRows.reduce((sum, row) => sum + row.v, 0) : null;
+  const recent = allRows?.every((row) => row.createdAt != null) ? [...allRows].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4) : [];
+  const [publishAnnouncement, publication] = usePublishAdminAnnouncementMutation();
+  const publishing = useRef(false), toastTimer = useRef(null);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
   const filtered = useMemo(
     () =>
-      rows.filter(
+      (rows || []).filter(
         (r) =>
-          (tab === "All Announcements" || r.st === tab.replace(/s$/, "")) &&
-          (status === "All" || r.st === status) &&
           (type === "All" || r.type === type) &&
           (audience === "All" || r.aud === audience) &&
-          (!q ||
+          (!q.trim() ||
             [r.t, r.p, r.id].some((v) =>
-              v.toLowerCase().includes(q.toLowerCase()),
+              v.toLowerCase().includes(q.trim().toLowerCase()),
             )),
       ),
     [rows, tab, status, type, audience, q],
   );
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const total = available ? filtered.length : null;
+  const pageCount = total == null ? null : Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const paged = available ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : [];
+  useEffect(() => { if (pageCount != null && page > pageCount) setPage(pageCount); }, [page, pageCount]);
   function notify(s) {
+    clearTimeout(toastTimer.current);
     setToast(s);
-    setTimeout(() => setToast(""), 1600);
+    toastTimer.current = setTimeout(() => setToast(""), 1600);
   }
+  async function publish(id) {
+    setMenu(null);
+    if (publishing.current || publication.isLoading) return;
+    publishing.current = true;
+    try { const response = await publishAnnouncement({ id, owner }).unwrap(); notify(response.message); }
+    catch (error) { notify(getApiErrorMessage(error)); }
+    finally { publishing.current = false; }
+  }
+  const metric = (value, pending) => pending ? <Skeleton as="span" width={54} height={23} /> : announcementCount(value);
   return (
     <div className="engagement-page">
       <PageHeader
@@ -93,7 +127,7 @@ export function Announcements() {
             <Button
               variant="outline"
               icon="download"
-              onClick={() => csvExport(filtered)}
+              onClick={() => { if (!available || loading) { window.alert(source.error ? getApiErrorMessage(source.error) : 'The complete announcement results are unavailable for export.'); return; } csvExport(filtered); }}
             >
               Export
             </Button>
@@ -107,31 +141,35 @@ export function Announcements() {
         <StatCard
           icon="megaphone"
           label="Total Announcements"
-          value="24"
-          delta="14%"
+          value={metric(allRows?.length, directory.isFetching)}
+          delta="—"
+          direction={null}
           caption="from last 30 days"
         />
         <StatCard
           icon="send"
           tint="green"
           label="Published"
-          value="18"
-          delta="12%"
+          value={metric(counts?.PUBLISHED, countsQuery.isFetching)}
+          delta="—"
+          direction={null}
           caption="from last 30 days"
         />
         <StatCard
           icon="calendar"
           label="Scheduled"
-          value="5"
-          delta="5%"
+          value={metric(counts?.SCHEDULED, countsQuery.isFetching)}
+          delta="—"
+          direction={null}
           caption="from last 30 days"
         />
         <StatCard
           icon="eye"
           tint="purple"
           label="Total Views"
-          value="8,432"
-          delta="18%"
+          value={metric(totalViews, directory.isFetching)}
+          delta="—"
+          direction={null}
           caption="from last 30 days"
         />
       </div>
@@ -202,7 +240,7 @@ export function Announcements() {
               }}
             >
               <option>All</option>
-              {[...new Set(rows.map((r) => r.aud))].map((x) => (
+              {[...new Set((allRows || []).filter((r) => r.audienceKnown).map((r) => r.aud))].map((x) => (
                 <option key={x}>{x}</option>
               ))}
             </select>
@@ -220,10 +258,10 @@ export function Announcements() {
               Reset
             </Button>
           </div>
-          <DataTable
+          {loading ? <DriverTableLoading columns={7} label="Loading announcements" /> : <DataTable
             rows={paged}
             rowKey={(r) => r.id}
-            onRowClick={(r) => navigate("/announcements/" + r.id)}
+            onRowClick={(r) => navigate(announcementDetailUrl(r.id))}
             columns={[
               {
                 key: "t",
@@ -231,7 +269,7 @@ export function Announcements() {
                 render: (r) => (
                   <span className="engagement-title-cell">
                     <span className="type-icon">
-                      <Icon name={ICON[r.type]} size={15} />
+                      <Icon name={r.icon} size={15} />
                     </span>
                     <span>
                       <strong>{r.t}</strong>
@@ -298,35 +336,27 @@ export function Announcements() {
                             {
                               label: "View Announcement",
                               icon: "eye",
-                              onClick: () => navigate("/announcements/" + r.id),
+                              onClick: () => navigate(announcementDetailUrl(r.id)),
                             },
                             {
                               label: "Edit Announcement",
                               icon: "pencil",
                               onClick: () =>
-                                navigate("/announcements/" + r.id + "/edit"),
+                                navigate(announcementEditUrl(r.id)),
                             },
                             r.st !== "Published"
                               ? {
                                   label: "Publish Now",
                                   icon: "send",
-                                  onClick: () => {
-                                    publishAnnouncement(r.id);
-                                    setMenu(null);
-                                    notify("Announcement published");
-                                  },
+                                  disabled: publication.isLoading,
+                                  onClick: () => publish(r.id),
                                 }
                               : {
                                   label: "Unpublish",
                                   icon: "archive",
                                   onClick: () => {
-                                    updateAnnouncement(r.id, {
-                                      st: "Draft",
-                                      d: "—",
-                                      tm: "",
-                                    });
                                     setMenu(null);
-                                    notify("Moved to drafts");
+                                    announcementUnavailable('Unpublish');
                                   },
                                 },
                             { divider: true },
@@ -334,7 +364,7 @@ export function Announcements() {
                               label: "Duplicate",
                               icon: "copy",
                               onClick: () =>
-                                navigate("/announcements/new?copy=" + r.id),
+                                navigate(announcementCopyUrl(r.id)),
                             },
                           ]}
                         />
@@ -344,8 +374,8 @@ export function Announcements() {
                 ),
               },
             ]}
-          />
-          {!paged.length && (
+          />}
+          {!loading && !paged.length && (
             <div
               style={{
                 padding: 40,
@@ -353,19 +383,19 @@ export function Announcements() {
                 color: "var(--tk-ink-400)",
               }}
             >
-              No announcements match your filters.
+              {source.error && !conflict ? <DriverLoadingNotice>{getApiErrorMessage(source.error)}</DriverLoadingNotice> : available ? 'No announcements match your filters.' : '—'}
             </div>
           )}
           <Pagination
             page={page}
-            pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
+            pageCount={pageCount}
             pageSize={PAGE_SIZE}
-            total={filtered.length}
+            total={total}
             onPage={(p) =>
               setPage(
                 Math.min(
                   Math.max(1, p),
-                  Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
+                  pageCount || 1,
                 ),
               )
             }
@@ -388,7 +418,7 @@ export function Announcements() {
                 <span>
                   <strong>{name}</strong>
                 </span>
-                <b>{rows.filter((r) => r.type === name).length}</b>
+                <b>{allRows?.every((r) => r.typeKnown) ? announcementCount(allRows.filter((r) => r.type === name).length) : '—'}</b>
               </button>
             ))}
             <Button
@@ -415,14 +445,14 @@ export function Announcements() {
               </button>
             }
           >
-            {rows.slice(0, 4).map((r) => (
+            {recent.map((r) => (
               <button
                 className="engagement-side-row"
                 key={r.id}
-                onClick={() => navigate("/announcements/" + r.id)}
+                onClick={() => navigate(announcementDetailUrl(r.id))}
               >
                 <span className="side-icon">
-                  <Icon name={ICON[r.type]} size={13} />
+                  <Icon name={r.icon} size={13} />
                 </span>
                 <span>
                   <strong>{r.t}</strong>
@@ -431,6 +461,7 @@ export function Announcements() {
                 <Badge>{r.st}</Badge>
               </button>
             ))}
+            {!recent.length && !directory.isFetching && '—'}
           </SectionCard>
           <Card tone="cool">
             <div style={{ display: "flex", gap: 12 }}>

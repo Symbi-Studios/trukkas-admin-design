@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSelector } from "react-redux";
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -23,22 +24,17 @@ import {
   AlertRow,
   FilterSelect,
   EmptyState,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
 import {
-  addEscrowFunds,
-  releaseEscrowHold,
-  resolveDispute,
-} from "../mock/api.js";
-import {
-  escrowSummary as escrowSummaryStatic,
-  escrowBalanceBreakdown,
-  escrowWeeklyActivity,
-  escrowRules,
-  escrowActivityLog,
-  escrowAlerts,
-} from "../mock/fixtures/escrow.js";
-import { formatNaira } from "../mock/format.js";
+  useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery,
+  useGetAdminEscrowLedgerQuery, useGetAdminEscrowDisputesQuery,
+  useGetAdminEscrowRulesQuery, useGetAdminEscrowActivityQuery,
+  emptyEscrowOverview, unavailableEscrowWeeklyActivity, adaptEscrowRules,
+  escrowMoney as formatNaira, escrowNumber, escrowMillions, escrowCount,
+  escrowReleasesFromTransactions,
+} from "../store/features/wallets/walletsApi.js";
+import { DriverTableLoading } from "./DriversLoading.jsx";
 
 const TABS = [
   "Escrow Overview",
@@ -98,29 +94,29 @@ function FlowBox({ label, value, caption, color }) {
 }
 
 export function Wallets() {
-  const summary = (useCollection("escrowSummary") || [escrowSummaryStatic])[0];
-  const accounts = useCollection("escrowAccounts") || [];
-  const holds = useCollection("escrowHolds") || [];
-  const releases = useCollection("escrowReleases") || [];
-  const disputes = useCollection("disputes") || [];
-  const tx = useCollection("escrowTransactions") || [];
-
   const [tab, setTab] = useState("Escrow Overview");
-  const [menuFor, setMenuFor] = useState(null);
   const [modal, setModal] = useState(null);
   const [amount, setAmount] = useState("");
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const navigate = useNavigate();
-
-  async function handleAddFunds() {
-    const value = Number(amount);
-    if (!value || value <= 0) return;
-    setBusy(true);
-    await addEscrowFunds(value);
-    setBusy(false);
-    setModal(null);
-    setAmount("");
-  }
+  const canViewActivity = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
+  const overviewQuery = useGetAdminEscrowOverviewQuery();
+  const registerQuery = useGetAdminEscrowRegisterQuery(undefined, { skip: !["Escrow Overview", "Holds"].includes(tab) });
+  const ledgerQuery = useGetAdminEscrowLedgerQuery(undefined, { skip: !["Escrow Overview", "Releases", "Transactions"].includes(tab) });
+  const disputesQuery = useGetAdminEscrowDisputesQuery(undefined, { skip: tab !== "Disputes" });
+  const rulesQuery = useGetAdminEscrowRulesQuery(undefined, { skip: tab !== "Escrow Rules" });
+  const activityQuery = useGetAdminEscrowActivityQuery(undefined, { skip: tab !== "Activity Log" || !canViewActivity });
+  const { summary, breakdown: escrowBalanceBreakdown } = overviewQuery.error ? emptyEscrowOverview : overviewQuery.currentData || emptyEscrowOverview;
+  const accounts = [];
+  const holds = (registerQuery.error ? [] : registerQuery.currentData || []).filter((row) => ["LOCKED", "HELD", "MOBILIZATION_RELEASED", "PENDING_RELEASE"].includes(row.statusCode));
+  const tx = ledgerQuery.error ? [] : ledgerQuery.currentData || [];
+  const releases = escrowReleasesFromTransactions(tx);
+  const disputes = disputesQuery.error ? [] : disputesQuery.currentData || [];
+  const escrowWeeklyActivity = unavailableEscrowWeeklyActivity;
+  const escrowRules = rulesQuery.error ? adaptEscrowRules(null) : rulesQuery.currentData || adaptEscrowRules(null);
+  const escrowActivityLog = canViewActivity && !activityQuery.error ? activityQuery.currentData || [] : [];
+  const escrowAlerts = [];
+  const metric = (value) => overviewQuery.isLoading ? <Skeleton as="span" width={96} height={23} /> : formatNaira(value);
 
   return (
     <>
@@ -130,7 +126,7 @@ export function Wallets() {
         description="Secure funds in escrow and manage holds, releases, and settlements."
         actions={
           <>
-            <FilterSelect label="May 24 – May 30, 2026" icon="calendar" />
+            <FilterSelect label="—" icon="calendar" />
             <Button variant="outline" icon="filter">
               Filters
             </Button>
@@ -152,51 +148,51 @@ export function Wallets() {
           icon="wallet"
           tint="navy"
           label="Total Escrow Balance"
-          value={formatNaira(summary.totalEscrowBalance)}
+          value={metric(summary.totalEscrowBalance)}
           delta={summary.totalEscrowBalanceDelta}
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="lock"
           tint="amber"
           label="Held in Escrow"
-          value={formatNaira(summary.heldInEscrow)}
+          value={metric(summary.heldInEscrow)}
           delta={summary.heldInEscrowDelta}
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="hourglass"
           tint="purple"
           label="Pending Release"
-          value={formatNaira(summary.pendingRelease)}
+          value={metric(summary.pendingRelease)}
           delta={summary.pendingReleaseDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Available to Settle"
-          value={formatNaira(summary.availableToSettle)}
+          value={metric(summary.availableToSettle)}
           delta={summary.availableToSettleDelta}
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="coins"
           tint="blue"
           label="Completed Releases"
-          value={formatNaira(summary.completedReleases)}
+          value={metric(summary.completedReleases)}
           delta={summary.completedReleasesDelta}
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="triangle-alert"
           tint="red"
           label="Disputed Amounts"
-          value={formatNaira(summary.disputedAmounts)}
+          value={metric(summary.disputedAmounts)}
           delta={summary.disputedAmountsDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption="—"
         />
       </div>
 
@@ -243,9 +239,9 @@ export function Wallets() {
                     <DonutChart
                       size={160}
                       thickness={18}
-                      centerValue={`₦${(summary.totalEscrowBalance / 1000000).toFixed(2)}M`}
+                      centerValue={escrowMillions(summary.totalEscrowBalance)}
                       centerLabel="Total Balance"
-                      data={escrowBalanceBreakdown.map((d) => ({
+                      data={escrowBalanceBreakdown.filter((d) => d.value != null).map((d) => ({
                         label: d.label,
                         value: d.value,
                         color: d.color,
@@ -256,7 +252,7 @@ export function Wallets() {
                       items={escrowBalanceBreakdown.map((d) => ({
                         label: d.label,
                         value: d.value,
-                        display: `${formatNaira(d.value)} (${d.pct})`,
+                        display: d.value == null ? "—" : `${formatNaira(d.value)} (${d.pct})`,
                         color: d.color,
                       }))}
                       showShare={false}
@@ -280,14 +276,14 @@ export function Wallets() {
                         tint: "amber",
                         label: "Funds Held",
                         value: formatNaira(escrowWeeklyActivity.fundsHeld),
-                        caption: `${escrowWeeklyActivity.fundsHeldTx} transactions`,
+                        caption: escrowCount(escrowWeeklyActivity.fundsHeldTx, "transactions"),
                       },
                       {
                         icon: "lock-open",
                         tint: "green",
                         label: "Funds Released",
                         value: formatNaira(escrowWeeklyActivity.fundsReleased),
-                        caption: `${escrowWeeklyActivity.fundsReleasedTx} transactions`,
+                        caption: escrowCount(escrowWeeklyActivity.fundsReleasedTx, "transactions"),
                       },
                       {
                         icon: "coins",
@@ -296,13 +292,13 @@ export function Wallets() {
                         value: formatNaira(
                           escrowWeeklyActivity.settlementsMade,
                         ),
-                        caption: `${escrowWeeklyActivity.settlementsCount} settlements`,
+                        caption: escrowCount(escrowWeeklyActivity.settlementsCount, "settlements"),
                       },
                       {
                         icon: "triangle-alert",
                         tint: "red",
                         label: "New Disputes",
-                        value: escrowWeeklyActivity.newDisputes,
+                        value: escrowNumber(escrowWeeklyActivity.newDisputes),
                         caption: `${formatNaira(escrowWeeklyActivity.newDisputesAmount)}`,
                       },
                     ].map((s) => (
@@ -352,7 +348,7 @@ export function Wallets() {
                   </a>
                 }
               >
-                <DataTable
+                {registerQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
                   rows={holds.slice(0, 5)}
                   rowKey={(r) => r.holdId}
                   columns={[
@@ -360,7 +356,7 @@ export function Wallets() {
                       key: "holdId",
                       header: "Hold ID",
                       render: (r) => (
-                        <Link to={`/escrow/${r.holdId}`} className="tk-mono">
+                        <Link to={r.detailUrl} className="tk-mono">
                           {r.holdId}
                         </Link>
                       ),
@@ -372,7 +368,7 @@ export function Wallets() {
                       key: "amount",
                       header: "Amount (₦)",
                       align: "right",
-                      render: (r) => r.amount.toLocaleString("en-NG"),
+                      render: (r) => escrowNumber(r.amount),
                     },
                     {
                       key: "heldOn",
@@ -397,13 +393,13 @@ export function Wallets() {
                         <span style={{ display: "flex", gap: 6 }}>
                           <IconButton
                             icon="eye"
-                            onClick={() => navigate(`/escrow/${r.holdId}`)}
+                            onClick={() => navigate(r.detailUrl)}
                           />
                         </span>
                       ),
                     },
                   ]}
-                />
+                />)}
               </SectionCard>
 
               <SectionCard
@@ -421,7 +417,7 @@ export function Wallets() {
                   </a>
                 }
               >
-                <DataTable
+                {ledgerQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
                   rows={releases.slice(0, 5)}
                   rowKey={(r) => r.releaseId}
                   columns={[
@@ -438,7 +434,7 @@ export function Wallets() {
                       key: "amount",
                       header: "Amount (₦)",
                       align: "right",
-                      render: (r) => r.amount.toLocaleString("en-NG"),
+                      render: (r) => escrowNumber(r.amount),
                     },
                     {
                       key: "releasedOn",
@@ -464,7 +460,7 @@ export function Wallets() {
                       render: (r) => <Badge>{r.status}</Badge>,
                     },
                   ]}
-                />
+                />)}
               </SectionCard>
             </div>
           )}
@@ -515,7 +511,7 @@ export function Wallets() {
                   key: "balance",
                   header: "Balance (₦)",
                   align: "right",
-                  render: (r) => <b>{r.balance.toLocaleString("en-NG")}</b>,
+                  render: (r) => <b>{escrowNumber(r.balance)}</b>,
                 },
                 {
                   key: "status",
@@ -527,7 +523,7 @@ export function Wallets() {
           )}
 
           {tab === "Holds" && (
-            <DataTable
+            <>{registerQuery.isLoading ? <DriverTableLoading columns={9} label="Loading escrow records" /> : (<DataTable
               rows={holds}
               rowKey={(r) => r.holdId}
               columns={[
@@ -535,7 +531,7 @@ export function Wallets() {
                   key: "holdId",
                   header: "Hold ID",
                   render: (r) => (
-                    <Link to={`/escrow/${r.holdId}`} className="tk-mono">
+                    <Link to={r.detailUrl} className="tk-mono">
                       {r.holdId}
                     </Link>
                   ),
@@ -547,7 +543,7 @@ export function Wallets() {
                   key: "amount",
                   header: "Amount (₦)",
                   align: "right",
-                  render: (r) => r.amount.toLocaleString("en-NG"),
+                  render: (r) => escrowNumber(r.amount),
                 },
                 {
                   key: "heldOn",
@@ -576,18 +572,18 @@ export function Wallets() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => releaseEscrowHold(r.holdId)}
+                        disabled
                       >
                         Release
                       </Button>
                     ),
                 },
               ]}
-            />
+            />)}</>
           )}
 
           {tab === "Releases" && (
-            <DataTable
+            <>{ledgerQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
               rows={releases}
               rowKey={(r) => r.releaseId}
               columns={[
@@ -602,7 +598,7 @@ export function Wallets() {
                   key: "amount",
                   header: "Amount (₦)",
                   align: "right",
-                  render: (r) => r.amount.toLocaleString("en-NG"),
+                  render: (r) => escrowNumber(r.amount),
                 },
                 {
                   key: "releasedOn",
@@ -626,18 +622,18 @@ export function Wallets() {
                   render: (r) => <Badge>{r.status}</Badge>,
                 },
               ]}
-            />
+            />)}</>
           )}
 
           {tab === "Disputes" &&
-            (disputes.length === 0 ? (
+            (disputesQuery.currentData && !disputesQuery.error && !disputesQuery.isFetching && disputes.length === 0 ? (
               <EmptyState
                 icon="shield-check"
                 title="No open disputes"
                 description="All escrow disputes have been resolved."
               />
             ) : (
-              <DataTable
+              <>{disputesQuery.isLoading ? <DriverTableLoading columns={9} label="Loading escrow records" /> : (<DataTable
                 rows={disputes}
                 rowKey={(r) => r.id}
                 columns={[
@@ -657,7 +653,7 @@ export function Wallets() {
                     key: "amount",
                     header: "Amount (₦)",
                     align: "right",
-                    render: (r) => r.amount.toLocaleString("en-NG"),
+                    render: (r) => escrowNumber(r.amount),
                   },
                   { key: "reason", header: "Reason" },
                   { key: "opened", header: "Opened" },
@@ -687,18 +683,18 @@ export function Wallets() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => resolveDispute(r.id)}
+                          disabled
                         >
                           Resolve
                         </Button>
                       ),
                   },
                 ]}
-              />
+              />)}</>
             ))}
 
           {tab === "Transactions" && (
-            <DataTable
+            <>{ledgerQuery.isLoading ? <DriverTableLoading columns={6} label="Loading escrow records" /> : (<DataTable
               rows={tx}
               rowKey={(r) => r.id}
               columns={[
@@ -732,8 +728,8 @@ export function Wallets() {
                         color: r.pos ? "var(--tk-success)" : "var(--tk-danger)",
                       }}
                     >
-                      {r.pos ? "+" : "-"}
-                      {r.amount.toLocaleString("en-NG")}
+                      {r.amount == null ? "" : r.pos === true ? "+" : r.pos === false ? "-" : ""}
+                      {escrowNumber(r.amount)}
                     </span>
                   ),
                 },
@@ -748,7 +744,7 @@ export function Wallets() {
                   ),
                 },
               ]}
-            />
+            />)}</>
           )}
 
           {tab === "Escrow Rules" && (
@@ -760,7 +756,7 @@ export function Wallets() {
                   iconTint={r.iconTint}
                   title={r.name}
                   subtitle={r.description}
-                  value={r.value}
+                  value={rulesQuery.isLoading ? <Skeleton as="span" width={54} height={14} /> : r.value}
                 />
               ))}
             </div>
@@ -770,15 +766,15 @@ export function Wallets() {
             <div
               style={{ padding: "18px var(--tk-card-pad) var(--tk-card-pad)" }}
             >
-              <Timeline
+              {activityQuery.isLoading && canViewActivity ? <DriverTableLoading columns={3} label="Loading escrow activity" /> : <Timeline
                 items={escrowActivityLog.map((a) => ({
                   title: a.text,
                   description: `by ${a.actor}`,
                   time: a.time,
-                  state: "done",
+                  state: a.state,
                   icon: "check",
                 }))}
-              />
+              />}
             </div>
           )}
         </SectionCard>
@@ -833,22 +829,22 @@ export function Wallets() {
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <FlowBox
                 label="Funds Held"
-                value={`₦${(escrowWeeklyActivity.fundsHeld / 1000000).toFixed(2)}M`}
-                caption={`${escrowWeeklyActivity.fundsHeldTx} transactions`}
+                value={escrowMillions(escrowWeeklyActivity.fundsHeld)}
+                caption={escrowCount(escrowWeeklyActivity.fundsHeldTx, "transactions")}
                 color="var(--tk-warning)"
               />
               <Icon name="arrow-right" size={16} color="var(--tk-ink-300)" />
               <FlowBox
                 label="Funds Released"
-                value={`₦${(escrowWeeklyActivity.fundsReleased / 1000000).toFixed(2)}M`}
-                caption={`${escrowWeeklyActivity.fundsReleasedTx} transactions`}
+                value={escrowMillions(escrowWeeklyActivity.fundsReleased)}
+                caption={escrowCount(escrowWeeklyActivity.fundsReleasedTx, "transactions")}
                 color="var(--tk-success)"
               />
               <Icon name="arrow-right" size={16} color="var(--tk-ink-300)" />
               <FlowBox
                 label="Settlements Made"
-                value={`₦${(escrowWeeklyActivity.settlementsMade / 1000000).toFixed(2)}M`}
-                caption={`${escrowWeeklyActivity.settlementsCount} settlements`}
+                value={escrowMillions(escrowWeeklyActivity.settlementsMade)}
+                caption={escrowCount(escrowWeeklyActivity.settlementsCount, "settlements")}
                 color="var(--tk-blue)"
               />
             </div>
@@ -893,8 +889,7 @@ export function Wallets() {
               Cancel
             </Button>
             <Button
-              disabled={busy || !Number(amount) || Number(amount) <= 0}
-              onClick={handleAddFunds}
+              disabled
             >
               {busy ? "Processing…" : "Add Funds"}
             </Button>

@@ -24,10 +24,13 @@ import {
   DropdownMenu,
   Icon,
   EmptyState,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { feeSummary, feeDistribution } from "../mock/fixtures/fees.js";
-import { formatNaira } from "../mock/format.js";
+import {
+  useGetAdminFeeRevenueQuery, emptyFeeSummary,
+  unavailableFeeCatalog, unavailableFeeDistribution as feeDistribution,
+  feeMoney as formatNaira, feeMillions,
+} from '../store/features/fees/feesApi.js';
 
 const TABS = [
   "Fee Rules",
@@ -105,7 +108,10 @@ function FilterButton({ label, value, options, active, onChange }) {
 
 export function FeesCommission() {
   const navigate = useNavigate();
-  const rules = useCollection("feeRules") || [];
+  const revenueQuery = useGetAdminFeeRevenueQuery();
+  const feeSummary = revenueQuery.error ? emptyFeeSummary : revenueQuery.currentData || emptyFeeSummary;
+  const rules = unavailableFeeCatalog.rules || [];
+  const revenueLoading = revenueQuery.isLoading || (revenueQuery.isFetching && !revenueQuery.currentData);
   const [tab, setTab] = useState("Fee Rules");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("All Status");
@@ -139,7 +145,7 @@ export function FeesCommission() {
         description="Configure platform fees, commissions and deductions."
         actions={
           <>
-            <Button icon="plus">Add Fee Rule</Button>
+            <Button icon="plus" disabled>Add Fee Rule</Button>
             <span style={{ position: "relative" }}>
               <Button
                 variant="outline"
@@ -216,7 +222,7 @@ export function FeesCommission() {
           icon="wallet"
           tint="green"
           label="Total Revenue (This Month)"
-          value={formatNaira(feeSummary.totalRevenue)}
+          value={revenueLoading ? <Skeleton as="span" width={96} height={23} /> : formatNaira(feeSummary.totalRevenue)}
           delta={feeSummary.totalRevenueDelta}
           caption="vs last month"
         />
@@ -333,7 +339,7 @@ export function FeesCommission() {
                 >
                   Fee Rules{" "}
                   <span style={{ color: "var(--tk-ink-400)", fontWeight: 500 }}>
-                    ({filtered.length})
+                    ({unavailableFeeCatalog.total ?? "—"})
                   </span>
                 </span>
               </div>
@@ -449,9 +455,9 @@ export function FeesCommission() {
               <Pagination
                 page={page}
                 pageSize={PAGE_SIZE}
-                total={filtered.length}
+                total={unavailableFeeCatalog.total ?? undefined}
                 pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-                onPage={setPage}
+                onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))))}
                 onPageSize={() => {}}
               />
             </>
@@ -519,9 +525,9 @@ export function FeesCommission() {
               <DonutChart
                 size={160}
                 thickness={16}
-                centerValue={`₦${(feeSummary.totalPlatformFees / 1000000).toFixed(2)}M`}
+                centerValue={feeMillions(feeSummary.totalPlatformFees)}
                 centerLabel="Total Fees"
-                data={feeDistribution.map((d) => ({
+                data={feeDistribution.filter((d) => Number.isFinite(d.value)).map((d) => ({
                   label: d.label,
                   value: d.value,
                   color: d.color,
@@ -532,7 +538,7 @@ export function FeesCommission() {
                 items={feeDistribution.map((d) => ({
                   label: d.label,
                   value: d.value,
-                  display: `${d.value}% (₦${(d.amount / 1000000).toFixed(2)}M)`,
+                  display: `${d.value == null ? "—" : `${d.value}%`} (${feeMillions(d.amount)})`,
                   color: d.color,
                 }))}
                 showShare={false}

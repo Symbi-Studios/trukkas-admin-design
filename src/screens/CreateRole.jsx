@@ -6,12 +6,11 @@ import {
   PageHeader, Button, SectionCard, TextField, Select, Textarea, ColorSwatchPicker, ChoiceCard,
   Switch, SearchField, PermissionRow, Banner,
 } from '../ds.js';
-import { ROLE_MODULE_MATRIX, ROLE_SCOPES } from '../mock/fixtures/roles.js';
-import { createRole } from '../mock/api.js';
+import { ROLE_MODULE_MATRIX, ROLE_SCOPES } from '../store/features/roles/rolesConfig.js';
+import { ROLE_CAPABILITIES } from '../store/features/roles/rolesApi.js';
 
 const ROLE_TYPES = ['System', 'Custom'];
 const ICONS = ['Shield', 'Shield Check', 'Users', 'Key', 'Eye', 'Wallet', 'User'];
-const ICON_NAME = { Shield: 'shield', 'Shield Check': 'shield-check', Users: 'users-round', Key: 'key-round', Eye: 'eye', Wallet: 'wallet', User: 'user' };
 
 function initialLevels() {
   return Object.fromEntries(ROLE_MODULE_MATRIX.map((m) => [m.key, m.level]));
@@ -30,26 +29,14 @@ export function CreateRole() {
   const [require2fa, setRequire2fa] = useState(false);
   const [levels, setLevels] = useState(initialLevels);
   const [permQ, setPermQ] = useState('');
-  const [saving, setSaving] = useState(false);
+  const saving = false;
 
   const visibleModules = useMemo(() => (
     !permQ ? ROLE_MODULE_MATRIX : ROLE_MODULE_MATRIX.filter((m) => m.label.toLowerCase().includes(permQ.toLowerCase()))
   ), [permQ]);
 
-  const grantedCount = Object.values(levels).filter((l) => l !== 'none').length;
-
   function setAll(level) {
     setLevels(Object.fromEntries(ROLE_MODULE_MATRIX.map((m) => [m.key, level])));
-  }
-
-  async function handleCreate() {
-    setSaving(true);
-    await createRole({
-      name, type: roleType || 'Custom', status, description, color, icon: ICON_NAME[icon],
-      permissionsCount: grantedCount,
-    });
-    setSaving(false);
-    navigate('/roles');
   }
 
   return (
@@ -58,8 +45,7 @@ export function CreateRole() {
         description="Define role details and set permissions to control access across the platform."
         actions={<>
           <Button variant="outline" onClick={() => navigate('/roles')}>Cancel</Button>
-          <Button icon="shield" disabled={saving || !name || !roleType}
-            onClick={handleCreate}>{saving ? 'Creating…' : 'Create Role'}</Button>
+          <Button icon="shield" disabled={!ROLE_CAPABILITIES.create || saving || !name.trim() || !roleType}>{saving ? 'Creating…' : 'Create Role'}</Button>
         </>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
@@ -146,7 +132,7 @@ export function CreateRole() {
             </div>
 
             <Banner tone="info" title="Full Access grants all current and future permissions in a module."
-              action={<Button variant="outline" size="sm" icon="eye">Preview Permissions</Button>}>
+              action={<Button variant="outline" size="sm" icon="eye" disabled={!ROLE_CAPABILITIES.preview}>Preview Permissions</Button>}>
               Custom Access allows you to select specific actions.
             </Banner>
           </div>

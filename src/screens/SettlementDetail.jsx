@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import {
-  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline,
+  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline, Skeleton,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { retrySettlement, approveSettlement } from '../mock/api.js';
-import { formatNaira } from '../mock/format.js';
+import {
+  useGetAdminJobSettlementsQuery, useGetAdminJobSettlementDetailQuery,
+  settlementMoney as formatNaira, downloadSettlementReceipt,
+} from '../store/features/settlements/settlementsApi.js';
 
 const STATUS_TONE = { Completed: 'success', Pending: 'warning', 'On Hold': 'info', Failed: 'danger' };
 
@@ -33,16 +35,26 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 
 export function SettlementDetail() {
   const { settlementId } = useParams();
+  const search = useSearchParams();
+  const userId = search.get('userId') || '', jobId = search.get('jobId') || '';
+  const direct = Boolean(userId && jobId);
   const navigate = useNavigate();
-  const rows = useCollection('settlements') || [];
-  const r = rows.find((x) => x.id === settlementId);
+  const legacyQuery = useGetAdminJobSettlementsQuery(undefined, { skip: direct || !settlementId });
+  const legacyRow = legacyQuery.error ? null : legacyQuery.currentData?.find((row) => row.id !== '—' && row.id === settlementId);
+  const detailQuery = useGetAdminJobSettlementDetailQuery({ userId: direct ? userId : legacyRow?.userId, jobId: direct ? jobId : legacyRow?.jobId }, { skip: !direct && !legacyRow });
+  const query = direct || legacyRow ? detailQuery : legacyQuery;
+  const row = query.error || (!direct && !legacyRow) ? null : detailQuery.currentData;
+  const loading = query.isLoading || (query.isFetching && !row) || (Boolean(legacyRow) && detailQuery.isUninitialized);
+  const r = row || { id:'—', payer:'—', payee:'—', payerType:'—', payeeType:'—', route:'—', relatedTo:'—', amount:null, type:'—', method:'—', status:'—', settledOn:'—', settledTime:'—' };
   const [menu, setMenu] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const value = (content) => loading ? <Skeleton as="span" width={100} height={16} /> : content;
+  const settledOn = r.settledOn === '—' ? '—' : r.settledOn + ' ' + r.settledTime;
 
-  if (!r) {
+  // Missing IDs in the documented DTO cannot establish that a legacy ID is absent.
+  if (!loading && query.error?.status === 404) {
     return (
       <Card>
-        <span className="tk-body">No settlement found with ID {settlementId}.</span>
+        <span className="tk-body">No settlement found with ID {settlementId || '—'}.</span>
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back to Settlements</Button>
         </div>
@@ -50,20 +62,10 @@ export function SettlementDetail() {
     );
   }
 
-  async function handlePrimary() {
-    setBusy(true);
-    if (r.status === 'Failed') await retrySettlement(r.id);
-    else await approveSettlement(r.id);
-    setBusy(false);
-  }
-
-  const timeline = [
-    { title: 'Job delivered & confirmed', description: r.relatedTo, state: 'done', icon: 'check' },
-    { title: 'Settlement initiated', description: `${r.payer} → ${r.payee}`, state: 'done', icon: 'coins' },
-    { title: r.status === 'Failed' ? 'Settlement failed' : r.status === 'On Hold' ? 'Settlement on hold' : r.status === 'Pending' ? 'Awaiting approval' : 'Settlement completed',
-      description: r.status === 'Completed' ? `Paid via ${r.method}` : 'Pending admin action',
-      time: r.settledOn ? `${r.settledOn} ${r.settledTime}` : undefined,
-      state: r.status === 'Completed' ? 'done' : r.status === 'Failed' ? 'danger' : 'current', icon: r.status === 'Failed' ? 'x' : 'lock-open' },
+  const timeline = r.timeline || [
+    { title:'Job delivered & confirmed', description:'—', time:'—', state:'pending', icon:'check' },
+    { title:'Settlement initiated', description:'—', time:'—', state:'pending', icon:'coins' },
+    { title:'—', description:'—', time:'—', state:'pending', icon:'lock-open' },
   ];
 
   return (
@@ -73,8 +75,8 @@ export function SettlementDetail() {
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back</Button>
           {(r.status === 'Failed' || r.status === 'Pending' || r.status === 'On Hold') && (
-            <Button icon={r.status === 'Failed' ? 'rotate-ccw' : 'circle-check'} disabled={busy} onClick={handlePrimary}>
-              {busy ? 'Processing…' : r.status === 'Failed' ? 'Retry Settlement' : 'Approve & Settle'}
+            <Button icon={r.status === 'Failed' ? 'rotate-ccw' : 'circle-check'} disabled>
+              {r.status === 'Failed' ? 'Retry Settlement' : 'Approve & Settle'}
             </Button>
           )}
           <span style={{ position: 'relative' }}>
@@ -82,8 +84,8 @@ export function SettlementDetail() {
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Download Receipt', icon: 'file-text' },
-                  { label: 'View Related Job', icon: 'package' },
+                  { label: 'Download Receipt', icon: 'file-text', onClick: () => { if (row) downloadSettlementReceipt(row); setMenu(false); } },
+                  { label: 'View Related Job', icon: 'package', onClick: () => { if (row?.jobUrl) navigate(row.jobUrl); setMenu(false); } },
                 ]} />
               </span>
             )}
@@ -98,14 +100,14 @@ export function SettlementDetail() {
           </span>
           <div style={{ flex: 1, minWidth: 200, display: 'grid', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 className="tk-title" style={{ fontSize: 22 }}>{r.payer} → {r.payee}</h2>
-              <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
+              <h2 className="tk-title" style={{ fontSize: 22 }}>{value(`${r.payer} → ${r.payee}`)}</h2>
+              <Badge tone={STATUS_TONE[r.status] || 'neutral'}>{r.status}</Badge>
             </div>
-            <span className="tk-meta">{r.route} · {r.relatedTo}</span>
+            <span className="tk-meta">{value(`${r.route} · ${r.relatedTo}`)}</span>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="tk-meta">Amount</div>
-            <div style={{ font: '700 24px/30px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(r.amount)}</div>
+            <div style={{ font: '700 24px/30px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(formatNaira(r.amount))}</div>
           </div>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: '1px solid var(--tk-line)', paddingTop: 16 }}>
@@ -117,7 +119,7 @@ export function SettlementDetail() {
           ].map((f, i) => (
             <div key={f.label} style={{ flex: '1 1 150px', padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
               <div className="tk-meta" style={{ marginBottom: 4 }}>{f.label}</div>
-              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{f.value}</div>
+              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(f.value)}</div>
             </div>
           ))}
         </div>
@@ -125,24 +127,24 @@ export function SettlementDetail() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="Settlement Details">
-          <LabelValue label="Route" value={r.route} />
-          <LabelValue label="Payer" value={r.payer} />
-          <LabelValue label="Payer Type" value={r.payerType} />
-          <LabelValue label="Payee" value={r.payee} />
-          <LabelValue label="Payee Type" value={r.payeeType} />
-          <LabelValue label="Amount" value={formatNaira(r.amount)} />
-          <LabelValue label="Method" value={r.method} />
-          <LabelValue label="Status" value={<Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>} />
-          <LabelValue label="Settled On" value={r.settledOn ? `${r.settledOn} ${r.settledTime}` : '—'} />
+          <LabelValue label="Route" value={value(r.route)} />
+          <LabelValue label="Payer" value={value(r.payer)} />
+          <LabelValue label="Payer Type" value={value(r.payerType)} />
+          <LabelValue label="Payee" value={value(r.payee)} />
+          <LabelValue label="Payee Type" value={value(r.payeeType)} />
+          <LabelValue label="Amount" value={value(formatNaira(r.amount))} />
+          <LabelValue label="Method" value={value(r.method)} />
+          <LabelValue label="Status" value={<Badge tone={STATUS_TONE[r.status] || 'neutral'}>{r.status}</Badge>} />
+          <LabelValue label="Settled On" value={value(settledOn)} />
         </SectionCard>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
           <SectionCard title="Settlement Timeline">
-            <Timeline items={timeline} />
+            <Timeline items={timeline.map((item) => ({ ...item, title: value(item.title), description: value(item.description), time: value(item.time) }))} />
           </SectionCard>
           <SectionCard title="Parties" pad="none" style={{ padding: '4px var(--tk-card-pad) 8px' }}>
-            <Fact icon="arrow-up-right" iconTint="blue" label="Payer" value={`${r.payer} (${r.payerType})`} />
-            <Fact icon="arrow-down-left" iconTint="green" label="Payee" value={`${r.payee} (${r.payeeType})`} />
+            <Fact icon="arrow-up-right" iconTint="blue" label="Payer" value={value(`${r.payer} (${r.payerType})`)} />
+            <Fact icon="arrow-down-left" iconTint="green" label="Payee" value={value(`${r.payee} (${r.payeeType})`)} />
           </SectionCard>
         </div>
       </div>

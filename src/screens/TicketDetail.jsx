@@ -1,49 +1,139 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
+import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
-import { PageHeader, Button, Card, SectionCard, Badge, Avatar, Icon, Select, DropdownMenu, Modal, TextField, Textarea } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { updateTicket, replyToTicket } from '../mock/api.js';
+import { PageHeader, Button, Card, SectionCard, Badge, Avatar, Icon, Select, DropdownMenu, Modal, TextField, Skeleton } from '../ds.js';
+import {
+  useGetAdminSupportTicketDetailQuery, useGetAdminTicketAgentsQuery, useUpdateAdminSupportTicketMutation,
+  useUploadAdminTicketReplyAttachmentsMutation, useSendAdminTicketReplyMutation,
+  emptyTicket, ticketWithAgents, ticketCount, downloadTicketAttachment, TICKET_STATUS_CODES, TICKET_PRIORITY_CODES,
+} from '../store/features/tickets/ticketsApi.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import './Support.css';
 
-const STATUSES=['Open','In Progress','Pending','Resolved','Closed']; const PRIORITIES=['High','Medium','Low']; const CATEGORIES=['Trips & Jobs','Container Triangulation','Fleet Management','Finance','Live Tracking','Pricing','General']; const AGENTS=['Sarah Johnson','Sarah Wilson','Michael Brown','David Wilson','Trukkas Admin'];
+const STATUSES=['Open','In Progress','Pending','Resolved','Closed']; const PRIORITIES=['High','Medium','Low']; const CATEGORIES=['Trips & Jobs','Container Triangulation','Fleet Management','Finance','Live Tracking','Pricing','General'];
 
 function downloadText(name,text){const blob=new Blob([text],{type:'text/plain'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
-function Action({icon,label,hint,danger,onClick}){return <button className={'support-action'+(danger?' danger':'')} onClick={onClick}><span className="ico"><Icon name={icon} size={14}/></span><span><strong>{label}</strong><small>{hint}</small></span></button>}
+function Action({icon,label,hint,danger,onClick,disabled}){return <button className={'support-action'+(danger?' danger':'')} disabled={disabled} onClick={onClick}><span className="ico"><Icon name={icon} size={14}/></span><span><strong>{label}</strong><small>{hint}</small></span></button>}
 
 export function TicketDetail(){
-  const {ticketId}=useParams(); const navigate=useNavigate(); const tickets=useCollection('supportTickets')||[]; const ticket=tickets.find(t=>t.id===ticketId); const [tab,setTab]=useState('Reply'); const [reply,setReply]=useState(''); const [menu,setMenu]=useState(false); const [edit,setEdit]=useState(false); const [toast,setToast]=useState(''); const [draft,setDraft]=useState(null);
-  function notify(s){setToast(s);setTimeout(()=>setToast(''),1800)}
-  if(!ticket)return <Card><p>Ticket {ticketId} was not found.</p><Button variant="outline" icon="arrow-left" onClick={()=>navigate('/tickets')}>Back to Tickets</Button></Card>;
-  async function send(){if(!reply.trim())return;await replyToTicket(ticket.id,reply.trim(),tab==='Internal Note');setReply('');notify(tab==='Internal Note'?'Internal note added':'Reply sent')}
-  function openEdit(){setDraft({...ticket});setEdit(true)}
-  async function saveEdit(){await updateTicket(ticket.id,{subject:draft.subject,priority:draft.priority,category:draft.category,assignee:draft.assignee});setEdit(false);notify('Ticket updated')}
-  const update=(key,value)=>updateTicket(ticket.id,{[key]:value});
+  const route = useParams(), search = useSearchParams();
+  const ticketId = route.ticketId || search.get('ticketId') || '';
+  const navigate = useNavigate();
+  const admin = useSelector((state) => state.auth.admin);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const query = useGetAdminSupportTicketDetailQuery(ticketId, { skip: !authenticated || !ticketId, refetchOnMountOrArgChange: true });
+  const agentsQuery = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated || admin?.role !== 'SUPER_ADMIN' });
+  const agents = useMemo(() => {
+    const rows = authenticated && admin?.role === 'SUPER_ADMIN' && !agentsQuery.error ? [...(agentsQuery.currentData || [])] : [];
+    if (authenticated && admin?.id && admin?.name && !rows.some((agent) => agent.id === admin.id)) rows.push({ id: admin.id, name: admin.name });
+    return rows;
+  }, [authenticated, admin, agentsQuery.currentData, agentsQuery.error]);
+  const record = authenticated && !query.error ? query.currentData : undefined;
+  const ticket = ticketWithAgents(record || emptyTicket, agents);
+  const loading = authenticated && (query.isLoading || (query.isFetching && !record));
+  const value = (content) => loading ? <Skeleton as="span" width={100} height={14} /> : content;
+  const [tab,setTab]=useState('Reply');
+  const [replies,setReplies]=useState({ Reply: '', 'Internal Note': '' });
+  const reply = replies[tab];
+  const setReply = (content) => setReplies((previous) => ({ ...previous, [tab]: typeof content === 'function' ? content(previous[tab]) : content }));
+  const [menu,setMenu]=useState(false), [edit,setEdit]=useState(false), [toast,setToast]=useState(''), [draft,setDraft]=useState(null);
+  const [pending,setPending]=useState(false);
+  const lock = useRef(null), files = useRef([]), uploaded = useRef([]), fileInput = useRef(null), toastTimer = useRef(null), activeId = useRef(ticketId);
+  activeId.current = ticketId;
+  const [updateTicket] = useUpdateAdminSupportTicketMutation();
+  const [uploadAttachments] = useUploadAdminTicketReplyAttachmentsMutation();
+  const [sendReply] = useSendAdminTicketReplyMutation();
+  const busy = pending || !record;
+  const availableAgents = agents.filter((agent) => agent.isActive === true || agent.id === admin?.id);
+  const agentOptions = availableAgents.map((agent) => ({ value: agent.id, label: agent.name }));
+  if (ticket.assignedTo && !agentOptions.some((agent) => agent.value === ticket.assignedTo) && ticket.assignee !== '—') agentOptions.unshift({ value: ticket.assignedTo, label: ticket.assignee });
+  const assignedValue = (id) => agents.some((agent) => agent.id === id) ? id : '';
+  const nextAgent = availableAgents.find((agent) => agent.id !== ticket.assignedTo);
+  const changes = draft ? {
+    ...(draft.priority !== ticket.priority && TICKET_PRIORITY_CODES[draft.priority] ? { priority: TICKET_PRIORITY_CODES[draft.priority] } : {}),
+    ...(draft.assignedTo !== ticket.assignedTo && availableAgents.some((agent) => agent.id === draft.assignedTo) ? { assignedTo: draft.assignedTo } : {}),
+  } : {};
+  useEffect(() => {
+    lock.current = null; files.current = []; uploaded.current = [];
+    setPending(false); setReplies({ Reply: '', 'Internal Note': '' }); setTab('Reply'); setEdit(false); setDraft(null); setMenu(false); setToast('');
+    clearTimeout(toastTimer.current);
+  }, [ticketId]);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  function notify(message) { clearTimeout(toastTimer.current); setToast(message); toastTimer.current = setTimeout(() => setToast(''), 3000); }
+  async function update(key, selected) {
+    const code = key === 'status' ? TICKET_STATUS_CODES[selected] : key === 'priority' ? TICKET_PRIORITY_CODES[selected] : selected;
+    if (!code) { notify('This status is not supported by the ticket API.'); return false; }
+    return saveChanges({ [key === 'assignee' ? 'assignedTo' : key]: code });
+  }
+  async function saveChanges(body) {
+    if (busy || lock.current || !Object.keys(body).length) return false;
+    const operation = Symbol(), id = ticketId;
+    lock.current = operation; setPending(true);
+    try {
+      await updateTicket({ id, changes: body }).unwrap();
+      if (id !== activeId.current) return false;
+      notify('Ticket updated'); return true;
+    } catch (error) { if (id === activeId.current) notify(getApiErrorMessage(error)); return false; }
+    finally { if (lock.current === operation) { lock.current = null; setPending(false); } }
+  }
+  async function send() {
+    if (tab !== 'Reply' || !reply.trim() || busy || lock.current) return;
+    const operation = Symbol(), id = ticketId, content = reply.trim();
+    lock.current = operation; setPending(true);
+    try {
+      let urls = uploaded.current;
+      if (files.current.length && !urls.length) {
+        urls = await uploadAttachments({ id, files: files.current }).unwrap();
+        if (id !== activeId.current) return;
+        uploaded.current = urls;
+      }
+      await sendReply({ id, content, attachmentUrls: urls }).unwrap();
+      if (id !== activeId.current) return;
+      setReplies((previous) => ({ ...previous, Reply: '' })); files.current = []; uploaded.current = [];
+      notify('Reply sent');
+    } catch (error) { if (id === activeId.current) notify(getApiErrorMessage(error)); }
+    finally { if (lock.current === operation) { lock.current = null; setPending(false); } }
+  }
+  function chooseFiles(event) {
+    const selected = Array.from(event.target.files || []); event.target.value = '';
+    if (!selected.length || busy || tab !== 'Reply') return;
+    if (selected.length > 5 || selected.some((file) => !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) || file.size > 10 * 1024 * 1024 || file.size === 0)) {
+      notify('Choose 1–5 JPEG, PNG, WebP or PDF files, up to 10 MB each.'); return;
+    }
+    files.current = selected; uploaded.current = [];
+    notify(`${selected.length} ${selected.length === 1 ? 'file' : 'files'} selected`);
+  }
+  function openEdit() { if (!record) return; setDraft({ ...ticket }); setEdit(true); }
+  async function saveEdit() { if (await saveChanges(changes)) setEdit(false); }
+  async function copyId() { try { await navigator.clipboard.writeText(ticket.id); notify('Ticket ID copied'); } catch { notify('Could not copy the ticket ID.'); } }
+  if (!loading && query.error) return <Card><p>{query.error.status === 404 ? `Ticket ${ticketId} was not found.` : getApiErrorMessage(query.error)}</p><Button variant="outline" icon="arrow-left" onClick={()=>navigate('/tickets')}>Back to Tickets</Button></Card>;
   return <div className="support-page">
-    <PageHeader crumbs={['Support System','Tickets',ticket.id]} title="Ticket Details" description="View and manage the details of this support ticket." actions={<><Button variant="outline" icon="arrow-left" onClick={()=>navigate('/tickets')}>Back to Tickets</Button><Button variant="outline" icon="pencil" onClick={openEdit}>Edit Ticket</Button><span style={{position:'relative'}}><Button variant="outline" icon="ellipsis" onClick={()=>setMenu(!menu)}>More Actions</Button>{menu&&<span style={{position:'absolute',right:0,top:44,zIndex:30}}><DropdownMenu width={220} items={[{label:'Print Ticket',icon:'printer',onClick:()=>window.print()},{label:'Download Ticket',icon:'download',onClick:()=>downloadText(ticket.id+'.txt',ticket.subject+'\n\n'+ticket.description)},{label:'Copy Ticket ID',icon:'copy',onClick:()=>{navigator.clipboard?.writeText(ticket.id);notify('Ticket ID copied')}},{divider:true},{label:'Close Ticket',icon:'circle-x',tone:'danger',onClick:()=>{update('status','Closed');setMenu(false)}}]}/></span>}</span></>} />
+    <PageHeader crumbs={['Support System','Tickets',ticket.id]} title="Ticket Details" description="View and manage the details of this support ticket." actions={<><Button variant="outline" icon="arrow-left" onClick={()=>navigate('/tickets')}>Back to Tickets</Button><Button variant="outline" icon="pencil" disabled={busy} onClick={openEdit}>Edit Ticket</Button><span style={{position:'relative'}}><Button variant="outline" icon="ellipsis" onClick={()=>setMenu(!menu)}>More Actions</Button>{menu&&<span style={{position:'absolute',right:0,top:44,zIndex:30}}><DropdownMenu width={220} items={[{label:'Print Ticket',icon:'printer',disabled:!record,onClick:()=>window.print()},{label:'Download Ticket',icon:'download',disabled:!record,onClick:()=>downloadText(ticket.id+'.txt',ticket.subject+'\n\n'+ticket.description)},{label:'Copy Ticket ID',icon:'copy',disabled:!record,onClick:copyId},{divider:true},{label:'Close Ticket',icon:'circle-x',tone:'danger',disabled:busy,onClick:()=>{update('status','Closed');setMenu(false)}}]}/></span>}</span></>} />
     <div className="ticket-grid">
       <div className="ticket-main">
         <Card className="ticket-head-card">
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}><Badge tone="info">{ticket.id}</Badge><Badge tone={ticket.status==='Open'?'success':'info'} dot>{ticket.status}</Badge></div>
-          <h2 style={{fontSize:19,margin:'14px 0 0',color:'var(--tk-ink-900)'}}>{ticket.subject}</h2>
-          <div className="ticket-meta"><span className="ticket-meta-item"><Avatar name={ticket.customer} size={28}/><span>{ticket.customer}<small style={{display:'block',color:'var(--tk-ink-400)'}}>({ticket.email})</small></span></span><span className="ticket-meta-item"><Icon name="tag" size={16}/><Badge>{ticket.category}</Badge></span><span className="ticket-meta-item"><Icon name="flag" size={16} color="var(--tk-danger)"/><Badge tone={ticket.priority==='High'?'danger':'warning'}>{ticket.priority}</Badge></span><span className="ticket-meta-item"><Icon name="calendar-days" size={16}/><span>{ticket.created}<small style={{display:'block',color:'var(--tk-ink-400)'}}>Created 2 days ago</small></span></span></div>
-          <h3 style={{fontSize:12,margin:'15px 0 4px'}}>Description</h3><div className="ticket-copy">{ticket.description}</div>
-          <h3 style={{fontSize:12,margin:'18px 0 8px'}}>Attachments ({ticket.attachments.length})</h3><div className="attachments">{ticket.attachments.map(a=><button className="attachment" key={a.name} onClick={()=>downloadText(a.name,'Demo attachment for '+ticket.id)}><span className="file-ico"><Icon name={a.icon} size={18}/></span><span><strong>{a.name}</strong><small>{a.size}</small></span></button>)}</div>
-          {!!ticket.attachments.length&&<div style={{textAlign:'right',marginTop:10}}><button className="support-link" style={{border:0,background:'none'}} onClick={()=>ticket.attachments.forEach(a=>downloadText(a.name,'Demo attachment for '+ticket.id))}><Icon name="download" size={13}/> Download All</button></div>}
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}><Badge tone="info">{value(ticket.id)}</Badge><Badge tone={ticket.status==='Open'?'success':'info'} dot>{value(ticket.status)}</Badge></div>
+          <h2 style={{fontSize:19,margin:'14px 0 0',color:'var(--tk-ink-900)'}}>{value(ticket.subject)}</h2>
+          <div className="ticket-meta"><span className="ticket-meta-item"><Avatar name={ticket.customer} size={28}/><span>{value(ticket.customer)}<small style={{display:'block',color:'var(--tk-ink-400)'}}>({value(ticket.email)})</small></span></span><span className="ticket-meta-item"><Icon name="tag" size={16}/><Badge>{value(ticket.category)}</Badge></span><span className="ticket-meta-item"><Icon name="flag" size={16} color="var(--tk-danger)"/><Badge tone={ticket.priority==='High'?'danger':'warning'}>{value(ticket.priority)}</Badge></span><span className="ticket-meta-item"><Icon name="calendar-days" size={16}/><span>{value(ticket.created)}<small style={{display:'block',color:'var(--tk-ink-400)'}}>{value(ticket.createdAge)}</small></span></span></div>
+          <h3 style={{fontSize:12,margin:'15px 0 4px'}}>Description</h3><div className="ticket-copy">{value(ticket.description)}</div>
+          <h3 style={{fontSize:12,margin:'18px 0 8px'}}>Attachments ({value(ticketCount(ticket.attachmentsKnown ? ticket.attachments.length : null))})</h3><div className="attachments">{loading ? value('—') : ticket.attachments.map(a=><button className="attachment" key={a.url} onClick={()=>downloadTicketAttachment(a)}><span className="file-ico"><Icon name={a.icon} size={18}/></span><span><strong>{a.name}</strong><small>{a.size}</small></span></button>)}{!loading && !ticket.attachmentsKnown && !ticket.attachments.length ? '—' : null}</div>
+          {!!ticket.attachments.length&&<div style={{textAlign:'right',marginTop:10}}><button className="support-link" style={{border:0,background:'none'}} onClick={()=>ticket.attachments.forEach(downloadTicketAttachment)}><Icon name="download" size={13}/> Download All</button></div>}
         </Card>
         <SectionCard title="Conversation" pad="none">
-          <div className="conversation">{ticket.messages.length?ticket.messages.map((m,i)=><div className="message" key={i}><Avatar name={m.author} size={30}/><div><div style={{display:'flex',gap:8,alignItems:'center'}}><strong style={{fontSize:12}}>{m.author}</strong><Badge tone={m.internal?'warning':'info'} style={{height:18,fontSize:9}}>{m.role}</Badge></div><div className="message-body">{m.body}</div></div><span className="message-time">{m.time}</span></div>):<div style={{padding:20,color:'var(--tk-ink-400)'}}>No conversation yet.</div>}</div>
-          <div className="reply-box"><div className="reply-tabs"><button className={tab==='Reply'?'active':''} onClick={()=>setTab('Reply')}>Reply</button><button className={tab==='Internal Note'?'active':''} onClick={()=>setTab('Internal Note')}>Internal Note</button></div><div className="reply-compose"><textarea aria-label={tab} placeholder={tab==='Reply'?'Type your reply...':'Add a private note for agents...'} value={reply} onChange={e=>setReply(e.target.value)}/><div className="reply-actions"><Button variant="ghost" icon="paperclip" aria-label="Attach file"/><Button variant="ghost" icon="smile" aria-label="Add emoji" onClick={()=>setReply(r=>r+' 🙂')}/><Button onClick={send}>{tab==='Reply'?'Send Reply':'Add Note'}</Button></div></div></div>
+          <div className="conversation">{loading ? <div style={{padding:20,color:'var(--tk-ink-400)'}}>{value('—')}</div> : ticket.messages.length?ticket.messages.map((m,i)=><div className="message" key={m.id || i}><Avatar name={m.author} size={30}/><div><div style={{display:'flex',gap:8,alignItems:'center'}}><strong style={{fontSize:12}}>{m.author}</strong><Badge tone={m.internal?'warning':'info'} style={{height:18,fontSize:9}}>{m.role}</Badge></div><div className="message-body">{m.body}</div></div><span className="message-time">{m.time}</span></div>):<div style={{padding:20,color:'var(--tk-ink-400)'}}>{ticket.messagesKnown ? 'No conversation yet.' : '—'}</div>}</div>
+          <div className="reply-box"><div className="reply-tabs"><button className={tab==='Reply'?'active':''} disabled={pending} onClick={()=>setTab('Reply')}>Reply</button><button className={tab==='Internal Note'?'active':''} disabled={pending} onClick={()=>setTab('Internal Note')}>Internal Note</button></div><div className="reply-compose"><textarea aria-label={tab} placeholder={tab==='Reply'?'Type your reply...':'Add a private note for agents...'} value={reply} disabled={busy} onChange={e=>setReply(e.target.value)}/><div className="reply-actions"><input ref={fileInput} type="file" hidden multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={chooseFiles}/><Button variant="ghost" icon="paperclip" aria-label="Attach file" disabled={busy || tab!=='Reply'} onClick={()=>fileInput.current?.click()}/><Button variant="ghost" icon="smile" aria-label="Add emoji" disabled={busy} onClick={()=>setReply(r=>r+' 🙂')}/><Button disabled={busy || tab!=='Reply' || !reply.trim()} onClick={send}>{tab==='Reply'?'Send Reply':'Add Note'}</Button></div></div></div>
         </SectionCard>
       </div>
       <div className="support-rail">
-        <SectionCard title="Ticket Information"><div className="info-list"><div className="info-row"><label>Ticket ID</label><span>{ticket.id}</span></div><div className="info-row"><label>Status</label><Select value={ticket.status} options={STATUSES} leadingDot="var(--tk-blue)" onChange={e=>update('status',e.target.value)}/></div><div className="info-row"><label>Priority</label><Select value={ticket.priority} options={PRIORITIES} leadingDot="var(--tk-danger)" onChange={e=>update('priority',e.target.value)}/></div><div className="info-row"><label>Category</label><Select value={ticket.category} options={CATEGORIES} onChange={e=>update('category',e.target.value)}/></div><div className="info-row"><label>Sub Category</label><span>{ticket.subcategory}</span></div><div className="info-row"><label>Assigned To</label><Select value={ticket.assignee} options={AGENTS} onChange={e=>update('assignee',e.target.value)}/></div><div className="info-row"><label>Source</label><span>{ticket.source}</span></div><div className="info-row"><label>Customer</label><span>{ticket.company}</span></div><div className="info-row"><label>Last Update</label><span>{ticket.updated}</span></div></div></SectionCard>
-        <SectionCard title="Status Timeline"><div className="timeline-item"><i style={{background:'var(--tk-success)'}}/><div><strong>Open</strong><small>{ticket.created}<br/>Ticket created</small></div></div><div className="timeline-item"><i/><div><strong>In Progress</strong><small>May 31, 2024, 11:05 AM<br/>Assigned to {ticket.assignee}</small></div></div><div className="timeline-item"><i style={{background:'var(--tk-neutral)'}}/><div><strong>—</strong><small>Pending your response</small></div></div></SectionCard>
-        <SectionCard title="Quick Actions"><Action icon="circle-dot" label="Change Status" hint="Update the current status" onClick={()=>update('status',ticket.status==='Open'?'In Progress':'Open')}/><Action icon="user-round-plus" label="Assign Ticket" hint="Assign to another agent" onClick={()=>update('assignee',ticket.assignee==='Sarah Johnson'?'Michael Brown':'Sarah Johnson')}/><Action icon="message-square" label="Add Internal Note" hint="Add private note for agents" onClick={()=>{setTab('Internal Note');document.querySelector('[aria-label="Internal Note"]')?.focus()}}/><Action icon="git-merge" label="Merge Ticket" hint="Merge with another ticket" onClick={()=>notify('Select another ticket to merge')}/><Action danger icon="trash-2" label="Close Ticket" hint="Close this ticket" onClick={()=>update('status','Closed')}/></SectionCard>
+        <SectionCard title="Ticket Information"><div className="info-list"><div className="info-row"><label>Ticket ID</label><span>{value(ticket.id)}</span></div><div className="info-row"><label>Status</label><Select aria-label="Status" value={STATUSES.includes(ticket.status) ? ticket.status : ''} placeholder={ticket.status} options={STATUSES} disabled={busy} leadingDot="var(--tk-blue)" onChange={e=>update('status',e.target.value)}/></div><div className="info-row"><label>Priority</label><Select aria-label="Priority" value={PRIORITIES.includes(ticket.priority) ? ticket.priority : ''} placeholder={ticket.priority} options={PRIORITIES} disabled={busy} leadingDot="var(--tk-danger)" onChange={e=>update('priority',e.target.value)}/></div><div className="info-row"><label>Category</label><Select value={CATEGORIES.includes(ticket.category) ? ticket.category : ''} placeholder={ticket.category} options={CATEGORIES} disabled/></div><div className="info-row"><label>Sub Category</label><span>{value(ticket.subcategory)}</span></div><div className="info-row"><label>Assigned To</label><Select aria-label="Assigned To" value={assignedValue(ticket.assignedTo)} placeholder={ticket.assignee} options={agentOptions} disabled={busy || !agents.length} onChange={e=>update('assignee',e.target.value)}/></div><div className="info-row"><label>Source</label><span>{value(ticket.source)}</span></div><div className="info-row"><label>Customer</label><span>{value(ticket.company)}</span></div><div className="info-row"><label>Last Update</label><span>{value(ticket.updated)}</span></div></div></SectionCard>
+        <SectionCard title="Status Timeline"><div className="timeline-item"><i style={{background:'var(--tk-success)'}}/><div><strong>{value('—')}</strong><small>{value(ticket.created)}<br/>Ticket created</small></div></div><div className="timeline-item"><i/><div><strong>{value('—')}</strong><small>{value('—')}<br/>{value('—')}</small></div></div><div className="timeline-item"><i style={{background:'var(--tk-neutral)'}}/><div><strong>{value('—')}</strong><small>{value('—')}</small></div></div></SectionCard>
+        <SectionCard title="Quick Actions"><Action icon="circle-dot" label="Change Status" hint="Update the current status" disabled={busy || !ticket.statusCode || ticket.status==='Open'} onClick={()=>update('status',ticket.status==='Open'?'In Progress':'Open')}/><Action icon="user-round-plus" label="Assign Ticket" hint="Assign to another agent" disabled={busy || !nextAgent} onClick={()=>update('assignee',nextAgent.id)}/><Action icon="message-square" label="Add Internal Note" hint="Add private note for agents" disabled/><Action icon="git-merge" label="Merge Ticket" hint="Merge with another ticket" disabled/><Action danger icon="trash-2" label="Close Ticket" hint="Close this ticket" disabled={busy} onClick={()=>update('status','Closed')}/></SectionCard>
       </div>
     </div>
-    <Modal open={edit} onClose={()=>setEdit(false)} title="Edit Ticket" width={560} footer={<><Button variant="outline" onClick={()=>setEdit(false)}>Cancel</Button><Button onClick={saveEdit}>Save Changes</Button></>}>{draft&&<div style={{display:'grid',gap:14}}><TextField label="Subject" value={draft.subject} onChange={e=>setDraft({...draft,subject:e.target.value})}/><Select label="Priority" value={draft.priority} options={PRIORITIES} onChange={e=>setDraft({...draft,priority:e.target.value})}/><Select label="Category" value={draft.category} options={CATEGORIES} onChange={e=>setDraft({...draft,category:e.target.value})}/><Select label="Assigned To" value={draft.assignee} options={AGENTS} onChange={e=>setDraft({...draft,assignee:e.target.value})}/></div>}</Modal>
+    <Modal open={edit} onClose={()=>{if(!pending)setEdit(false)}} title="Edit Ticket" width={560} footer={<><Button variant="outline" disabled={pending} onClick={()=>setEdit(false)}>Cancel</Button><Button disabled={busy || !Object.keys(changes).length} onClick={saveEdit}>Save Changes</Button></>}>{draft&&<div style={{display:'grid',gap:14}}><TextField label="Subject" value={draft.subject} readOnly/><Select label="Priority" value={PRIORITIES.includes(draft.priority) ? draft.priority : ''} placeholder={draft.priority} options={PRIORITIES} disabled={pending} onChange={e=>setDraft({...draft,priority:e.target.value})}/><Select label="Category" value={CATEGORIES.includes(draft.category) ? draft.category : ''} placeholder={draft.category} options={CATEGORIES} disabled/><Select label="Assigned To" value={assignedValue(draft.assignedTo)} placeholder={draft.assignee} options={agentOptions} disabled={pending || !agents.length} onChange={e=>setDraft({...draft,assignedTo:e.target.value})}/></div>}</Modal>
     {toast&&<div className="toast">{toast}</div>}
   </div>
 }

@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
 import { useNavigate, useParams } from '../router.js';
 import {
   PageHeader, Button, Card, SectionCard, Badge, Tag, Tabs, LabelValue, DataTable, DropdownMenu,
   Avatar, Icon, ProgressBar, StatusDot,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { userActivityFor } from '../mock/fixtures/users.js';
-import { deactivateUser, activateUser, lockUserAccount, resetUserPassword } from '../mock/api.js';
+import { useGetManagedUserProfileQuery, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
 
 const CONTACT_ROWS = [
   { key: 'email', icon: 'mail' },
@@ -28,16 +30,60 @@ function IconLine({ icon, children }) {
 
 export function UserDetail() {
   const { userId } = useParams();
+  const search = useSearchParams();
+  const id = search.get('id') || userId;
+  const source = search.get('source') || 'user';
+  const role = useSelector((state) => state.auth.admin?.role);
   const navigate = useNavigate();
-  const users = useCollection('users') || [];
-  const u = users.find((x) => x.id === userId);
+  const permitted = source !== 'admin' || role === 'SUPER_ADMIN';
+  const query = useGetManagedUserProfileQuery({ id, source }, { skip: !id || !permitted, refetchOnMountOrArgChange: true });
+  const u = permitted && !query.error ? query.currentData : null;
+  const [changeAccess, accessState] = useChangeManagedUserAccessMutation();
+  const [editAdmin, editState] = useUpdateManagedAdminMutation();
+  const submitting = useRef(false);
   const [tab, setTab] = useState('Overview');
   const [menu, setMenu] = useState(false);
+  const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available for this user through this control in the documented API.`); };
+  useEffect(() => { setTab('Overview'); setMenu(false); }, [id, source]);
+
+  async function updateAccess(operation) {
+    setMenu(false);
+    if (submitting.current || accessState.isLoading) return;
+    if (!u || u.source !== 'user' || u.statusCode !== (operation === 'suspend' ? 'ACTIVE' : 'SUSPENDED')) { unavailable('Changing access'); return; }
+    const reason = operation === 'suspend' ? window.prompt('Reason for suspending this user:') : null;
+    if (operation === 'suspend' && !reason?.trim()) return;
+    submitting.current = true;
+    try { const result = await changeAccess({ id: u.backendId, source: u.source, operation, reason }).unwrap(); window.alert(result.message); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { submitting.current = false; }
+  }
+
+  async function editUser(transferRole = false) {
+    setMenu(false);
+    if (submitting.current || editState.isLoading) return;
+    if (u?.source !== 'admin' || role !== 'SUPER_ADMIN') { unavailable(transferRole ? 'Transfer Role' : 'Edit User'); return; }
+    const value = transferRole ? window.prompt('Role: SUPER_ADMIN, OPS_ADMIN or FINANCE_ADMIN', u.roleCode)
+      : window.prompt('Full Name', u.name === '—' ? '' : u.name);
+    if (!value?.trim()) return;
+    const body = transferRole ? { role: value.trim() } : { name: value.trim() };
+    if ((!transferRole && body.name === u.name) || (transferRole && body.role === u.roleCode)) return;
+    submitting.current = true;
+    try { const result = await editAdmin({ id: u.backendId, ...body }).unwrap(); window.alert(result.message); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { submitting.current = false; }
+  }
+
+  const changeStatus = () => updateAccess(u?.statusCode === 'ACTIVE' ? 'suspend' : 'activate');
+  const viewActivity = () => { setMenu(false); setTab('Activity Log'); unavailable('View Activity Log'); };
+  const booleanLabel = (value) => value == null ? '—' : value ? 'Enabled' : 'Disabled';
+  const amountLabel = (value, unit) => value == null ? '—' : `${value} ${unit}`;
+
+  if (permitted && (query.isLoading || (query.isFetching && !query.currentData))) return <DriverDetailLoading />;
 
   if (!u) {
     return (
       <Card>
-        <span className="tk-body">No user found with ID {userId}.</span>
+        <span className="tk-body">{!permitted ? 'Only Super Admins can view admin accounts.' : query.error ? getApiErrorMessage(query.error) : `No user found with ID ${id || '—'}.`}</span>
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/users')}>Back to Users</Button>
         </div>
@@ -45,7 +91,7 @@ export function UserDetail() {
     );
   }
 
-  const activity = userActivityFor(u);
+  const activity = [];
 
   return (
     <>
@@ -53,29 +99,29 @@ export function UserDetail() {
         description="View detailed information about this user."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/users')}>Back to Users</Button>
-          <Button variant="outline" icon="pencil">Edit User</Button>
+          <Button variant="outline" icon="pencil" onClick={() => editUser()}>Edit User</Button>
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={260} items={[
-                  { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => { resetUserPassword(u.id); setMenu(false); } },
-                  { label: 'Force Logout', icon: 'log-out' },
-                  { label: 'Impersonate User', icon: 'user-round-cog' },
+                  { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => unavailable('Reset Password') },
+                  { label: 'Force Logout', icon: 'log-out', onClick: () => unavailable('Force Logout') },
+                  { label: 'Impersonate User', icon: 'user-round-cog', onClick: () => unavailable('Impersonate User') },
                   { divider: true },
                   { label: u.status === 'Active' ? 'Deactivate User' : 'Activate User', icon: 'user-x',
-                    onClick: () => { (u.status === 'Active' ? deactivateUser : activateUser)(u.id); setMenu(false); } },
-                  { label: 'Lock User Account', icon: 'lock', onClick: () => { lockUserAccount(u.id); setMenu(false); } },
-                  { label: 'Update Permissions', icon: 'shield' },
-                  { label: 'Transfer Role', icon: 'repeat' },
+                    onClick: changeStatus },
+                  { label: 'Lock User Account', icon: 'lock', onClick: () => unavailable('Lock User Account') },
+                  { label: 'Update Permissions', icon: 'shield', onClick: () => unavailable('Update Permissions') },
+                  { label: 'Transfer Role', icon: 'repeat', onClick: () => editUser(true) },
                   { divider: true },
-                  { label: 'View Activity Log', icon: 'history' },
-                  { label: 'Download User Report', icon: 'file-down' },
-                  { label: 'Send Email', icon: 'mail' },
-                  { label: 'Send SMS', icon: 'message-square' },
-                  { label: 'Export User Data', icon: 'download' },
+                  { label: 'View Activity Log', icon: 'history', onClick: viewActivity },
+                  { label: 'Download User Report', icon: 'file-down', onClick: () => unavailable('Download User Report') },
+                  { label: 'Send Email', icon: 'mail', onClick: () => unavailable('Send Email') },
+                  { label: 'Send SMS', icon: 'message-square', onClick: () => unavailable('Send SMS') },
+                  { label: 'Export User Data', icon: 'download', onClick: () => unavailable('Export User Data') },
                   { divider: true },
-                  { label: 'Delete User', icon: 'trash-2', tone: 'danger' },
+                  { label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => unavailable('Delete User') },
                 ]} />
               </span>
             )}
@@ -87,7 +133,7 @@ export function UserDetail() {
           <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
             <div style={{ display: 'grid', justifyItems: 'center', gap: 8 }}>
               <Avatar name={u.name} size={72} />
-              <StatusDot tone={u.online ? 'success' : 'neutral'} label={u.online ? 'Online' : 'Offline'} />
+              <StatusDot tone={u.online ? 'success' : 'neutral'} label={u.online == null ? '—' : u.online ? 'Online' : 'Offline'} />
             </div>
             <div style={{ flex: '1 1 220px', display: 'grid', gap: 8, minWidth: 220 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -101,7 +147,7 @@ export function UserDetail() {
             </div>
             <div style={{ flex: '1 1 260px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px',
                          borderLeft: '1px solid var(--tk-line)', paddingLeft: 20, minWidth: 240, alignContent: 'start' }}>
-              <LabelValue layout="stack" label="User ID" value={u.id} />
+              <LabelValue layout="stack" label="User ID" value={u.backendId} />
               <LabelValue layout="stack" label="Last Active" value={u.lastActive} />
               <LabelValue layout="stack" label="Joined On" value={u.joinedOn} style={{ marginTop: 12 }} />
               <LabelValue layout="stack" label="Password Last Changed" value={u.passwordLastChanged} style={{ marginTop: 12 }} />
@@ -118,7 +164,7 @@ export function UserDetail() {
       </div>
 
       <Card pad="none">
-        <Tabs value={tab} onChange={setTab} style={{ padding: '0 var(--tk-card-pad)' }}
+        <Tabs value={tab} onChange={(value) => { setTab(value); if (value !== 'Overview') unavailable(value); }} style={{ padding: '0 var(--tk-card-pad)' }}
           items={['Overview', 'Roles & Permissions', 'Activity Log', 'Sessions', 'Documents', 'Security', 'Notifications']} />
       </Card>
 
@@ -133,37 +179,37 @@ export function UserDetail() {
           <LabelValue label="Status" value={<span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Badge dot>{u.status}</Badge>
             <Button variant="danger" size="sm"
-              onClick={() => (u.status === 'Active' ? deactivateUser(u.id) : activateUser(u.id))}>
+              onClick={changeStatus}>
               {u.status === 'Active' ? 'Deactivate User' : 'Activate User'}
             </Button>
           </span>} />
         </SectionCard>
 
         <SectionCard title="Account Summary">
-          <LabelValue label="Total Logins" value={`${u.totalLogins} times`} />
-          <LabelValue label="Failed Login Attempts" value={`${u.failedLogins} times`} />
-          <LabelValue label="Active Sessions" value={`${u.activeSessions} session${u.activeSessions === 1 ? '' : 's'}`} />
+          <LabelValue label="Total Logins" value={amountLabel(u.totalLogins, 'times')} />
+          <LabelValue label="Failed Login Attempts" value={amountLabel(u.failedLogins, 'times')} />
+          <LabelValue label="Active Sessions" value={amountLabel(u.activeSessions, `session${u.activeSessions === 1 ? '' : 's'}`)} />
           <LabelValue label="Last Login" value={<span style={{ display: 'grid', gap: 2, textAlign: 'right' }}>
             <span>{u.lastActive}</span><span className="tk-meta">{u.lastLoginDetail}</span>
           </span>} />
           <LabelValue label="Account Created" value={u.accountCreated} />
-          <LabelValue label="Email Notifications" value={<Badge dot tone={u.loginNotifications ? 'success' : 'neutral'}>{u.loginNotifications ? 'Enabled' : 'Disabled'}</Badge>} />
+          <LabelValue label="Email Notifications" value={<Badge dot tone={u.emailNotifications ? 'success' : 'neutral'}>{booleanLabel(u.emailNotifications)}</Badge>} />
         </SectionCard>
 
         <SectionCard title="Security Overview">
-          <LabelValue label="Two-Factor Authentication" value={<Tag tone={u.twoFactor ? 'success' : 'neutral'}>{u.twoFactor ? 'Enabled' : 'Disabled'}</Tag>} />
+          <LabelValue label="Two-Factor Authentication" value={<Tag tone={u.twoFactor ? 'success' : 'neutral'}>{booleanLabel(u.twoFactor)}</Tag>} />
           <div style={{ padding: '9px 0' }}>
             <ProgressBar value={u.passwordStrengthPct}
-              color={u.passwordStrengthPct >= 75 ? 'var(--tk-success)' : u.passwordStrengthPct >= 45 ? 'var(--tk-warning)' : 'var(--tk-danger)'}
+              color={u.passwordStrengthPct == null ? 'var(--tk-viz-track)' : u.passwordStrengthPct >= 75 ? 'var(--tk-success)' : u.passwordStrengthPct >= 45 ? 'var(--tk-warning)' : 'var(--tk-danger)'}
               label="Password Strength" caption={u.passwordStrength} />
           </div>
           <LabelValue label="Password Expires" value={u.passwordExpires} />
-          <LabelValue label="Login Notifications" value={<Tag tone={u.loginNotifications ? 'success' : 'neutral'}>{u.loginNotifications ? 'Enabled' : 'Disabled'}</Tag>} />
+          <LabelValue label="Login Notifications" value={<Tag tone={u.loginNotifications ? 'success' : 'neutral'}>{booleanLabel(u.loginNotifications)}</Tag>} />
         </SectionCard>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <SectionCard title="Recent Activity" pad="none" footer={<a href="#">View All Activity →</a>}>
+        <SectionCard title="Recent Activity" pad="none" footer={<a href="#" onClick={(event) => { event.preventDefault(); viewActivity(); }}>View All Activity →</a>}>
           <DataTable rows={activity} rowKey={(r, i) => i}
             columns={[
               { key: 'text', header: 'Activity', render: (r) => (
@@ -176,19 +222,20 @@ export function UserDetail() {
               { key: 'location', header: 'Location' },
               { key: 'time', header: 'Date & Time' },
             ]} />
+          {'—'}
         </SectionCard>
 
         <SectionCard title="Quick Actions">
           <div style={{ display: 'grid', gap: 4 }}>
             {[
-              { icon: 'rotate-ccw', label: 'Reset Password', hint: 'Send password reset link to user', onClick: () => resetUserPassword(u.id) },
+              { icon: 'rotate-ccw', label: 'Reset Password', hint: 'Send password reset link to user', onClick: () => unavailable('Reset Password') },
               { icon: 'log-out', label: 'Force Logout', hint: 'Sign out user from all active sessions' },
               { icon: 'shield', label: 'Update Permissions', hint: 'Modify user roles and permissions' },
               { icon: 'history', label: 'View Activity Log', hint: 'See all user actions and events' },
               { icon: 'user-x', label: 'Deactivate User', hint: 'Temporarily disable user access',
-                onClick: () => deactivateUser(u.id), danger: true },
+                onClick: () => updateAccess('suspend'), danger: true },
             ].map((a) => (
-              <button key={a.label} type="button" onClick={a.onClick}
+              <button key={a.label} type="button" onClick={a.onClick || (a.label === 'View Activity Log' ? viewActivity : () => unavailable(a.label))}
                 style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 8px', border: 0,
                          background: 'transparent', cursor: 'pointer', textAlign: 'left', borderRadius: 'var(--tk-r-sm)' }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tk-surface-sunk)'}

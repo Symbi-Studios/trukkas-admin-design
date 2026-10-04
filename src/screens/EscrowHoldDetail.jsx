@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import {
-  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline,
+  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline, Skeleton,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { releaseEscrowHold } from '../mock/api.js';
-import { formatNaira } from '../mock/format.js';
+import {
+  useGetAdminEscrowRegisterQuery, useGetAdminEscrowTripQuery, useGetAdminEscrowLedgerQuery,
+  escrowMoney as formatNaira, escrowReleasesFromTransactions,
+} from '../store/features/wallets/walletsApi.js';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
   const TINT = {
@@ -30,15 +32,31 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 }
 
 export function EscrowHoldDetail() {
-  const { holdId } = useParams();
+  const params = useParams(), search = useSearchParams();
+  const holdId = search.get('id') || params.holdId || '';
+  const tripId = search.get('tripId') || '';
   const navigate = useNavigate();
-  const holds = useCollection('escrowHolds') || [];
-  const releases = useCollection('escrowReleases') || [];
-  const r = holds.find((x) => x.holdId === holdId);
   const [menu, setMenu] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const busy = false;
+  const registerQuery = useGetAdminEscrowRegisterQuery(undefined, { skip: !holdId || Boolean(tripId) });
+  const tripQuery = useGetAdminEscrowTripQuery({ tripId, holdId }, { skip: !holdId || !tripId });
+  const selectedQuery = tripId ? tripQuery : registerQuery;
+  const hold = selectedQuery.error ? null : tripId ? tripQuery.currentData : registerQuery.currentData?.find((row) => row.holdId === holdId);
+  const r = hold || { holdId: holdId || '—', jobId: '—', customer: '—', route: '—', amount: null, heldOn: '—', heldTime: '—', releaseBy: '—', status: '—' };
+  const ledgerQuery = useGetAdminEscrowLedgerQuery(undefined, { skip: !hold });
+  const releases = escrowReleasesFromTransactions(ledgerQuery.error ? [] : ledgerQuery.currentData || []);
+  const release = releases.filter((row) => row.jobId === hold?.jobId || row.jobId === hold?.jobApiId).sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))[0];
+  const released = ['RELEASED', 'COMPLETED'].includes(r.statusCode);
+  const loading = selectedQuery.isLoading || (selectedQuery.isFetching && !hold);
+  const value = (content) => loading ? <Skeleton as="span" width={100} height={16} /> : content;
+  const heldOn = r.heldOn === '—' && r.heldTime === '—' ? '—' : `${r.heldOn} ${r.heldTime}`;
+  const timeline = [
+    { title: 'Escrow hold created', description: hold ? `Held for ${r.customer} · ${formatNaira(r.amount)}` : '—', time: heldOn, state: hold ? 'done' : 'pending', icon: 'lock' },
+    { title: 'Awaiting delivery confirmation', description: r.releaseBy === '—' ? '—' : `Scheduled release by ${r.releaseBy}`, state: released ? 'done' : r.statusCode === 'PENDING_RELEASE' ? 'current' : 'pending', icon: 'clock' },
+    { title: 'Funds released', description: release ? `Released to ${release.releasedTo}` : '—', time: release ? `${release.releasedOn} ${release.releasedTime}` : '—', state: released ? 'done' : 'pending', icon: 'lock-open' },
+  ];
 
-  if (!r) {
+  if (!hold && !loading && selectedQuery.error?.status === 404) {
     return (
       <Card>
         <span className="tk-body">No escrow hold found with ID {holdId}.</span>
@@ -49,19 +67,13 @@ export function EscrowHoldDetail() {
     );
   }
 
-  const release = releases.find((rel) => rel.jobId === r.jobId);
-
-  async function handleRelease() {
-    setBusy(true);
-    await releaseEscrowHold(r.holdId);
-    setBusy(false);
+  function exportDetails() {
+    if (!hold) return;
+    const fields = [['Hold ID', r.holdId], ['Job / Trip ID', r.jobId], ['Customer', r.customer], ['Route', r.route], ['Amount', formatNaira(r.amount)], ['Status', r.status], ['Held On', heldOn], ['Scheduled Release', r.releaseBy]];
+    const csv = [['Field', 'Value'], ...fields].map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'escrow-hold.csv'; anchor.click(); URL.revokeObjectURL(url); setMenu(false);
   }
-
-  const timeline = [
-    { title: 'Escrow hold created', description: `Held for ${r.customer} · ${formatNaira(r.amount)}`, time: `${r.heldOn} ${r.heldTime}`, state: 'done', icon: 'lock' },
-    { title: 'Awaiting delivery confirmation', description: `Scheduled release by ${r.releaseBy}`, state: r.status === 'Released' ? 'done' : r.status === 'Pending Release' ? 'current' : 'pending', icon: 'clock' },
-    { title: 'Funds released', description: release ? `Released to ${release.releasedTo}` : 'Not yet released', time: release ? `${release.releasedOn} ${release.releasedTime}` : undefined, state: r.status === 'Released' ? 'done' : 'pending', icon: 'lock-open' },
-  ];
 
   return (
     <>
@@ -69,8 +81,8 @@ export function EscrowHoldDetail() {
         description="Detailed view of this escrow hold."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/wallets')}>Back</Button>
-          {r.status !== 'Released' && (
-            <Button icon="lock-open" disabled={busy} onClick={handleRelease}>{busy ? 'Releasing…' : 'Release Funds'}</Button>
+          {!released && (
+            <Button icon="lock-open" disabled>{busy ? 'Releasing…' : 'Release Funds'}</Button>
           )}
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
@@ -79,7 +91,7 @@ export function EscrowHoldDetail() {
                 <DropdownMenu width={220} items={[
                   { label: 'Open a Dispute', icon: 'triangle-alert', tone: 'danger' },
                   { divider: true },
-                  { label: 'Export Details', icon: 'file-text' },
+                  { label: 'Export Details', icon: 'file-text', onClick: exportDetails },
                 ]} />
               </span>
             )}
@@ -94,26 +106,26 @@ export function EscrowHoldDetail() {
           </span>
           <div style={{ flex: 1, minWidth: 200, display: 'grid', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 className="tk-title" style={{ fontSize: 22 }}>{r.customer}</h2>
+              <h2 className="tk-title" style={{ fontSize: 22 }}>{value(r.customer)}</h2>
               <Badge>{r.status}</Badge>
             </div>
-            <span className="tk-meta">{r.route}</span>
+            <span className="tk-meta">{value(r.route)}</span>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="tk-meta">Held Amount</div>
-            <div style={{ font: '700 24px/30px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(r.amount)}</div>
+            <div style={{ font: '700 24px/30px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(formatNaira(r.amount))}</div>
           </div>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: '1px solid var(--tk-line)', paddingTop: 16 }}>
           {[
             { label: 'Hold ID', value: r.holdId },
             { label: 'Job / Trip ID', value: r.jobId },
-            { label: 'Held On', value: `${r.heldOn} ${r.heldTime}` },
+            { label: 'Held On', value: heldOn },
             { label: 'Release By', value: r.releaseBy },
           ].map((f, i) => (
             <div key={f.label} style={{ flex: '1 1 150px', padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
               <div className="tk-meta" style={{ marginBottom: 4 }}>{f.label}</div>
-              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{f.value}</div>
+              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(f.value)}</div>
             </div>
           ))}
         </div>
@@ -121,24 +133,24 @@ export function EscrowHoldDetail() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="Hold Details">
-          <LabelValue label="Customer" value={r.customer} />
-          <LabelValue label="Route" value={r.route} />
-          <LabelValue label="Job / Trip ID" value={r.jobId} />
-          <LabelValue label="Amount" value={formatNaira(r.amount)} />
+          <LabelValue label="Customer" value={value(r.customer)} />
+          <LabelValue label="Route" value={value(r.route)} />
+          <LabelValue label="Job / Trip ID" value={value(r.jobId)} />
+          <LabelValue label="Amount" value={value(formatNaira(r.amount))} />
           <LabelValue label="Status" value={<Badge>{r.status}</Badge>} />
-          <LabelValue label="Held On" value={`${r.heldOn} ${r.heldTime}`} />
-          <LabelValue label="Scheduled Release" value={r.releaseBy} />
+          <LabelValue label="Held On" value={value(heldOn)} />
+          <LabelValue label="Scheduled Release" value={value(r.releaseBy)} />
         </SectionCard>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
           <SectionCard title="Release Timeline">
-            <Timeline items={timeline} />
+            <Timeline items={timeline.map((item) => ({ ...item, description: value(item.description), time: value(item.time) }))} />
           </SectionCard>
           {release && (
             <SectionCard title="Release Record" pad="none" style={{ padding: '4px var(--tk-card-pad) 8px' }}>
               <Fact icon="hash" iconTint="blue" label="Release ID" value={release.releaseId} />
               <Fact icon="user" iconTint="green" label="Released To" value={release.releasedTo} />
-              <Fact icon="file-text" iconTint="purple" label="Settlement Reference" value={release.reference} />
+              <Fact icon="file-text" iconTint="purple" label="Settlement Reference" value={release.settlementReference} />
             </SectionCard>
           )}
         </div>

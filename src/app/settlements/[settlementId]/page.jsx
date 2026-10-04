@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { SettlementDetail } from '../../../screens/SettlementDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('settlementId'); }
@@ -13,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function SettlementDetailPage() {
-  return <SettlementDetail />;
+  return <Suspense fallback={null}><SettlementDetail /></Suspense>;
 }

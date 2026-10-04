@@ -21,16 +21,14 @@ import {
   Icon,
   AlertRow,
   EmptyState,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { retrySettlement, approveSettlement } from "../mock/api.js";
 import {
-  settlementSummary,
-  payoutSummary,
-  settlementStatusBreakdown,
-  settlementAlerts,
-} from "../mock/fixtures/settlements.js";
-import { formatNaira } from "../mock/format.js";
+  useGetAdminJobSettlementsQuery, settlementInsights,
+  settlementMoney as formatNaira, settlementNumber, settlementMillions,
+  settlementDetailUrl, exportSettlementRows, downloadSettlementReceipt,
+} from '../store/features/settlements/settlementsApi.js';
+import { DriverTableLoading } from './DriversLoading.jsx';
 
 const TABS = [
   "All Settlements",
@@ -107,7 +105,11 @@ const TYPE_TONE = {
 
 export function Settlements() {
   const navigate = useNavigate();
-  const all = useCollection("settlements") || [];
+  const query = useGetAdminJobSettlementsQuery();
+  const all = useMemo(() => query.error ? [] : query.currentData || [], [query.currentData, query.error]);
+  const { summary: settlementSummary, payouts: payoutSummary, statuses: settlementStatusBreakdown, alerts: settlementAlerts } = settlementInsights(query.error ? null : query.currentData);
+  const loading = query.isLoading || (query.isFetching && !query.currentData);
+  const value = (content) => loading ? <Skeleton as="span" width={90} height={23} /> : content;
 
   const [tab, setTab] = useState("All Settlements");
   const [q, setQ] = useState("");
@@ -118,10 +120,12 @@ export function Settlements() {
   const [method, setMethod] = useState("All Methods");
   const [sort, setSort] = useState("Newest First");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [view, setView] = useState("list");
   const [menuFor, setMenuFor] = useState(null);
 
   const tabFiltered = useMemo(() => {
+    if (tab === "By Trip") return [];
     if (tab === "Driver Settlements")
       return all.filter((s) => s.type === "Driver Payout");
     if (tab === "Vendor Settlements")
@@ -146,11 +150,12 @@ export function Settlements() {
             (v) => v && v.toLowerCase().includes(q.toLowerCase()),
           )),
     );
-    rows = [...rows].sort((a, b) =>
-      sort === "Newest First"
-        ? b.id.localeCompare(a.id)
-        : a.id.localeCompare(b.id),
-    );
+    rows = [...rows].sort((a, b) => {
+      const aTime = Date.parse(a.sortAt), bTime = Date.parse(b.sortAt);
+      if (!Number.isFinite(aTime)) return Number.isFinite(bTime) ? 1 : 0;
+      if (!Number.isFinite(bTime)) return -1;
+      return sort === "Newest First" ? bTime - aTime : aTime - bTime;
+    });
     return rows;
   }, [
     tabFiltered,
@@ -163,7 +168,14 @@ export function Settlements() {
     sort,
   ]);
 
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(Math.max(1, page), pageCount);
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // The documented collection covers truckers only; other party tabs are unconfirmed.
+  const unsupportedTab = ["By Trip", "Driver Settlements", "Vendor Settlements", "Customer Settlements"].includes(tab);
+  const unsupportedFilter = ["Driver Payout", "Vendor Payment", "Customer Refund"].includes(settlementType)
+    || ["Driver", "Vendor", "Customer"].includes(payeeType) || payerType !== "All Payers" || status === "Failed" || method === "Bank Transfer";
+  const knownCollection = query.isSuccess && !query.error && !unsupportedTab && !unsupportedFilter;
 
   return (
     <>
@@ -173,11 +185,11 @@ export function Settlements() {
         description="Manage and track all settlement activities across jobs, trips and parties."
         actions={
           <>
-            <FilterSelect label="May 24 – May 30, 2026" icon="calendar" />
+            <FilterSelect label="—" icon="calendar" />
             <Button variant="outline" icon="filter">
               Filters
             </Button>
-            <Button variant="outline" icon="download">
+            <Button variant="outline" icon="download" disabled={loading || !knownCollection} onClick={() => exportSettlementRows(filtered)}>
               Export
             </Button>
           </>
@@ -195,52 +207,52 @@ export function Settlements() {
           icon="wallet"
           tint="navy"
           label="Total Settlements"
-          value={formatNaira(settlementSummary.totalSettlements)}
+          value={value(formatNaira(settlementSummary.totalSettlements))}
           delta={settlementSummary.totalSettlementsDelta}
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Completed Settlements"
-          value={formatNaira(settlementSummary.completedSettlements)}
+          value={value(formatNaira(settlementSummary.completedSettlements))}
           delta={settlementSummary.completedSettlementsDelta}
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="hourglass"
           tint="amber"
           label="Pending Settlements"
-          value={formatNaira(settlementSummary.pendingSettlements)}
+          value={value(formatNaira(settlementSummary.pendingSettlements))}
           delta={settlementSummary.pendingSettlementsDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="circle-pause"
           tint="purple"
           label="On Hold"
-          value={formatNaira(settlementSummary.onHold)}
+          value={value(formatNaira(settlementSummary.onHold))}
           delta={settlementSummary.onHoldDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="circle-x"
           tint="red"
           label="Failed Settlements"
-          value={formatNaira(settlementSummary.failedSettlements)}
+          value={value(formatNaira(settlementSummary.failedSettlements))}
           delta={settlementSummary.failedSettlementsDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption="—"
         />
         <StatCard
           icon="timer"
           tint="blue"
           label="Avg. Settlement Time"
-          value={settlementSummary.avgSettlementTime}
+          value={value(settlementSummary.avgSettlementTime ?? "—")}
           delta={settlementSummary.avgSettlementTimeDelta}
-          caption="vs May 17 – May 23"
+          caption="—"
         />
       </div>
 
@@ -334,7 +346,7 @@ export function Settlements() {
                     setPage(1);
                   }}
                 />
-                <FilterSelect label="May 24 – May 30, 2026" icon="calendar" />
+                <FilterSelect label="—" icon="calendar" />
               </>
             }
           />
@@ -385,7 +397,9 @@ export function Settlements() {
             />
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <DriverTableLoading columns={10} label="Loading settlements" />
+          ) : knownCollection && filtered.length === 0 ? (
             <EmptyState
               icon="coins"
               title="No settlements found"
@@ -394,15 +408,15 @@ export function Settlements() {
           ) : (
             <>
               <DataTable
-                rows={paged}
-                rowKey={(r) => r.id}
+                rows={unsupportedTab ? [] : paged}
+                rowKey={(r) => r.key}
                 columns={[
                   {
                     key: "id",
                     header: "Settlement ID",
                     render: (r) => (
                       <span style={{ display: "grid", gap: 2 }}>
-                        <Link to={`/settlements/${r.id}`} className="tk-mono">
+                        <Link to={settlementDetailUrl(r)} className="tk-mono">
                           {r.id}
                         </Link>
                       </span>
@@ -449,7 +463,7 @@ export function Settlements() {
                     key: "amount",
                     header: "Amount (₦)",
                     align: "right",
-                    render: (r) => <b>{r.amount.toLocaleString("en-NG")}</b>,
+                    render: (r) => <b>{settlementNumber(r.amount)}</b>,
                   },
                   {
                     key: "type",
@@ -464,14 +478,14 @@ export function Settlements() {
                     key: "status",
                     header: "Status",
                     render: (r) => (
-                      <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
+                      <Badge tone={STATUS_TONE[r.status] || "neutral"}>{r.status}</Badge>
                     ),
                   },
                   {
                     key: "settledOn",
                     header: "Settled On",
                     render: (r) =>
-                      r.settledOn ? (
+                      r.settledOn !== "—" ? (
                         <span style={{ display: "grid", gap: 2 }}>
                           <span>{r.settledOn}</span>
                           <span className="tk-meta">{r.settledTime}</span>
@@ -487,7 +501,7 @@ export function Settlements() {
                     width: 44,
                     render: (r) => (
                       <RowMenu
-                        id={r.id}
+                        id={r.key}
                         menuFor={menuFor}
                         setMenuFor={setMenuFor}
                         items={[
@@ -496,7 +510,7 @@ export function Settlements() {
                             icon: "eye",
                             onClick: () => {
                               setMenuFor(null);
-                              navigate(`/settlements/${r.id}`);
+                              navigate(settlementDetailUrl(r));
                             },
                           },
                           ...(r.status === "Failed"
@@ -505,7 +519,6 @@ export function Settlements() {
                                   label: "Retry Settlement",
                                   icon: "rotate-ccw",
                                   onClick: () => {
-                                    retrySettlement(r.id);
                                     setMenuFor(null);
                                   },
                                 },
@@ -517,14 +530,13 @@ export function Settlements() {
                                   label: "Approve & Settle",
                                   icon: "circle-check",
                                   onClick: () => {
-                                    approveSettlement(r.id);
                                     setMenuFor(null);
                                   },
                                 },
                               ]
                             : []),
                           { divider: true },
-                          { label: "Download Receipt", icon: "file-text" },
+                          { label: "Download Receipt", icon: "file-text", onClick: () => { downloadSettlementReceipt(r); setMenuFor(null); } },
                         ]}
                       />
                     ),
@@ -532,12 +544,12 @@ export function Settlements() {
                 ]}
               />
               <Pagination
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={filtered.length}
-                pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-                onPage={setPage}
-                onPageSize={() => {}}
+                page={currentPage}
+                pageSize={pageSize}
+                total={knownCollection ? filtered.length : undefined}
+                pageCount={pageCount}
+                onPage={(next) => setPage(Math.min(Math.max(1, next), pageCount))}
+                onPageSize={(size) => { setPageSize(size); setPage(1); }}
               />
             </>
           )}
@@ -558,9 +570,9 @@ export function Settlements() {
               <DonutChart
                 size={160}
                 thickness={18}
-                centerValue={`₦${(settlementSummary.totalSettlements / 1000000).toFixed(2)}M`}
+                centerValue={settlementMillions(settlementSummary.totalSettlements)}
                 centerLabel="Total Settled"
-                data={payoutSummary.map((d) => ({
+                data={payoutSummary.filter((d) => Number.isFinite(d.pct)).map((d) => ({
                   label: d.label,
                   value: d.pct,
                   color: d.color,
@@ -571,7 +583,7 @@ export function Settlements() {
                 items={payoutSummary.map((d) => ({
                   label: d.label,
                   value: d.pct,
-                  display: `${formatNaira(d.amount)} (${d.pct}%)`,
+                  display: `${formatNaira(d.amount)} (${d.pct == null ? "—" : `${d.pct}%`})`,
                   color: d.color,
                 }))}
                 showShare={false}
@@ -614,7 +626,7 @@ export function Settlements() {
                     color: "var(--tk-ink-900)",
                   }}
                 >
-                  {s.count.toLocaleString("en-NG")} settlements
+                  {settlementNumber(s.count)} settlements
                 </span>
                 <span className="tk-meta">{s.pct}</span>
               </div>
@@ -627,7 +639,7 @@ export function Settlements() {
           >
             {all.slice(0, 3).map((r) => (
               <div
-                key={r.id}
+                key={r.key}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -652,7 +664,7 @@ export function Settlements() {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Link
-                    to={`/settlements/${r.id}`}
+                    to={settlementDetailUrl(r)}
                     style={{
                       display: "block",
                       font: "600 13px/18px var(--tk-font-sans)",
@@ -674,7 +686,7 @@ export function Settlements() {
                   >
                     {formatNaira(r.amount)}
                   </div>
-                  <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
+                  <Badge tone={STATUS_TONE[r.status] || "neutral"}>{r.status}</Badge>
                 </div>
               </div>
             ))}

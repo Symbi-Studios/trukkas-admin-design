@@ -1,13 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, Tabs, TableToolbar, SearchField, FilterSelect,
-  DataTable, Pagination, Badge, CopyableId, Avatar, DropdownMenu, IconButton, Icon,
+  DataTable, Pagination, Badge, CopyableId, Avatar, DropdownMenu, IconButton, Icon, Skeleton, EmptyState,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { verificationSummary } from '../mock/fixtures/verifications.js';
+import { useGetAdminVerificationDirectoryQuery, verificationSummary, verificationDetailUrl } from '../store/features/verification/verificationApi.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { DriverTableLoading } from './DriversLoading.jsx';
+
+const EMPTY_ROWS = [];
 
 const STATUS_ICON = { Pending: 'clock', 'In Review': 'eye', Verified: 'shield-check', Rejected: 'shield-x' };
 const STATUS_TONE = { Pending: 'warning', 'In Review': 'info', Verified: 'success', Rejected: 'danger' };
@@ -38,7 +41,12 @@ function FilterButton({ value, options, active, onChange }) {
 
 export function Verification() {
   const navigate = useNavigate();
-  const verifications = useCollection('verifications') || [];
+  const query = useGetAdminVerificationDirectoryQuery();
+  const verifications = query.error ? EMPTY_ROWS : query.currentData || EMPTY_ROWS;
+  const summary = verificationSummary(query.error ? null : query.currentData);
+  const loading = query.isLoading || (query.isFetching && !query.currentData);
+  const statValue = (value) => loading ? <Skeleton as="span" width={54} height={23} /> : value;
+  const unavailable = (action) => window.alert(`${action} is not available in the documented verification API.`);
   const [tab, setTab] = useState('All Verifications');
   const [q, setQ] = useState('');
   const [entityType, setEntityType] = useState('All Types');
@@ -49,15 +57,16 @@ export function Verification() {
   const [menuFor, setMenuFor] = useState(null);
 
   const filtered = useMemo(() => verifications.filter((v) => (
-    (tab === 'All Verifications' || v.status === tab) &&
+    (tab === 'All Verifications' || (tab === 'Expiring Soon' ? v.expiringSoon === true : v.status === tab)) &&
     (entityType === 'All Types' || v.entityType === entityType) &&
     (verType === 'All Types' || v.type === verType) &&
     (status === 'All Statuses' || v.status === status) &&
     (riskLevel === 'All Levels' || v.riskLevel === riskLevel) &&
-    (!q || [v.id, v.entityName, v.regNo].some((s) => s && s.toLowerCase().includes(q.toLowerCase())))
+    (!q || [v.id, v.reviewId, v.entityName, v.regNo].some((s) => s && s.toLowerCase().includes(q.toLowerCase())))
   )), [verifications, tab, entityType, verType, status, riskLevel, q]);
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => setPage((current) => Math.min(current, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)))), [filtered.length]);
 
   function resetFilters() {
     setEntityType('All Types'); setVerType('All Types'); setStatus('All Statuses');
@@ -69,17 +78,17 @@ export function Verification() {
       <PageHeader crumbs={['Compliance', 'Verification', 'All Verifications']} title="All Verifications"
         description="Monitor and manage all verification requests across entities."
         actions={<>
-          <Button variant="outline" icon="download">Export Report</Button>
-          <Button icon="plus">New Verification</Button>
+          <Button variant="outline" icon="download" onClick={() => unavailable('Export Report')}>Export Report</Button>
+          <Button icon="plus" onClick={() => unavailable('New Verification')}>New Verification</Button>
         </>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>
-        <StatCard icon="clipboard-list" tint="blue" label="Total Verifications" value={verificationSummary.total} caption={verificationSummary.totalCaption} />
-        <StatCard icon="clock" tint="amber" label="Pending" value={verificationSummary.pending} caption={verificationSummary.pendingShare} />
-        <StatCard icon="eye" tint="blue" label="In Review" value={verificationSummary.inReview} caption={verificationSummary.inReviewShare} />
-        <StatCard icon="shield-check" tint="green" label="Verified" value={verificationSummary.verified} caption={verificationSummary.verifiedShare} />
-        <StatCard icon="shield-x" tint="red" label="Rejected" value={verificationSummary.rejected} caption={verificationSummary.rejectedShare} />
-        <StatCard icon="calendar-clock" tint="amber" label="Expiring Soon" value={verificationSummary.expiringSoon} caption={verificationSummary.expiringSoonCaption} />
+        <StatCard icon="clipboard-list" tint="blue" label="Total Verifications" value={statValue(summary.total)} caption={summary.totalCaption} />
+        <StatCard icon="clock" tint="amber" label="Pending" value={statValue(summary.pending)} caption={summary.pendingShare} />
+        <StatCard icon="eye" tint="blue" label="In Review" value={statValue(summary.inReview)} caption={summary.inReviewShare} />
+        <StatCard icon="shield-check" tint="green" label="Verified" value={statValue(summary.verified)} caption={summary.verifiedShare} />
+        <StatCard icon="shield-x" tint="red" label="Rejected" value={statValue(summary.rejected)} caption={summary.rejectedShare} />
+        <StatCard icon="calendar-clock" tint="amber" label="Expiring Soon" value={statValue(summary.expiringSoon)} caption={summary.expiringSoonCaption} />
       </div>
 
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
@@ -95,25 +104,25 @@ export function Verification() {
               onChange={(v) => { setStatus(v); setPage(1); }} />
             <FilterButton value={riskLevel} options={['All Levels', ...RISK_LEVELS]} active={riskLevel !== 'All Levels'}
               onChange={(v) => { setRiskLevel(v); setPage(1); }} />
-            <FilterSelect label="Date Range" icon="calendar" />
-            <Button variant="outline" icon="list-filter">Filters</Button>
+            <FilterSelect label="Date Range" icon="calendar" onClick={() => unavailable('Date Range filtering')} />
+            <Button variant="outline" icon="list-filter" onClick={() => unavailable('Additional filters')}>Filters</Button>
           </>}
           onClear={resetFilters} />
 
         <Tabs value={tab} onChange={(t) => { setTab(t); setPage(1); }} style={{ padding: '0 var(--tk-card-pad)' }}
           items={['All Verifications',
-            { value: 'Pending', label: 'Pending', count: verificationSummary.pending },
-            { value: 'In Review', label: 'In Review', count: verificationSummary.inReview },
-            { value: 'Verified', label: 'Verified', count: verificationSummary.verified },
-            { value: 'Rejected', label: 'Rejected', count: verificationSummary.rejected },
-            { value: 'Expiring Soon', label: 'Expiring Soon', count: verificationSummary.expiringSoon }]} />
+            { value: 'Pending', label: 'Pending', count: summary.pending },
+            { value: 'In Review', label: 'In Review', count: summary.inReview },
+            { value: 'Verified', label: 'Verified', count: summary.verified },
+            { value: 'Rejected', label: 'Rejected', count: summary.rejected },
+            { value: 'Expiring Soon', label: 'Expiring Soon', count: summary.expiringSoon }]} />
 
-        <DataTable rows={paged} rowKey={(r) => r.id}
+        <DataTable rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
           columns={[
-            { key: 'id', header: 'Verification ID', render: (r) => <CopyableId id={r.id} size="sm" /> },
+            { key: 'id', header: 'Verification ID', render: (r) => <CopyableId id={r.id} size="sm" onCopy={() => unavailable('Copy verification ID')} /> },
             { key: 'entity', header: 'Entity / Company', render: (r) => (
               <span style={{ display: 'grid', gap: 2 }}>
-                <Link to={'/verification/' + r.id} style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.entityName}</Link>
+                <Link to={verificationDetailUrl(r)} style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.entityName}</Link>
                 <span className="tk-meta">{r.regNo}</span>
               </span>) },
             { key: 'entityType', header: 'Entity Type', render: (r) => <Badge tone="neutral">{r.entityType}</Badge> },
@@ -125,7 +134,7 @@ export function Verification() {
               </span>) },
             { key: 'status', header: 'Status', render: (r) => (
               <Badge tone={STATUS_TONE[r.status]}>
-                <Icon name={STATUS_ICON[r.status]} size={11} />{r.status}
+                <Icon name={STATUS_ICON[r.status] || 'minus'} size={11} />{r.status}
               </Badge>) },
             { key: 'riskLevel', header: 'Risk Level', render: (r) => <Badge tone={RISK_TONE[r.riskLevel]}>{r.riskLevel}</Badge> },
             { key: 'dueDate', header: 'Due Date', render: (r) => (
@@ -143,24 +152,25 @@ export function Verification() {
               </span>) },
             { key: 'actions', header: 'Actions', width: 110, render: (r) => (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Button variant="outline" size="sm" icon="eye" onClick={() => navigate('/verification/' + r.id)}>View</Button>
+                <Button variant="outline" size="sm" icon="eye" onClick={() => navigate(verificationDetailUrl(r))}>View</Button>
                 <span style={{ position: 'relative' }}>
-                  <IconButton icon="ellipsis-vertical" onClick={() => setMenuFor(menuFor === r.id ? null : r.id)} />
-                  {menuFor === r.id && (
+                  <IconButton icon="ellipsis-vertical" onClick={() => setMenuFor(menuFor === r.key ? null : r.key)} />
+                  {menuFor === r.key && (
                     <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
                       <DropdownMenu width={210} items={[
-                        { label: 'View Verification', icon: 'eye', onClick: () => { setMenuFor(null); navigate('/verification/' + r.id); } },
-                        { label: 'Reassign', icon: 'users' },
-                        { label: 'Download Documents', icon: 'download' },
+                        { label: 'View Verification', icon: 'eye', onClick: () => { setMenuFor(null); navigate(verificationDetailUrl(r)); } },
+                        { label: 'Reassign', icon: 'users', onClick: () => { setMenuFor(null); unavailable('Reassign'); } },
+                        { label: 'Download Documents', icon: 'download', onClick: () => { setMenuFor(null); unavailable('Download Documents'); } },
                       ]} />
                     </span>
                   )}
                 </span>
               </span>) },
           ]} />
-        <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length}
+        {loading ? <DriverTableLoading columns={10} label="Loading verifications" /> : query.error ? <EmptyState icon="triangle-alert" title="Could not load verifications" description={getApiErrorMessage(query.error)} action={<Button variant="outline" onClick={query.refetch}>Retry</Button>} /> : !paged.length ? <EmptyState icon="shield-check" title={['Verified', 'Rejected', 'Expiring Soon'].includes(tab) || ['Verified', 'Rejected'].includes(status) ? '—' : 'No verifications found'} description={['Verified', 'Rejected', 'Expiring Soon'].includes(tab) || ['Verified', 'Rejected'].includes(status) ? '—' : undefined} /> : null}
+        <Pagination page={page} pageSize={PAGE_SIZE} total={query.error || loading ? 0 : filtered.length}
           pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-          onPage={setPage} onPageSize={() => {}} />
+          onPage={(next) => setPage(Math.max(1, Math.min(next, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)))))} onPageSize={() => {}} />
       </SectionCard>
     </>
   );

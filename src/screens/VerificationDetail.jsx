@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
 import { useNavigate, useParams } from '../router.js';
 import {
   PageHeader, Button, EntityHeaderCard, Badge, Tabs, SectionCard, LabelValue, DonutChart,
   LegendList, DataTable, Timeline, ActivityFeed, DropdownMenu, Card, Banner,
-  IconButton, ProgressBar,
+  IconButton, ProgressBar, EmptyState,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { approveVerification, markNonCompliant, cancelVerification } from '../mock/api.js';
+import { useGetAdminVerificationDetailQuery, useApproveAdminVerificationEntityMutation, canReviewVerification, verificationDocumentUrl } from '../store/features/verification/verificationApi.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { DriverDetailLoading } from './DriversLoading.jsx';
 
 const TIMELINE_STEPS = [
   { title: 'Application Submitted', icon: 'check' },
@@ -19,50 +22,75 @@ const TIMELINE_STEPS = [
 ];
 
 function timelineFor(v) {
-  const decided = v.status === 'Verified' || v.status === 'Non-Compliant' || v.status === 'Cancelled';
   return TIMELINE_STEPS.map((step, i) => {
-    if (i === 0) return { ...step, state: 'done', time: v.submittedOn };
-    if (i === 1) return { ...step, state: 'done', time: v.documentReviewOn };
-    if (i === 2) return { ...step, state: decided ? 'done' : 'current', time: v.informationVerificationOn, description: decided ? undefined : 'In Progress' };
-    if (i === 3) return { ...step, state: decided ? 'done' : 'pending', description: decided ? undefined : 'Pending' };
-    const label = v.status === 'Verified' ? 'Approved' : v.status === 'Non-Compliant' ? 'Marked Non-Compliant' : v.status === 'Cancelled' ? 'Cancelled' : 'Pending';
-    return { ...step, state: decided ? 'done' : 'pending', description: decided ? label : 'Pending' };
+    if (i === 0 && v.submittedOn !== '—') return { ...step, state: 'done', time: v.submittedOn };
+    if (i === 4 && v.status === 'Verified') return { ...step, state: 'done', time: v.reviewedOn || '—', description: 'Approved' };
+    if (i === 4 && v.status === 'Rejected') return { ...step, state: 'danger', time: v.reviewedOn || '—', description: 'Rejected' };
+    return { ...step, state: 'pending', time: '—', description: '—' };
   });
 }
 
 const STAGE_PILL = {
   Verified: ['success', 'Verified'],
+  Rejected: ['danger', 'Rejected'],
   'Non-Compliant': ['danger', 'Non-Compliant'],
   Cancelled: ['neutral', 'Cancelled'],
 };
 
 export function VerificationDetail() {
   const { verificationId } = useParams();
+  const search = useSearchParams();
+  const id = search.get('id') || verificationId;
+  const source = search.get('source');
   const navigate = useNavigate();
-  const verifications = useCollection('verifications') || [];
-  const v = verifications.find((x) => x.id === verificationId);
+  const args = { source, id };
+  const query = useGetAdminVerificationDetailQuery(args, { skip: !id || !source, refetchOnMountOrArgChange: true });
+  const v = query.error ? null : query.currentData;
+  const [approve, approval] = useApproveAdminVerificationEntityMutation();
+  const role = useSelector((state) => state.auth.admin?.role);
+  const submitting = useRef(false);
   const [tab, setTab] = useState('Verification Overview');
   const [menu, setMenu] = useState(false);
+  const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available in the documented verification API.`); };
+  useEffect(() => { setTab('Verification Overview'); setMenu(false); }, [id, source]);
+
+  async function approveVerification() {
+    setMenu(false);
+    if (submitting.current || approval.isLoading) return;
+    if (!v?.canApprove || !canReviewVerification(role, source)) { window.alert('This verification cannot be approved by your account in its current state.'); return; }
+    submitting.current = true;
+    try { const result = await approve(args).unwrap(); window.alert(result.message); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { submitting.current = false; }
+  }
+
+  if (query.isLoading || (query.isFetching && !query.currentData)) return <DriverDetailLoading />;
 
   if (!v) {
     return (
       <Card>
-        <span className="tk-body">No verification found with ID {verificationId}.</span>
+        <span className="tk-body">{query.error ? getApiErrorMessage(query.error) : `No verification found with ID ${id || '—'}.`}</span>
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/verification')}>Back to Verification</Button>
+          {query.error && <Button variant="outline" onClick={query.refetch}>Retry</Button>}
         </div>
       </Card>
     );
   }
 
-  const decided = v.status === 'Verified' || v.status === 'Non-Compliant' || v.status === 'Cancelled';
-  const [stagePillTone, stagePillLabel] = STAGE_PILL[v.status] || ['info', 'In Progress'];
+  const decided = !v.canApprove;
+  const [stagePillTone, stagePillLabel] = STAGE_PILL[v.status] || (v.status === 'In Review' ? ['info', 'In Progress'] : v.status === 'Pending' ? ['warning', 'Pending'] : ['neutral', '—']);
   const requirements = v.requirements || [];
-  const completed = v.progress?.completed ?? requirements.filter((r) => r.status === 'Completed').length;
-  const inReview = v.progress?.inReview ?? requirements.filter((r) => r.status === 'In Review').length;
-  const total = v.progress?.total ?? requirements.length;
-  const pending = v.progress?.pending ?? (requirements.length - completed - inReview);
-  const pct = total ? Math.round((completed / total) * 100) : 0;
+  const completed = v.progress?.completed ?? null;
+  const inReview = v.progress?.inReview ?? null;
+  const total = v.progress?.total ?? null;
+  const pending = v.progress?.pending ?? null;
+  const pct = total != null && completed != null ? (total ? Math.round((completed / total) * 100) : 0) : null;
+  function viewDocument(requirement) {
+    const url = verificationDocumentUrl(requirement.url);
+    if (!url) { unavailable('View Requirement Document'); return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 
   return (
     <>
@@ -75,19 +103,19 @@ export function VerificationDetail() {
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={250} items={[
-                  { label: 'Edit Verification Details', icon: 'pencil' },
-                  { label: 'Reassign Verification', icon: 'users' },
-                  { label: 'Request More Information', icon: 'message-square' },
-                  { label: 'Mark as Non-Compliant', icon: 'circle-slash', onClick: () => { markNonCompliant(v.id); setMenu(false); } },
-                  { label: 'Approve Verification', icon: 'circle-check', onClick: () => { approveVerification(v.id); setMenu(false); } },
+                  { label: 'Edit Verification Details', icon: 'pencil', onClick: () => unavailable('Edit Verification Details') },
+                  { label: 'Reassign Verification', icon: 'users', onClick: () => unavailable('Reassign Verification') },
+                  { label: 'Request More Information', icon: 'message-square', onClick: () => unavailable('Request More Information') },
+                  { label: 'Mark as Non-Compliant', icon: 'circle-slash', onClick: () => unavailable('Mark as Non-Compliant') },
+                  { label: 'Approve Verification', icon: 'circle-check', onClick: approveVerification },
                   { divider: true },
-                  { label: 'Add Comment', icon: 'message-square-plus' },
-                  { label: 'Add Internal Note', icon: 'notebook-pen' },
+                  { label: 'Add Comment', icon: 'message-square-plus', onClick: () => unavailable('Add Comment') },
+                  { label: 'Add Internal Note', icon: 'notebook-pen', onClick: () => unavailable('Add Internal Note') },
                   { divider: true },
-                  { label: 'Export Verification Report', icon: 'file-text' },
-                  { label: 'Download All Documents', icon: 'download' },
+                  { label: 'Export Verification Report', icon: 'file-text', onClick: () => unavailable('Export Verification Report') },
+                  { label: 'Download All Documents', icon: 'download', onClick: () => unavailable('Download All Documents') },
                   { divider: true },
-                  { label: 'Cancel Verification', icon: 'trash-2', tone: 'danger', onClick: () => { cancelVerification(v.id); setMenu(false); } },
+                  { label: 'Cancel Verification', icon: 'trash-2', tone: 'danger', onClick: () => unavailable('Cancel Verification') },
                 ]} />
               </span>
             )}
@@ -105,8 +133,8 @@ export function VerificationDetail() {
 
       <Card pad="none">
         <Tabs value={tab} onChange={setTab} style={{ padding: '0 var(--tk-card-pad)' }}
-          items={['Verification Overview', { value: 'Documents', label: 'Documents', count: 6 },
-                  'Information', 'Assessment', { value: 'Comments', label: 'Comments', count: 2 }, 'History']} />
+          items={['Verification Overview', { value: 'Documents', label: 'Documents', count: v.documentCount ?? '—' },
+                  'Information', 'Assessment', { value: 'Comments', label: 'Comments', count: v.commentCount ?? '—' }, 'History']} />
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
@@ -121,16 +149,16 @@ export function VerificationDetail() {
               <LabelValue label="Due Date" value={v.dueDate} valueTone={v.dueDate !== '—' ? 'var(--tk-danger)' : undefined} />
               <LabelValue label="Priority" value={<Badge tone="warning">{v.priority}</Badge>} />
             </SectionCard>
-            <SectionCard title="Verification Progress" footer={<a href="#">View Full Progress →</a>}>
+            <SectionCard title="Verification Progress" footer={<a href="#" onClick={(event) => { event.preventDefault(); unavailable('View Full Progress'); }}>View Full Progress →</a>}>
               <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                <DonutChart size={116} thickness={16} centerValue={`${pct}%`} centerLabel="Complete"
-                  data={[{ label: 'Completed', value: completed || 1, color: 'var(--tk-success)' },
+                <DonutChart size={116} thickness={16} centerValue={pct == null ? '—' : `${pct}%`} centerLabel="Complete"
+                  data={v.progress ? [{ label: 'Completed', value: completed, color: 'var(--tk-success)' },
                          { label: 'In Review', value: inReview, color: 'var(--tk-warning)' },
-                         { label: 'Pending', value: pending, color: 'var(--tk-blue)' }]} />
+                         { label: 'Pending', value: pending, color: 'var(--tk-blue)' }] : []} />
                 <LegendList style={{ flex: 1 }} showShare={false}
-                  items={[{ label: 'Completed', value: completed, display: `${completed} / ${total}`, color: 'var(--tk-success)' },
-                          { label: 'In Review', value: inReview, display: `${inReview} / ${total}`, color: 'var(--tk-warning)' },
-                          { label: 'Pending', value: pending, display: `${pending} / ${total}`, color: 'var(--tk-blue)' }]} />
+                  items={[{ label: 'Completed', value: completed, display: completed == null || total == null ? '—' : `${completed} / ${total}`, color: 'var(--tk-success)' },
+                          { label: 'In Review', value: inReview, display: inReview == null || total == null ? '—' : `${inReview} / ${total}`, color: 'var(--tk-warning)' },
+                          { label: 'Pending', value: pending, display: pending == null || total == null ? '—' : `${pending} / ${total}`, color: 'var(--tk-blue)' }]} />
               </div>
             </SectionCard>
             <SectionCard title="Overall Assessment">
@@ -140,18 +168,18 @@ export function VerificationDetail() {
                   {v.assessment}
                 </span>
                 <span className="tk-meta">
-                  {decided ? 'This verification has been decided.' : 'Most requirements have been met. Complete remaining reviews to finalize.'}
+                  {['Verified', 'Rejected'].includes(v.status) ? 'This verification has been decided.' : '—'}
                 </span>
               </div>
               <Banner tone={v.riskLevel === 'High' ? 'danger' : 'success'} title={`Risk Level: ${v.riskLevel}`} style={{ marginTop: 12 }}>
-                {v.riskLevel === 'High' ? 'Compliance issues were identified.' : 'No major compliance issues identified.'}
+                {v.riskLevel === '—' ? '—' : v.riskLevel === 'High' ? 'Compliance issues were identified.' : 'No major compliance issues identified.'}
               </Banner>
             </SectionCard>
           </div>
 
           <SectionCard title="Requirements Checklist" pad="none" style={{ marginTop: 16 }}
-            footer={<a href="#">View All Requirements</a>}>
-            <DataTable rows={requirements} rowKey={(r) => r.name}
+            footer={<a href="#" onClick={(event) => { event.preventDefault(); unavailable('View All Requirements'); }}>View All Requirements</a>}>
+            <DataTable rows={requirements} rowKey={(r) => r.key}
               columns={[
                 { key: 'name', header: 'Requirement', render: (r) => (
                   <span style={{ display: 'grid', gap: 2 }}>
@@ -163,11 +191,12 @@ export function VerificationDetail() {
                 { key: 'by', header: 'Reviewer' },
                 { key: 'on', header: 'Reviewed On' },
                 { key: 'note', header: 'Notes' },
-                { key: 'x', header: 'Actions', width: 80, render: () => (
+                { key: 'x', header: 'Actions', width: 80, render: (r) => (
                   <span style={{ display: 'flex', gap: 4 }}>
-                    <IconButton icon="eye" tone="outline" /><IconButton icon="ellipsis-vertical" />
+                    <IconButton icon="eye" tone="outline" onClick={() => viewDocument(r)} /><IconButton icon="ellipsis-vertical" onClick={() => unavailable('Requirement Actions')} />
                   </span>) },
               ]} />
+            {!requirements.length && <EmptyState title="—" />}
           </SectionCard>
         </div>
 
@@ -176,25 +205,26 @@ export function VerificationDetail() {
             <Timeline items={timelineFor(v)} />
           </SectionCard>
           <SectionCard title="Risk Indicators" icon="triangle-alert">
-            <ProgressBar value={12} label="Sanctions Check" caption="Clear" color="var(--tk-success)" />
-            <ProgressBar style={{ marginTop: 12 }} value={8} label="PEP Screening" caption="Clear" color="var(--tk-success)" />
-            <ProgressBar style={{ marginTop: 12 }} value={20} label="Adverse Media" caption="Clear" color="var(--tk-success)" />
-            <ProgressBar style={{ marginTop: 12 }} value={34} label="Credit History" caption="Reviewed" color="var(--tk-blue)" />
+            <ProgressBar value={null} label="Sanctions Check" caption="—" color="var(--tk-success)" />
+            <ProgressBar style={{ marginTop: 12 }} value={null} label="PEP Screening" caption="—" color="var(--tk-success)" />
+            <ProgressBar style={{ marginTop: 12 }} value={null} label="Adverse Media" caption="—" color="var(--tk-success)" />
+            <ProgressBar style={{ marginTop: 12 }} value={null} label="Credit History" caption="—" color="var(--tk-blue)" />
           </SectionCard>
-          <SectionCard title="Activity Log" action={<a href="#">View All</a>}>
+          <SectionCard title="Activity Log" action={<a href="#" onClick={(event) => { event.preventDefault(); unavailable('View All Activity'); }}>View All</a>}>
             <ActivityFeed items={v.activity || []} />
+            {!v.activity?.length && <span className="tk-meta">—</span>}
           </SectionCard>
         </div>
       </div>
 
       <Card style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
         <Button variant="danger" icon="trash-2" style={{ marginRight: 'auto' }} disabled={decided}
-          onClick={() => cancelVerification(v.id)}>Cancel Verification</Button>
-        <Button variant="outline" icon="message-square" disabled={decided}>Request More Information</Button>
+          onClick={() => unavailable('Cancel Verification')}>Cancel Verification</Button>
+        <Button variant="outline" icon="message-square" disabled={decided} onClick={() => unavailable('Request More Information')}>Request More Information</Button>
         <Button variant="outline" icon="circle-slash" disabled={decided}
-          onClick={() => markNonCompliant(v.id)}>Mark as Non-Compliant</Button>
-        <Button icon="shield-check" size="lg" disabled={decided}
-          onClick={() => approveVerification(v.id)}>Approve Verification</Button>
+          onClick={() => unavailable('Mark as Non-Compliant')}>Mark as Non-Compliant</Button>
+        <Button icon="shield-check" size="lg" disabled={decided || approval.isLoading || !canReviewVerification(role, source)}
+          onClick={approveVerification}>Approve Verification</Button>
       </Card>
     </>
   );

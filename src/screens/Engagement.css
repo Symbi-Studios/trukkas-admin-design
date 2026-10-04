@@ -342,18 +342,18 @@
   width: 104px;
   height: 104px;
   border-radius: 50%;
-  background: conic-gradient(
+  background: var(--feedback-ring-background, conic-gradient(
     #12ad69 0 40%,
     #287bed 40% 66%,
     #f14b75 66% 90%,
     #afb6ca 90%
-  );
+  ));
   display: grid;
   place-items: center;
   flex: none;
 }
 .feedback-ring:after {
-  content: "38\A Total";
+  content: var(--feedback-ring-label, "38\A Total");
   white-space: pre;
   width: 70px;
   height: 70px;

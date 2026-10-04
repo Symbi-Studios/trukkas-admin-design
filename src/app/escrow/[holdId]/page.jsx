@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { EscrowHoldDetail } from '../../../screens/EscrowHoldDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('holdId'); }
@@ -13,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function EscrowHoldDetailPage() {
-  return <EscrowHoldDetail />;
+  return <Suspense fallback={null}><EscrowHoldDetail /></Suspense>;
 }
