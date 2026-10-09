@@ -9,9 +9,17 @@ const DOCUMENT_LABELS = {
 };
 
 function numberOrNull(value) {
-  if (value == null || value === '') return null;
+  if (typeof value !== 'number' && !(typeof value === 'string' && /^\d+$/.test(value.trim()))) return null;
   const number = Number(value);
-  return Number.isFinite(number) ? number : null;
+  return Number.isSafeInteger(number) && number >= 0 ? number : null;
+}
+
+const failure = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
+export function documentTime(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return '—';
+  const [year, month, day, hour, minute, second] = value.slice(0, 19).split(/[-T:]/).map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate() || hour > 23 || minute > 59 || second > 59 || !Number.isFinite(Date.parse(value))) return '—';
+  return new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
 function textOrNull(value) {
@@ -28,7 +36,7 @@ function statusLabel(value) {
 }
 
 function documentKey(value) {
-  const normalized = String(value || '').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/[\s-]+/g, '_');
+  const normalized = (textOrNull(value) || '').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/[\s-]+/g, '_');
   if (normalized === 'exitnote') return 'exit_note';
   if (normalized === 'gate_pass' || normalized === 'gatepass') return 'customs_gate_pass';
   return normalized;
@@ -50,8 +58,8 @@ function routeParts(value) {
     return { route: value, origin: delivery ? pickup : null };
   }
   if (value && typeof value === 'object') {
-    const pickup = value.pickup || value.origin || null;
-    const delivery = value.delivery || value.destination || null;
+    const pickup = textOrNull(value.pickup) || textOrNull(value.origin);
+    const delivery = textOrNull(value.delivery) || textOrNull(value.destination);
     return { route: [pickup, delivery].filter(Boolean).join(' → ') || null, origin: pickup };
   }
   return { route: null, origin: null };
@@ -71,22 +79,25 @@ function documentSummary(value) {
 function mapQueueJob(job) {
   const id = String(job.id);
   const route = routeParts(job.route);
-  const documentTypes = Array.isArray(job.documents) ? job.documents.map(documentKey) : [];
-  const jobType = job.jobType || job.requestType || null;
+  const documentTypes = Array.isArray(job.documents) ? job.documents.map(documentKey).filter(Boolean) : [];
+  const jobType = textOrNull(job.jobType?.label) || textOrNull(job.jobType) || textOrNull(job.requestType);
+  const jobKind = /^(import|export)\b/i.test(jobType || '') ? statusLabel(jobType.split(/[\s(]/)[0]) : null;
   return {
     id,
-    displayId: job.jobNumber || id,
-    company: job.forwarderName || null,
-    jobType: /^(import|export)/i.test(jobType || '') ? statusLabel(jobType) : null,
+    displayId: textOrNull(job.jobNumber) || id,
+    company: textOrNull(job.company?.name) || textOrNull(job.forwarderName),
+    companyId: textOrNull(job.company?.id),
+    jobType: jobKind || jobType, jobKind,
     job: {
       id,
-      statusCode: job.status || '',
-      status: job.statusLabel || statusLabel(job.status),
+      statusCode: textOrNull(job.status) || '',
+      status: textOrNull(job.statusLabel) || statusLabel(job.status),
+      lifecycleStatusCode: textOrNull(job.jobStatus),
       route: route.route,
-      origin: route.origin,
+      origin: textOrNull(job.origin) || textOrNull(job.originPort) || route.origin,
     },
     documentTypes,
-    summary: documentSummary(job.summary),
+    summary: documentSummary(job.documentSummary ?? job.documentCounts ?? job.summary),
     submittedAt: job.submittedAt || null,
     updatedAt: job.updatedAt || null,
   };
@@ -95,17 +106,20 @@ function mapQueueJob(job) {
 function mapQueueResponse(response, args = {}) {
   const data = unwrapApiResponseData(response);
   if (!Array.isArray(data?.jobs)) throw new Error('The document queue response is missing its jobs list.');
-  const rows = data.jobs.filter((job) => job && job.id != null).map(mapQueueJob);
+  const ids = data.jobs.map((job) => textOrNull(job?.id));
+  if (ids.some((id) => !id) || new Set(ids).size !== ids.length) throw new Error('The document queue returned missing or duplicate job IDs.');
+  const rows = data.jobs.map(mapQueueJob);
   const pagination = data.pagination || {};
-  const limit = numberOrNull(pagination.limit) ?? args.limit ?? 20;
-  const total = numberOrNull(pagination.total) ?? rows.length;
+  const limit = numberOrNull(pagination.limit), total = numberOrNull(pagination.total), page = numberOrNull(pagination.page), pages = numberOrNull(pagination.totalPages);
+  if (!limit || total == null || page !== (args.page ?? 1) || pages == null || rows.length > limit || rows.length > total || pages !== Math.ceil(total / limit) && !(total === 0 && pages === 1)
+    || page > Math.max(1, pages) || (total > 0 && !rows.length)) throw new Error('The document queue returned invalid or incomplete pagination.');
   return {
     rows,
     pagination: {
-      page: numberOrNull(pagination.page) ?? args.page ?? 1,
+      page,
       limit,
       total,
-      totalPages: numberOrNull(pagination.totalPages) ?? Math.max(1, Math.ceil(total / limit)),
+      totalPages: Math.max(1, pages),
     },
   };
 }
@@ -113,10 +127,10 @@ function mapQueueResponse(response, args = {}) {
 function mapDocument(raw, key, job) {
   const source = raw && typeof raw === 'object' ? raw : { url: raw };
   const requirement = documentKey(source.type || source.documentType || source.requirement || key);
-  const id = source.id == null && source.documentId == null ? null : String(source.id ?? source.documentId);
+  const id = textOrNull(source.id) || textOrNull(source.documentId);
   const url = safeDocumentUrl(source.url || source.fileUrl || source.documentUrl);
-  const code = source.status || source.reviewStatus || null;
-  const fileName = source.fileName || (url ? new URL(url).pathname.split('/').pop() || null : null);
+  const code = textOrNull(source.status) || textOrNull(source.reviewStatus);
+  const fileName = textOrNull(source.fileName);
   const uploaderType = textOrNull(source.uploadedBy?.type);
   return {
     id,
@@ -124,15 +138,18 @@ function mapDocument(raw, key, job) {
     jobId: job.id,
     jobNumber: job.displayId,
     requirement,
-    name: source.name || DOCUMENT_LABELS[requirement] || statusLabel(requirement),
+    name: textOrNull(source.label) || textOrNull(source.name) || DOCUMENT_LABELS[requirement] || statusLabel(requirement),
     fileName,
     url,
     statusCode: code,
-    status: source.statusLabel || (code ? statusLabel(code) : url ? 'Uploaded' : 'Not uploaded'),
-    reviewAuthority: source.reviewAuthority || (job.jobType === 'Export' ? 'trucking_company' : id && code ? 'trukkas_admin' : null),
-    fileType: source.fileType || (fileName?.toLowerCase().endsWith('.pdf') ? 'PDF' : null),
-    fileSize: source.fileSize || null,
-    version: source.version || null,
+    status: textOrNull(source.statusLabel) || statusLabel(code),
+    // The spec explicitly assigns TDO / Exit Note / Customs Gate Pass review
+    // to admins. Neither a URL nor an Import/Export label establishes authority.
+    reviewAuthority: ['tdo', 'exit_note', 'customs_gate_pass'].includes(requirement) ? 'trukkas_admin' : null,
+    canReview: job.job.lifecycleStatusCode === 'DOC_REVIEW' && ['tdo', 'exit_note', 'customs_gate_pass'].includes(requirement) && ['PENDING', 'REJECTED'].includes(code) && Boolean(id),
+    fileType: ({ 'application/pdf': 'PDF', 'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WebP' })[source.mimeType] || textOrNull(source.mimeType) || textOrNull(source.fileType),
+    fileSize: textOrNull(source.fileSize) ?? numberOrNull(source.fileSize),
+    version: numberOrNull(source.version),
     uploadedBy: personName(source.uploadedBy),
     uploadedByRole: textOrNull(source.uploadedByRole) || (uploaderType ? statusLabel(uploaderType) : null),
     uploadedAt: source.uploadedAt || null,
@@ -145,7 +162,7 @@ function mapDocument(raw, key, job) {
 
 function mapDetailResponse(response) {
   const data = unwrapApiResponseData(response);
-  if (!data || typeof data !== 'object' || Array.isArray(data) || data.id == null) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || !textOrNull(data.id)) {
     throw new Error('The document review detail response is missing its job ID.');
   }
   const job = mapQueueJob({ ...data, documents: [] });
@@ -154,6 +171,7 @@ function mapDetailResponse(response) {
   const urlsByKey = Object.fromEntries(Object.entries(urlFields).map(([key, value]) => [documentKey(key), value]));
   const rawList = Array.isArray(data.documentList) ? data.documentList
     : Array.isArray(data.documents) ? data.documents : null;
+  if (rawList?.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) throw new Error('The document review response contains unreadable document records.');
   const documents = rawList
     ? rawList.filter((item) => item && typeof item === 'object').map((item) => {
         const key = documentKey(item.type || item.documentType || item.requirement);
@@ -161,25 +179,16 @@ function mapDetailResponse(response) {
         return mapDocument({ ...item, url: item.url || item.fileUrl || (typeof fallback === 'string' ? fallback : fallback?.url) }, key, job);
       })
     : Object.entries(urlFields)
-        .filter(([key, value]) => DOCUMENT_LABELS[documentKey(key)] || (value && typeof value === 'object' && (value.url || value.id)))
+        .filter(([key, value]) => (DOCUMENT_LABELS[documentKey(key)] && safeDocumentUrl(value)) || (value && typeof value === 'object' && (value.url || value.id || value.status)))
         .map(([key, value]) => mapDocument(value, key, job));
-  const knownStatuses = documents.filter((document) => document.statusCode);
-  const derivedSummary = knownStatuses.length === documents.length && documents.length > 0
-    ? documents.reduce((summary, document) => {
-        const status = String(document.statusCode).toUpperCase();
-        if (status === 'APPROVED') summary.approved += 1;
-        else if (status === 'REJECTED') summary.rejected += 1;
-        else if (status === 'MISSING') summary.missing += 1;
-        else summary.pending += 1;
-        return summary;
-      }, { total: documents.length, approved: 0, pending: 0, rejected: 0, missing: 0 })
-    : null;
+  if (new Set(documents.map((document) => document.rowKey)).size !== documents.length) throw new Error('The document review response repeated a document.');
   return {
     ...job,
     documents,
-    summary: documentSummary(data.summary || derivedSummary),
-    container: data.container || null,
-    containerNumber: data.containerNumber || null,
+    summary: documentSummary(data.documentSummary ?? data.documentCounts ?? data.summary),
+    canReviewJob: job.job.lifecycleStatusCode === 'DOC_REVIEW',
+    container: textOrNull(data.container),
+    containerNumber: textOrNull(data.containerNumber),
     tdoDate: data.tdoDate || null,
   };
 }
@@ -191,53 +200,109 @@ function mapStatsResponse(response) {
     throw new Error('The document review stats response is invalid.');
   }
   return {
-    awaitingJobs: numberOrNull(stats.awaiting),
-    approvedJobsToday: numberOrNull(stats.approvedToday),
-    rejectedJobsToday: numberOrNull(stats.rejectedToday),
-    documentCounts: documentSummary(stats.documentCounts),
+    awaitingJobs: numberOrNull(stats.jobs?.awaiting),
+    approvedJobsToday: numberOrNull(stats.jobs?.approvedToday),
+    rejectedJobsToday: numberOrNull(stats.jobs?.rejectedToday),
+    documentCounts: documentSummary(stats.documents ?? stats.documentCounts),
   };
+}
+
+async function readMapped(baseQuery, request, map) {
+  const result = await baseQuery(request);
+  if (result.error) return result;
+  try { return { data: map(result.data) }; } catch (error) { return failure(error.message); }
+}
+async function readQueueDirectory(baseQuery, params = {}) {
+  const rows = [], seen = new Set();
+  let page = 1, total = null, totalPages = 1;
+  do {
+    const result = await readMapped(baseQuery, { url: '/admin/doc-review/queue', params: { ...params, page, limit: 100 } }, (response) => mapQueueResponse(response, { page }));
+    if (result.error) return result;
+    const data = result.data;
+    if (total != null && (total !== data.pagination.total || totalPages !== data.pagination.totalPages)) return failure('The document queue changed while loading. Refresh before filtering.');
+    total = data.pagination.total; totalPages = data.pagination.totalPages;
+    for (const row of data.rows) {
+      if (seen.has(row.id)) return failure('The document queue repeated a job across pages.');
+      seen.add(row.id); rows.push(row);
+    }
+    page += 1;
+  } while (page <= totalPages);
+  return rows.length === total ? { data: rows } : failure('The document queue did not return its complete collection.');
 }
 
 const detailTag = (jobId) => ({ type: 'AdminDocReviewDetail', id: jobId });
 const reviewTags = (jobId) => ['AdminDocReviewStats', 'AdminDocReviewQueue', detailTag(jobId)];
 const reviewPath = (jobId) => `/admin/doc-review/queue/${encodeURIComponent(jobId)}`;
 const documentPath = (jobId, documentId) => `${reviewPath(jobId)}/documents/${encodeURIComponent(documentId)}`;
+async function reviewMutation(baseQuery, { jobId, documentId, reason, approve }) {
+  if (!textOrNull(jobId) || (documentId !== undefined && !textOrNull(documentId))) return failure('The review needs valid job and document IDs.');
+  if (!approve && !textOrNull(reason)) return failure('Enter a reason for the forwarder.');
+  const result = await baseQuery({ url: `${documentId === undefined ? reviewPath(jobId) : documentPath(jobId, documentId)}/${approve ? 'approve' : 'reject'}`, method: 'POST', ...(!approve ? { body: { reason: reason.trim() } } : {}) });
+  if (result.error) return result;
+  const dto = unwrapApiResponseData(result.data);
+  const confirmed = documentId === undefined
+    ? dto?.job?.id === jobId && dto.job.status === (approve ? 'DOCUMENTS_VALIDATED' : 'DRAFT')
+    : dto?.document?.id === documentId && dto.document.status === (approve ? 'APPROVED' : 'REJECTED') && (!dto.job || dto.job.id === jobId);
+  return confirmed ? { data: dto } : failure('The review was sent, but its result could not be confirmed. Refresh before trying again.');
+}
 
 export const documentsApi = baseApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminDocReviewStats: builder.query({
-      query: () => ({ url: '/admin/doc-review/stats' }),
-      transformResponse: mapStatsResponse,
+      queryFn: (_arg, _api, _options, baseQuery) => readMapped(baseQuery, { url: '/admin/doc-review/stats' }, mapStatsResponse),
       providesTags: ['AdminDocReviewStats'],
     }),
     getAdminDocReviewQueue: builder.query({
-      query: ({ status = 'all', search, page = 1, limit = 20 } = {}) => ({
-        url: '/admin/doc-review/queue',
-        params: { status, ...(search ? { search } : {}), page, limit },
-      }),
-      transformResponse: (response, _meta, args) => mapQueueResponse(response, args),
+      async queryFn({ status = 'all', search, documentType, companyId, missing, attentionOnly = false, page = 1, limit = 20 } = {}, _api, _options, baseQuery) {
+        const params = { status, ...(search ? { search } : {}), ...(documentType ? { documentType: documentType.toUpperCase() } : {}), ...(companyId ? { companyId } : {}), ...(missing === true ? { missing: true } : {}) };
+        // The existing By Status default combines awaiting + rejected jobs.
+        // Preserve that union using the complete server-filtered collection.
+        if (attentionOnly) {
+          const result = await readQueueDirectory(baseQuery, params);
+          if (result.error) return result;
+          const rows = result.data.filter((row) => ['awaiting', 'rejected'].includes(row.job.statusCode));
+          return { data: { rows: rows.slice((page - 1) * limit, page * limit), pagination: { page, limit, total: rows.length, totalPages: Math.max(1, Math.ceil(rows.length / limit)) } } };
+        }
+        return readMapped(baseQuery, { url: '/admin/doc-review/queue', params: { ...params, page, limit } }, (response) => {
+          const data = mapQueueResponse(response, { page });
+          if (data.pagination.limit !== limit) throw new Error('The document queue returned a different page size.');
+          return data;
+        });
+      },
       providesTags: ['AdminDocReviewQueue'],
     }),
     getAdminDocReviewDetail: builder.query({
-      query: (jobId) => ({ url: reviewPath(jobId) }),
-      transformResponse: mapDetailResponse,
+      queryFn: (jobId, _api, _options, baseQuery) => readMapped(baseQuery, { url: reviewPath(jobId) }, (response) => {
+        const data = mapDetailResponse(response);
+        if (data.id !== jobId) throw new Error('The document detail response does not match this job.');
+        return data;
+      }),
       providesTags: (_result, _error, jobId) => [detailTag(jobId)],
     }),
+    getAdminDocReviewFilterOptions: builder.query({
+      async queryFn(_arg, _api, _options, baseQuery) {
+        const result = await readQueueDirectory(baseQuery, { status: 'all' });
+        if (result.error) return result;
+        const companies = new Map();
+        for (const row of result.data) if (row.companyId && row.company) companies.set(row.companyId, { id: row.companyId, name: row.company });
+        return { data: { companies: [...companies.values()], types: [...new Set(result.data.flatMap((row) => row.documentTypes))] } };
+      }, providesTags: ['AdminDocReviewQueue'],
+    }),
     approveAdminJobDocuments: builder.mutation({
-      query: (jobId) => ({ url: `${reviewPath(jobId)}/approve`, method: 'POST' }),
+      queryFn: (jobId, _api, _options, baseQuery) => reviewMutation(baseQuery, { jobId, approve: true }),
       invalidatesTags: (_result, _error, jobId) => reviewTags(jobId),
     }),
     rejectAdminJobDocuments: builder.mutation({
-      query: ({ jobId, reason }) => ({ url: `${reviewPath(jobId)}/reject`, method: 'POST', body: { reason } }),
+      queryFn: ({ jobId, reason }, _api, _options, baseQuery) => reviewMutation(baseQuery, { jobId, reason, approve: false }),
       invalidatesTags: (_result, _error, { jobId }) => reviewTags(jobId),
     }),
     approveAdminDocument: builder.mutation({
-      query: ({ jobId, documentId }) => ({ url: `${documentPath(jobId, documentId)}/approve`, method: 'POST' }),
+      queryFn: ({ jobId, documentId }, _api, _options, baseQuery) => reviewMutation(baseQuery, { jobId, documentId, approve: true }),
       invalidatesTags: (_result, _error, { jobId }) => reviewTags(jobId),
     }),
     rejectAdminDocument: builder.mutation({
-      query: ({ jobId, documentId, reason }) => ({ url: `${documentPath(jobId, documentId)}/reject`, method: 'POST', body: { reason } }),
+      queryFn: ({ jobId, documentId, reason }, _api, _options, baseQuery) => reviewMutation(baseQuery, { jobId, documentId, reason, approve: false }),
       invalidatesTags: (_result, _error, { jobId }) => reviewTags(jobId),
     }),
   }),
@@ -247,6 +312,7 @@ export const {
   useGetAdminDocReviewStatsQuery,
   useGetAdminDocReviewQueueQuery,
   useGetAdminDocReviewDetailQuery,
+  useGetAdminDocReviewFilterOptionsQuery,
   useApproveAdminJobDocumentsMutation,
   useRejectAdminJobDocumentsMutation,
   useApproveAdminDocumentMutation,

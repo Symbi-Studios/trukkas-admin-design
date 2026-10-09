@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
@@ -169,6 +169,7 @@ export function TripsSegments() {
   const [actionDialog, setActionDialog] = useState(null);
   const [actionText, setActionText] = useState("");
   const [actionError, setActionError] = useState("");
+  const actionLock = useRef(false);
 
   const selectedRange = useMemo(() => dateRange(dateFilter), [dateFilter]);
   const listFilters = {
@@ -206,7 +207,7 @@ export function TripsSegments() {
   const trips = tripsResponse?.rows || [];
   const origins = useMemo(() => [...new Set(trips.map((trip) => trip.origin).filter(Boolean))], [trips]);
   const destinations = useMemo(() => [...new Set(trips.map((trip) => trip.destination).filter(Boolean))], [trips]);
-  const drivers = useMemo(() => [...new Set(trips.map((trip) => trip.driverName).filter(Boolean))], [trips]);
+  const drivers = useMemo(() => [...new Set(trips.filter((trip) => trip.driverId).map((trip) => trip.driverName).filter(Boolean))], [trips]);
   const filtered = trips;
   const selectedRow = trips.find((trip) => trip.id === selectedId) || null;
   const selectedTrip = tripDetail || selectedRow;
@@ -280,9 +281,10 @@ export function TripsSegments() {
   }
 
   async function confirmAction() {
-    if (!actionDialog || actionBusy) return;
+    if (!actionDialog || actionBusy || actionLock.current) return;
     const { type, trip } = actionDialog;
     if (["delay", "message"].includes(type) && !actionText.trim()) return;
+    actionLock.current = true;
     try {
       if (type === "delay") await markDelayed({ id: trip.id, reason: actionText }).unwrap();
       if (type === "clear-delay") await clearDelayed(trip.id).unwrap();
@@ -293,6 +295,8 @@ export function TripsSegments() {
       setToast({ tone: "success", title: type === "delay" ? "Trip marked delayed." : type === "clear-delay" ? "Delay flag cleared." : type === "delivery" ? "Trip marked at delivery." : "Message sent to driver." });
     } catch (requestError) {
       setActionError(apiErrorMessage(requestError, "Unable to update this trip."));
+    } finally {
+      actionLock.current = false;
     }
   }
 
@@ -385,7 +389,7 @@ export function TripsSegments() {
     },
   ];
 
-  if (!tripsResponse && isLoading) return <TripsLoading />;
+  if (!tripsResponse && (isLoading || isFetching)) return <TripsLoading />;
 
   return (
     <div className="operations-screen">
@@ -430,7 +434,7 @@ export function TripsSegments() {
       <div className="ops-panel">
         <div className="ops-panel-head">
           <div>
-            <h3>All Trips <small>({tripsResponse?.pagination.total ?? 0})</small></h3>
+            <h3>All Trips <small>({tripsResponse?.pagination.total ?? "—"})</small></h3>
             <p>Click a trip to view its latest available details.</p>
           </div>
           <SearchField placeholder="Search trip, job, route, truck or driver…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -471,7 +475,7 @@ export function TripsSegments() {
             open={openFilter === "driver"}
             onToggle={() => setOpenFilter(openFilter === "driver" ? null : "driver")}
             options={["All Drivers", ...drivers]}
-            onSelect={(value) => { setDriverFilter(value); setDriverId(value === "All Drivers" ? null : trips.find((trip) => trip.driverName === value)?.driverId || null); setOpenFilter(null); }}
+            onSelect={(value) => { setDriverFilter(value); setDriverId(value === "All Drivers" ? null : trips.find((trip) => trip.driverName === value && trip.driverId)?.driverId || null); setOpenFilter(null); }}
           />
           <FilterMenu
             label="Date Range"
@@ -494,7 +498,7 @@ export function TripsSegments() {
           page={tripsResponse?.pagination.page || page}
           pageCount={Math.max(1, tripsResponse?.pagination.totalPages || 1)}
           pageSize={tripsResponse?.pagination.limit || PAGE_SIZE}
-          total={tripsResponse?.pagination.total ?? 0}
+          total={tripsResponse?.pagination.total ?? null}
           onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, tripsResponse?.pagination.totalPages || 1)))}
         />
       </div>

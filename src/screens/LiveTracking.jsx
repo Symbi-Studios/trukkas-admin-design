@@ -8,7 +8,7 @@ import {
 import './LiveTracking.css';
 import {
   useGetAdminTripsQuery,
-  useLazyGetAdminTripsQuery,
+  useGetAdminTrackingTripsQuery,
   useGetAdminTripStatsQuery,
   useGetAdminTripDetailQuery,
   useLazyExportAdminTripsQuery,
@@ -20,10 +20,6 @@ const STATUSES = ['Assigned', 'In Transit', 'At Pickup', 'At Delivery', 'Deliver
 const STATUS_FILTERS = {
   Assigned: 'assigned', 'In Transit': 'inTransit', 'At Pickup': 'atPickup',
   'At Delivery': 'atDelivery', Delivered: 'completed', Delayed: 'delayed',
-};
-const MAP_STATUS_COLOR = {
-  Assigned: '#0241e8', 'In Transit': '#0241e8', 'At Pickup': '#f27602', 'At Delivery': '#0e7c86',
-  Delivered: '#12833b', Delayed: '#cb0611', Stopped: '#8a90a8', Maintenance: '#4c16ac',
 };
 const STATUS_COLOR = {
   Assigned: 'var(--tk-info)',
@@ -45,52 +41,6 @@ const QUICK_ACTIONS = [
 const LAYERS = ['Trucks', 'Trips', 'Clusters', 'Geofences', 'Traffic'];
 const LAYER_ICON = { Trucks: 'truck', Trips: 'route', Clusters: 'shapes', Geofences: 'octagon', Traffic: 'activity' };
 
-function mapApiTrip(trip) {
-  const status = trip.status || 'Unknown';
-  const latitude = trip.truck?.latitude;
-  const longitude = trip.truck?.longitude;
-  const position = trip.hasGpsPosition && Number.isFinite(latitude) && Number.isFinite(longitude)
-    && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
-    ? { lat: latitude, lng: longitude } : null;
-  const statusColor = MAP_STATUS_COLOR[status] || MAP_STATUS_COLOR['In Transit'];
-
-  return {
-    id: trip.id,
-    jobId: trip.jobId,
-    from: trip.origin || '-',
-    to: trip.destination || '-',
-    status,
-    statusColor,
-    speed: null,
-    driver: trip.driverName || '—',
-    driverPhone: trip.driverPhone || '—',
-    truck: trip.truck?.plateNumber || '—',
-    truckPhone: '—',
-    company: trip.truckingCompanyName || '—',
-    companyPhone: trip.truckingCompanyPhone || '—',
-    container: trip.container.size || trip.containerNumber || '—',
-    cargo: trip.cargoDescription || '—',
-    location: trip.currentLocation.description
-      ? `${trip.currentLocation.description}${trip.currentLocation.source === 'TRIP_STATUS' ? ' (status based)' : ''}`
-      : position ? `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}` : '—',
-    distanceCovered: trip.distance.totalKm != null && trip.distance.remainingKm != null
-      ? `${Math.max(0, trip.distance.totalKm - trip.distance.remainingKm).toFixed(1)} km` : '—',
-    totalDistance: trip.distance.totalKm == null ? '—' : `${trip.distance.totalKm} km`,
-    eta: trip.displayEta || '—',
-    nextStop: trip.destination || '—',
-    lastUpdate: trip.truck?.displayLastLocationUpdate || (trip.dates.updatedAt ? new Date(trip.dates.updatedAt).toLocaleString('en-NG') : '—'),
-    engine: '—',
-    progress: trip.progressPercent,
-    stops: trip.milestones.map((milestone) => ({
-      time: milestone.at ? new Date(milestone.at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }) : '—',
-      label: milestone.label,
-      state: milestone.completed ? 'done' : 'pending',
-    })),
-    position,
-    driverId: trip.driverId,
-  };
-}
-
 function downloadCsv(csv) {
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
@@ -111,6 +61,8 @@ export function LiveTracking() {
   const [page, setPage] = useState(1);
   const [loadedTrips, setLoadedTrips] = useState([]);
   const [refreshingTrips, setRefreshingTrips] = useState(false);
+  const refreshLock = useRef(false);
+  const messageLock = useRef(false);
   const filterVersion = useRef(0);
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [q, setQ] = useState('');
@@ -119,10 +71,10 @@ export function LiveTracking() {
     isLoading: tripsLoading,
     isFetching: tripsFetching,
     error: tripsError,
-  } = useGetAdminTripsQuery({
+    refetch: refetchTrackingTrips,
+  } = useGetAdminTrackingTripsQuery({
     page, limit: 100, statusFilter: STATUS_FILTERS[statusFilter], search: q.trim() || undefined,
   }, { pollingInterval: 30000 });
-  const [fetchTripsPage] = useLazyGetAdminTripsQuery();
   const { currentData: statsResponse, refetch: refetchStats } = useGetAdminTripStatsQuery(undefined, { pollingInterval: 30000 });
   const { currentData: assignedCountResponse, refetch: refetchAssignedCount } = useGetAdminTripsQuery({ page: 1, limit: 1, statusFilter: 'assigned' }, { pollingInterval: 30000 });
   const { currentData: completedCountResponse, refetch: refetchCompletedCount } = useGetAdminTripsQuery({ page: 1, limit: 1, statusFilter: 'completed' }, { pollingInterval: 30000 });
@@ -156,13 +108,10 @@ export function LiveTracking() {
     setLoadedTrips([]);
   }, [statusFilter, q]);
   useEffect(() => {
-    if (!tripsResponse) return;
-    setLoadedTrips((previous) => page === 1 ? tripsResponse.rows : [
-      ...new Map([...previous, ...tripsResponse.rows].map((trip) => [trip.id, trip])).values(),
-    ]);
-  }, [tripsResponse, page]);
+    if (tripsResponse) setLoadedTrips(tripsResponse.rows);
+  }, [tripsResponse]);
 
-  const trackedTrips = useMemo(() => loadedTrips.map(mapApiTrip), [loadedTrips]);
+  const trackedTrips = loadedTrips;
 
   useEffect(() => {
     if (selectedId && trackedTrips.length && !trackedTrips.some((trip) => trip.id === selectedId)) {
@@ -171,10 +120,10 @@ export function LiveTracking() {
   }, [selectedId, trackedTrips]);
 
   const filtered = useMemo(() => trackedTrips.filter((trip) => statusFilter === 'All Status'
-    ? !['Delivered', 'Disputed'].includes(trip.status) : trip.status === statusFilter), [statusFilter, trackedTrips]);
+    ? !['completed', 'disputed'].includes(trip.segment) : true), [statusFilter, trackedTrips]);
   const visible = filtered.slice(0, visibleCount);
   const selectedLiveTrip = useMemo(() => selectedId && selectedDetail?.id === selectedId
-    ? mapApiTrip(selectedDetail) : null, [selectedId, selectedDetail]);
+    ? selectedDetail.tracking : null, [selectedId, selectedDetail]);
   const selected = selectedId
     ? (selectedLiveTrip || trackedTrips.find((t) => t.id === selectedId) || null)
     : null;
@@ -185,7 +134,7 @@ export function LiveTracking() {
       color: trip.statusColor || '#2563eb',
       opportunityId: trip.id,
     }));
-    if (selectedLiveTrip?.position) points.push({
+    if (selectedLiveTrip?.position && filtered.some((trip) => trip.id === selectedLiveTrip.id)) points.push({
       ...selectedLiveTrip.position,
       title: `${selectedLiveTrip.truck} · ${selectedLiveTrip.from} → ${selectedLiveTrip.to}`,
       color: selectedLiveTrip.statusColor || '#2563eb',
@@ -204,35 +153,26 @@ export function LiveTracking() {
     { label: 'At Pickup', value: count('atPickup'), color: STATUS_COLOR['At Pickup'] },
     { label: 'At Delivery', value: count('atDelivery'), color: STATUS_COLOR['At Delivery'] },
     { label: 'Returning Container', value: count('returningContainer'), color: 'var(--tk-teal)' },
-  ].filter((item) => typeof item.value === 'number').map((item) => ({
-    ...item, pct: activeCount ? Math.round((item.value / activeCount) * 100) : 0,
+  ].map((item) => ({
+    ...item, pct: activeCount == null || item.value == null ? null : activeCount === 0 ? 0 : Math.round((item.value / activeCount) * 100),
   }));
   const hasMorePages = page < (tripsResponse?.pagination.totalPages || 1);
 
   async function refreshTracking() {
-    if (refreshingTrips) return;
+    if (refreshLock.current) return;
+    refreshLock.current = true;
     const currentFilterVersion = filterVersion.current;
     setRefreshingTrips(true);
     try {
-      const refreshed = [];
-      for (let nextPage = 1; nextPage <= page; nextPage += 1) {
-        const response = await fetchTripsPage({
-          page: nextPage, limit: 100, statusFilter: STATUS_FILTERS[statusFilter], search: q.trim() || undefined,
-        }, false).unwrap();
-        refreshed.push(...response.rows);
-        if (nextPage >= response.pagination.totalPages) break;
-      }
-      if (currentFilterVersion === filterVersion.current) {
-        setLoadedTrips([...new Map(refreshed.map((trip) => [trip.id, trip])).values()]);
-      }
-      await Promise.allSettled([
-        refetchStats(), refetchAssignedCount(), refetchCompletedCount(),
-        ...(selectedId ? [refetchSelectedDetail()] : []),
+      await Promise.all([
+        refetchTrackingTrips().unwrap(), refetchStats().unwrap(), refetchAssignedCount().unwrap(), refetchCompletedCount().unwrap(),
+        ...(selectedId ? [refetchSelectedDetail().unwrap()] : []),
       ]);
       if (currentFilterVersion === filterVersion.current) notify('success', 'Trip locations refreshed.');
     } catch (error) {
-      notify('danger', apiErrorMessage(error, 'Unable to refresh trip locations.'));
+      if (currentFilterVersion === filterVersion.current) notify('danger', apiErrorMessage(error, 'Unable to refresh trip locations.'));
     } finally {
+      refreshLock.current = false;
       setRefreshingTrips(false);
     }
   }
@@ -254,7 +194,8 @@ export function LiveTracking() {
   }
 
   async function sendDriverMessage() {
-    if (!selected?.driverId || !message.trim() || sendingMessage) return;
+    if (!selected?.driverId || !message.trim() || sendingMessage || messageLock.current) return;
+    messageLock.current = true;
     try {
       await messageDriver({ id: selected.id, message }).unwrap();
       setMessageOpen(false);
@@ -262,6 +203,8 @@ export function LiveTracking() {
       notify('success', 'Message sent to driver.');
     } catch (error) {
       notify('danger', apiErrorMessage(error, 'Unable to message the driver.'));
+    } finally {
+      messageLock.current = false;
     }
   }
 
@@ -409,7 +352,9 @@ export function LiveTracking() {
                   <div className="lt-contact-row" key={label} style={{ borderTop: label !== 'Driver' ? '1px solid var(--tk-line)' : 'none' }}>
                     <span style={{ width: 32, height: 32, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)', color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}><Icon name={icon} size={15} /></span>
                     <div style={{ flex: 1, display: 'grid', gap: 1 }}><span className="tk-meta">{label}</span><strong style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value}</strong></div>
-                    <IconButton icon="phone" tone="outline" disabled={!phone || phone === '—'} onClick={() => notify('success', `Calling ${value}…`)} />
+                    <IconButton icon="phone" tone="outline" disabled={!phone || phone === '—'} onClick={() => {
+                      if (/^\+?[\d ()-]{5,30}$/.test(phone)) window.location.assign(`tel:${phone.replace(/[ ()-]/g, '')}`);
+                    }} />
                   </div>
                 ))}
               </div>
@@ -460,13 +405,13 @@ export function LiveTracking() {
       <div className="lt-bottom">
         <SectionCard title="Live Overview">
           <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-            <DonutChart size={140} thickness={18} centerValue={activeCount ?? '—'} centerLabel="Active Trips" data={overview} />
+            <DonutChart size={140} thickness={18} centerValue={activeCount ?? '—'} centerLabel="Active Trips" data={activeCount == null ? [] : overview} />
             <div style={{ width: '100%', display: 'grid', gap: 8 }}>
               {overview.map((o) => (
                 <div key={o.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ width: 8, height: 8, borderRadius: 999, background: o.color, flex: '0 0 auto' }} />
                   <span style={{ flex: 1, font: '400 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{o.label}</span>
-                  <strong style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{o.value} ({o.pct}%)</strong>
+                  <strong style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{o.value ?? '—'} ({o.pct == null ? '—' : `${o.pct}%`})</strong>
                 </div>
               ))}
             </div>

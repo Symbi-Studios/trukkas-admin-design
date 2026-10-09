@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import { Badge, Banner, Button, Card, EmptyState, Icon, Modal, PageHeader, SectionCard, Skeleton, Textarea } from '../ds.js';
@@ -9,6 +10,7 @@ import {
   useApproveAdminDocumentMutation,
   useGetAdminDocReviewDetailQuery,
   useRejectAdminDocumentMutation,
+  documentTime,
 } from '../store/features/documents/documentsApi.js';
 import './Documents.css';
 
@@ -16,15 +18,12 @@ function requestError(error) {
   const message = error?.data?.message;
   if (typeof message === 'string') return message;
   if (Array.isArray(message)) return message.join(' ');
+  if (error?.status === 'CUSTOM_ERROR' && typeof error.error === 'string') return error.error;
   return error?.status === 403 ? 'Your account cannot review this document.' : 'The request could not be completed.';
 }
 
 function formatTime(value) {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('en-NG', {
-    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  }).format(date);
+  return documentTime(value);
 }
 
 function Info({ label, value }) {
@@ -37,8 +36,9 @@ export function DocumentDetail() {
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId');
   const documentId = searchParams.get('documentId') || params.documentId;
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const { currentData: job, isLoading, isFetching, error, refetch } = useGetAdminDocReviewDetailQuery(jobId, {
-    skip: !jobId,
+    skip: !jobId || !authenticated,
     refetchOnMountOrArgChange: true,
   });
   const document = job?.documents.find((item) => item.id === documentId || item.rowKey === documentId);
@@ -48,6 +48,7 @@ export function DocumentDetail() {
   const [reason, setReason] = useState('');
   const [notice, setNotice] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  useEffect(() => { setAction(null); setReason(''); setNotice(null); }, [jobId, documentId]);
 
   async function submit() {
     if (!document?.id || !jobId || !action || submitting) return;
@@ -70,7 +71,7 @@ export function DocumentDetail() {
   if (error) return <Card><EmptyState icon="file-text" title={error.status === 403 ? 'Access denied' : error.status === 404 ? 'Job not found' : 'Document details unavailable'} description="Please try again or return to Documents." /><div className="documents-detail-empty-actions"><Button variant="outline" onClick={refetch}>Retry</Button><Button variant="secondary" onClick={() => navigate('/documents')}>Back to Documents</Button></div></Card>;
   if (!document) return <Card><EmptyState icon="file-text" title="Document not found" description="This document is not in the job review response." /><Button variant="secondary" onClick={() => navigate('/documents')}>Back to Documents</Button></Card>;
 
-  const reviewable = Boolean(document.id) && canAdminReview(document);
+  const reviewable = Boolean(document.id) && document.canReview === true && canAdminReview(document);
   return (
     <div className="documents-screen">
       <PageHeader
@@ -92,8 +93,8 @@ export function DocumentDetail() {
           </SectionCard>
           <SectionCard title="Review history">
             {document.uploadedAt || document.reviewedAt || document.rejectionReason ? <>
-              {document.uploadedAt && <div className="document-activity"><span className="node"><Icon name="upload" size={12} /></span><span><strong>Document uploaded</strong><small>{document.uploadedBy || 'Uploader unavailable'} · {formatTime(document.uploadedAt)}</small></span></div>}
-              {document.reviewedAt && <div className="document-activity"><span className="node"><Icon name="shield-check" size={12} /></span><span><strong>Review recorded</strong><small>{document.reviewedBy || 'Reviewer unavailable'} · {formatTime(document.reviewedAt)}</small></span></div>}
+              {document.uploadedAt && <div className="document-activity"><span className="node"><Icon name="upload" size={12} /></span><span><strong>Document uploaded</strong><small>{document.uploadedBy || '—'} · {formatTime(document.uploadedAt)}</small></span></div>}
+              {document.reviewedAt && <div className="document-activity"><span className="node"><Icon name="shield-check" size={12} /></span><span><strong>Review recorded</strong><small>{document.reviewedBy || '—'} · {formatTime(document.reviewedAt)}</small></span></div>}
               {document.rejectionReason && <div className="document-review-note"><strong>Review reason</strong><p>{document.rejectionReason}</p></div>}
             </> : <p className="tk-muted">Review history is not available in this response.</p>}
           </SectionCard>
@@ -112,8 +113,8 @@ export function DocumentDetail() {
             <Info label="Uploader role" value={document.uploadedByRole || '—'} />
             <Info label="Date uploaded" value={formatTime(document.uploadedAt)} />
             <Info label="File type" value={document.fileType || '—'} />
-            <Info label="File size" value={document.fileSize || '—'} />
-            <Info label="Version" value={document.version ? `v${document.version}` : '—'} />
+            <Info label="File size" value={document.fileSize ?? '—'} />
+            <Info label="Version" value={document.version != null ? `v${document.version}` : '—'} />
             <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onClick={() => navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`)}>View job details</Button>
           </SectionCard>
         </div>

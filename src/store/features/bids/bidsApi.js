@@ -1,14 +1,25 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
+const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
+const identifier = (value) => text(value) || (Number.isSafeInteger(value) && value >= 0 ? String(value) : null);
+
 function numberOrNull(value) {
-  if (value == null || value === '') return null;
+  if ((typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && !value.trim())) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function numberOr(value, fallback) {
+function count(value) {
   const parsed = numberOrNull(value);
-  return parsed == null ? fallback : parsed;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function timestamp(value) {
+  if (!text(value) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  const [year, month, day, hour, minute, second] = value.slice(0, 19).split(/[-T:]/).map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate() || hour > 23 || minute > 59 || second > 59) return null;
+  return Number.isFinite(Date.parse(value)) ? value : null;
 }
 
 function formatStatus(value) {
@@ -21,30 +32,28 @@ function formatStatus(value) {
 }
 
 function mapBid(bid) {
-  const trucker = bid.trucker && typeof bid.trucker === 'object' ? bid.trucker : null;
-  const job = bid.job && typeof bid.job === 'object' ? bid.job : null;
-  const statusCode = typeof bid.status === 'string' ? bid.status : '';
+  const trucker = record(bid.trucker);
+  const job = record(bid.job);
+  const statusCode = text(bid.status) || '';
   return {
-    id: String(bid.id),
-    jobId: bid.jobId == null ? (job?.id == null ? null : String(job.id)) : String(bid.jobId),
-    jobNumber: bid.jobNumber || job?.jobNumber || null,
-    route: bid.route || job?.route || null,
-    truckerId: bid.truckerId == null ? (trucker?.id == null ? null : String(trucker.id)) : String(bid.truckerId),
-    truckerName: bid.truckerName || trucker?.name || '—',
-    truckerRating: numberOrNull(bid.truckerRating ?? trucker?.rating),
-    truckerTrips: numberOrNull(bid.truckerTrips ?? trucker?.trips),
+    id: identifier(bid.id),
+    jobId: identifier(bid.jobId) ?? identifier(job.id),
+    jobNumber: text(bid.jobNumber) ?? text(job.jobNumber),
+    route: text(bid.route) ?? text(job.route),
+    truckerId: identifier(bid.truckerId) ?? identifier(trucker.id),
+    truckerName: text(bid.truckerName) ?? text(trucker.name) ?? '—',
+    truckerRating: numberOrNull(bid.truckerRating ?? trucker.rating),
+    truckerTrips: count(bid.truckerTrips ?? trucker.totalTrips),
     amount: numberOrNull(bid.amount),
-    currency: bid.currency || null,
-    isCounterOffer: bid.isCounterOffer === true,
+    currency: text(bid.currency),
+    isCounterOffer: typeof bid.isCounterOffer === 'boolean' ? bid.isCounterOffer : null,
     statusCode,
-    status: bid.statusLabel || formatStatus(statusCode),
-    createdAt: bid.createdAt || null,
-    expiresAt: bid.expiresAt || null,
-    respondedAt: bid.respondedAt || null,
-    originalAmount: numberOrNull(bid.originalAmount),
-    counterOfferAmount: numberOrNull(bid.counterOfferAmount),
-    estimatedDeliveryDate: bid.estimatedDeliveryDate || bid.deliveryDate || null,
-    message: bid.message || bid.notes || null,
+    status: formatStatus(statusCode),
+    createdAt: timestamp(bid.createdAt),
+    expiresAt: timestamp(bid.expiresAt),
+    respondedAt: timestamp(bid.respondedAt),
+    estimatedDeliveryDate: timestamp(bid.estimatedDeliveryDate),
+    message: text(bid.message),
   };
 }
 
@@ -53,17 +62,15 @@ function mapListResponse(response, args = {}) {
   if (!Array.isArray(data?.bids)) {
     throw new Error('The bids response is missing its bid list.');
   }
-  const rows = data.bids.filter((bid) => bid && bid.id != null).map(mapBid);
-  const pagination = data.pagination || {};
-  const limit = numberOr(pagination.limit, args.limit || rows.length || 20);
-  const total = numberOr(pagination.total, rows.length);
+  const rows = data.bids.filter((bid) => identifier(record(bid).id) != null).map(mapBid);
+  const pagination = record(data.pagination);
   return {
     rows,
     pagination: {
-      page: numberOr(pagination.page, args.page || 1),
-      limit,
-      total,
-      totalPages: numberOr(pagination.totalPages, limit > 0 ? Math.ceil(total / limit) : 1),
+      page: count(pagination.page) || args.page || 1,
+      limit: count(pagination.limit) || args.limit || 20,
+      total: count(pagination.total),
+      totalPages: count(pagination.totalPages),
     },
   };
 }
@@ -74,27 +81,41 @@ function mapAnalyticsResponse(response) {
   if (!analytics || typeof analytics !== 'object' || Array.isArray(analytics)) {
     throw new Error('The bid analytics response is invalid.');
   }
-  const funnel = analytics.funnel || {};
+  const funnel = record(analytics.funnel);
+  const margin = record(analytics.averageWinningMargin);
+  const breakdown = record(analytics.statusBreakdown);
   return {
-    totalBids: numberOr(analytics.totalBids, 0),
-    pendingBids: numberOr(analytics.pendingBids, 0),
-    counterOffers: numberOr(analytics.counterOffers, 0),
-    acceptedBids: numberOr(analytics.acceptedBids, 0),
-    expiredBids: numberOr(analytics.expiredBids, 0),
+    totalBids: count(analytics.totalBids),
+    pendingBids: count(analytics.pendingBids),
+    counterOffers: count(analytics.counterOffers),
+    acceptedBids: count(analytics.acceptedBids),
+    expiredBids: count(analytics.expiredBids),
+    averageWinningMargin: {
+      amount: count(margin.sampleSize) === 0 ? null : numberOrNull(margin.amount),
+      percent: count(margin.sampleSize) === 0 ? null : numberOrNull(margin.percent),
+      currency: text(margin.currency),
+      sampleSize: count(margin.sampleSize),
+    },
+    statusBreakdown: {
+      pending: count(breakdown.pending),
+      accepted: count(breakdown.accepted),
+      expired: count(breakdown.expired),
+      other: count(breakdown.other),
+    },
     funnel: {
-      jobsPublished: numberOr(funnel.jobsPublished, 0),
-      jobsWithBids: numberOr(funnel.jobsWithBids, 0),
-      bidsReceived: numberOr(funnel.bidsReceived, 0),
-      bidsAccepted: numberOr(funnel.bidsAccepted, 0),
-      jobsCompleted: numberOr(funnel.jobsCompleted, 0),
+      jobsPublished: count(funnel.jobsPublished),
+      jobsWithBids: count(funnel.jobsWithBids),
+      bidsReceived: count(funnel.bidsReceived),
+      bidsAccepted: count(funnel.bidsAccepted),
+      jobsCompleted: count(funnel.jobsCompleted),
     },
     topCompanies: Array.isArray(analytics.topCompanies)
-      ? analytics.topCompanies.map((company, index) => ({
-          id: company.truckerId == null ? `company-${index}` : String(company.truckerId),
-          name: company.name || '—',
-          totalBids: numberOr(company.totalBids, 0),
-          won: numberOr(company.won, 0),
-          winRate: numberOr(company.winRate, 0),
+      ? analytics.topCompanies.filter((company) => company && typeof company === 'object' && !Array.isArray(company)).map((company, index) => ({
+          id: identifier(company.truckerId) ?? `company-${index}`,
+          name: text(company.name) ?? '—',
+          totalBids: count(company.totalBids),
+          won: count(company.won),
+          winRate: numberOrNull(company.winRate),
         }))
       : [],
   };
@@ -103,19 +124,21 @@ function mapAnalyticsResponse(response) {
 function mapDetailResponse(response) {
   const data = unwrapApiResponseData(response);
   const bid = data?.bid && typeof data.bid === 'object' ? data.bid : data;
-  if (!bid || typeof bid !== 'object' || Array.isArray(bid) || bid.id == null) {
+  if (!identifier(record(bid).id)) {
     throw new Error('The bid detail response is missing its bid ID.');
   }
   return mapBid(bid);
 }
 
 export const bidsApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminBids: builder.query({
-      query: ({ status, jobId, search, dateFrom, dateTo, page = 1, limit = 20 } = {}) => ({
+      query: ({ status, isCounterOffer, jobId, search, dateFrom, dateTo, page = 1, limit = 20 } = {}) => ({
         url: '/admin/bids',
         params: {
           ...(status ? { status } : {}),
+          ...(typeof isCounterOffer === 'boolean' ? { isCounterOffer } : {}),
           ...(jobId ? { jobId } : {}),
           ...(search ? { search } : {}),
           ...(dateFrom ? { dateFrom } : {}),
@@ -131,7 +154,14 @@ export const bidsApi = baseApi.injectEndpoints({
       ],
     }),
     getAdminBidAnalytics: builder.query({
-      query: () => ({ url: '/admin/bids/analytics' }),
+      query: ({ dateFrom, dateTo, allTime } = {}) => ({
+        url: '/admin/bids/analytics',
+        params: {
+          ...(dateFrom ? { dateFrom } : {}),
+          ...(dateTo ? { dateTo } : {}),
+          ...(typeof allTime === 'boolean' ? { allTime } : {}),
+        },
+      }),
       transformResponse: mapAnalyticsResponse,
       providesTags: ['AdminBidAnalytics'],
     }),

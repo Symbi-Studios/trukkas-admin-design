@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "../router.js";
 import {
   Avatar,
@@ -75,7 +75,7 @@ function dateParams(label) {
 function dateTime(value) {
   if (!value) return "—";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("en-NG", {
     day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   }).format(date);
@@ -88,7 +88,7 @@ function money(value, currency = "NGN") {
       style: "currency", currency: currency || "NGN", maximumFractionDigits: 0,
     }).format(value);
   } catch {
-    return `₦${value.toLocaleString("en-NG")}`;
+    return "—";
   }
 }
 
@@ -163,6 +163,7 @@ export function BidsOffers() {
 
   const selectedStatus = STATUS_OPTIONS.find(([label]) => label === statusFilter)?.[1] || null;
   const status = TAB_STATUS[tab] || selectedStatus;
+  const isCounterTab = tab === "Counter Offers";
   const dates = dateParams(dateRange);
   const {
     currentData: bidsResponse,
@@ -170,15 +171,22 @@ export function BidsOffers() {
     isFetching,
     error,
     refetch,
-  } = useGetAdminBidsQuery({ status, search, ...dates, page, limit: PAGE_SIZE }, {
+  } = useGetAdminBidsQuery({ status, isCounterOffer: isCounterTab ? true : undefined, search, ...dates, page, limit: PAGE_SIZE }, {
     refetchOnMountOrArgChange: true,
   });
   const {
-    data: analytics,
-    isLoading: analyticsLoading,
+    currentData: analytics,
+    isFetching: analyticsFetching,
     error: analyticsError,
     refetch: refetchAnalytics,
+  } = useGetAdminBidAnalyticsQuery(dateRange === "All Dates" ? { allTime: true } : dates, { refetchOnMountOrArgChange: true });
+  // Keep the existing company's rolling-seven-day section on its documented window.
+  const {
+    currentData: rollingAnalytics,
+    error: rollingAnalyticsError,
+    refetch: refetchRollingAnalytics,
   } = useGetAdminBidAnalyticsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const analyticsLoading = analyticsFetching && !analytics;
   const {
     currentData: selectedBid,
     isLoading: detailLoading,
@@ -188,24 +196,25 @@ export function BidsOffers() {
   } = useGetAdminBidDetailQuery(selectedBidId, { skip: !selectedBidId });
 
   const rows = bidsResponse?.rows || [];
-  const isCounterTab = tab === "Counter Offers";
-  const visibleRows = useMemo(
-    () => isCounterTab ? rows.filter((bid) => bid.isCounterOffer) : rows,
-    [isCounterTab, rows],
-  );
+  const visibleRows = rows;
   const counterOffers = rows.filter((bid) => bid.isCounterOffer);
 
-  const funnelData = analytics ? [
-    ["Jobs Published", analytics.funnel.jobsPublished, "#8d58e8"],
-    ["Jobs with Bids", analytics.funnel.jobsWithBids, "#5b79e5"],
-    ["Bids Received", analytics.funnel.bidsReceived, "#74d1b1"],
-    ["Bids Accepted", analytics.funnel.bidsAccepted, "#ffa11e"],
-    ["Jobs Completed", analytics.funnel.jobsCompleted, "#ff676d"],
-  ] : [];
-  const funnelMax = Math.max(1, ...funnelData.map((item) => item[1]));
-  const otherBids = analytics
-    ? Math.max(0, analytics.totalBids - analytics.pendingBids - analytics.acceptedBids - analytics.expiredBids)
-    : 0;
+  const funnelData = [
+    ["Jobs Published", analytics?.funnel.jobsPublished, "#8d58e8"],
+    ["Jobs with Bids", analytics?.funnel.jobsWithBids, "#5b79e5"],
+    ["Bids Received", analytics?.funnel.bidsReceived, "#74d1b1"],
+    ["Bids Accepted", analytics?.funnel.bidsAccepted, "#ffa11e"],
+    ["Jobs Completed", analytics?.funnel.jobsCompleted, "#ff676d"],
+  ];
+  const funnelMax = Math.max(1, ...funnelData.map((item) => item[1] ?? 0));
+  const breakdown = analytics?.statusBreakdown;
+  const donutData = [
+    { value: breakdown?.pending, color: "#f27602" },
+    { value: breakdown?.accepted, color: "#12a150" },
+    { value: breakdown?.expired, color: "#e02b22" },
+    { value: breakdown?.other, color: "#8d58e8" },
+  ];
+  const winningMargin = analytics?.averageWinningMargin;
 
   function exportRows() {
     if (!visibleRows.length) return;
@@ -213,7 +222,7 @@ export function BidsOffers() {
       ["Bid ID", "Job", "Route", "Trucking Company", "Amount", "Counter Offer", "Status", "Submitted", "Expires", "Responded"],
       ...visibleRows.map((bid) => [
         bid.id, bid.jobNumber, bid.route, bid.truckerName, bid.amount,
-        bid.isCounterOffer ? "Yes" : "No", bid.status, bid.createdAt, bid.expiresAt, bid.respondedAt,
+        bid.isCounterOffer == null ? "—" : bid.isCounterOffer ? "Yes" : "No", bid.status, bid.createdAt, bid.expiresAt, bid.respondedAt,
       ]),
     ];
     const csv = data.map((row) => row.map(csvCell).join(",")).join("\n");
@@ -242,12 +251,12 @@ export function BidsOffers() {
       render: (bid) => (
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Avatar name={bid.truckerName} size={30} />
-          <span className="cell-two"><strong>{bid.truckerName}</strong><small>{bid.truckerRating == null ? "Rating unavailable" : `${bid.truckerRating} rating`}{bid.truckerTrips == null ? "" : ` · ${bid.truckerTrips} trips`}</small></span>
+          <span className="cell-two"><strong>{bid.truckerName}</strong><small>{bid.truckerRating == null ? "—" : `${bid.truckerRating} rating`}{bid.truckerTrips == null ? " · —" : ` · ${bid.truckerTrips} trips`}</small></span>
         </span>
       ),
     },
     { key: "amount", header: "Bid Amount", render: (bid) => <strong>{money(bid.amount, bid.currency)}</strong> },
-    { key: "offer", header: "Offer Type", render: (bid) => bid.isCounterOffer ? <Badge tone="info">Counter Offer</Badge> : "Initial Bid" },
+    { key: "offer", header: "Offer Type", render: (bid) => bid.isCounterOffer == null ? "—" : bid.isCounterOffer ? <Badge tone="info">Counter Offer</Badge> : "Initial Bid" },
     { key: "status", header: "Status", render: (bid) => <Badge tone={STATUS_TONES[bid.status] || "neutral"} dot>{bid.status}</Badge> },
     { key: "created", header: "Submitted", render: (bid) => dateTime(bid.createdAt), width: 145 },
   ];
@@ -285,27 +294,26 @@ export function BidsOffers() {
           <Button variant="outline" icon="rotate-cw" onClick={refetch}>Retry</Button>
         </div>
       )}
-      {analyticsError && (
+      {(analyticsError || rollingAnalyticsError) && (
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Banner tone="warning" title="Bid analytics are temporarily unavailable." />
-          <Button variant="outline" icon="rotate-cw" onClick={refetchAnalytics}>Retry analytics</Button>
+          <Button variant="outline" icon="rotate-cw" onClick={() => { refetchAnalytics(); refetchRollingAnalytics(); }}>Retry analytics</Button>
         </div>
       )}
 
       <div className="kpi-grid">
-        <Metric label="Total Bids" value={analyticsLoading ? "…" : analytics?.totalBids?.toLocaleString() ?? "—"} icon="briefcase-business" />
-        <Metric label="Pending Evaluation" value={analyticsLoading ? "…" : analytics?.pendingBids?.toLocaleString() ?? "—"} icon="hand-coins" color="#f27602" />
-        <Metric label="Counter Offers" value={analyticsLoading ? "…" : analytics?.counterOffers?.toLocaleString() ?? "—"} icon="users-round" color="#2469e8" />
-        <Metric label="Accepted Bids" value={analyticsLoading ? "…" : analytics?.acceptedBids?.toLocaleString() ?? "—"} icon="badge-check" color="#12a150" />
-        <Metric label="Expired Offers" value={analyticsLoading ? "…" : analytics?.expiredBids?.toLocaleString() ?? "—"} icon="clock" color="#e02b22" />
-        <Metric label="Avg. Winning Margin" value="—" caption="Not reported by API" icon="badge-percent" />
+        <Metric label="Total Bids" value={analyticsLoading ? "…" : analytics?.totalBids?.toLocaleString() ?? "—"} caption={dateRange} icon="briefcase-business" />
+        <Metric label="Pending Evaluation" value={analyticsLoading ? "…" : analytics?.pendingBids?.toLocaleString() ?? "—"} caption={dateRange} icon="hand-coins" color="#f27602" />
+        <Metric label="Counter Offers" value={analyticsLoading ? "…" : analytics?.counterOffers?.toLocaleString() ?? "—"} caption={dateRange} icon="users-round" color="#2469e8" />
+        <Metric label="Accepted Bids" value={analyticsLoading ? "…" : analytics?.acceptedBids?.toLocaleString() ?? "—"} caption={dateRange} icon="badge-check" color="#12a150" />
+        <Metric label="Expired Offers" value={analyticsLoading ? "…" : analytics?.expiredBids?.toLocaleString() ?? "—"} caption={dateRange} icon="clock" color="#e02b22" />
+        <Metric label="Avg. Winning Margin" value={analyticsLoading ? "…" : winningMargin?.currency ? money(winningMargin.amount, winningMargin.currency) : "—"} caption={winningMargin?.percent == null ? "—" : `${winningMargin.percent}%`} icon="badge-percent" />
       </div>
 
       <Tabs
         items={["Bid Overview", "Counter Offers", "Awarded / Won", "Expired", "Cancelled"]}
         value={tab}
         onChange={(value) => {
-          if (value === "Counter Offers" && status == null && page === 1) refetch();
           setTab(value);
           setStatusFilter("All Status");
         }}
@@ -336,7 +344,7 @@ export function BidsOffers() {
             page={bidsResponse?.pagination.page || page}
             pageCount={Math.max(1, bidsResponse?.pagination.totalPages || 1)}
             pageSize={bidsResponse?.pagination.limit || PAGE_SIZE}
-            total={isCounterTab ? undefined : bidsResponse?.pagination.total ?? 0}
+            total={bidsResponse?.pagination.total}
             onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, bidsResponse?.pagination.totalPages || 1)))}
           />
         </div>
@@ -350,19 +358,14 @@ export function BidsOffers() {
                 thickness={20}
                 centerValue={analytics?.totalBids ?? "—"}
                 centerLabel="Total Bids"
-                data={[
-                  { value: analytics?.pendingBids || 0, color: "#f27602" },
-                  { value: analytics?.acceptedBids || 0, color: "#12a150" },
-                  { value: analytics?.expiredBids || 0, color: "#e02b22" },
-                  { value: otherBids, color: "#8d58e8" },
-                ]}
+                data={donutData.every((item) => item.value != null) ? donutData : []}
               />
               <div>
                 {[
-                  ["#f27602", "Pending", analytics?.pendingBids],
-                  ["#12a150", "Accepted", analytics?.acceptedBids],
-                  ["#e02b22", "Expired", analytics?.expiredBids],
-                  ["#8d58e8", "Other", otherBids],
+                  ["#f27602", "Pending", breakdown?.pending],
+                  ["#12a150", "Accepted", breakdown?.accepted],
+                  ["#e02b22", "Expired", breakdown?.expired],
+                  ["#8d58e8", "Other", breakdown?.other],
                 ].map(([color, label, value]) => (
                   <div className="bid-legend" key={label}><span><i style={{ background: color }} />{label}</span><b>{value ?? "—"}</b></div>
                 ))}
@@ -386,9 +389,9 @@ export function BidsOffers() {
       <div className="bottom-bid-grid">
         <div className="ops-panel">
           <div className="ops-panel-head"><div><h3>Top Bidding Companies <small>(Rolling 7 Days)</small></h3></div></div>
-          {analytics?.topCompanies.length ? analytics.topCompanies.map((company, index) => (
+          {rollingAnalytics?.topCompanies.length ? rollingAnalytics.topCompanies.map((company, index) => (
             <div className="rank-row" key={company.id}>
-              <b>{index + 1}</b><span>{company.name}</span><span>{company.totalBids} Bids</span><span>Won: {company.won}</span><span>Win Rate {company.winRate}%</span>
+              <b>{index + 1}</b><span>{company.name}</span><span>{company.totalBids ?? "—"} Bids</span><span>Won: {company.won ?? "—"}</span><span>Win Rate {company.winRate == null ? "—" : `${company.winRate}%`}</span>
             </div>
           )) : <div style={{ padding: "20px 14px" }} className="tk-meta">No company analytics available.</div>}
         </div>
@@ -396,7 +399,7 @@ export function BidsOffers() {
           <div className="ops-panel-head"><div><h3>Bid Conversion Funnel</h3></div></div>
           <div className="funnel">
             {funnelData.map(([label, value, color]) => (
-              <div className="funnel-row" key={label}><span>{label}</span><i style={{ background: color, width: Math.max(18, (value / funnelMax) * 100) + "%" }} /><b>{value}</b></div>
+              <div className="funnel-row" key={label}><span>{label}</span><i style={{ background: color, width: (value == null || value === 0 ? 0 : Math.max(18, (value / funnelMax) * 100)) + "%" }} /><b>{value ?? "—"}</b></div>
             ))}
           </div>
         </div>
@@ -419,7 +422,7 @@ export function BidsOffers() {
           <div style={{ display: "grid", gap: 10 }}>
             <div className="trip-fact"><span>Status</span><b><Badge tone={STATUS_TONES[selectedBid.status] || "neutral"}>{selectedBid.status}</Badge></b></div>
             <div className="trip-fact"><span>Bid Amount</span><b>{money(selectedBid.amount, selectedBid.currency)}</b></div>
-            <div className="trip-fact"><span>Offer Type</span><b>{selectedBid.isCounterOffer ? "Counter Offer" : "Initial Bid"}</b></div>
+            <div className="trip-fact"><span>Offer Type</span><b>{selectedBid.isCounterOffer == null ? "—" : selectedBid.isCounterOffer ? "Counter Offer" : "Initial Bid"}</b></div>
             <div className="trip-fact"><span>Route</span><b>{selectedBid.route || "—"}</b></div>
             <div className="trip-fact"><span>Submitted</span><b>{dateTime(selectedBid.createdAt)}</b></div>
             <div className="trip-fact"><span>Expires</span><b>{dateTime(selectedBid.expiresAt)}</b></div>

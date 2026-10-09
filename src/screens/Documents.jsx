@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
   Avatar,
@@ -29,6 +30,8 @@ import {
   useGetAdminDocReviewQueueQuery,
   useGetAdminDocReviewStatsQuery,
   useGetAdminDocReviewDetailQuery,
+  useGetAdminDocReviewFilterOptionsQuery,
+  documentTime,
   useRejectAdminDocumentMutation,
   useRejectAdminJobDocumentsMutation,
 } from "../store/features/documents/documentsApi.js";
@@ -51,21 +54,18 @@ const statusOptions = [
 ];
 
 function formatTime(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat("en-NG", {
-    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-  }).format(date);
+  return documentTime(value);
 }
 
 function canReviewDocument(document) {
-  return Boolean(document?.id) && canAdminReview(document);
+  return Boolean(document?.id) && document.canReview === true && canAdminReview(document);
 }
 
 function requestError(error) {
   const message = error?.data?.message;
   if (typeof message === "string") return message;
   if (Array.isArray(message)) return message.join(" ");
+  if (error?.status === "CUSTOM_ERROR" && typeof error.error === "string") return error.error;
   return error?.status === 403 ? "Your account cannot review these documents." : "The request could not be completed.";
 }
 
@@ -81,6 +81,8 @@ function DocumentsLoading() {
 
 export function Documents() {
   const navigate = useNavigate();
+  const owner = useSelector((state) => state.auth.admin?.id);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const [tab, setTab] = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -103,43 +105,36 @@ export function Documents() {
   }, [searchInput]);
 
   const queueStatus = statusOptions.find(([label]) => label === statusFilter)?.[1] || "all";
+  const { currentData: options, error: optionsError } = useGetAdminDocReviewFilterOptionsQuery(owner, { skip: !authenticated });
   const {
     currentData: queue,
     isLoading: queueLoading,
     isFetching: queueFetching,
     error: queueError,
     refetch: refetchQueue,
-  } = useGetAdminDocReviewQueueQuery({ status: queueStatus, search, page, limit: pageSize }, {
+  } = useGetAdminDocReviewQueueQuery({ owner, status: queueStatus, search, page, limit: pageSize,
+    documentType: typeFilter === "All document types" ? undefined : typeFilter,
+    companyId: companyFilter === "All companies" ? undefined : companyFilter,
+    missing: tab === "missing" ? true : undefined,
+    attentionOnly: tab === "status" && statusFilter === "All statuses",
+  }, {
+    skip: !authenticated || search !== searchInput.trim(),
     refetchOnMountOrArgChange: true,
   });
-  const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } =
-    useGetAdminDocReviewStatsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { currentData: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } =
+    useGetAdminDocReviewStatsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const [approveJob] = useApproveAdminJobDocumentsMutation();
   const [rejectJob] = useRejectAdminJobDocumentsMutation();
   const [approveDocument] = useApproveAdminDocumentMutation();
   const [rejectDocument] = useRejectAdminDocumentMutation();
 
-  const grouped = queue?.rows || [];
-  const companies = useMemo(
-    () => [...new Set(grouped.map((item) => item.company))],
-    [grouped],
-  );
-  const allTypes = useMemo(
-    () => [...new Set(grouped.flatMap((item) => item.documentTypes))],
-    [grouped],
-  );
-  const totals = stats?.documentCounts;
-
-  const filtered = useMemo(
-    () =>
-      grouped.filter((entry) =>
-        (companyFilter === "All companies" || entry.company === companyFilter) &&
-        (typeFilter === "All document types" || entry.documentTypes.includes(typeFilter)) &&
-        (tab !== "status" || statusFilter !== "All statuses" || ["awaiting", "rejected"].includes(entry.job.statusCode.toLowerCase())) &&
-        (tab !== "missing" || (entry.summary.missing != null && entry.summary.missing > 0)),
-      ),
-    [grouped, companyFilter, typeFilter, statusFilter, tab],
-  );
+  const grouped = authenticated && !queueError ? queue?.rows || [] : [];
+  const companies = authenticated && !optionsError ? options?.companies || [] : [];
+  const allTypes = authenticated && !optionsError ? options?.types || [] : [];
+  const totals = authenticated && !statsError ? stats?.documentCounts : null;
+  const filtered = grouped;
+  const loadingQueue = queueFetching || authenticated && search !== searchInput.trim();
+  useEffect(() => { setSelectedDocs([]); setExpandedJob(null); setAction(null); }, [tab, searchInput, typeFilter, statusFilter, companyFilter, page, pageSize, owner]);
 
   const reviewableSelected = selectedDocs.filter(canReviewDocument);
 
@@ -253,7 +248,7 @@ export function Documents() {
       header: "Job type",
       width: 110,
       render: (row) => (
-        row.jobType ? <Badge tone={row.jobType === "Import" ? "info" : "neutral"}>{row.jobType}</Badge> : "—"
+        row.jobType ? <Badge tone={row.jobKind === "Import" ? "info" : "neutral"}>{row.jobType}</Badge> : "—"
       ),
     },
     {
@@ -331,12 +326,12 @@ export function Documents() {
           label="Approved Documents"
           value={statsLoading ? "…" : totals?.approved?.toLocaleString() ?? "—"}
           tint="green"
-          caption={stats?.approvedJobsToday == null ? "Document count unavailable" : `${stats.approvedJobsToday} jobs approved today`}
+          caption={stats?.approvedJobsToday == null ? "—" : `${stats.approvedJobsToday} jobs approved today`}
         />
         <StatCard
           icon="clock"
           label="Pending Review"
-          value={statsLoading ? "…" : totals?.pending?.toLocaleString() ?? stats?.awaitingJobs?.toLocaleString() ?? "—"}
+          value={statsLoading ? "…" : totals?.pending?.toLocaleString() ?? "—"}
           tint="amber"
           caption={totals?.pending == null ? "Jobs awaiting approval" : "Documents awaiting review"}
         />
@@ -345,7 +340,7 @@ export function Documents() {
           label="Rejected Documents"
           value={statsLoading ? "…" : totals?.rejected?.toLocaleString() ?? "—"}
           tint="red"
-          caption={stats?.rejectedJobsToday == null ? "Document count unavailable" : `${stats.rejectedJobsToday} jobs rejected today`}
+          caption={stats?.rejectedJobsToday == null ? "—" : `${stats.rejectedJobsToday} jobs rejected today`}
         />
       </div>
 
@@ -415,17 +410,17 @@ export function Documents() {
                 }))}
               />
               <DocumentFilter
-                label={companyFilter}
+                label={companyFilter === "All companies" ? companyFilter : companies.find((company) => company.id === companyFilter)?.name || "—"}
                 active={companyFilter !== "All companies"}
                 open={openFilter === "company"}
                 align="right"
                 onToggle={() =>
                   setOpenFilter(openFilter === "company" ? null : "company")
                 }
-                items={["All companies", ...companies.filter(Boolean)].map((value) => ({
-                  label: value,
-                  icon: value === companyFilter ? "check" : undefined,
-                  onClick: () => selectFilter(setCompanyFilter, value),
+                items={[{ id: "All companies", name: "All companies" }, ...companies].map((company) => ({
+                  label: company.name,
+                  icon: company.id === companyFilter ? "check" : undefined,
+                  onClick: () => selectFilter(setCompanyFilter, company.id),
                 }))}
               />
             </div>
@@ -449,7 +444,7 @@ export function Documents() {
               : undefined
           }
         />
-        {queueFetching ? (
+        {loadingQueue ? (
           <div className="documents-table-loading" role="status" aria-label="Loading document queue" aria-busy="true">
             {Array.from({ length: 6 }, (_, index) => <div className="documents-loading-row" key={index}><Skeleton width="13%" height={14} /><Skeleton width="24%" height={14} /><Skeleton width="18%" height={14} /><Skeleton width="12%" height={14} /></div>)}
           </div>
@@ -483,8 +478,8 @@ export function Documents() {
         <Pagination
           page={queue?.pagination.page || page}
           pageSize={pageSize}
-          total={queue?.pagination.total ?? 0}
-          pageCount={Math.max(1, queue?.pagination.totalPages || 1)}
+          total={authenticated && !queueError && !loadingQueue ? queue?.pagination.total : null}
+          pageCount={authenticated && !queueError && !loadingQueue ? queue?.pagination.totalPages : null}
           onPage={(value) => setPage(Math.min(Math.max(1, value), Math.max(1, queue?.pagination.totalPages || 1)))}
           onPageSize={(value) => {
             setPageSize(value);
@@ -593,9 +588,9 @@ function ExpandedJob({ row, selected, setSelected, navigate, onAction }) {
       render: (doc) => (
         <div>
           <strong>{doc.name}</strong>
-          {(doc.fileSize || doc.version) && (
+          {(doc.fileSize != null || doc.version != null) && (
             <small>
-              {[doc.fileSize, doc.version ? `v${doc.version}` : null].filter(Boolean).join(" · ")}
+              {[doc.fileSize, doc.version != null ? `v${doc.version}` : null].filter((value) => value != null).join(" · ")}
             </small>
           )}
         </div>
@@ -686,7 +681,7 @@ function ExpandedJob({ row, selected, setSelected, navigate, onAction }) {
           <span className="is-pending">● {summary.pending ?? "—"} Pending</span>
           <span className="is-rejected">● {summary.rejected ?? "—"} Rejected</span>
         </div>
-        {detail && !isFetching && row.job.statusCode?.toLowerCase() === "awaiting" && row.jobType !== "Export" && <>
+        {detail?.canReviewJob && !error && !isFetching && <>
           <Button size="sm" onClick={() => onAction("approveJob", { jobId: row.id })}>Approve job documents</Button>
           <Button size="sm" variant="danger" onClick={() => onAction("rejectJob", { jobId: row.id })}>Reject job documents</Button>
         </>}
@@ -698,7 +693,7 @@ function ExpandedJob({ row, selected, setSelected, navigate, onAction }) {
           View Job Details
         </Button>
       </div>
-      {row.jobType === "Export" && (
+      {row.jobKind === "Export" && shownDocuments.some((document) => ['indemnity_letter', 'confirmation_letter'].includes(document.requirement)) && (
         <Banner tone="info">
           Export documents are reviewed by the trucking company. Admins can view
           their status but cannot approve or reject them.
