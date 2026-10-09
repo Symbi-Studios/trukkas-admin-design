@@ -14,6 +14,14 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function textOrNull(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function personName(value) {
+  return textOrNull(value) || textOrNull(value?.name);
+}
+
 function statusLabel(value) {
   if (typeof value !== 'string' || !value.trim()) return '—';
   return value.toLowerCase().split(/[_\s-]+/).map((part) => part[0].toUpperCase() + part.slice(1)).join(' ');
@@ -109,6 +117,7 @@ function mapDocument(raw, key, job) {
   const url = safeDocumentUrl(source.url || source.fileUrl || source.documentUrl);
   const code = source.status || source.reviewStatus || null;
   const fileName = source.fileName || (url ? new URL(url).pathname.split('/').pop() || null : null);
+  const uploaderType = textOrNull(source.uploadedBy?.type);
   return {
     id,
     rowKey: id || `${job.id}:${requirement}`,
@@ -124,11 +133,11 @@ function mapDocument(raw, key, job) {
     fileType: source.fileType || (fileName?.toLowerCase().endsWith('.pdf') ? 'PDF' : null),
     fileSize: source.fileSize || null,
     version: source.version || null,
-    uploadedBy: source.uploadedBy || null,
-    uploadedByRole: source.uploadedByRole || null,
+    uploadedBy: personName(source.uploadedBy),
+    uploadedByRole: textOrNull(source.uploadedByRole) || (uploaderType ? statusLabel(uploaderType) : null),
     uploadedAt: source.uploadedAt || null,
     updatedAt: source.updatedAt || null,
-    reviewedBy: source.reviewedBy || null,
+    reviewedBy: personName(source.reviewedBy),
     reviewedAt: source.reviewedAt || null,
     rejectionReason: source.rejectionReason || null,
   };
@@ -195,6 +204,7 @@ const reviewPath = (jobId) => `/admin/doc-review/queue/${encodeURIComponent(jobI
 const documentPath = (jobId, documentId) => `${reviewPath(jobId)}/documents/${encodeURIComponent(documentId)}`;
 
 export const documentsApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminDocReviewStats: builder.query({
       query: () => ({ url: '/admin/doc-review/stats' }),

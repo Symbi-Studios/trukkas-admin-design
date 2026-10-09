@@ -12,7 +12,7 @@ export const NAV = [
       { id: "bids", icon: "radio-tower", label: "Bids & Offers" },
       { id: "documents", icon: "file-text", label: "Documents" },
       { id: "tracking", icon: "map-pin", label: "Live Tracking" },
-      { id: "triangulation", icon: "boxes", label: "Container Triangulation" },
+      // { id: "triangulation", icon: "boxes", label: "Container Triangulation" },
     ],
   },
   {
