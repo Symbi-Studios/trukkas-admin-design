@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -19,10 +20,13 @@ import {
   Textarea,
   DropdownMenu,
   ListRow,
+  Skeleton,
+  EmptyState,
 } from "../ds.js";
 import { ProgressBar } from "../ds/components/data/ProgressBar.jsx";
-import { useCollection } from "../mock/useCollection.js";
-import { createMaintenance, updateMaintenance } from "../mock/api.js";
+import { DriverTableLoading } from "./DriversLoading.jsx";
+import { useGetAdminFleetTrucksQuery } from "../store/features/fleet/fleetApi.js";
+import { maintenanceError, maintenanceHref, maintenanceTabs, maintenanceWindow, useGetAdminMaintenanceQuery, useGetAdminMaintenanceStatsQuery, useLazyExportAdminMaintenanceQuery, useImportAdminMaintenanceMutation, useUpdateAdminMaintenanceStatusMutation } from "../store/features/maintenance/maintenanceApi.js";
 import "./Maintenance.css";
 const PAGE_SIZE = 10,
   STATUSES = [
@@ -58,50 +62,26 @@ const maintenanceApprovals = [
     id: 1,
     icon: "bell",
     iconTint: "green",
-    count: 5,
+    key: "repair",
     title: "Repair requests",
   },
   {
     id: 2,
     icon: "wrench",
     iconTint: "amber",
-    count: 4,
+    key: "preventive",
     title: "Preventive maintenance requests",
   },
   {
     id: 3,
     icon: "triangle-alert",
     iconTint: "red",
-    count: 3,
+    key: "major",
     title: "Major repair requests",
   },
 ];
-function csv(rows) {
-  const s = [
-    [
-      "ID",
-      "Truck",
-      "Type",
-      "Description",
-      "Service Center",
-      "Due Date",
-      "Status",
-      "Priority",
-    ],
-    ...rows.map((r) => [
-      r.id,
-      r.plate,
-      r.type,
-      r.description,
-      r.serviceCenter,
-      r.dueDate,
-      r.status,
-      r.priority,
-    ]),
-  ]
-    .map((x) => x.join(","))
-    .join("\n");
-  const u = URL.createObjectURL(new Blob([s]));
+function csv(content) {
+  const u = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = u;
   a.download = "maintenance.csv";
@@ -109,9 +89,12 @@ function csv(rows) {
   URL.revokeObjectURL(u);
 }
 export function Maintenance() {
-  const navigate = useNavigate(),
-    rows = useCollection("maintenance") || [],
-    trucks = useCollection("trucks") || [];
+  const navigate = useNavigate();
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const owner = useSelector(state => state.auth.admin?.id);
+  const role = useSelector(state => state.auth.admin?.role);
+  const canWrite = ["SUPER_ADMIN", "OPS_ADMIN"].includes(role);
+  const busy = useRef(false);
   const [tab, setTab] = useState("All Maintenance"),
     [q, setQ] = useState(""),
     [status, setStatus] = useState("All Statuses"),
@@ -123,7 +106,7 @@ export function Maintenance() {
     [schedule, setSchedule] = useState(false),
     [menu, setMenu] = useState(null),
     [form, setForm] = useState({
-      plate: trucks[0]?.plate || "",
+      plate: "",
       type: "Preventive",
       description: "",
       serviceCenter: "",
@@ -133,44 +116,77 @@ export function Maintenance() {
       estimatedCost: "",
       notes: "",
     }),
-    [toast, setToast] = useState("");
-  const filtered = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          (tab === "All Maintenance" || r.status === tab) &&
-          (status === "All Statuses" || r.status === status) &&
-          (priority === "All Priorities" || r.priority === priority) &&
-          (type === "All Types" || r.type === type) &&
-          (!date ||
-            r.dueDate.includes(
-              new Date(date + "T12:00:00").toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              }),
-            )) &&
-          (!q ||
-            [r.id, r.plate, r.description, r.serviceCenter].some((v) =>
-              v.toLowerCase().includes(q.toLowerCase()),
-            )),
-      ),
-    [rows, tab, status, priority, type, date, q],
-  );
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+    [toast, setToast] = useState(""),
+    [pendingOnly, setPendingOnly] = useState(false);
+  const conflicting = status !== "All Statuses" && (pendingOnly || tab !== "All Maintenance" && status !== tab);
+  const args = { owner, tab: pendingOnly ? "requested" : maintenanceTabs[status !== "All Statuses" ? status : tab], search: q.trim(), type: type === "All Types" ? undefined : type.toUpperCase(), ...(date ? { dateFrom: `${date}T00:00:00+01:00`, dateTo: `${date}T23:59:59.999+01:00` } : {}), page, limit: pageSize };
+  const list = useGetAdminMaintenanceQuery(args, { skip: !authenticated || conflicting, refetchOnMountOrArgChange: true });
+  const statsQuery = useGetAdminMaintenanceStatsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const stats = statsQuery.error ? null : statsQuery.currentData;
+  const window = maintenanceWindow();
+  const upcomingQuery = useGetAdminMaintenanceQuery({ owner, tab: "scheduled", ...window, page: 1, limit: 100 }, { skip: !authenticated });
+  const upcomingRows = upcomingQuery.error ? [] : upcomingQuery.currentData?.rows || [];
+  const fleetQuery = useGetAdminFleetTrucksQuery({ page: 1, limit: 100 }, { skip: !authenticated || !schedule });
+  const trucks = fleetQuery.error ? [] : fleetQuery.currentData?.trucks || [];
+  const paged = conflicting || list.error ? [] : list.currentData?.rows || [];
+  const total = conflicting ? 0 : list.error ? null : list.currentData?.pagination.total;
+  const pageCount = conflicting ? 1 : list.currentData?.pagination.totalPages || 1;
+  const [exportMaintenance] = useLazyExportAdminMaintenanceQuery();
+  const [importMaintenance] = useImportAdminMaintenanceMutation();
+  const [updateStatus] = useUpdateAdminMaintenanceStatusMutation();
+  const value = v => v == null ? "—" : v.toLocaleString("en-NG");
+  const statValue = v => statsQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value(v);
+  const share = v => v == null ? "—" : `${v}%`;
+  const overview = stats?.overview || [];
+  const colors = ["var(--tk-blue)", "var(--tk-warning)", "var(--tk-success)", "var(--tk-danger)"];
+  const shares = overview.map(s => s.percent);
+  let ringEnd = 0;
+  const ring = shares.length === 4 && shares.every(p => p != null && p <= 100) && Math.abs(shares.reduce((a, b) => a + b, 0) - 100) < 1
+    ? `conic-gradient(${shares.map((p, i) => { const start = ringEnd; ringEnd += p; return `${colors[i]} ${start}% ${ringEnd}%`; }).join(",")})` : "var(--tk-viz-track)";
+  useEffect(() => { if (trucks.length && !form.plate) setForm(f => ({ ...f, plate: trucks[0].plate })); }, [trucks, form.plate]);
+  useEffect(() => { if (list.error) notify(maintenanceError(list.error)); }, [list.error]);
+  useEffect(() => { if (statsQuery.error) notify(maintenanceError(statsQuery.error)); }, [statsQuery.error]);
   function notify(s) {
     setToast(s);
     setTimeout(() => setToast(""), 1600);
   }
   async function submit() {
     if (!form.plate || !form.description || !form.dueDate) return;
-    const r = await createMaintenance({
-      ...form,
-      dueLabel: "Scheduled",
-      created: "Just now",
-    });
-    setSchedule(false);
-    navigate("/maintenance/" + r.id);
+    notify("Scheduling is unavailable: the documented API cannot save the Priority selected in this form.");
+  }
+  async function changeStatus(r, action) {
+    if (busy.current) return;
+    if (!canWrite) return notify("Your account cannot perform this maintenance operation.");
+    const allowed = action === "start" ? ["SCHEDULED"] : action === "cancel" ? ["REQUESTED", "SCHEDULED", "IN_PROGRESS"] : ["SCHEDULED", "IN_PROGRESS"];
+    if (!allowed.includes(r.statusCode)) return notify("This action is unavailable for the current maintenance status.");
+    busy.current = true;
+    try { await updateStatus({ id: r.id, action }).unwrap(); setMenu(null); }
+    catch (error) { notify(maintenanceError(error)); }
+    finally { busy.current = false; }
+  }
+  async function exportRows() {
+    if (busy.current) return;
+    if (conflicting) return notify("The selected status filters do not match any records.");
+    busy.current = true;
+    try { csv(await exportMaintenance(args, false).unwrap()); setMenu(null); }
+    catch (error) { notify(maintenanceError(error)); }
+    finally { busy.current = false; }
+  }
+  function importFile() {
+    if (busy.current) return;
+    if (!canWrite) return notify("Your account cannot import maintenance records.");
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".csv,text/csv";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file || busy.current) return;
+      if (file.size > 2 * 1024 * 1024) return notify("The CSV must be no larger than 2 MB.");
+      busy.current = true;
+      try { const result = await importMaintenance(file).unwrap(); notify(`${result.created} created; ${result.failed} failed.${result.errors.length ? ` ${result.errors.join(" ")}` : ""}`); }
+      catch (error) { notify(maintenanceError(error)); }
+      finally { busy.current = false; }
+    };
+    input.click();
   }
   return (
     <div className="maint-page">
@@ -186,7 +202,7 @@ export function Maintenance() {
             <Button
               variant="outline"
               icon="download"
-              onClick={() => notify("Import template downloaded")}
+              onClick={importFile}
             >
               Import
             </Button>
@@ -211,17 +227,17 @@ export function Maintenance() {
                     {
                       label: "Export Maintenance",
                       icon: "download",
-                      onClick: () => csv(filtered),
+                      onClick: exportRows,
                     },
                     {
                       label: "Service Centers",
                       icon: "building-2",
-                      onClick: () => notify("Service centers opened"),
+                      onClick: () => notify("Service Centers is unavailable in the documented maintenance API."),
                     },
                     {
                       label: "Maintenance Rules",
                       icon: "settings",
-                      onClick: () => notify("Maintenance rules opened"),
+                      onClick: () => notify("Maintenance policies are documented, but this screen has no existing policy editor."),
                     },
                   ]}
                 />
@@ -234,54 +250,54 @@ export function Maintenance() {
         <StatCard
           icon="truck"
           label="Total Trucks"
-          value="486"
-          caption="312 Trucks · 128 Trailers · 46 Others"
+          value={statValue(stats?.totalTrucks)}
+          caption={stats?.trucksCaption || "— Trucks · — Trailers · — Others"}
         />
         <StatCard
           icon="wrench"
           tint="amber"
           label="In Maintenance"
-          value="36"
-          caption="7.4% of total"
+          value={statValue(stats?.inMaintenance)}
+          caption={`${share(stats?.inMaintenancePercent)} of total`}
         />
         <StatCard
           icon="calendar-days"
           label="Due Soon"
-          value="27"
+          value={statValue(stats?.dueSoon)}
           caption="Within next 7 days"
         />
         <StatCard
           icon="triangle-alert"
           tint="red"
           label="Overdue"
-          value="6"
+          value={statValue(stats?.overdue)}
           caption="Requires immediate attention"
         />
         <StatCard
           icon="lock-keyhole"
           tint="red"
           label="Restricted Assets"
-          value="14"
+          value={statValue(stats?.restrictedAssets)}
           caption="Not eligible for new jobs"
         />
         <StatCard
           icon="file-text"
           tint="blue"
           label="Pending Approvals"
-          value="12"
+          value={statValue(stats?.pendingApprovals)}
           caption="Maintenance requests"
         />
       </div>
       <div className="maint-row">
         <SectionCard title="Maintenance Overview">
           <div className="maint-chart">
-            <div className="maint-ring" />
+            <div className="maint-ring" style={{ background: ring }} />
             <div className="maint-legend">
               {[
-                ["Scheduled", "210 (43.2%)", "var(--tk-blue)"],
-                ["In Progress", "36 (7.4%)", "var(--tk-warning)"],
-                ["Completed", "178 (36.6%)", "var(--tk-success)"],
-                ["Overdue", "6 (12.8%)", "var(--tk-danger)"],
+                ["Scheduled", `${value(overview[0]?.count)} (${share(overview[0]?.percent)})`, "var(--tk-blue)"],
+                ["In Progress", `${value(overview[1]?.count)} (${share(overview[1]?.percent)})`, "var(--tk-warning)"],
+                ["Completed", `${value(overview[2]?.count)} (${share(overview[2]?.percent)})`, "var(--tk-success)"],
+                ["Overdue", `${value(overview[3]?.count)} (${share(overview[3]?.percent)})`, "var(--tk-danger)"],
               ].map((x) => (
                 <span key={x[0]}>
                   <i style={{ color: x[2] }}>● {x[0]}</i>
@@ -296,16 +312,16 @@ export function Maintenance() {
           tooltip="Assets that are currently restricted or in maintenance will not be eligible for new jobs."
         >
           {[
-            ["Eligible for jobs", 90.1, "var(--tk-success)", 438],
-            ["Under Maintenance", 7.4, "var(--tk-warning)", 36],
-            ["Pending Inspection", 1.6, "var(--tk-blue)", 8],
-            ["Restricted", 2.9, "var(--tk-danger)", 14],
+            ["Eligible for jobs", stats?.eligibility[0]?.percent, "var(--tk-success)", stats?.eligibility[0]?.count],
+            ["Under Maintenance", stats?.eligibility[1]?.percent, "var(--tk-warning)", stats?.eligibility[1]?.count],
+            ["Pending Inspection", stats?.eligibility[2]?.percent, "var(--tk-blue)", stats?.eligibility[2]?.count],
+            ["Restricted", stats?.eligibility[3]?.percent, "var(--tk-danger)", stats?.eligibility[3]?.count],
           ].map((x) => (
             <div className="maint-type-row-reverse" key={x[0]}>
               <ProgressBar
-                value={[x[1]]}
+                value={x[1] ?? 0}
                 label={x[0]}
-                caption={`${x[1]}% (${x[3]})`}
+                caption={`${share(x[1])} (${value(x[3])})`}
                 color={x[2]}
               />
             </div>
@@ -320,45 +336,45 @@ export function Maintenance() {
                 background: "none",
                 color: "var(--tk-blue)",
               }}
-              onClick={() => setType("All")}
+              onClick={() => { setType("All Types"); setPage(1); }}
             >
               View all
             </button>
           }
         >
           {[
-            ["Preventive", 49.8, "var(--tk-blue)"],
-            ["Repair", 34.2, "var(--tk-warning)"],
-            ["Inspection", 11.9, "var(--tk-success)"],
-            ["Breakdown", 4.1, "var(--tk-danger)"],
+            ["Preventive", stats?.byType[0], "var(--tk-blue)"],
+            ["Repair", stats?.byType[1], "var(--tk-warning)"],
+            ["Inspection", stats?.byType[2], "var(--tk-success)"],
+            ["Breakdown", stats?.byType[3], "var(--tk-danger)"],
           ].map((x) => (
             <div className="maint-type-row" key={x[0]}>
               <Icon name="wrench" size={12} />
 
               <ProgressBar
-                value={[x[1]]}
+                value={x[1] ?? 0}
                 label={x[0]}
-                caption={`${x[1]}%`}
+                caption={share(x[1])}
                 color="var(--tk-blue-light)"
               />
             </div>
           ))}
         </SectionCard>
-        <SectionCard title="Maintenance Approvals" count={12}>
+        <SectionCard title="Maintenance Approvals" count={value(stats?.approvals.total)}>
           {maintenanceApprovals.map((r) => (
             <ListRow
               key={r.id}
               icon={r.icon}
               iconTint={r.iconTint}
               title={r.title}
-              value={r.count}
+              value={value(stats?.approvals[r.key])}
             />
           ))}
 
           <Button
             iconRight="arrow-right"
             fullWidth
-            onClick={() => notify("Import template downloaded")}
+            onClick={() => { setPendingOnly(true); setTab("All Maintenance"); setStatus("All Statuses"); setPage(1); }}
           >
             View Pending Approvals
           </Button>
@@ -393,6 +409,7 @@ export function Maintenance() {
               className="maint-select"
               value={priority}
               onChange={(e) => {
+                if (e.target.value !== "All Priorities") { notify("Priority filtering is unavailable in the documented maintenance API."); return; }
                 setPriority(e.target.value);
                 setPage(1);
               }}
@@ -417,12 +434,13 @@ export function Maintenance() {
               className="maint-select"
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => { setDate(e.target.value); setPage(1); }}
             />
             <Button
               variant="outline"
               icon="rotate-ccw"
               onClick={() => {
+                setPendingOnly(false);
                 setQ("");
                 setStatus("All Statuses");
                 setPriority("All Priorities");
@@ -442,6 +460,7 @@ export function Maintenance() {
             <Tabs
               value={tab}
               onChange={(v) => {
+                setPendingOnly(false);
                 setTab(v);
                 setPage(1);
               }}
@@ -455,10 +474,10 @@ export function Maintenance() {
               ]}
               style={{ padding: "0 16px" }}
             />
-            <DataTable
+            {list.isFetching && !conflicting ? <DriverTableLoading columns={10} label="Loading maintenance" /> : list.error ? <EmptyState icon="wrench" title={maintenanceError(list.error)} /> : <DataTable
               rows={paged}
               rowKey={(r) => r.id}
-              onRowClick={(r) => navigate("/maintenance/" + r.id)}
+              onRowClick={(r) => navigate(maintenanceHref(r.id))}
               columns={[
                 {
                   key: "id",
@@ -466,7 +485,7 @@ export function Maintenance() {
                   render: (r) => (
                     <span className="maint-cell">
                       <strong style={{ color: "var(--tk-blue)" }}>
-                        {r.id}
+                        {r.reference}
                       </strong>
                       <small>{r.created}</small>
                     </span>
@@ -576,7 +595,7 @@ export function Maintenance() {
                         icon="eye"
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate("/maintenance/" + r.id);
+                          navigate(maintenanceHref(r.id));
                         }}
                       />
                       <Button
@@ -601,27 +620,20 @@ export function Maintenance() {
                               {
                                 label: "View Maintenance",
                                 icon: "eye",
-                                onClick: () => navigate("/maintenance/" + r.id),
+                                onClick: () => navigate(maintenanceHref(r.id)),
                               },
                               {
                                 label: "Start Work",
                                 icon: "play",
                                 onClick: () => {
-                                  updateMaintenance(r.id, {
-                                    status: "In Progress",
-                                  });
-                                  setMenu(null);
+                                  changeStatus(r, "start");
                                 },
                               },
                               {
                                 label: "Mark Completed",
                                 icon: "circle-check",
                                 onClick: () => {
-                                  updateMaintenance(r.id, {
-                                    status: "Completed",
-                                    actualCost: r.estimatedCost,
-                                  });
-                                  setMenu(null);
+                                  changeStatus(r, "complete");
                                 },
                               },
                               {
@@ -629,10 +641,7 @@ export function Maintenance() {
                                 icon: "circle-x",
                                 tone: "danger",
                                 onClick: () => {
-                                  updateMaintenance(r.id, {
-                                    status: "Cancelled",
-                                  });
-                                  setMenu(null);
+                                  changeStatus(r, "cancel");
                                 },
                               },
                             ]}
@@ -643,17 +652,17 @@ export function Maintenance() {
                   ),
                 },
               ]}
-            />
+            />}
             <Pagination
               page={page}
-              pageCount={Math.max(1, Math.ceil(filtered.length / pageSize))}
+              pageCount={pageCount}
               pageSize={pageSize}
-              total={filtered.length}
+              total={total ?? undefined}
               onPage={(p) =>
                 setPage(
                   Math.min(
                     Math.max(1, p),
-                    Math.max(1, Math.ceil(filtered.length / pageSize)),
+                    Math.max(1, pageCount),
                   ),
                 )
               }
@@ -674,14 +683,13 @@ export function Maintenance() {
                   background: "none",
                   color: "var(--tk-blue)",
                 }}
-                onClick={() => setStatus("Scheduled")}
+                onClick={() => { setPendingOnly(false); setTab("All Maintenance"); setStatus("Scheduled"); setPage(1); }}
               >
                 View all
               </button>
             }
           >
-            {rows
-              .filter((r) => r.status === "Scheduled")
+            {upcomingRows
               .slice(0, 3)
               .map((r) => (
                 <button
@@ -695,7 +703,7 @@ export function Maintenance() {
                     textAlign: "left",
                   }}
                   key={r.id}
-                  onClick={() => navigate("/maintenance/" + r.id)}
+                  onClick={() => navigate(maintenanceHref(r.id))}
                 >
                   <span className="ico">
                     <Icon name="truck" size={13} />
@@ -726,13 +734,15 @@ export function Maintenance() {
               icon="calendar"
               title="Maintenance Calendar"
               hint="View calendar and due dates"
-              onClick={() => notify("Calendar view opened")}
+              onClick={() => notify("Calendar data is documented, but this screen has no existing calendar view.")}
             />
             <Action
               icon="file-text"
               title="Maintenance Reports"
               hint="Generate and export reports"
               onClick={() => {
+                setPendingOnly(false);
+                setStatus("All Statuses");
                 setTab("Completed");
                 setPage(1);
               }}
@@ -741,7 +751,7 @@ export function Maintenance() {
               icon="building-2"
               title="Service Centers"
               hint="Manage service centers"
-              onClick={() => notify("Service centers opened")}
+              onClick={() => notify("Service Centers is unavailable in the documented maintenance API.")}
             />
           </SectionCard>
         </div>

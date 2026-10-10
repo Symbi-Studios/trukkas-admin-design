@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, FilterSelect,
   DataTable, Pagination, Badge, QuickActionsCard, Card, DropdownMenu, IconButton,
-  Avatar, Icon, Tabs, Banner, EmptyState, Modal, Textarea, Skeleton,
+  Avatar, Icon, Tabs, Banner, EmptyState, Modal, Textarea, Skeleton, TextField, Select,
 } from '../ds.js';
 import { DriverLicenseLoading, DriverLoadingNotice, DriverTableLoading, DriversLoading } from './DriversLoading.jsx';
 import {
@@ -13,16 +13,20 @@ import {
   useGetAdminDriverLicenseQuery, useGetAdminDriverStatsQuery,
   useGetAdminPendingDriversQuery, useReviewAdminDriverMutation,
   useSuspendAdminDriverMutation, useVerifyAdminDriverLicenseMutation,
+  useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery, useGetAdminDriverRankingsQuery,
+  useCreateAdminDriverMutation, useImportAdminDriversMutation, useLazyExportAdminDriverComplianceQuery,
 } from '../store/features/drivers/driversApi.js';
 
 const STATUS_TONE = { 'Pending Review': 'warning', Rejected: 'danger', Active: 'success', 'On Trip': 'info' };
 const REG_TYPES = ['Individual Driver', 'Company Driver'];
 const LICENSE_STATUSES = ['Valid', 'Expiring Soon', 'Expired', 'Pending Review', 'Rejected'];
 const STATUS_QUERY = {
-  Active: 'ACTIVE', 'On Trip': 'ACTIVE', Inactive: 'INACTIVE',
+  Active: 'ACTIVE', 'On Trip': 'ON_TRIP', Inactive: 'INACTIVE',
   'Pending Profile': 'PENDING_PROFILE', 'Pending Review': 'PENDING_REVIEW',
 };
-const TAB_QUERY = { Active: 'ACTIVE', 'On Trip': 'ACTIVE', Inactive: 'INACTIVE', 'Pending Review': 'PENDING_REVIEW' };
+const TAB_QUERY = { Active: 'ACTIVE', 'On Trip': 'ON_TRIP', Inactive: 'INACTIVE', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
+const LICENSE_QUERY = { Valid: 'VALID', 'Expiring Soon': 'EXPIRING_SOON', Expired: 'EXPIRED', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
+const EMPTY_DRIVER_FORM = { firstName: '', lastName: '', email: '', phone: '', licenseNumber: '', licenseExpiresAt: '', companyId: '', truckId: '' };
 const naira = (value) => Number.isFinite(value) ? `₦${Math.round(value).toLocaleString('en-NG')}` : '—';
 
 function safeDocumentUrl(value) {
@@ -57,13 +61,6 @@ function download(name, text) {
 
 function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
 
-function localStatusMatch(driver, value) {
-  if (value === 'All Status') return true;
-  if (value === 'On Trip') return driver.isOnTrip;
-  if (value === 'Inactive') return ['INACTIVE', 'SUSPENDED', 'BANNED'].includes(driver.statusCode);
-  return driver.statusCode === STATUS_QUERY[value];
-}
-
 export function Drivers() {
   const [tab, setTab] = useState('All Drivers');
   const [page, setPage] = useState(1);
@@ -82,24 +79,37 @@ export function Drivers() {
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [licenseDriverId, setLicenseDriverId] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [driverForm, setDriverForm] = useState(EMPTY_DRIVER_FORM);
+  const [createError, setCreateError] = useState('');
+  const createLock = useRef(false), importLock = useRef(false), actionLock = useRef(false);
+  const importInput = useRef(null);
+  const companiesQuery = useGetAdminDriverCompaniesQuery();
+  const rankingQuery = useGetAdminDriverRankingsQuery();
+  const companyRecords = companiesQuery.currentData || [];
+  const companyOptions = companyRecords.map((item) => ({ ...item, label: companyRecords.filter((other) => other.name === item.name).length > 1 ? `${item.name} · ${item.email || item.id}` : item.name }));
+  const filters = {
+    search, status: STATUS_QUERY[status] || TAB_QUERY[tab],
+    tabStatus: TAB_QUERY[tab], onTrip: tab === 'Active' ? false : tab === 'On Trip' ? true : undefined,
+    registrationType: regType === 'Company Driver' ? 'company' : regType === 'Individual Driver' ? 'individual' : undefined,
+    companyId: companyOptions.find((item) => item.label === company)?.id,
+    licenseStatus: LICENSE_QUERY[licenseStatus],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { setSearch(q.trim()); setPage(1); }, 250);
     return () => clearTimeout(timer);
   }, [q]);
 
-  const queryStatus = STATUS_QUERY[status] || TAB_QUERY[tab];
   const driversQuery = useGetAdminDriversQuery(
-    { search, status: queryStatus, page, limit: pageSize },
-    { skip: tab === 'Rejected' },
+    { ...filters, page, limit: pageSize },
   );
   const pendingQuery = useGetAdminPendingDriversQuery();
   const statsQuery = useGetAdminDriverStatsQuery();
-  const activeCountQuery = useGetAdminDriversQuery({ status: 'ACTIVE', page: 1, limit: 1 });
-  const pendingCountQuery = useGetAdminDriversQuery({ status: 'PENDING_REVIEW', page: 1, limit: 1 });
-  const inactiveCountQuery = useGetAdminDriversQuery({ status: 'INACTIVE', page: 1, limit: 1 });
-  const suspendedCountQuery = useGetAdminDriversQuery({ status: 'SUSPENDED', page: 1, limit: 1 });
-  const bannedCountQuery = useGetAdminDriversQuery({ status: 'BANNED', page: 1, limit: 1 });
+  const companyTrucksQuery = useGetAdminDriverCompanyTrucksQuery(driverForm.companyId, { skip: !addOpen || !driverForm.companyId });
+  const [createDriver, createState] = useCreateAdminDriverMutation();
+  const [importDrivers, importState] = useImportAdminDriversMutation();
+  const [exportCompliance, exportState] = useLazyExportAdminDriverComplianceQuery();
   const licenseQuery = useGetAdminDriverLicenseQuery(licenseDriverId, { skip: !licenseDriverId });
   const license = licenseQuery.currentData;
   const [reviewDriver, reviewState] = useReviewAdminDriverMutation();
@@ -113,45 +123,31 @@ export function Drivers() {
     const pending = pendingById.get(driver.id);
     return pending ? { ...driver, license: driver.license || pending.license, licenseStatus: driver.licenseStatus !== '—' ? driver.licenseStatus : pending.licenseStatus, licenseExpiresAt: driver.licenseExpiresAt || pending.licenseExpiresAt } : driver;
   }), [driversQuery.currentData, pendingById]);
-  const companies = useMemo(() => [...new Set(drivers.map((driver) => driver.company).filter(Boolean))].sort(), [drivers]);
+  const companies = companyOptions.map((item) => item.label).sort();
 
   const counts = {
     total: statsQuery.data?.total ?? null,
-    individual: null,
-    company: null,
-    pending: pendingCountQuery.data?.pagination.total ?? pendingQuery.data?.count ?? null,
-    active: activeCountQuery.data?.pagination.total ?? null,
-    onTrip: null,
-    inactive: [inactiveCountQuery, suspendedCountQuery, bannedCountQuery].every((query) => query.data?.pagination.total != null)
-      ? inactiveCountQuery.data.pagination.total + suspendedCountQuery.data.pagination.total + bannedCountQuery.data.pagination.total
-      : null,
-    rejected: null,
-    expiringDocs: null,
-    totalEarnings: null,
-    avgRating: null,
-    totalReviews: null,
+    individual: statsQuery.data?.individual,
+    company: statsQuery.data?.company,
+    pending: statsQuery.data?.pendingReview ?? pendingQuery.data?.count ?? null,
+    active: statsQuery.data?.active,
+    onTrip: statsQuery.data?.onTrip,
+    inactive: [statsQuery.data?.inactive, statsQuery.data?.suspended, statsQuery.data?.banned].every((value) => value != null)
+      ? statsQuery.data.inactive + statsQuery.data.suspended + statsQuery.data.banned : null,
+    rejected: statsQuery.data?.rejected,
+    expiringDocs: statsQuery.data?.documentsExpiring.expiringSoon,
+    totalEarnings: statsQuery.data?.earnings.completedTripValue,
+    avgRating: statsQuery.data?.averageRating.average,
+    totalReviews: statsQuery.data?.averageRating.count,
   };
   counts.approved = counts.active;
 
-  const tabMatch = (driver) => {
-    if (tab === 'Pending Review') return driver.statusCode === 'PENDING_REVIEW';
-    if (tab === 'Active') return driver.statusCode === 'ACTIVE' && !driver.isOnTrip;
-    if (tab === 'On Trip') return driver.isOnTrip;
-    if (tab === 'Inactive') return ['INACTIVE', 'SUSPENDED', 'BANNED'].includes(driver.statusCode);
-    return true;
-  };
-  const filtered = useMemo(() => drivers.filter((driver) => {
-    const matchesType = regType === 'All Types' || driver.registrationType === regType;
-    const matchesStatus = localStatusMatch(driver, status);
-    const matchesCompany = company === 'All Companies' || driver.company === company;
-    const matchesLicense = licenseStatus === 'All' || driver.licenseStatus === licenseStatus;
-    return tabMatch(driver) && matchesType && matchesStatus && matchesCompany && matchesLicense;
-  }), [drivers, tab, regType, status, company, licenseStatus]);
+  const filtered = drivers;
 
   const pageCount = driversQuery.currentData?.pagination.totalPages || 1;
-  const total = driversQuery.currentData?.pagination.total ?? 0;
-  const pendingCountLoading = !pendingCountQuery.data && pendingCountQuery.isFetching && !pendingQuery.data;
-  const inactiveCountLoading = [inactiveCountQuery, suspendedCountQuery, bannedCountQuery].some((query) => !query.data && query.isFetching);
+  const total = driversQuery.currentData?.pagination.total;
+  const pendingCountLoading = !statsQuery.data && statsQuery.isFetching && !pendingQuery.data;
+  const inactiveCountLoading = !statsQuery.data && statsQuery.isFetching;
   const metricValue = (value, loading) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
 
   function exportRoster() {
@@ -174,12 +170,13 @@ export function Drivers() {
   }
 
   async function applyAction() {
-    if (!action) return;
+    if (!action || actionBusy || actionLock.current) return;
     if (action.kind === 'suspend' && !reason.trim()) {
       setActionError('A reason is required to suspend a driver.');
       return;
     }
     setActionError('');
+    actionLock.current = true;
     try {
       if (action.kind === 'approve' || action.kind === 'reject') await reviewDriver({ id: action.id, decision: action.kind, reason }).unwrap();
       if (action.kind === 'approve-license' || action.kind === 'reject-license') await verifyLicense({ id: action.id, decision: action.kind === 'approve-license' ? 'approve' : 'reject', reason }).unwrap();
@@ -190,6 +187,8 @@ export function Drivers() {
       setReason('');
     } catch (error) {
       setActionError(adminDriverError(error));
+    } finally {
+      actionLock.current = false;
     }
   }
 
@@ -218,9 +217,58 @@ export function Drivers() {
     if (pendingRow?.id) setLicenseDriverId(pendingRow.id);
     else setToast('There are no pending driver licenses to review.');
   };
-  const quickUnavailable = (feature) => setToast(`${feature} is not available in the admin driver API yet.`);
 
-  if (!driversQuery.data && driversQuery.isFetching && tab !== 'Rejected') return <DriversLoading />;
+  async function downloadCompliance() {
+    if (exportState.isFetching) return;
+    if (filters.tabStatus && filters.tabStatus !== 'ON_TRIP' && filters.status !== filters.tabStatus) {
+      setToast('The selected tab and account status do not overlap.');
+      return;
+    }
+    if (filters.onTrip === false || (filters.onTrip === true && filters.status !== 'ON_TRIP')) {
+      setToast('The compliance export does not document the on-trip filter for this selection.');
+      return;
+    }
+    if (['PENDING_REVIEW', 'REJECTED'].includes(filters.licenseStatus)) {
+      setToast('The compliance export does not support license verification filters.');
+      return;
+    }
+    if (filters.status === 'INACTIVE') {
+      setToast('The compliance export supports a single account status, while Inactive includes suspended and banned accounts.');
+      return;
+    }
+    try { download('driver-compliance.csv', await exportCompliance(filters, false).unwrap()); }
+    catch (error) { setToast(adminDriverError(error)); }
+  }
+
+  async function submitDriver(event) {
+    event.preventDefault();
+    if (createLock.current || createState.isLoading) return;
+    if (!['firstName', 'lastName', 'email', 'phone'].every((key) => driverForm[key].trim())) { setCreateError('First name, last name, email and phone are required.'); return; }
+    if (!/^\+?[0-9\s-]{10,16}$/.test(driverForm.phone.trim())) { setCreateError('Enter a valid local or international phone number.'); return; }
+    createLock.current = true; setCreateError('');
+    try {
+      const created = await createDriver(driverForm).unwrap();
+      setAddOpen(false); setDriverForm(EMPTY_DRIVER_FORM);
+      setToast(created.invite.sms === true || created.invite.email === true ? 'Driver created and password invite sent.'
+        : created.invite.sms === false && created.invite.email === false ? 'Driver created, but both invite delivery channels failed.' : 'Driver created. Invite delivery status was not returned.');
+    } catch (error) { setCreateError(adminDriverError(error)); }
+    finally { createLock.current = false; }
+  }
+
+  async function importCsv(event) {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file || importLock.current) return;
+    if (!/\.csv$/i.test(file.name) || file.size > 2 * 1024 * 1024) { setToast('Choose a CSV file up to 2 MB.'); return; }
+    importLock.current = true;
+    try {
+      const result = await importDrivers(file).unwrap();
+      const failures = result.results.filter((row) => row.status === 'FAILED').map((row) => `Line ${row.line ?? '—'}: ${row.error || '—'}`).join('; ');
+      setToast(`Created: ${result.created ?? '—'}. Failed: ${result.failed ?? '—'}.${failures ? ` ${failures}` : ''}`);
+    } catch (error) { setToast(adminDriverError(error)); }
+    finally { importLock.current = false; }
+  }
+
+  if (!driversQuery.data && driversQuery.isFetching) return <DriversLoading />;
 
   return <>
     <PageHeader
@@ -234,9 +282,9 @@ export function Drivers() {
           <Button variant="outline" iconRight="chevron-down" onClick={() => setMoreOpen((open) => !open)}>More Actions</Button>
           {moreOpen && <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
             <DropdownMenu width={230} items={[
-              { label: 'Add Driver', icon: 'user-plus', onClick: () => { setMoreOpen(false); quickUnavailable('Adding drivers'); } },
-              { label: 'Import Drivers', icon: 'upload', onClick: () => { setMoreOpen(false); quickUnavailable('Driver import'); } },
-              { label: 'Driver Compliance Report', icon: 'shield-check', onClick: () => { setMoreOpen(false); quickUnavailable('The compliance report'); } },
+              { label: 'Add Driver', icon: 'user-plus', onClick: () => { setMoreOpen(false); setCreateError(''); setAddOpen(true); } },
+              { label: 'Import Drivers', icon: 'upload', onClick: () => { setMoreOpen(false); if (!importState.isLoading) importInput.current?.click(); } },
+              { label: 'Driver Compliance Report', icon: 'shield-check', onClick: () => { setMoreOpen(false); void downloadCompliance(); } },
             ]} />
           </span>}
         </span>
@@ -249,19 +297,19 @@ export function Drivers() {
 
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--tk-space-4)' }}>
       <StatCard icon="users" label="Total Drivers" value={metricValue(counts.total, !statsQuery.data && statsQuery.isFetching)} caption={statsQuery.isLoading ? <Skeleton as="span" width={86} height={11} /> : counts.total == null ? 'Not provided by API' : 'All registered drivers'} />
-      <StatCard icon="user" tint="green" label="Individual Drivers" value={counts.individual ?? '—'} caption="Not provided by API" />
-      <StatCard icon="building-2" tint="navy" label="Company Drivers" value={counts.company ?? '—'} caption="Not provided by API" />
+      <StatCard icon="user" tint="green" label="Individual Drivers" value={metricValue(counts.individual, statsQuery.isLoading)} caption="Individual registrations" />
+      <StatCard icon="building-2" tint="navy" label="Company Drivers" value={metricValue(counts.company, statsQuery.isLoading)} caption="Company registrations" />
       <StatCard icon="clock" tint="amber" label="Pending Review" value={metricValue(counts.pending, pendingCountLoading)} caption="Pending review queue" />
-      <StatCard icon="circle-check" tint="green" label="Approved / Active" value={metricValue(counts.approved, !activeCountQuery.data && activeCountQuery.isFetching)} caption="ACTIVE account status" />
+      <StatCard icon="circle-check" tint="green" label="Approved / Active" value={metricValue(counts.approved, statsQuery.isLoading)} caption="ACTIVE account status" />
     </div>
 
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--tk-space-4)' }}>
-      <StatCard icon="route" label="On Trip" value="—" caption="Not provided as a summary" />
+      <StatCard icon="route" label="On Trip" value={metricValue(counts.onTrip, statsQuery.isLoading)} caption="Drivers on active trips" />
       <StatCard icon="circle-minus" tint="navy" label="Inactive" value={metricValue(counts.inactive, inactiveCountLoading)} caption="INACTIVE, SUSPENDED, and BANNED" />
-      <StatCard icon="circle-x" tint="red" label="Rejected" value="—" caption="Cannot be separated from INACTIVE" />
-      <StatCard icon="triangle-alert" tint="amber" label="Documents Expiring" value="—" caption="No expiry summary endpoint" />
-      <StatCard icon="wallet" tint="green" label="Total Driver Earnings" value={naira(counts.totalEarnings)} caption="No driver earnings endpoint" />
-      <StatCard icon="star" tint="amber" label="Average Rating" value="—" caption="No driver rating endpoint" />
+      <StatCard icon="circle-x" tint="red" label="Rejected" value={metricValue(counts.rejected, statsQuery.isLoading)} caption="Rejected applications" />
+      <StatCard icon="triangle-alert" tint="amber" label="Documents Expiring" value={metricValue(counts.expiringDocs, statsQuery.isLoading)} caption={statsQuery.data?.documentsExpiring.withinDays == null ? '—' : `Within ${statsQuery.data.documentsExpiring.withinDays} days`} />
+      <StatCard icon="wallet" tint="green" label="Total Driver Earnings" value={naira(counts.totalEarnings)} caption="Completed trip value; paid to companies" />
+      <StatCard icon="star" tint="amber" label="Average Rating" value={counts.avgRating == null ? '—' : counts.avgRating.toFixed(1)} caption={counts.totalReviews == null ? '—' : `${counts.totalReviews} reviews`} />
     </div>
 
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
@@ -284,9 +332,7 @@ export function Drivers() {
           { value: 'Rejected', label: 'Rejected' },
         ]} />
 
-        {tab === 'Rejected' ? <Banner tone="warning" title="Rejected drivers cannot be filtered reliably">
-          The reject action sets the account to INACTIVE. This API does not distinguish rejected accounts from other inactive accounts.
-        </Banner> : driversQuery.isFetching ? <DriverTableLoading />
+        {driversQuery.isFetching ? <DriverTableLoading />
           : driversQuery.error ? <div style={{ padding: 'var(--tk-card-pad)' }}><Banner tone="danger" title="Unable to load drivers">{adminDriverError(driversQuery.error)}</Banner><Button variant="outline" onClick={() => driversQuery.refetch()}>Retry</Button></div>
             : filtered.length === 0 ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this API page match the selected filters.' : 'No drivers match this search or status.'} />
               : <DataTable rows={filtered} rowKey={(driver) => driver.id} columns={[
@@ -299,7 +345,7 @@ export function Drivers() {
                 { key: 'licenseStatus', header: 'License Status', render: (driver) => <Badge>{driver.licenseStatus}</Badge> },
                 { key: 'joined', header: 'Joined', render: (driver) => driver.joined ? new Date(driver.joined).toLocaleDateString() : '—' },
                 { key: 'earnings', header: 'Earnings', render: (driver) => <strong style={{ color: 'var(--tk-ink-900)' }}>{naira(driver.totalEarnings)}</strong> },
-                { key: 'rating', header: 'Rating', render: (driver) => driver.rating ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="star" size={13} color="var(--tk-warning)" />{driver.rating.toFixed(1)}</span> : <span className="tk-meta">—</span> },
+                { key: 'rating', header: 'Rating', render: (driver) => driver.rating != null ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="star" size={13} color="var(--tk-warning)" />{driver.rating.toFixed(1)}</span> : <span className="tk-meta">—</span> },
                 { key: 'actions', header: 'Actions', width: 130, render: (driver) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Link to={driverDetailUrl(driver.id)}><Button size="sm" variant="outline">View</Button></Link>
                   <span style={{ position: 'relative' }}><IconButton icon="ellipsis-vertical" onClick={() => setRowMenu(rowMenu === driver.id ? null : driver.id)} />
@@ -315,34 +361,50 @@ export function Drivers() {
                   </span>
                 </span> },
               ]} />}
-        {tab === 'On Trip' && <p className="tk-meta" style={{ padding: '0 var(--tk-card-pad) 10px' }}>On Trip is filtered from the current page of ACTIVE accounts because the API has no on-trip filter or summary.</p>}
-        {(regType !== 'All Types' || company !== 'All Companies' || licenseStatus !== 'All') && <p className="tk-meta" style={{ padding: '0 var(--tk-card-pad) 10px' }}>Registration type, company, and license filters apply to the loaded API page.</p>}
-        {tab !== 'Rejected' && !driversQuery.isFetching && !driversQuery.error && <Pagination page={page} pageSize={pageSize} pageCount={pageCount} total={total} onPage={(next) => setPage(Math.max(1, Math.min(pageCount, next)))} onPageSize={(size) => { setPageSize(size); setPage(1); }} />}
+        {!driversQuery.isFetching && !driversQuery.error && <Pagination page={page} pageSize={pageSize} pageCount={pageCount} total={total} onPage={(next) => setPage(Math.max(1, Math.min(pageCount, next)))} onPageSize={(size) => { setPageSize(size); setPage(1); }} />}
       </Card>
 
       <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
         <SectionCard title="Driver Status">
           <div style={{ display: 'grid', gap: 12 }}>
             {[
-              ['Active', counts.active], ['Pending Review', counts.pending], ['Inactive', counts.inactive], ['On Trip', null],
+              ['Active', counts.active], ['Pending Review', counts.pending], ['Inactive', counts.inactive], ['On Trip', counts.onTrip],
             ].map(([label, value]) => <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span className="tk-meta">{label}</span><strong style={{ color: 'var(--tk-ink-900)' }}>{value ?? '—'}</strong></div>)}
-            <span className="tk-meta">On-trip totals are not provided by this API.</span>
+            <span className="tk-meta">On-trip drivers are included in active accounts.</span>
           </div>
         </SectionCard>
         <SectionCard title="Earnings Overview" description="Last 6 months">
-          <EmptyState icon="wallet" title="Earnings data unavailable" description="The admin driver APIs do not provide earnings totals or history." style={{ padding: '24px 8px' }} />
+          <EmptyState icon="wallet" title="Earnings data unavailable" description="Monthly driver trip-value history is not provided by the API." style={{ padding: '24px 8px' }} />
         </SectionCard>
         <SectionCard title="Top Rated Drivers">
-          <EmptyState icon="star" title="Ratings data unavailable" description="The admin driver APIs do not provide driver ratings or reviews." style={{ padding: '24px 8px' }} />
+          {rankingQuery.isFetching ? <DriverTableLoading columns={3} /> : rankingQuery.error ? <EmptyState icon="star" title="Ratings data unavailable" description={adminDriverError(rankingQuery.error)} style={{ padding: '24px 8px' }} />
+            : rankingQuery.currentData?.length ? <DataTable rows={rankingQuery.currentData} rowKey={(driver) => driver.id} columns={[
+              { key: 'name', header: 'Driver', render: driverCell }, { key: 'rating', header: 'Rating', render: (driver) => driver.rating.toFixed(1) }, { key: 'reviews', header: 'Reviews' },
+            ]} /> : <EmptyState icon="star" title="Ratings data unavailable" description="No rated drivers were returned." style={{ padding: '24px 8px' }} />}
         </SectionCard>
         <QuickActionsCard items={[
           { icon: 'user-check', label: 'Review Pending Drivers', hint: 'Verify and approve driver registrations', onClick: () => changeTab('Pending Review') },
           { icon: 'shield-check', label: 'Verify Documents', hint: 'Review a pending driver license', onClick: verifyDocuments },
-          { icon: 'file-chart-column', label: 'Driver Compliance Report', hint: 'Not provided by the admin driver API', onClick: () => quickUnavailable('The compliance report') },
+          { icon: 'file-chart-column', label: 'Driver Compliance Report', hint: 'Download the compliance CSV', onClick: () => void downloadCompliance() },
           { icon: 'download', label: 'Export Driver List', hint: 'Download the loaded API page', onClick: exportRoster },
         ]} />
       </div>
     </div>
+
+    <input ref={importInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importCsv(event)} />
+    <Modal open={addOpen} onClose={() => { if (!createState.isLoading) setAddOpen(false); }} title="Add Driver" footer={<>
+      <Button variant="outline" disabled={createState.isLoading} onClick={() => setAddOpen(false)}>Cancel</Button>
+      <Button type="submit" form="add-driver-form" disabled={createState.isLoading}>{createState.isLoading ? 'Saving…' : 'Add Driver'}</Button>
+    </>}>
+      <form id="add-driver-form" onSubmit={submitDriver} style={{ display: 'grid', gap: 14 }}>
+        {[['firstName', 'First Name', 'text', 80], ['lastName', 'Last Name', 'text', 80], ['email', 'Email', 'email'], ['phone', 'Phone', 'tel'], ['licenseNumber', 'License Number', 'text', 40], ['licenseExpiresAt', 'License Expiry', 'date']].map(([key, label, type, maxLength]) => (
+          <TextField key={key} label={label} type={type} maxLength={maxLength} required={['firstName', 'lastName', 'email', 'phone'].includes(key)} value={driverForm[key]} disabled={createState.isLoading} onChange={(event) => setDriverForm((form) => ({ ...form, [key]: event.target.value }))} />
+        ))}
+        <Select label="Company (optional)" placeholder="Individual Driver" value={driverForm.companyId} disabled={createState.isLoading || companiesQuery.isFetching} options={[...(driverForm.companyId ? [{ value: '', label: 'Individual Driver' }] : []), ...companyOptions.map((item) => ({ value: item.id, label: item.label }))]} onChange={(event) => setDriverForm((form) => ({ ...form, companyId: event.target.value, truckId: '' }))} />
+        <Select label="Assigned Truck (optional)" placeholder="Unassigned" value={driverForm.truckId} disabled={!driverForm.companyId || companyTrucksQuery.isFetching || createState.isLoading} options={[...(driverForm.truckId ? [{ value: '', label: 'Unassigned' }] : []), ...(companyTrucksQuery.currentData || []).map((truck) => ({ value: truck.id, label: truck.plate }))]} onChange={(event) => setDriverForm((form) => ({ ...form, truckId: event.target.value }))} />
+        {(createError || companyTrucksQuery.error || companiesQuery.error) && <Banner tone="danger" title="Action not completed">{createError || adminDriverError(companyTrucksQuery.error || companiesQuery.error)}</Banner>}
+      </form>
+    </Modal>
 
     <Modal open={Boolean(action)} onClose={() => { if (!actionBusy) { setAction(null); setActionError(''); } }} title={action ? actionTitle[action.kind] : ''} description={action?.name} footer={<>
       <Button variant="outline" disabled={actionBusy} onClick={() => { setAction(null); setActionError(''); }}>Cancel</Button>

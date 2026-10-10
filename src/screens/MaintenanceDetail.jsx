@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "../router.js";
 import {
   PageHeader,
@@ -18,9 +18,12 @@ import {
   BarChart,
   EmptyState,
   QuickActionsCard,
+  Skeleton,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { updateMaintenance, setTruckStatus } from "../mock/api.js";
+import { useSelector } from "react-redux";
+import { useSearchParams } from "next/navigation";
+import { DriverLoadingNotice, DriverTableLoading } from "./DriversLoading.jsx";
+import { maintenanceError, maintenanceHref, useGetAdminMaintenanceAssetQuery, useGetAdminMaintenanceDetailQuery, useGetAdminMaintenanceTruckRecordsQuery, useUpdateAdminMaintenanceStatusMutation, useRestrictAdminMaintenanceTruckMutation } from "../store/features/maintenance/maintenanceApi.js";
 import "./Maintenance.css";
 import "./MaintenanceDetail.css";
 
@@ -45,110 +48,13 @@ const RECORD_DATE_LABEL = {
   Overdue: "Was Due",
   Cancelled: "Cancelled On",
 };
-const ASSET_TYPE = {
-  "40FT Trailer": "Truck (Prime Mover)",
-  "20FT Container": "Truck (Container Chassis)",
-  Flatbed: "Truck (Flatbed)",
-  "40FT High Cube": "Truck (High Cube Trailer)",
-  Tanker: "Truck (Tanker)",
-  "45FT Container": "Truck (Container Chassis)",
-};
-const CHECKLISTS = {
-  Preventive: [
-    "Engine oil & filter replacement",
-    "Air filter replacement",
-    "Fuel filter replacement",
-    "Brake inspection",
-    "General safety inspection",
-  ],
-  Repair: [
-    "Fault diagnosis",
-    "Component replacement",
-    "Function test",
-    "Torque & leak check",
-    "Road test",
-  ],
-  Inspection: [
-    "Document verification",
-    "Brake & tyre check",
-    "Lighting & signals check",
-    "Emissions check",
-    "Roadworthiness sign-off",
-  ],
-  Breakdown: [
-    "On-site diagnosis",
-    "Recovery to service center",
-    "Root cause repair",
-    "Function test",
-    "Return to service",
-  ],
-};
-const PAST_HISTORY = [
-  {
-    date: "Jan 18, 2026",
-    odometer: 365420,
-    serviceType: "Repair",
-    description: "Brake system repair",
-    serviceCenter: "TruckCare Plus",
-    status: "Completed",
-  },
-  {
-    date: "Nov 02, 2025",
-    odometer: 340100,
-    serviceType: "Preventive",
-    description: "Full vehicle inspection",
-    serviceCenter: "AutoCare Lagos",
-    status: "Completed",
-  },
-  {
-    date: "Jul 15, 2025",
-    odometer: 300560,
-    serviceType: "Preventive",
-    description: "Oil change, filter replacement",
-    serviceCenter: "QuickFix Auto",
-    status: "Completed",
-  },
-  {
-    date: "May 03, 2025",
-    odometer: 260210,
-    serviceType: "Inspection",
-    description: "Regulatory inspection",
-    serviceCenter: "Lagos Vehicle Test Centre",
-    status: "Completed",
-  },
-];
-const UPCOMING_TEMPLATE = [
-  {
-    title: "Tyre Rotation & Balancing",
-    type: "Preventive",
-    offsetKm: 15000,
-    hint: "Due shortly after the next service",
-  },
-  {
-    title: "Annual Roadworthiness Inspection",
-    type: "Inspection",
-    offsetKm: null,
-    hint: "Due later in the year",
-  },
-];
-const MONTH_LABELS = ["Apr", "May", "Jun", "Jul", "Aug", "Sep"];
-
-function seed(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-function monthlyKm(plate) {
-  const s = seed(plate);
-  return MONTH_LABELS.map((_, i) => 3800 + ((s >> (i * 3)) % 6) * 750 + i * 90);
-}
 function km(n) {
   return n == null ? "—" : n.toLocaleString("en-NG") + " km";
 }
 function dl(r) {
   const u = URL.createObjectURL(
     new Blob([
-      `${r.id}\n${r.plate}\n${r.description}\nOdometer: ${km(r.currentOdometer)}\nNext due: ${km(r.nextDueOdometer)} or ${r.nextDueDate}`,
+      `${r.reference}\n${r.plate}\n${r.description}\nOdometer: ${km(r.currentOdometer)}\nNext due: ${km(r.nextDueOdometer)} or ${r.nextDueDate}`,
     ]),
   );
   const a = document.createElement("a");
@@ -159,16 +65,31 @@ function dl(r) {
 }
 
 export function MaintenanceDetail() {
-  const navigate = useNavigate(),
-    { maintenanceId } = useParams(),
-    rows = useCollection("maintenance") || [],
-    r = rows.find((x) => x.id === maintenanceId),
-    [tab, setTab] = useState("Overview"),
+  const navigate = useNavigate();
+  const params = useParams();
+  const search = useSearchParams();
+  const maintenanceId = search.get("id") || params.maintenanceId;
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const owner = useSelector(state => state.auth.admin?.id);
+  const role = useSelector(state => state.auth.admin?.role);
+  const canWrite = ["SUPER_ADMIN", "OPS_ADMIN"].includes(role);
+  const query = useGetAdminMaintenanceDetailQuery({ id: maintenanceId, owner }, { skip: !authenticated || !maintenanceId, refetchOnMountOrArgChange: true });
+  const record = query.error ? null : query.currentData;
+  const truckRecordsQuery = useGetAdminMaintenanceTruckRecordsQuery({ truckId: record?.truckId, owner }, { skip: !authenticated || !record?.truckId, refetchOnMountOrArgChange: true });
+  const records = truckRecordsQuery.error ? null : truckRecordsQuery.currentData;
+  const assetQuery = useGetAdminMaintenanceAssetQuery({ truckId: record?.truckId, owner }, { skip: !authenticated || !record?.truckId });
+  const asset = assetQuery.error ? null : assetQuery.currentData;
+  const r = record ? { ...record, nextDueDate: records?.nextDueDate || "—", nextDueDays: records?.nextDueDays ?? null,
+    makeModel: asset?.makeModel || "—", year: asset?.year ?? "—", vin: asset?.vin || "—", noOpenIssues: asset?.noOpenIssues ?? null } : null;
+  const [tab, setTab] = useState("Overview"),
     [menuOpen, setMenuOpen] = useState(false),
     [flagOpen, setFlagOpen] = useState(false),
     [flagReason, setFlagReason] = useState(""),
     [suspendOpen, setSuspendOpen] = useState(false),
     [toast, setToast] = useState(null);
+  const busy = useRef(false);
+  const [updateStatus] = useUpdateAdminMaintenanceStatusMutation();
+  const [restrictTruck] = useRestrictAdminMaintenanceTruckMutation();
 
   useEffect(() => {
     if (!toast) return;
@@ -176,15 +97,20 @@ export function MaintenanceDetail() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => { if (truckRecordsQuery.error) setToast({ tone: "danger", title: maintenanceError(truckRecordsQuery.error) }); }, [truckRecordsQuery.error]);
+  useEffect(() => { setTab("Overview"); setMenuOpen(false); setFlagOpen(false); setSuspendOpen(false); setFlagReason(""); setToast(null); }, [maintenanceId]);
+
   function notify(tone, title) {
     setToast({ tone, title });
   }
+
+  if (query.isLoading || query.isFetching && !query.currentData) return <div className="maint-page" aria-busy="true"><DriverLoadingNotice>Loading maintenance details…</DriverLoadingNotice><Card><Skeleton width={180} height={26} /><Skeleton height={180} /></Card><Card><Skeleton height={320} /></Card></div>;
 
   if (!r) {
     return (
       <Card>
         <span className="tk-body">
-          No maintenance record found with ID {maintenanceId}.
+          {query.error ? maintenanceError(query.error) : `No maintenance record found with ID ${maintenanceId || "—"}.`}
         </span>
         <div style={{ marginTop: 12 }}>
           <Button
@@ -201,115 +127,56 @@ export function MaintenanceDetail() {
 
   const isOverdue = r.status === "Overdue";
   const isInProgress = r.status === "In Progress";
-  const assetStatus = isInProgress ? "In Maintenance" : "Active";
-  const fitForRoad = !isOverdue;
-  const maintStatusLabel = isOverdue
-    ? "Overdue"
-    : isInProgress
-      ? "Maintenance In Progress"
-      : "Up to Date";
-  const maintStatusTone = isOverdue
-    ? "danger"
-    : isInProgress
-      ? "warning"
-      : "success";
-  const maintStatusDesc = isOverdue
-    ? "This asset has overdue maintenance and requires immediate attention."
-    : isInProgress
-      ? "A maintenance job is currently in progress for this asset."
-      : "This asset has met all required maintenance based on kilometres and time intervals.";
-  const remainingKm =
-    r.nextDueOdometer != null
-      ? Math.max(0, r.nextDueOdometer - r.currentOdometer)
-      : null;
-  const scaleMax = Math.max(
-    600000,
-    Math.ceil(
-      ((r.nextDueOdometer || r.currentOdometer || 100000) * 1.2) / 50000,
-    ) * 50000,
-  );
+  const assetStatus = r.assetStatus;
+  const fitForRoad = r.fitForRoad;
+  const maintStatusLabel = isOverdue ? "Overdue" : isInProgress ? "Maintenance In Progress" : "—";
+  const maintStatusTone = STATUS_TONE[r.status] || "neutral";
+  const maintStatusDesc = isOverdue ? "This asset has overdue maintenance and requires immediate attention." : isInProgress ? "A maintenance job is currently in progress for this asset." : "—";
+  const remainingKm = r.nextDueOdometer != null && r.currentOdometer != null ? Math.max(0, r.nextDueOdometer - r.currentOdometer) : null;
+  const scaleMax = r.nextDueOdometer;
   const compliance = [
-    {
-      label: "Maintenance Compliant",
-      hint: "All mandatory maintenance completed",
-      ok: !isOverdue,
-    },
-    {
-      label: "Eligible for Jobs",
-      hint: "This asset can be assigned to new jobs",
-      ok: !isOverdue && !isInProgress,
-    },
-    {
-      label: "No Open Maintenance Issues",
-      hint: "No unresolved maintenance items",
-      ok: !isOverdue && !isInProgress,
-    },
+    { label: "Maintenance Compliant", hint: "All mandatory maintenance completed", ok: r.maintenanceCompliant },
+    { label: "Eligible for Jobs", hint: "This asset can be assigned to new jobs", ok: r.eligibleForJobs },
+    { label: "No Open Maintenance Issues", hint: "No unresolved maintenance items", ok: r.noOpenIssues },
   ];
-  const checklist = CHECKLISTS[r.type] || CHECKLISTS.Preventive;
-  const historyRows = [
-    {
-      n: 1,
-      date: r.dueDate,
-      odometer: r.currentOdometer,
-      serviceType: r.type,
-      description: r.description,
-      serviceCenter: r.serviceCenter,
-      status: r.status,
-      self: true,
-    },
-    ...PAST_HISTORY.map((h, i) => ({ n: i + 2, ...h, self: false })),
-  ];
-  const upcoming = [
-    {
-      title: `${r.type} Maintenance`,
-      type: r.type,
-      dueDate: r.nextDueDate,
-      dueOdometer: r.nextDueOdometer,
-    },
-    ...UPCOMING_TEMPLATE.map((u) => ({
-      title: u.title,
-      type: u.type,
-      dueOdometer:
-        u.offsetKm != null && r.nextDueOdometer != null
-          ? r.nextDueOdometer + u.offsetKm
-          : null,
-      hint: u.hint,
-    })),
-  ];
-  const monthly = monthlyKm(r.plate);
-  const avgMonthlyKm = Math.round(
-    monthly.reduce((a, b) => a + b, 0) / monthly.length,
-  );
+  const checklist = r.checklist;
+  const historyRows = (records?.history || []).map(row => ({ ...row, self: row.id === r.id }));
+  const lastMaintenance = records?.last || { date: "—", odometer: null, serviceType: "—" };
+  const upcoming = records?.upcoming || [];
+  const monthly = [];
+  const monthLabels = [];
+  const avgMonthlyKm = null;
 
-  async function markCompleted() {
-    await updateMaintenance(r.id, { status: "Completed" });
-    setMenuOpen(false);
-    notify("success", "Maintenance marked as completed.");
+  async function changeStatus(action) {
+    if (busy.current) return;
+    if (!canWrite) return notify("danger", "Your account cannot perform this maintenance operation.");
+    busy.current = true;
+    try { await updateStatus({ id: r.id, action }).unwrap(); setMenuOpen(false); notify(action === "start" ? "info" : "success", action === "start" ? "Maintenance started." : "Maintenance marked as completed."); }
+    catch (error) { notify("danger", maintenanceError(error)); }
+    finally { busy.current = false; }
   }
-  async function startMaintenance() {
-    await updateMaintenance(r.id, { status: "In Progress" });
-    setMenuOpen(false);
-    notify("info", "Maintenance started.");
-  }
-  async function submitFlag() {
-    await updateMaintenance(r.id, {
-      flagged: true,
-      flagReason: flagReason.trim(),
-    });
-    setFlagOpen(false);
-    setFlagReason("");
-    notify("warning", `${r.id} flagged for review.`);
+  const markCompleted = () => changeStatus("complete");
+  const startMaintenance = () => changeStatus("start");
+  function submitFlag() {
+    notify("warning", "Flag for Review is unavailable in the documented maintenance API.");
   }
   async function confirmSuspend() {
-    await setTruckStatus(r.plate, "Inactive");
-    setSuspendOpen(false);
-    notify("danger", `${r.plate} has been suspended from active duty.`);
+    if (busy.current) return;
+    if (!canWrite) return notify("danger", "Your account cannot restrict assets.");
+    busy.current = true;
+    try { await restrictTruck({ truckId: r.truckId, reference: r.reference }).unwrap(); setSuspendOpen(false); notify("danger", `${r.plate} has been suspended from active duty.`); }
+    catch (error) { notify("danger", maintenanceError(error)); }
+    finally { busy.current = false; }
+  }
+  function viewHistory(row) {
+    if (row.self) notify("info", "You are viewing this record.");
+    else navigate(maintenanceHref(row.id));
   }
 
   return (
     <div className="maint-page">
       <PageHeader
-        crumbs={["Fleet Management", "Maintenance", r.id]}
+        crumbs={["Fleet Management", "Maintenance", r.reference]}
         title="Maintenance Record Details"
         description="View the complete maintenance record, service history and asset status for compliance and safety oversight."
         actions={
@@ -324,7 +191,7 @@ export function MaintenanceDetail() {
             <Button
               variant="outline"
               icon="truck"
-              onClick={() => navigate("/fleet/" + encodeURIComponent(r.plate))}
+              onClick={() => navigate("/fleet/detail?id=" + encodeURIComponent(r.truckId || ""))}
             >
               View Asset Profile
             </Button>
@@ -454,7 +321,7 @@ export function MaintenanceDetail() {
                   </Badge>
                 </div>
                 <div className="tk-meta" style={{ marginTop: 4 }}>
-                  {ASSET_TYPE[r.truckType] || `Truck (${r.truckType})`}
+                  {r.truckType}
                 </div>
               </div>
             </div>
@@ -525,23 +392,23 @@ export function MaintenanceDetail() {
               </div>
             </div>
           </div>
-          <div className={`mdet-fit ${fitForRoad ? "" : "tone-danger"}`}>
+          <div className={`mdet-fit ${fitForRoad === false ? "tone-danger" : ""}`}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
               <Icon
-                name={fitForRoad ? "circle-check" : "triangle-alert"}
+                name={fitForRoad == null ? "minus" : fitForRoad ? "circle-check" : "triangle-alert"}
                 size={20}
-                color={fitForRoad ? "var(--tk-success)" : "var(--tk-danger)"}
+                color={fitForRoad == null ? "var(--tk-ink-300)" : fitForRoad ? "var(--tk-success)" : "var(--tk-danger)"}
               />
               <div>
                 <div
                   style={{
                     font: "700 15px/20px var(--tk-font-sans)",
-                    color: fitForRoad
+                    color: fitForRoad == null ? "var(--tk-ink-300)" : fitForRoad
                       ? "var(--tk-success)"
                       : "var(--tk-danger)",
                   }}
                 >
-                  {fitForRoad ? "Fit for Road" : "Not Fit for Road"}
+                  {fitForRoad == null ? "—" : fitForRoad ? "Fit for Road" : "Not Fit for Road"}
                 </div>
                 <div
                   style={{
@@ -549,7 +416,7 @@ export function MaintenanceDetail() {
                     color: "var(--tk-ink-500)",
                   }}
                 >
-                  {fitForRoad
+                  {fitForRoad == null ? "—" : fitForRoad
                     ? "All required maintenance up to date."
                     : "Overdue maintenance must be resolved."}
                 </div>
@@ -598,7 +465,7 @@ export function MaintenanceDetail() {
                 <InfoRow
                   icon="truck"
                   label="Asset Type"
-                  value={ASSET_TYPE[r.truckType] || r.truckType}
+                  value={r.truckType}
                 />
                 <InfoRow icon="car" label="Make / Model" value={r.makeModel} />
                 <InfoRow
@@ -614,7 +481,7 @@ export function MaintenanceDetail() {
                 <InfoRow
                   icon="map-pin"
                   label="Current Location"
-                  value={r.location}
+                  value={r.assetLocation}
                 />
                 <InfoRow
                   icon="circle-dot"
@@ -655,14 +522,14 @@ export function MaintenanceDetail() {
                     <strong
                       style={{ font: "600 14px/20px var(--tk-font-sans)" }}
                     >
-                      {PAST_HISTORY[0].date}
+                      {lastMaintenance.date}
                     </strong>
                     <span className="tk-meta">
-                      at {km(PAST_HISTORY[0].odometer)}
+                      at {km(lastMaintenance.odometer)}
                     </span>
                     <div style={{ marginTop: 4 }}>
                       <span className="tk-meta">Service Type:</span>{" "}
-                      <Badge tone="info">{PAST_HISTORY[0].serviceType}</Badge>
+                      <Badge tone="info">{lastMaintenance.serviceType}</Badge>
                     </div>
                   </div>
                   <div className="mdet-status-box">
@@ -687,7 +554,7 @@ export function MaintenanceDetail() {
                     >
                       {r.nextDueDays != null
                         ? `In ${r.nextDueDays} days / ${km(remainingKm)}`
-                        : "Not yet scheduled"}
+                        : "—"}
                     </div>
                   </div>
                 </div>
@@ -716,7 +583,7 @@ export function MaintenanceDetail() {
                       }}
                     >
                       <Icon
-                        name={STATUS_ICON[r.status]}
+                        name={STATUS_ICON[r.status] || "minus"}
                         size={17}
                         color={`var(--tk-${maintStatusTone === "success" ? "success" : maintStatusTone})`}
                       />
@@ -732,7 +599,7 @@ export function MaintenanceDetail() {
                     </strong>
                     <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
                   </div>
-                  <InfoRow icon="hash" label="Maintenance ID" value={r.id} />
+                  <InfoRow icon="hash" label="Maintenance ID" value={r.reference} />
                   <InfoRow
                     icon="building-2"
                     label="Service Center"
@@ -740,8 +607,8 @@ export function MaintenanceDetail() {
                   />
                   <InfoRow
                     icon="calendar"
-                    label={RECORD_DATE_LABEL[r.status]}
-                    value={r.dueDate}
+                    label={RECORD_DATE_LABEL[r.status] || "—"}
+                    value={r.recordDate}
                   />
                   <InfoRow
                     icon="badge"
@@ -751,7 +618,7 @@ export function MaintenanceDetail() {
                   <InfoRow
                     icon="gauge"
                     label="Odometer Reading"
-                    value={km(r.currentOdometer)}
+                    value={km(r.odometer)}
                   />
                   <InfoRow
                     icon="calendar-clock"
@@ -761,7 +628,7 @@ export function MaintenanceDetail() {
                 </div>
                 <div>
                   <span className="tk-meta">Service Items Performed</span>
-                  {checklist.map((c) => (
+                  {checklist == null ? "—" : checklist.map((c) => (
                     <div className="mdet-checklist-row" key={c}>
                       <Icon
                         name={
@@ -800,17 +667,10 @@ export function MaintenanceDetail() {
               }
               pad="none"
             >
-              <HistoryTable
+              {truckRecordsQuery.isFetching ? <DriverTableLoading columns={8} label="Loading maintenance history" /> : truckRecordsQuery.error ? <EmptyState icon="wrench" title={maintenanceError(truckRecordsQuery.error)} /> : <HistoryTable
                 rows={historyRows}
-                onView={(row) =>
-                  notify(
-                    "info",
-                    row.self
-                      ? "You are viewing this record."
-                      : "Historical record — read only.",
-                  )
-                }
-              />
+                onView={viewHistory}
+              />}
             </SectionCard>
           </div>
 
@@ -819,16 +679,16 @@ export function MaintenanceDetail() {
               {compliance.map((c) => (
                 <div className="mdet-compliance-row" key={c.label}>
                   <Icon
-                    name={c.ok ? "circle-check" : "circle-x"}
+                    name={c.ok == null ? "minus" : c.ok ? "circle-check" : "circle-x"}
                     size={18}
-                    color={c.ok ? "var(--tk-success)" : "var(--tk-danger)"}
+                    color={c.ok == null ? "var(--tk-ink-300)" : c.ok ? "var(--tk-success)" : "var(--tk-danger)"}
                   />
                   <div>
                     <strong
                       style={{
                         display: "block",
                         font: "600 13px/18px var(--tk-font-sans)",
-                        color: c.ok ? "var(--tk-success)" : "var(--tk-danger)",
+                        color: c.ok == null ? "var(--tk-ink-300)" : c.ok ? "var(--tk-success)" : "var(--tk-danger)",
                       }}
                     >
                       {c.label}
@@ -861,13 +721,13 @@ export function MaintenanceDetail() {
                 </span>
               </div>
               <ProgressBar
-                value={r.currentOdometer}
-                max={scaleMax}
+                value={r.currentOdometer ?? 0}
+                max={scaleMax ?? 1}
                 color="var(--tk-blue)"
               />
               <div className="mdet-km-scale">
-                <span>0 km</span>
-                <span>{scaleMax.toLocaleString("en-NG")} km</span>
+                <span>{scaleMax == null ? "—" : "0 km"}</span>
+                <span>{km(scaleMax)}</span>
               </div>
               <Banner tone="info" style={{ marginTop: 12 }}>
                 Next maintenance is due at {km(r.nextDueOdometer)} or by{" "}
@@ -897,7 +757,7 @@ export function MaintenanceDetail() {
                   label: "View Asset Profile",
                   icon: "truck",
                   onClick: () =>
-                    navigate("/fleet/" + encodeURIComponent(r.plate)),
+                    navigate("/fleet/detail?id=" + encodeURIComponent(r.truckId || "")),
                 },
                 {
                   label: "Flag for Review",
@@ -920,26 +780,19 @@ export function MaintenanceDetail() {
       {tab === "Maintenance History" && (
         <SectionCard
           title="Maintenance History"
-          count={historyRows.length}
+          count={records ? historyRows.length : "—"}
           pad="none"
         >
-          <HistoryTable
+          {truckRecordsQuery.isFetching ? <DriverTableLoading columns={8} label="Loading maintenance history" /> : truckRecordsQuery.error ? <EmptyState icon="wrench" title={maintenanceError(truckRecordsQuery.error)} /> : <HistoryTable
             rows={historyRows}
-            onView={(row) =>
-              notify(
-                "info",
-                row.self
-                  ? "You are viewing this record."
-                  : "Historical record — read only.",
-              )
-            }
-          />
+            onView={viewHistory}
+          />}
         </SectionCard>
       )}
 
       {tab === "Upcoming Maintenance" && (
         <SectionCard title="Upcoming Maintenance">
-          {upcoming.map((u, i) => (
+          {truckRecordsQuery.isFetching ? <Skeleton height={180} /> : truckRecordsQuery.error ? "—" : upcoming.map((u, i) => (
             <div className="mdet-upcoming-row" key={u.title + i}>
               <span className="mdet-upcoming-ico">
                 <Icon
@@ -1010,13 +863,13 @@ export function MaintenanceDetail() {
               </span>
             </div>
             <ProgressBar
-              value={r.currentOdometer}
-              max={scaleMax}
+              value={r.currentOdometer ?? 0}
+              max={scaleMax ?? 1}
               color="var(--tk-blue)"
             />
             <div className="mdet-km-scale">
-              <span>0 km</span>
-              <span>{scaleMax.toLocaleString("en-NG")} km</span>
+              <span>{scaleMax == null ? "—" : "0 km"}</span>
+              <span>{km(scaleMax)}</span>
             </div>
           </SectionCard>
           <SectionCard title="Monthly Distance Covered">
@@ -1024,16 +877,16 @@ export function MaintenanceDetail() {
               series={[
                 { name: "Distance", color: "var(--tk-blue)", points: monthly },
               ]}
-              labels={MONTH_LABELS}
-              format={(v) => Math.round(v / 1000) + "k"}
+              labels={monthLabels}
+              format={(v) => monthly.length ? Math.round(v / 1000) + "k" : "—"}
             />
           </SectionCard>
         </div>
       )}
 
       {tab === "Documents" && (
-        <SectionCard title={`Documents (${r.attachments.length})`}>
-          {r.attachments.length === 0 ? (
+        <SectionCard title={`Documents (${r.attachments?.length ?? "—"})`}>
+          {r.attachments == null ? "—" : r.attachments.length === 0 ? (
             <EmptyState
               icon="file-text"
               title="No documents"
@@ -1072,7 +925,7 @@ export function MaintenanceDetail() {
         open={flagOpen}
         onClose={() => setFlagOpen(false)}
         title="Flag for Review"
-        description={`Flag ${r.id} for compliance review.`}
+        description={`Flag ${r.reference} for compliance review.`}
         width={480}
         footer={
           <>
@@ -1177,7 +1030,7 @@ function HistoryTable({ rows, onView }) {
         {
           key: "odometer",
           header: "Odometer (km)",
-          render: (r) => r.odometer.toLocaleString("en-NG"),
+          render: (r) => r.odometer == null ? "—" : r.odometer.toLocaleString("en-NG"),
         },
         {
           key: "serviceType",

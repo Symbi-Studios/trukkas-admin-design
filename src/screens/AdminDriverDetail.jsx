@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import { Avatar, Badge, Banner, Button, Card, DataTable, EmptyState, LabelValue, PageHeader, Pagination, SectionCard, StatCard, Tabs } from '../ds.js';
-import { adminDriverError, useGetAdminDriverJobsQuery, useGetAdminDriverLicenseQuery, useGetAdminDriverProfileQuery, useGetAdminDriverTransactionsQuery } from '../store/features/drivers/driversApi.js';
+import { adminDriverError, useGetAdminDriverActivityQuery, useGetAdminDriverJobsQuery, useGetAdminDriverLicenseQuery, useGetAdminDriverProfileQuery, useGetAdminDriverTransactionsQuery } from '../store/features/drivers/driversApi.js';
 import { useGetAdminTripsQuery } from '../store/features/trips/tripsApi.js';
 import { DriverDetailLoading, DriverLicenseLoading, DriverTableLoading } from './DriversLoading.jsx';
 
 const TAB_ITEMS = ['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wallet', 'Maintenance Log', 'Compliance', 'Incidents', 'Reviews & Ratings', 'Notes'];
 const SUPPORTED_TABS = new Set(['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wallet', 'Compliance']);
+const ACTIVITY_TABS = new Set(['Maintenance Log', 'Incidents', 'Reviews & Ratings', 'Notes']);
 
 const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG')}` : '—';
 function dateLabel(value) {
@@ -55,10 +56,30 @@ export function AdminDriverDetail() {
   const tripsQuery = useGetAdminTripsQuery({ driverId: id, page: tripPage, limit: tripLimit }, { skip: !id || tab !== 'Trips & Activity' });
   const jobsQuery = useGetAdminDriverJobsQuery({ id, tab: jobFilter, page: jobPage, limit: jobLimit }, { skip: !id || tab !== 'Trips & Activity' });
   const transactionsQuery = useGetAdminDriverTransactionsQuery({ id, page: transactionPage, limit: transactionLimit }, { skip: !id || tab !== 'Earnings & Wallet' });
+  const activityQuery = useGetAdminDriverActivityQuery(id, { skip: !id || !ACTIVITY_TABS.has(tab) });
   const profile = profileQuery.currentData;
   const license = licenseQuery.currentData;
   const fullName = profile?.name || 'Driver';
   const licenseUrl = safeDocumentUrl(license?.licenseUrl);
+  const activitySections = {
+    'Maintenance Log': { rows: activityQuery.currentData?.maintenance, columns: [
+      { key: 'reference', header: 'Reference' }, { key: 'type', header: 'Type' }, { key: 'description', header: 'Description' },
+      { key: 'status', header: 'Status', render: (item) => <Badge>{item.status}</Badge> }, { key: 'serviceCenter', header: 'Service Center' },
+      { key: 'dueDate', header: 'Due', render: (item) => dateLabel(item.dueDate) }, { key: 'completedAt', header: 'Completed', render: (item) => dateLabel(item.completedAt) },
+    ] },
+    Incidents: { rows: activityQuery.currentData?.incidents, columns: [
+      { key: 'type', header: 'Type' }, { key: 'source', header: 'Source' }, { key: 'job', header: 'Job' }, { key: 'description', header: 'Description' },
+      { key: 'status', header: 'Status', render: (item) => <Badge>{item.status}</Badge> }, { key: 'createdAt', header: 'Reported', render: (item) => dateLabel(item.createdAt) }, { key: 'resolvedAt', header: 'Resolved', render: (item) => dateLabel(item.resolvedAt) },
+    ] },
+    'Reviews & Ratings': { rows: activityQuery.currentData?.reviews.items, columns: [
+      { key: 'rater', header: 'Reviewer' }, { key: 'score', header: 'Rating', render: (item) => item.score ?? '—' }, { key: 'comment', header: 'Comment' },
+      { key: 'job', header: 'Job' }, { key: 'createdAt', header: 'Date', render: (item) => dateLabel(item.createdAt) },
+    ] },
+    Notes: { rows: activityQuery.currentData?.notes, columns: [
+      { key: 'body', header: 'Note' }, { key: 'admin', header: 'Added By' }, { key: 'createdAt', header: 'Date', render: (item) => dateLabel(item.createdAt) },
+    ] },
+  };
+  const activitySection = activitySections[tab];
 
   if (!id) return <Card><Banner tone="warning" title="No driver selected">Open a driver from the Drivers list to view their details.</Banner><Button onClick={() => navigate('/drivers')}>Back to Drivers</Button></Card>;
   if (!profile && (profileQuery.isLoading || profileQuery.isFetching)) return <DriverDetailLoading />;
@@ -166,6 +187,11 @@ export function AdminDriverDetail() {
         </>}
       </div>
     </SectionCard>}
-    {!SUPPORTED_TABS.has(tab) && <SectionCard title={tab}><EmptyState icon="clipboard-list" title={`${tab} unavailable`} description="These records are not available for this driver yet." /></SectionCard>}
+    {!SUPPORTED_TABS.has(tab) && <SectionCard title={tab}>
+      {activityQuery.isFetching ? <DriverTableLoading columns={activitySection.columns.length} label={`Loading ${tab.toLowerCase()}`} />
+        : activityQuery.error ? <><Banner tone="danger" title={`${tab} unavailable`}>{adminDriverError(activityQuery.error)}</Banner><Button variant="outline" onClick={() => activityQuery.refetch()}>Retry</Button></>
+          : activitySection?.rows?.length ? <DataTable rows={activitySection.rows} columns={activitySection.columns} rowKey={(item) => item.id} />
+            : <EmptyState icon="clipboard-list" title={`No ${tab.toLowerCase()} found`} description="No records were returned for this driver." />}
+    </SectionCard>}
   </div>;
 }

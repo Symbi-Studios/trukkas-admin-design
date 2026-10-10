@@ -1,70 +1,110 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 const cleanText = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
+const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+const records = (value) => Array.isArray(value) ? value.filter((item) => item && typeof item === 'object' && !Array.isArray(item)) : [];
 const accountStatusLabels = {
   ACTIVE: 'Active', PENDING_PROFILE: 'Pending Profile', PENDING_REVIEW: 'Pending Review',
   SUSPENDED: 'Inactive', INACTIVE: 'Inactive', BANNED: 'Inactive',
 };
-const licenseStatusLabels = { VALID: 'Valid', VERIFIED: 'Valid', EXPIRING_SOON: 'Expiring Soon', EXPIRED: 'Expired', PENDING: 'Pending Review', PENDING_REVIEW: 'Pending Review', REJECTED: 'Rejected' };
+const licenseStatusLabels = { VALID: 'Valid', VERIFIED: 'Verified', EXPIRING_SOON: 'Expiring Soon', EXPIRED: 'Expired', PENDING: 'Pending Review', PENDING_REVIEW: 'Pending Review', REJECTED: 'Rejected' };
 const formatEnum = (value) => cleanText(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) || null;
-const finiteNumber = (value) => typeof value === 'number' && Number.isFinite(value) ? value : null;
+const finiteNumber = (value) => (typeof value === 'number' || (typeof value === 'string' && value.trim())) && Number.isFinite(Number(value)) ? Number(value) : null;
+const count = (value) => Number.isSafeInteger(finiteNumber(value)) && finiteNumber(value) >= 0 ? finiteNumber(value) : null;
+function date(value) {
+  if (!cleanText(value) || !/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value)) return null;
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return null;
+  return Number.isFinite(Date.parse(value)) ? value : null;
+}
 const historyPagination = (data, args) => ({
-  page: finiteNumber(data.pagination?.page) ?? args.page ?? 1,
-  limit: finiteNumber(data.pagination?.limit) ?? args.limit ?? 10,
-  total: finiteNumber(data.pagination?.total) ?? finiteNumber(data.total) ?? 0,
-  totalPages: finiteNumber(data.pagination?.totalPages) ?? 1,
+  page: count(data.pagination?.page) || args.page || 1,
+  limit: count(data.pagination?.limit) || args.limit || 10,
+  total: count(data.pagination?.total) ?? count(data.total),
+  totalPages: count(data.pagination?.totalPages),
 });
 
+const driverFilters = ({ status, registrationType, companyId, licenseStatus, onTrip, search } = {}) => Object.fromEntries(
+  Object.entries({ status, registrationType, companyId, licenseStatus, onTrip, search: cleanText(search) })
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+);
+
+async function allUsers(baseQuery, path, params = {}, signal) {
+  const users = new Map();
+  let page = 1, pages = 1;
+  do {
+    if (signal?.aborted) return { error: { status: 'CUSTOM_ERROR', error: 'Driver directory request cancelled.' } };
+    const result = await baseQuery({ url: path, params: { ...params, page, limit: 100 } });
+    if (result.error) return { error: result.error };
+    const data = unwrapApiResponseData(result.data);
+    const totalPages = count(data?.pagination?.totalPages), total = count(data?.pagination?.total);
+    if (!Array.isArray(data?.users) || totalPages == null || total == null || (page < totalPages && !data.users.length)) {
+      return { error: { status: 'CUSTOM_ERROR', error: 'The driver directory response is incomplete.' } };
+    }
+    pages = Math.max(1, totalPages);
+    for (const user of records(data.users)) if (cleanText(user.id)) users.set(user.id, user);
+    if (page >= pages && users.size !== total) return { error: { status: 'CUSTOM_ERROR', error: 'The driver directory could not load every record.' } };
+    page += 1;
+  } while (page <= pages);
+  return { data: [...users.values()] };
+}
+
 export function adaptAdminDriver(dto = {}) {
-  const company = dto.linkedCompany || null;
-  const name = cleanText(dto.name) || [dto.firstName, dto.lastName].filter(Boolean).join(' ') || null;
+  const company = record(dto.linkedCompany);
+  const license = record(dto.license);
+  const name = cleanText(dto.name) || [cleanText(dto.firstName), cleanText(dto.lastName)].filter(Boolean).join(' ') || null;
   const rawStatus = cleanText(dto.status)?.toUpperCase() || null;
-  const isOnTrip = rawStatus === 'ACTIVE' && dto.isOnTrip === true;
+  const isOnTrip = typeof dto.isOnTrip === 'boolean' ? dto.isOnTrip : null;
+  const displayStatus = cleanText(dto.displayStatus)?.toUpperCase() || (dto.isRejected === true ? 'REJECTED' : isOnTrip === true ? 'ON_TRIP' : rawStatus);
   const rawLicense = cleanText(dto.licenseStatus)?.toUpperCase() || null;
   return {
     id: cleanText(dto.id), name: name || '—', email: cleanText(dto.email), phone: cleanText(dto.phone),
-    statusCode: rawStatus, isOnTrip, status: isOnTrip ? 'On Trip' : accountStatusLabels[rawStatus] || formatEnum(rawStatus) || '—',
-    registrationType: company ? 'Company Driver' : 'Individual Driver',
+    statusCode: rawStatus, displayStatusCode: displayStatus, isOnTrip, status: displayStatus === 'ON_TRIP' ? 'On Trip' : accountStatusLabels[displayStatus] || formatEnum(displayStatus) || '—',
+    registrationType: dto.registrationType === 'COMPANY' ? 'Company Driver' : dto.registrationType === 'INDIVIDUAL' ? 'Individual Driver' : cleanText(company.id) ? 'Company Driver' : dto.linkedCompany === null ? 'Individual Driver' : '—',
     company: cleanText(company?.name), linkedCompanyId: cleanText(company?.id),
-    license: cleanText(dto.licenseNumber), licenseStatusCode: rawLicense,
+    license: cleanText(license.number) || cleanText(dto.licenseNumber), licenseStatusCode: rawLicense,
+    licenseVerificationStatus: cleanText(license.verificationStatus),
     licenseStatus: licenseStatusLabels[rawLicense] || formatEnum(rawLicense) || '—',
-    licenseExpiresAt: cleanText(dto.licenseExpiresAt), truckPlate: cleanText(dto.truckPlate),
-    totalJobs: typeof dto.totalJobs === 'number' ? dto.totalJobs : null,
-    joined: cleanText(dto.createdAt) || cleanText(dto.joinedAt),
-    rating: null, reviews: null, totalEarnings: null,
+    licenseExpiresAt: date(license.expiresAt) || date(dto.licenseExpiresAt), truckPlate: cleanText(record(dto.assignedTruck).plateNumber) || cleanText(dto.truckPlate),
+    totalJobs: count(dto.totalJobs),
+    joined: date(dto.joinedAt) || date(dto.createdAt),
+    rating: count(record(dto.rating).count) === 0 ? null : finiteNumber(record(dto.rating).average), reviews: count(record(dto.rating).count), totalEarnings: finiteNumber(record(dto.earnings).completedTripValue),
+    currency: cleanText(record(dto.earnings).currency),
+    isRejected: typeof dto.isRejected === 'boolean' ? dto.isRejected : null,
+    rejectionReason: cleanText(dto.rejectionReason), rejectedAt: date(dto.rejectedAt),
     canReview: rawStatus === 'PENDING_REVIEW',
     canActivate: rawStatus === 'SUSPENDED',
-    canSuspend: rawStatus === 'ACTIVE' && !isOnTrip,
+    canSuspend: rawStatus === 'ACTIVE' && isOnTrip === false,
   };
 }
 
 export function adaptAdminDriverProfile(response) {
   const dto = unwrapApiResponseData(response);
   if (!dto || typeof dto !== 'object' || Array.isArray(dto)) return null;
-  const account = dto.details?.account || {};
-  const stats = dto.stats || {};
+  const account = record(record(dto.details).account);
+  const stats = record(dto.stats);
   const driver = adaptAdminDriver({
     ...dto,
     status: dto.status || account.accountStatus,
-    joinedAt: dto.joinedAt || account.dateJoined,
+    joinedAt: date(dto.joinedAt) || date(account.dateJoined),
     totalJobs: finiteNumber(stats.totalJobs?.count),
   });
   return {
     ...driver,
     role: cleanText(dto.role),
-    registrationType: cleanText(account.accountType) || (dto.linkedCompany ? 'Company Driver' : dto.linkedCompany === null ? 'Individual Driver' : null),
-    lastLoginAt: cleanText(dto.lastLoginAt) || cleanText(account.lastLogin),
+    registrationType: cleanText(account.accountType) || (driver.registrationType === '—' ? null : driver.registrationType),
+    lastLoginAt: date(dto.lastLoginAt) || date(account.lastLogin),
     registrationStatus: formatEnum(account.registrationStatus),
-    failedJobs: finiteNumber(stats.failedJobs?.count),
+    failedJobs: count(stats.failedJobs?.count),
     totalEarnings: finiteNumber(stats.totalEarned?.amount),
     walletBalance: finiteNumber(stats.walletBalance?.amount),
     jobsChangeThisWeek: finiteNumber(stats.totalJobs?.changeThisWeek),
     earningsChangeThisWeek: finiteNumber(stats.totalEarned?.changeThisWeek),
     kycStatus: formatEnum(dto.verification?.kycStatus),
-    trucks: Array.isArray(dto.trucks) ? dto.trucks.map((truck) => ({
+    trucks: Array.isArray(dto.trucks) ? records(dto.trucks).map((truck) => ({
       id: cleanText(truck.id), plate: cleanText(truck.plateNumber),
       type: cleanText(truck.containerType), size: cleanText(truck.containerSize),
-      year: cleanText(String(truck.year ?? '')), status: formatEnum(truck.status),
+      year: cleanText(truck.year) || (count(truck.year) != null ? String(truck.year) : null), status: formatEnum(truck.status),
     })) : null,
   };
 }
@@ -78,6 +118,33 @@ function errorBody(response) {
   };
 }
 
+function adaptDriverActivity(response) {
+  const data = record(unwrapApiResponseData(response));
+  const review = record(data.reviews);
+  return {
+    maintenance: records(data.maintenanceHistory).map((item, index) => ({
+      id: cleanText(item.id) || `maintenance-${index}`, reference: cleanText(item.reference) || '—',
+      type: formatEnum(item.type) || '—', severity: formatEnum(item.severity) || '—', status: formatEnum(item.status) || '—',
+      description: cleanText(item.description) || '—', dueDate: date(item.dueDate), completedAt: date(item.completedAt), serviceCenter: cleanText(item.serviceCenterName) || '—',
+    })),
+    incidents: records(data.incidents).map((item, index) => ({
+      id: cleanText(item.id) || `incident-${index}`, source: formatEnum(item.source) || '—',
+      type: formatEnum(item.type) || '—', status: formatEnum(item.status) || '—', description: cleanText(item.description) || '—',
+      job: cleanText(record(item.job).jobNumber) || '—', createdAt: date(item.createdAt), resolvedAt: date(item.resolvedAt),
+    })),
+    notes: records(data.notes).map((item, index) => ({
+      id: cleanText(item.id) || `note-${index}`, body: cleanText(item.body) || '—', admin: cleanText(record(item.admin).name) || '—', createdAt: date(item.createdAt),
+    })),
+    reviews: {
+      average: count(review.count) === 0 ? null : finiteNumber(review.average), count: count(review.count),
+      items: records(review.items).map((item, index) => ({
+        id: cleanText(item.id) || `review-${index}`, score: finiteNumber(item.score), comment: cleanText(item.comment) || '—',
+        rater: cleanText(record(item.rater).name) || '—', job: cleanText(record(item.job).jobNumber) || '—', createdAt: date(item.createdAt),
+      })),
+    },
+  };
+}
+
 export function adminDriverError(error) {
   if (error?.status === 401) return 'Your session has expired. Please sign in again.';
   if (error?.status === 403) return 'You do not have permission to view or manage this driver.';
@@ -87,18 +154,31 @@ export function adminDriverError(error) {
 }
 
 export const driversApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminDrivers: builder.query({
-      query: ({ search = '', status, page = 1, limit = 10 } = {}) => ({
-        url: '/admin/users/drivers', params: { ...(status ? { status } : {}), ...(search.trim() ? { search: search.trim() } : {}), page, limit },
-      }),
-      transformResponse: (response) => {
-        const data = unwrapApiResponseData(response) || {};
-        const pagination = data.pagination || {};
-        return {
-          drivers: (Array.isArray(data.users) ? data.users : []).map(adaptAdminDriver).filter((driver) => driver.id),
-          pagination: { page: pagination.page ?? 1, limit: pagination.limit ?? 10, total: pagination.total ?? null, totalPages: pagination.totalPages ?? null },
-        };
+      async queryFn({ page = 1, limit = 10, ...filters } = {}, api, _options, baseQuery) {
+        if (filters.tabStatus && filters.tabStatus !== 'ON_TRIP' && filters.status !== filters.tabStatus) {
+          return { data: { drivers: [], pagination: { page, limit, total: 0, totalPages: 0 } } };
+        }
+        const verificationFilter = ['PENDING_REVIEW', 'REJECTED'].includes(filters.licenseStatus) ? filters.licenseStatus : null;
+        const params = driverFilters({ ...filters, licenseStatus: verificationFilter ? undefined : filters.licenseStatus });
+        if (verificationFilter || filters.status === 'INACTIVE') {
+          const users = new Map();
+          for (const status of filters.status === 'INACTIVE' ? ['INACTIVE', 'SUSPENDED', 'BANNED'] : [filters.status]) {
+            const result = await allUsers(baseQuery, '/admin/users/drivers', driverFilters({ ...params, status }), api.signal);
+            if (result.error) return result;
+            for (const user of result.data) users.set(user.id, user);
+          }
+          const drivers = [...users.values()].map(adaptAdminDriver).filter((driver) => !verificationFilter || (verificationFilter === 'PENDING_REVIEW'
+            ? ['PENDING', 'PENDING_REVIEW'].includes(driver.licenseVerificationStatus) : driver.licenseVerificationStatus === 'REJECTED'));
+          return { data: { drivers: drivers.slice((page - 1) * limit, page * limit), pagination: { page, limit, total: drivers.length, totalPages: Math.ceil(drivers.length / limit) } } };
+        }
+        const result = await baseQuery({ url: '/admin/users/drivers', params: { ...params, page, limit } });
+        if (result.error) return result;
+        const data = unwrapApiResponseData(result.data);
+        if (!Array.isArray(data?.users)) return { error: { status: 'CUSTOM_ERROR', error: 'The driver response is missing its list.' } };
+        return { data: { drivers: records(data.users).map(adaptAdminDriver).filter((driver) => driver.id), pagination: historyPagination(data, { page, limit }) } };
       },
       providesTags: (result) => [{ type: 'AdminDrivers', id: 'LIST' }, ...(result?.drivers || []).map((driver) => ({ type: 'AdminDrivers', id: driver.id }))],
     }),
@@ -107,11 +187,10 @@ export const driversApi = baseApi.injectEndpoints({
       transformResponse: (response) => {
         const data = unwrapApiResponseData(response) || {};
         return {
-          count: typeof data.count === 'number' ? data.count : Array.isArray(data.drivers) ? data.drivers.length : null,
-          drivers: (Array.isArray(data.drivers) ? data.drivers : []).map((driver) => adaptAdminDriver({
+          count: count(data.count),
+          drivers: records(data.drivers).map((driver) => adaptAdminDriver({
             ...driver,
-            name: [driver.firstName, driver.lastName].filter(Boolean).join(' '),
-            licenseStatus: driver.kycStatus,
+            name: [cleanText(driver.firstName), cleanText(driver.lastName)].filter(Boolean).join(' '),
             licenseNumber: driver.driverProfile?.licenseNumber,
             licenseExpiresAt: driver.driverProfile?.licenseExpiresAt,
           })).filter((driver) => driver.id),
@@ -120,11 +199,15 @@ export const driversApi = baseApi.injectEndpoints({
       providesTags: [{ type: 'AdminDrivers', id: 'PENDING' }],
     }),
     getAdminDriverStats: builder.query({
-      query: () => ({ url: '/admin/users/stats' }),
+      query: () => ({ url: '/admin/users/drivers/stats' }),
       transformResponse: (response) => {
         const data = unwrapApiResponseData(response) || {};
-        const driverStats = data.byRole?.drivers || {};
-        return { total: typeof driverStats.total === 'number' ? driverStats.total : null, newToday: typeof driverStats.today === 'number' ? driverStats.today : null, newThisWeek: typeof driverStats.thisWeek === 'number' ? driverStats.thisWeek : null, newThisMonth: typeof driverStats.thisMonth === 'number' ? driverStats.thisMonth : null };
+        return {
+          ...Object.fromEntries(['total', 'individual', 'company', 'pendingReview', 'active', 'onTrip', 'inactive', 'rejected', 'suspended', 'banned'].map((key) => [key, count(data[key])])),
+          documentsExpiring: { expiringSoon: count(data.documentsExpiring?.expiringSoon), expired: count(data.documentsExpiring?.expired), noLicenseOnFile: count(data.documentsExpiring?.noLicenseOnFile), withinDays: count(data.documentsExpiring?.withinDays) },
+          earnings: { completedTrips: count(data.earnings?.completedTrips), completedTripValue: finiteNumber(data.earnings?.completedTripValue), currency: cleanText(data.earnings?.currency) },
+          averageRating: { average: count(data.averageRating?.count) === 0 ? null : finiteNumber(data.averageRating?.average), count: count(data.averageRating?.count) },
+        };
       },
       providesTags: [{ type: 'AdminDriverStats', id: 'SUMMARY' }],
     }),
@@ -133,6 +216,63 @@ export const driversApi = baseApi.injectEndpoints({
       transformResponse: adaptAdminDriverProfile,
       providesTags: (_result, _error, id) => [{ type: 'AdminDrivers', id }],
     }),
+    getAdminDriverCompanies: builder.query({
+      async queryFn(_args, api, _options, baseQuery) {
+        const result = await allUsers(baseQuery, '/admin/users/truckers', { truckerType: 'COMPANY' }, api.signal);
+        return result.error ? result : { data: result.data.filter((item) => cleanText(item.id) && cleanText(item.name)).map((item) => ({ id: item.id, name: item.name, email: cleanText(item.email) })) };
+      },
+      providesTags: ['AdminCompanies'],
+    }),
+    getAdminDriverCompanyTrucks: builder.query({
+      query: (id) => ({ url: `/admin/users/${encodeURIComponent(id)}/profile` }),
+      transformResponse: (response) => records(unwrapApiResponseData(response)?.trucks)
+        .filter((truck) => cleanText(truck.id) && cleanText(truck.plateNumber) && truck.assignedDriver === null)
+        .map((truck) => ({ id: truck.id, plate: truck.plateNumber })),
+      providesTags: ['AdminFleet', 'AdminCompanies'],
+    }),
+    getAdminDriverRankings: builder.query({
+      async queryFn(_args, api, _options, baseQuery) {
+        const result = await allUsers(baseQuery, '/admin/users/drivers', {}, api.signal);
+        if (result.error) return result;
+        return { data: result.data.map(adaptAdminDriver).filter((driver) => driver.rating != null && driver.reviews > 0)
+          .sort((a, b) => b.rating - a.rating || b.reviews - a.reviews || a.id.localeCompare(b.id)).slice(0, 5) };
+      },
+      providesTags: ['AdminDrivers'],
+    }),
+    getAdminDriverActivity: builder.query({
+      query: (id) => ({ url: `/admin/users/drivers/${encodeURIComponent(id)}/activity` }),
+      transformResponse: adaptDriverActivity,
+      providesTags: (_result, _error, id) => [{ type: 'AdminDrivers', id }],
+    }),
+    createAdminDriver: builder.mutation({
+      query: (fields) => ({ url: '/admin/users/drivers', method: 'POST', body: Object.fromEntries(
+        ['firstName', 'lastName', 'email', 'phone', 'licenseNumber', 'licenseExpiresAt', 'companyId', 'truckId']
+          .map((key) => [key, cleanText(fields[key])]).filter(([, value]) => value != null)
+      ) }),
+      transformResponse: (response) => {
+        const data = record(unwrapApiResponseData(response));
+        return { id: cleanText(data.driver?.id), invite: { sms: typeof data.invite?.sentVia?.sms === 'boolean' ? data.invite.sentVia.sms : null, email: typeof data.invite?.sentVia?.email === 'boolean' ? data.invite.sentVia.email : null } };
+      },
+      invalidatesTags: (_result, error) => error ? [] : ['AdminDrivers', 'AdminDriverStats', 'AdminFleet', 'AdminCompanies'],
+    }),
+    importAdminDrivers: builder.mutation({
+      query: (file) => {
+        const body = new FormData(); body.append('file', file);
+        return { url: '/admin/users/drivers/import', method: 'POST', body };
+      },
+      transformResponse: (response) => {
+        const data = record(unwrapApiResponseData(response));
+        return { created: count(data.created), failed: count(data.failed), results: records(data.results).map((item) => ({ line: count(item.line), status: cleanText(item.status), error: cleanText(item.error) })) };
+      },
+      invalidatesTags: (_result, error) => error ? [] : ['AdminDrivers', 'AdminDriverStats', 'AdminFleet', 'AdminCompanies'],
+    }),
+    exportAdminDriverCompliance: builder.query({
+      query: (filters = {}) => ({ url: '/admin/users/drivers/export', params: driverFilters(filters), responseHandler: 'text', headers: { Accept: 'text/csv' } }),
+      transformResponse: (response) => {
+        if (typeof response !== 'string') throw new Error('The compliance report response is not CSV.');
+        return response;
+      },
+    }),
     getAdminDriverJobs: builder.query({
       query: ({ id, tab = 'all', page = 1, limit = 10 }) => ({
         url: `/admin/users/${encodeURIComponent(id)}/jobs`, params: { tab, page, limit },
@@ -140,10 +280,10 @@ export const driversApi = baseApi.injectEndpoints({
       transformResponse: (response, _meta, args) => {
         const data = unwrapApiResponseData(response) || {};
         return {
-          rows: (Array.isArray(data.jobs) ? data.jobs : []).map((job) => ({
-            id: cleanText(job.jobId), forwarder: cleanText(job.forwarder), trucker: cleanText(job.trucker),
-            route: cleanText(job.route), status: formatEnum(job.status),
-            createdAt: cleanText(job.createdAt), completedAt: cleanText(job.completionDate),
+          rows: records(data.jobs).map((job) => ({
+            id: cleanText(job.jobId) || '—', forwarder: cleanText(job.forwarder) || '—', trucker: cleanText(job.trucker) || '—',
+            route: cleanText(job.route) || '—', status: formatEnum(job.status) || '—',
+            createdAt: date(job.createdAt), completedAt: date(job.completionDate),
           })),
           pagination: historyPagination(data, args),
         };
@@ -157,10 +297,10 @@ export const driversApi = baseApi.injectEndpoints({
       transformResponse: (response, _meta, args) => {
         const data = unwrapApiResponseData(response) || {};
         return {
-          rows: (Array.isArray(data.transactions) ? data.transactions : []).map((transaction) => ({
-            id: cleanText(transaction.id), label: cleanText(transaction.label),
-            type: formatEnum(transaction.type), amount: finiteNumber(transaction.amount),
-            status: formatEnum(transaction.status), createdAt: cleanText(transaction.createdAt),
+          rows: records(data.transactions).map((transaction) => ({
+            id: cleanText(transaction.id) || '—', label: cleanText(transaction.label) || '—',
+            type: formatEnum(transaction.type) || '—', amount: finiteNumber(transaction.amount),
+            status: formatEnum(transaction.status) || '—', createdAt: date(transaction.createdAt),
           })),
           pagination: historyPagination(data, args),
         };
@@ -172,7 +312,7 @@ export const driversApi = baseApi.injectEndpoints({
       transformResponse: (response) => {
         const data = unwrapApiResponseData(response) || {};
         const rawStatus = cleanText(data.kycStatus)?.toUpperCase() || null;
-        return { statusCode: rawStatus, status: licenseStatusLabels[rawStatus] || formatEnum(rawStatus) || '—', licenseNumber: cleanText(data.licenseNumber), licenseUrl: cleanText(data.licenseUrl), expiresAt: cleanText(data.licenseExpiresAt) };
+        return { statusCode: rawStatus, status: licenseStatusLabels[rawStatus] || formatEnum(rawStatus) || '—', licenseNumber: cleanText(data.licenseNumber), licenseUrl: cleanText(data.licenseUrl), expiresAt: date(data.licenseExpiresAt) };
       },
       providesTags: (_result, _error, id) => [{ type: 'AdminDrivers', id: `${id}-license` }],
     }),
@@ -211,5 +351,7 @@ export const {
   useGetAdminDriversQuery, useGetAdminPendingDriversQuery, useGetAdminDriverStatsQuery,
   useGetAdminDriverProfileQuery, useGetAdminDriverLicenseQuery, useReviewAdminDriverMutation,
   useGetAdminDriverJobsQuery, useGetAdminDriverTransactionsQuery,
+  useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery, useGetAdminDriverRankingsQuery, useGetAdminDriverActivityQuery,
+  useCreateAdminDriverMutation, useImportAdminDriversMutation, useLazyExportAdminDriverComplianceQuery,
   useVerifyAdminDriverLicenseMutation, useSuspendAdminDriverMutation, useActivateAdminDriverMutation,
 } = driversApi;

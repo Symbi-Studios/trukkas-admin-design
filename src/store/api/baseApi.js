@@ -121,16 +121,19 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const url = sanitizeUrl(request?.url || (typeof args === 'string' ? args : args.url));
   const requestBody = typeof args === 'string' ? undefined : args.body;
   const csvResponse = !result.error && (
-    ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips'].includes(api.endpoint)
+    ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips', 'exportAdminMaintenance', 'exportAdminDriverCompliance'].includes(api.endpoint)
     || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')
   );
   // Free-text audit actions and notes can contain personal details that field-
   // name redaction cannot reliably identify. Keep the request/status log only.
   const auditResponse = !result.error && (typeof args === 'string' ? args : args.url).split('?')[0] === '/admin/audit-logs';
+  const driverActivityResponse = !result.error && api.endpoint === 'getAdminDriverActivity';
   const responseBody = csvResponse
     ? '[CSV content omitted]'
     : auditResponse
       ? '[Audit log content omitted]'
+    : driverActivityResponse
+      ? '[Driver activity content omitted]'
     : result.error
       ? (result.error.data ?? { error: result.error.error ?? result.error.status })
       : result.data;
