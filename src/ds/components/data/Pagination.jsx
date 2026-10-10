@@ -19,7 +19,7 @@ export function Pagination({ page = 1, pageCount = 1, pageSize = 10, total, onPa
                   padding: '14px var(--tk-card-pad)', borderTop: '1px solid var(--tk-line)', ...style }}>
       {total != null && (
         <span className="tk-meta tk-pagination-summary">
-          Showing {total === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total.toLocaleString()}
+          Showing {total === '—' ? '—' : total === 0 ? 0 : (page - 1) * pageSize + 1} to {total === '—' ? '—' : Math.min(page * pageSize, total)} of {total.toLocaleString()}
         </span>
       )}
       <div style={{ flex: 1 }} />

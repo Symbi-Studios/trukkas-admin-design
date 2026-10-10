@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import {
   PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline, Skeleton,
 } from '../ds.js';
 import {
-  useGetAdminEscrowRegisterQuery, useGetAdminEscrowTripQuery, useGetAdminEscrowLedgerQuery,
-  escrowMoney as formatNaira, escrowReleasesFromTransactions,
+  useGetAdminEscrowHoldQuery, useGetAdminEscrowReleasesQuery,
+  escrowMoney as formatNaira,
 } from '../store/features/wallets/walletsApi.js';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
@@ -34,18 +35,17 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 export function EscrowHoldDetail() {
   const params = useParams(), search = useSearchParams();
   const holdId = search.get('id') || params.holdId || '';
-  const tripId = search.get('tripId') || '';
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
   const busy = false;
-  const registerQuery = useGetAdminEscrowRegisterQuery(undefined, { skip: !holdId || Boolean(tripId) });
-  const tripQuery = useGetAdminEscrowTripQuery({ tripId, holdId }, { skip: !holdId || !tripId });
-  const selectedQuery = tripId ? tripQuery : registerQuery;
-  const hold = selectedQuery.error ? null : tripId ? tripQuery.currentData : registerQuery.currentData?.find((row) => row.holdId === holdId);
+  const owner = useSelector((state) => state.auth.admin?.id);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const selectedQuery = useGetAdminEscrowHoldQuery({ holdId, owner }, { skip: !authenticated || !holdId });
+  const hold = authenticated && !selectedQuery.error ? selectedQuery.currentData : null;
   const r = hold || { holdId: holdId || '—', jobId: '—', customer: '—', route: '—', amount: null, heldOn: '—', heldTime: '—', releaseBy: '—', status: '—' };
-  const ledgerQuery = useGetAdminEscrowLedgerQuery(undefined, { skip: !hold });
-  const releases = escrowReleasesFromTransactions(ledgerQuery.error ? [] : ledgerQuery.currentData || []);
-  const release = releases.filter((row) => row.jobId === hold?.jobId || row.jobId === hold?.jobApiId).sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))[0];
+  const releasesQuery = useGetAdminEscrowReleasesQuery({ escrowId: holdId, owner }, { skip: !hold });
+  const releases = hold && !releasesQuery.error ? releasesQuery.currentData || [] : [];
+  const release = releases.filter((row) => row.statusCode === 'COMPLETED').sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))[0];
   const released = ['RELEASED', 'COMPLETED'].includes(r.statusCode);
   const loading = selectedQuery.isLoading || (selectedQuery.isFetching && !hold);
   const value = (content) => loading ? <Skeleton as="span" width={100} height={16} /> : content;
@@ -53,7 +53,7 @@ export function EscrowHoldDetail() {
   const timeline = [
     { title: 'Escrow hold created', description: hold ? `Held for ${r.customer} · ${formatNaira(r.amount)}` : '—', time: heldOn, state: hold ? 'done' : 'pending', icon: 'lock' },
     { title: 'Awaiting delivery confirmation', description: r.releaseBy === '—' ? '—' : `Scheduled release by ${r.releaseBy}`, state: released ? 'done' : r.statusCode === 'PENDING_RELEASE' ? 'current' : 'pending', icon: 'clock' },
-    { title: 'Funds released', description: release ? `Released to ${release.releasedTo}` : '—', time: release ? `${release.releasedOn} ${release.releasedTime}` : '—', state: released ? 'done' : 'pending', icon: 'lock-open' },
+    { title: 'Funds released', description: release ? `Released to ${release.releasedTo}` : '—', time: release && release.releasedOn !== '—' && release.releasedTime !== '—' ? `${release.releasedOn} ${release.releasedTime}` : '—', state: released ? 'done' : 'pending', icon: 'lock-open' },
   ];
 
   if (!hold && !loading && selectedQuery.error?.status === 404) {

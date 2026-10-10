@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -65,18 +66,20 @@ function ForwarderCell({ f }) {
 
 export function Forwarders() {
   const navigate = useNavigate();
-  const directoryQuery = useGetAdminForwarderDirectoryQuery();
-  const pendingQuery = useGetAdminPendingExporterLicensesQuery();
-  const FORWARDERS = directoryQuery.currentData || [];
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const owner = useSelector(state => state.auth.admin?.id);
+  const directoryQuery = useGetAdminForwarderDirectoryQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const pendingQuery = useGetAdminPendingExporterLicensesQuery(owner, { skip: !authenticated });
+  const FORWARDERS = directoryQuery.error ? [] : directoryQuery.currentData || [];
   const pendingLicenses = pendingQuery.error ? [] : pendingQuery.currentData?.rows || [];
   const [action, setAction] = useState(null), [announcement, setAnnouncement] = useState(false), [requestsOpen, setRequestsOpen] = useState(false), [notice, setNotice] = useState(null), [pageSize, setPageSize] = useState(10);
   const unavailable = (feature) => setNotice({ tone: 'info', text: `${feature} is not available yet.` });
   const STATS = useMemo(() => {
     const available = Boolean(directoryQuery.currentData) && !directoryQuery.error;
-    const count = (match) => available ? FORWARDERS.filter(match).length : '—';
-    return { total: available ? FORWARDERS.length : '—', active: count((row) => row.statusCode === 'ACTIVE'), exporters: count((row) => row.isExporter), suspended: count((row) => row.statusCode === 'SUSPENDED'), pending: available && FORWARDERS.every((row) => row.kycStatusCode) ? count((row) => ['PENDING', 'IN_REVIEW', 'PENDING_REVIEW'].includes(row.kycStatusCode)) : '—', totalSpend: null };
+    const count = (match) => available && FORWARDERS.every(row => row.statusCode) ? FORWARDERS.filter(match).length : '—';
+    return { total: available ? FORWARDERS.length : '—', active: count((row) => row.statusCode === 'ACTIVE'), exporters: available && FORWARDERS.every(row => row.isExporter != null) ? FORWARDERS.filter(row => row.isExporter === true).length : '—', suspended: count((row) => row.statusCode === 'SUSPENDED'), pending: available && FORWARDERS.every((row) => row.kycStatusCode) ? count((row) => ['PENDING', 'IN_REVIEW', 'PENDING_REVIEW'].includes(row.kycStatusCode)) : '—', totalSpend: null };
   }, [directoryQuery.currentData, directoryQuery.error]);
-  const OVERVIEW = directoryQuery.currentData && !directoryQuery.error ? STATUSES.map((label, index) => ({ label, value: FORWARDERS.filter((row) => row.status === label).length, color: ['var(--tk-success)', 'var(--tk-warning)', 'var(--tk-danger-solid)', 'var(--tk-neutral)', 'var(--tk-ink-400)'][index] })) : [];
+  const OVERVIEW = directoryQuery.currentData && !directoryQuery.error && FORWARDERS.every(row => row.statusCode) ? STATUSES.map((label, index) => ({ label, value: FORWARDERS.filter((row) => row.status === label).length, color: ['var(--tk-success)', 'var(--tk-warning)', 'var(--tk-danger-solid)', 'var(--tk-neutral)', 'var(--tk-ink-400)'][index] })) : [];
 
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -89,7 +92,7 @@ export function Forwarders() {
 
   const locations = useMemo(
     () => [...new Set(FORWARDERS.map((f) => f.location).filter((value) => value !== "—"))],
-    [directoryQuery.currentData],
+    [directoryQuery.currentData, directoryQuery.error],
   );
 
   const filtered = useMemo(
@@ -108,7 +111,7 @@ export function Forwarders() {
           location === "All Locations" || f.location === location;
         const matchesType =
           type === "All Types" ||
-          (type === "Exporter" ? f.isExporter : !f.isExporter);
+          (type === "Exporter" ? f.isExporter === true : f.isExporter === false);
         return (
           matchesQ &&
           matchesStatus &&
@@ -117,14 +120,14 @@ export function Forwarders() {
           matchesType
         );
       }),
-    [directoryQuery.currentData, q, status, verification, location, type],
+    [directoryQuery.currentData, directoryQuery.error, q, status, verification, location, type],
   );
 
   useEffect(() => { setPage(1); }, [q, status, verification, location, type, pageSize]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   function exportList() {
-    downloadForwarderCsv('forwarders.csv', [['ID', 'Name', 'Type', 'Email', 'Phone', 'Location', 'Status', 'Verification', 'Total Jobs', 'Total Spend (NGN)', 'Joined'], ...filtered.map((row) => [row.id, row.name, row.isExporter ? 'Exporter' : 'Forwarder', row.email, row.phone, row.location, row.status, row.verification, row.jobs, row.spend, row.joined])]);
+    downloadForwarderCsv('forwarders.csv', [['ID', 'Name', 'Type', 'Email', 'Phone', 'Location', 'Status', 'Verification', 'Total Jobs', 'Total Spend (NGN)', 'Joined'], ...filtered.map((row) => [row.id, row.name, row.isExporter == null ? '—' : row.isExporter ? 'Exporter' : 'Forwarder', row.email, row.phone, row.location, row.status, row.verification, row.jobs, row.spend, row.joined])]);
   }
   if (!directoryQuery.currentData && directoryQuery.isFetching) return <ForwardersLoading />;
   return (
@@ -353,7 +356,7 @@ export function Forwarders() {
                 key: "type",
                 header: "Type",
                 render: (r) =>
-                  r.isExporter ? (
+                  r.isExporter == null ? <Tag>—</Tag> : r.isExporter ? (
                     <Tag tone="teal" icon={<Icon name="ship" size={11} />}>
                       Exporter
                     </Tag>
@@ -496,7 +499,7 @@ export function Forwarders() {
                 style={{ width: "100%" }}
                 items={OVERVIEW.map((o) => ({
                   ...o,
-                  display: `${o.value} (${STATS.total ? Math.round((o.value / STATS.total) * 100) : 0}%)`,
+                  display: `${o.value} (${typeof STATS.total === "number" && STATS.total > 0 ? Math.round((o.value / STATS.total) * 100) : "—"}%)`,
                 }))}
                 showShare={false}
               />

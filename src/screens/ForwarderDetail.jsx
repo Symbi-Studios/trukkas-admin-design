@@ -27,7 +27,7 @@ const naira = forwarderMoney;
 function JobsTable({ rows }) {
   if (!rows.length) return <EmptyState title="No jobs found" description="Jobs for this forwarder will appear here." />;
   return (
-    <>{rows.some((row) => row.detailUnavailable) && <Banner>Some job details are unavailable. Cargo, amounts, and detail links are shown only for matching jobs.</Banner>}<DataTable rows={rows} rowKey={(r) => r.id}
+    <>{rows.some((row) => row.detailUnavailable) && <Banner>Some job details are unavailable. Cargo, amounts, and detail links are shown only for matching jobs.</Banner>}<DataTable rows={rows} rowKey={(r) => r.detailId}
       columns={[
         { key: 'id', header: 'Job ID', render: (r) => r.detailId ? <Link to={`/jobs/detail?id=${encodeURIComponent(r.detailId)}`}>{r.id}</Link> : <strong>{r.id || '—'}</strong> },
         { key: 'cargo', header: 'Cargo Type' },
@@ -43,25 +43,27 @@ export function ForwarderDetail() {
   const navigate = useNavigate(), params = useParams(), search = useSearchParams();
   const id = search.get('id') || params.forwarderId || '';
   const requestedTab = search.get('tab');
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const owner = useSelector(state => state.auth.admin?.id);
   const canViewActivity = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
   const [tab, setTab] = useState('Overview');
   const [moreOpen, setMoreOpen] = useState(false);
 
   const [page, setPage] = useState(1), [jobTab, setJobTab] = useState('all'), [action, setAction] = useState(null), [announcement, setAnnouncement] = useState(false), [notice, setNotice] = useState(null);
   useEffect(() => { setTab(({ verification: 'Verification', documents: 'Documents', jobs: 'Jobs & Shipments' })[requestedTab] || 'Overview'); setPage(1); setJobTab('all'); setAction(null); setAnnouncement(false); setNotice(null); setMoreOpen(false); }, [id, requestedTab]);
-  const profileQuery = useGetAdminForwarderProfileQuery(id, { skip: !id });
-  const FORWARDER = profileQuery.currentData;
+  const profileQuery = useGetAdminForwarderProfileQuery({ id, owner }, { skip: !authenticated || !id, refetchOnMountOrArgChange: true });
+  const FORWARDER = profileQuery.error ? null : profileQuery.currentData;
   const valid = FORWARDER?.role === 'FORWARDER';
-  const destinationsQuery = useGetAdminForwarderDestinationsQuery(id, { skip: !valid || tab !== 'Overview' });
-  const pendingQuery = useGetAdminPendingExporterLicensesQuery(undefined, { skip: !valid || !['Verification', 'Documents'].includes(tab) });
+  const destinationsQuery = useGetAdminForwarderDestinationsQuery({ id, owner }, { skip: !authenticated || !valid || tab !== 'Overview' });
+  const pendingQuery = useGetAdminPendingExporterLicensesQuery(owner, { skip: !authenticated || !valid || !['Verification', 'Documents'].includes(tab) });
   const pendingLicense = !pendingQuery.error ? pendingQuery.currentData?.rows.find((row) => row.id === id) : null;
   const licenseStatus = pendingLicense?.status || FORWARDER?.exporterLicenseStatus || (FORWARDER?.isExporter ? 'VERIFIED' : null);
   const licenseUrl = pendingLicense?.url || FORWARDER?.exporterLicenseUrl;
-  const jobsQuery = useGetAdminForwarderJobsQuery({ id, tab: tab === 'Jobs & Shipments' ? jobTab : 'all', page: tab === 'Jobs & Shipments' ? page : 1, limit: tab === 'Jobs & Shipments' ? 10 : 5 }, { skip: !valid || !['Overview', 'Jobs & Shipments'].includes(tab) });
-  const completedQuery = useGetAdminForwarderJobsQuery({ id, tab: 'completed', page: 1, limit: 1 }, { skip: !valid || tab !== 'Performance' });
-  const transactionsQuery = useGetAdminForwarderTransactionsQuery({ id, page, limit: 10 }, { skip: !valid || tab !== 'Banking & Financial' });
-  const activityQuery = useGetAdminForwarderActivityQuery(id, { skip: !valid || !canViewActivity || tab !== 'Activity Log' });
-  const savedDestinations = destinationsQuery.currentData || [], JOBS = jobsQuery.currentData?.rows || [];
+  const jobsQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: tab === 'Jobs & Shipments' ? jobTab : 'all', page: tab === 'Jobs & Shipments' ? page : 1, limit: tab === 'Jobs & Shipments' ? 10 : 5 }, { skip: !authenticated || !valid || !['Overview', 'Jobs & Shipments'].includes(tab) });
+  const completedQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: 'completed', page: 1, limit: 1 }, { skip: !authenticated || !valid || tab !== 'Performance' });
+  const transactionsQuery = useGetAdminForwarderTransactionsQuery({ id, owner, page, limit: 10 }, { skip: !authenticated || !valid || tab !== 'Banking & Financial' });
+  const activityQuery = useGetAdminForwarderActivityQuery({ id, owner }, { skip: !authenticated || !valid || !canViewActivity || tab !== 'Activity Log' });
+  const savedDestinations = destinationsQuery.error ? [] : destinationsQuery.currentData || [], JOBS = jobsQuery.error ? [] : jobsQuery.currentData?.rows || [];
   const DOCUMENTS = ['National ID Card', 'Passport Photograph', 'Freight Forwarding License', 'Export License', 'Proof of Address'].map((name, index) => ({ id: name, name, validity: '—', status: index === 3 ? forwarderVerification(licenseStatus) : '—', url: index === 3 ? licenseUrl : null }));
   const VERIFICATION_CHECKS = ['National ID Verification', 'Freight Forwarding License', 'Export License', 'Bank Account Verification', 'Address Verification', 'Background Check'].map((label, index) => ({ label, status: index === 2 ? forwarderVerification(licenseStatus) : '—' }));
   const PERFORMANCE = [
@@ -74,7 +76,7 @@ export function ForwarderDetail() {
   ];
   function changeTab(next) { setTab(next); setPage(1); }
   const unavailable = (feature) => setNotice({ tone: 'info', text: `${feature} is not available yet.` });
-  function exportProfile() { downloadForwarderCsv('forwarder-profile.csv', [['Field', 'Value'], ['ID', id], ['Name', FORWARDER.name], ['Email', FORWARDER.email], ['Phone', FORWARDER.phone], ['Status', FORWARDER.status], ['Account Type', FORWARDER.isExporter ? 'Exporter' : 'Forwarder'], ['Verification', FORWARDER.verification], ['Total Jobs', FORWARDER.jobs], ['Wallet Balance (NGN)', FORWARDER.balance], ['Joined', FORWARDER.memberSince], ['Last Login', FORWARDER.lastActivity]]); }
+  function exportProfile() { downloadForwarderCsv('forwarder-profile.csv', [['Field', 'Value'], ['ID', id], ['Name', FORWARDER.name], ['Email', FORWARDER.email], ['Phone', FORWARDER.phone], ['Status', FORWARDER.status], ['Account Type', FORWARDER.isExporter == null ? '—' : FORWARDER.isExporter ? 'Exporter' : 'Forwarder'], ['Verification', FORWARDER.verification], ['Total Jobs', FORWARDER.jobs], ['Wallet Balance (NGN)', FORWARDER.balance], ['Joined', FORWARDER.memberSince], ['Last Login', FORWARDER.lastActivity]]); }
   const success = (text) => setNotice({ tone: 'success', text });
   if (profileQuery.isFetching && !FORWARDER) return <ForwarderDetailLoading />;
   if (!id || profileQuery.error || !valid) return <SectionCard title="Forwarder Details">{profileQuery.error ? <QueryError query={profileQuery} title="Unable to load forwarder" /> : <EmptyState title={!id ? 'Select a forwarder' : 'Forwarder not found'} description="Choose a forwarder from the directory." />}<Button variant="outline" onClick={() => navigate('/forwarders')}>Back to Forwarders</Button></SectionCard>;
@@ -220,7 +222,7 @@ export function ForwarderDetail() {
                 <p style={{ margin: '0 0 8px', font: '400 13px/19px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{FORWARDER.address}</p>
                 <span className="tk-meta">Service coverage is not available yet.</span>
                 <div style={{ marginTop: 14, borderTop: '1px solid var(--tk-line)', paddingTop: 10 }}>
-                  <span className="tk-meta" style={{ display: 'block', marginBottom: 6 }}>Saved Destinations ({destinationsQuery.currentData ? savedDestinations.length : '—'})</span>
+                  <span className="tk-meta" style={{ display: 'block', marginBottom: 6 }}>Saved Destinations ({destinationsQuery.currentData && !destinationsQuery.error ? savedDestinations.length : '—'})</span>
                   {destinationsQuery.isFetching ? <DriverTableLoading columns={2} label="Loading saved destinations" /> : destinationsQuery.error ? <QueryError query={destinationsQuery} title="Unable to load saved destinations" /> : !savedDestinations.length ? <span className="tk-meta">No saved destinations.</span> : savedDestinations.map((b, i) => (
                     <div key={b.id} className="fd-row" style={{ borderTop: i ? '1px solid var(--tk-line)' : 'none' }}>
                       <Icon name="map-pin" size={15} color="var(--tk-blue)" />

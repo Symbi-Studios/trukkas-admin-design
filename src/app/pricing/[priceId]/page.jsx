@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { PricingDetail } from '../../../screens/PricingDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('priceId'); }
@@ -13,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function PricingDetailPage() {
-  return <PricingDetail />;
+  return <Suspense fallback={null}><PricingDetail /></Suspense>;
 }

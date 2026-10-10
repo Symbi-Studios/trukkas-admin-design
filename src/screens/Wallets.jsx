@@ -30,9 +30,9 @@ import {
   useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery,
   useGetAdminEscrowLedgerQuery, useGetAdminEscrowDisputesQuery,
   useGetAdminEscrowRulesQuery, useGetAdminEscrowActivityQuery,
-  emptyEscrowOverview, unavailableEscrowWeeklyActivity, adaptEscrowRules,
+  emptyEscrowOverview, adaptEscrowRules,
   escrowMoney as formatNaira, escrowNumber, escrowMillions, escrowCount,
-  escrowReleasesFromTransactions,
+  useGetAdminEscrowReleasesQuery, useGetAdminEscrowAccountsQuery, useGetAdminEscrowAlertsQuery,
 } from "../store/features/wallets/walletsApi.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 
@@ -99,23 +99,26 @@ export function Wallets() {
   const [amount, setAmount] = useState("");
   const busy = false;
   const navigate = useNavigate();
-  const canViewActivity = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
-  const overviewQuery = useGetAdminEscrowOverviewQuery();
-  const registerQuery = useGetAdminEscrowRegisterQuery(undefined, { skip: !["Escrow Overview", "Holds"].includes(tab) });
-  const ledgerQuery = useGetAdminEscrowLedgerQuery(undefined, { skip: !["Escrow Overview", "Releases", "Transactions"].includes(tab) });
-  const disputesQuery = useGetAdminEscrowDisputesQuery(undefined, { skip: tab !== "Disputes" });
-  const rulesQuery = useGetAdminEscrowRulesQuery(undefined, { skip: tab !== "Escrow Rules" });
-  const activityQuery = useGetAdminEscrowActivityQuery(undefined, { skip: tab !== "Activity Log" || !canViewActivity });
-  const { summary, breakdown: escrowBalanceBreakdown } = overviewQuery.error ? emptyEscrowOverview : overviewQuery.currentData || emptyEscrowOverview;
-  const accounts = [];
-  const holds = (registerQuery.error ? [] : registerQuery.currentData || []).filter((row) => ["LOCKED", "HELD", "MOBILIZATION_RELEASED", "PENDING_RELEASE"].includes(row.statusCode));
-  const tx = ledgerQuery.error ? [] : ledgerQuery.currentData || [];
-  const releases = escrowReleasesFromTransactions(tx);
-  const disputes = disputesQuery.error ? [] : disputesQuery.currentData || [];
-  const escrowWeeklyActivity = unavailableEscrowWeeklyActivity;
-  const escrowRules = rulesQuery.error ? adaptEscrowRules(null) : rulesQuery.currentData || adaptEscrowRules(null);
-  const escrowActivityLog = canViewActivity && !activityQuery.error ? activityQuery.currentData || [] : [];
-  const escrowAlerts = [];
+  const owner = useSelector((state) => state.auth.admin?.id);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const overviewQuery = useGetAdminEscrowOverviewQuery({ owner }, { skip: !authenticated });
+  const registerQuery = useGetAdminEscrowRegisterQuery({ owner }, { skip: !authenticated || !["Escrow Overview", "Holds"].includes(tab) });
+  const releasesQuery = useGetAdminEscrowReleasesQuery({ owner }, { skip: !authenticated || !["Escrow Overview", "Releases"].includes(tab) });
+  const ledgerQuery = useGetAdminEscrowLedgerQuery({ owner }, { skip: !authenticated || tab !== "Transactions" });
+  const accountsQuery = useGetAdminEscrowAccountsQuery({ owner }, { skip: !authenticated });
+  const alertsQuery = useGetAdminEscrowAlertsQuery({ owner }, { skip: !authenticated });
+  const disputesQuery = useGetAdminEscrowDisputesQuery({ owner }, { skip: !authenticated || tab !== "Disputes" });
+  const rulesQuery = useGetAdminEscrowRulesQuery({ owner }, { skip: !authenticated || tab !== "Escrow Rules" });
+  const activityQuery = useGetAdminEscrowActivityQuery({ owner }, { skip: !authenticated || tab !== "Activity Log" });
+  const { summary, breakdown: escrowBalanceBreakdown, weeklyActivity: escrowWeeklyActivity } = authenticated && !overviewQuery.error ? overviewQuery.currentData || emptyEscrowOverview : emptyEscrowOverview;
+  const accounts = authenticated && !accountsQuery.error ? accountsQuery.currentData || [] : [];
+  const holds = authenticated && !registerQuery.error ? registerQuery.currentData || [] : [];
+  const tx = authenticated && !ledgerQuery.error ? ledgerQuery.currentData || [] : [];
+  const releases = authenticated && !releasesQuery.error ? releasesQuery.currentData || [] : [];
+  const disputes = authenticated && !disputesQuery.error ? disputesQuery.currentData || [] : [];
+  const escrowRules = authenticated && !rulesQuery.error ? rulesQuery.currentData || adaptEscrowRules(null) : adaptEscrowRules(null);
+  const escrowActivityLog = authenticated && !activityQuery.error ? activityQuery.currentData || [] : [];
+  const escrowAlerts = authenticated && !alertsQuery.error ? alertsQuery.currentData || [] : [];
   const metric = (value) => overviewQuery.isLoading ? <Skeleton as="span" width={96} height={23} /> : formatNaira(value);
 
   return (
@@ -241,9 +244,9 @@ export function Wallets() {
                       thickness={18}
                       centerValue={escrowMillions(summary.totalEscrowBalance)}
                       centerLabel="Total Balance"
-                      data={escrowBalanceBreakdown.filter((d) => d.value != null).map((d) => ({
+                      data={escrowBalanceBreakdown.filter((d) => d.chartValue != null).map((d) => ({
                         label: d.label,
-                        value: d.value,
+                        value: d.chartValue,
                         color: d.color,
                       }))}
                     />
@@ -417,7 +420,7 @@ export function Wallets() {
                   </a>
                 }
               >
-                {ledgerQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
+                {releasesQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
                   rows={releases.slice(0, 5)}
                   rowKey={(r) => r.releaseId}
                   columns={[
@@ -466,7 +469,7 @@ export function Wallets() {
           )}
 
           {tab === "Escrow Accounts" && (
-            <DataTable
+            <>{accountsQuery.isLoading ? <DriverTableLoading columns={4} label="Loading escrow records" /> : (<DataTable
               rows={accounts}
               rowKey={(r) => r.id}
               columns={[
@@ -519,7 +522,7 @@ export function Wallets() {
                   render: (r) => <Badge>{r.status}</Badge>,
                 },
               ]}
-            />
+            />)}</>
           )}
 
           {tab === "Holds" && (
@@ -583,7 +586,7 @@ export function Wallets() {
           )}
 
           {tab === "Releases" && (
-            <>{ledgerQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
+            <>{releasesQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
               rows={releases}
               rowKey={(r) => r.releaseId}
               columns={[
@@ -766,7 +769,7 @@ export function Wallets() {
             <div
               style={{ padding: "18px var(--tk-card-pad) var(--tk-card-pad)" }}
             >
-              {activityQuery.isLoading && canViewActivity ? <DriverTableLoading columns={3} label="Loading escrow activity" /> : <Timeline
+              {activityQuery.isLoading ? <DriverTableLoading columns={3} label="Loading escrow activity" /> : <Timeline
                 items={escrowActivityLog.map((a) => ({
                   title: a.text,
                   description: `by ${a.actor}`,
@@ -800,7 +803,7 @@ export function Wallets() {
               </a>
             }
           >
-            {accounts.map((a) => (
+            {accountsQuery.isLoading ? <DriverTableLoading columns={3} label="Loading escrow records" /> : accounts.map((a) => (
               <ListRow
                 key={a.id}
                 icon="landmark"
@@ -864,7 +867,7 @@ export function Wallets() {
               </a>
             }
           >
-            {escrowAlerts.map((a, i) => (
+            {alertsQuery.isLoading ? <DriverTableLoading columns={3} label="Loading escrow records" /> : escrowAlerts.map((a, i) => (
               <AlertRow
                 key={i}
                 icon={a.icon}

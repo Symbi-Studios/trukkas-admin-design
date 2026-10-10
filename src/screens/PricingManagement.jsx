@@ -25,16 +25,11 @@ import {
   Select,
   EmptyState, Banner,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import {
-  addServicePricing,
-  setServicePricingStatus,
-  approvePriceException,
-  rejectPriceException,
-} from "../mock/api.js";
-import { formatNaira } from "../mock/format.js";
-
-import { pricingError, useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery } from '../store/features/pricing/pricingApi.js';
+import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv,
+  useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useGetAdminPricingSummaryQuery,
+  useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
+  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery,
+} from '../store/features/pricing/pricingApi.js';
 import { PricingLoading, PricingSettingModal } from './PricingSettings.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import './PricingManagement.css';
@@ -178,24 +173,36 @@ function ApprovalTile({ label, value, tone }) {
 
 export function PricingManagement() {
   const navigate = useNavigate();
-  const services = useCollection("servicePricing") || [];
+  const [tab, setTab] = useState("Service Pricing");
+  const servicesQuery = useGetAdminPricingServicesQuery();
+  const summaryQuery = useGetAdminPricingSummaryQuery();
+  const listsQuery = useGetAdminPricingPriceListsQuery(undefined, { skip: !['Price Lists', 'Approvals'].includes(tab) });
+  const customSurchargesQuery = useGetAdminPricingSurchargesQuery(undefined, { skip: !['Surcharges & Fees', 'Approvals'].includes(tab) });
+  const exceptionsQuery = useGetAdminPricingExceptionsQuery(undefined, { skip: !['Approvals', 'Price Exceptions'].includes(tab) });
+  const historyQuery = useGetAdminPricingHistoryQuery(undefined, { skip: tab !== 'Price History' });
+  const recentHistoryQuery = useGetAdminPricingRecentHistoryQuery();
+  const services = servicesQuery.error ? [] : servicesQuery.currentData?.rows || [];
   const configQuery = useGetAdminPricingConfigQuery();
   const config = configQuery.error ? null : configQuery.currentData;
-  const [setting, setSetting] = useState(null), [notice, setNotice] = useState(null);
-  const canEditConfig = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
+  const [setting, setSetting] = useState(null), [notice, setNotice] = useState(null), [actionError, setActionError] = useState(null);
+  const admin = useSelector((state) => state.auth.admin);
+  const canEditConfig = admin?.role === 'SUPER_ADMIN';
   const pricingRules = config?.rules || [];
-  const pricingSummary = { activePriceLists: '—', totalServices: '—', avgPriceChange: '—', priceExceptions: '—', surchargesActive: '—', currency: config?.currency || '—' };
-  const priceApprovalSummary = { pending: '—', approved: '—', rejected: '—' };
-  const priceLists = useCollection("priceLists") || [];
-  const exceptions = useCollection("priceExceptions") || [];
-  const history = useCollection("priceHistory") || [];
-  const recentChanges = history.slice(0, 5);
+  const summary = summaryQuery.error ? null : summaryQuery.currentData;
+  const pricingSummary = { activePriceLists: summary?.activePriceLists ?? '—', totalServices: summary?.totalServices ?? '—', avgPriceChange: summary?.avgPriceChange ?? '—', priceExceptions: summary?.priceExceptions ?? '—', surchargesActive: summary?.surchargesActive ?? '—', currency: config?.currency || '—' };
+  const priceApprovalSummary = { pending: summary?.pending ?? '—', approved: summary?.approved ?? '—', rejected: summary?.rejected ?? '—' };
+  const priceLists = listsQuery.error ? [] : listsQuery.currentData?.rows || [];
+  const exceptions = exceptionsQuery.error ? [] : exceptionsQuery.currentData?.rows || [];
+  const history = historyQuery.error ? [] : historyQuery.currentData?.rows || [];
+  const recentChanges = recentHistoryQuery.error ? [] : recentHistoryQuery.currentData?.rows || [];
+  const pendingApprovals = [...services.filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...priceLists.filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || []).filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...exceptions.filter((row) => row.statusCode === 'PENDING')];
+  const approvalsLoading = [servicesQuery, listsQuery, customSurchargesQuery, exceptionsQuery].some((query) => query.isFetching);
+  const readQueries = [configQuery, summaryQuery, servicesQuery, recentHistoryQuery, ...(tab === 'Price Lists' ? [listsQuery] : tab === 'Surcharges & Fees' ? [customSurchargesQuery] : tab === 'Approvals' ? [listsQuery, customSurchargesQuery, exceptionsQuery] : tab === 'Price Exceptions' ? [exceptionsQuery] : tab === 'Price History' ? [historyQuery] : [])];
+  const readError = readQueries.find((query) => query.error)?.error;
 
-  const [tab, setTab] = useState("Service Pricing");
   const terminalQuery = useGetAdminPricingTerminalRatesQuery(undefined, { skip: tab !== 'Surcharges & Fees' });
   const terminalRates = terminalQuery.error ? [] : terminalQuery.currentData?.rows || [];
-  const surcharges = [...(config?.fees || []), ...terminalRates];
-  const demoTab = !['Surcharges & Fees', 'Pricing Rules'].includes(tab);
+  const surcharges = [...(config?.fees || []), ...terminalRates, ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || [])];
   const [q, setQ] = useState("");
   const [serviceType, setServiceType] = useState("All Services");
   const [jobType, setJobType] = useState("All Job Types");
@@ -217,22 +224,22 @@ export function PricingManagement() {
     basePrice: "",
     surcharge: "",
   });
-  const [busy, setBusy] = useState(false);
+  const busy = false;
 
   const serviceOptions = useMemo(
-    () => ["All Services", ...new Set(services.map((s) => s.service))],
+    () => ["All Services", ...new Set(services.map((s) => s.service).filter((value) => value !== '—'))],
     [services],
   );
   const truckOptions = useMemo(
-    () => ["All Truck Types", ...new Set(services.map((s) => s.truckType))],
+    () => ["All Truck Types", ...new Set(services.map((s) => s.truckType).filter((value) => value !== '—'))],
     [services],
   );
   const routeOptions = useMemo(
-    () => ["All Routes", ...new Set(services.map((s) => s.route))],
+    () => ["All Routes", ...new Set(services.map((s) => s.route).filter((value) => value !== '—'))],
     [services],
   );
   const locationOptions = useMemo(
-    () => ["All Locations", ...new Set(services.map((s) => s.coverage))],
+    () => ["All Locations", ...new Set(services.map((s) => s.coverage).filter((value) => value !== '—'))],
     [services],
   );
 
@@ -266,25 +273,20 @@ export function PricingManagement() {
     setPage(1);
   }
 
-  async function submitAdd() {
-    if (!draft.service || !draft.route || !draft.basePrice) return;
-    setBusy(true);
-    await addServicePricing(draft);
-    setBusy(false);
-    setAddOpen(false);
-    setDraft({
-      service: "",
-      route: "",
-      coverage: "",
-      truckType: "",
-      unit: "Per Trip",
-      basePrice: "",
-      surcharge: "",
-    });
-    setPage(1);
+  function unavailable(message) { setActionError({ error: message }); setMenuFor(null); setExportOpen(false); }
+  function submitAdd() {
+    unavailable('The existing form uses unsupported pricing units, free-text routes and an inline surcharge. Add Pricing is unavailable with this form.');
+  }
+  function changePricing() {
+    unavailable('Live pricing updates are currently unavailable.');
+  }
+  function exportServices() {
+    setExportOpen(false);
+    if (!servicesQuery.currentData || servicesQuery.error || servicesQuery.isFetching) { unavailable('Load the complete service pricing list before exporting.'); return; }
+    downloadPricingCsv('service-pricing.csv', ['Service', 'Route', 'Coverage', 'Truck Type / Container', 'Unit', 'Base Price', 'Surcharge', 'Total Price', 'Status', 'Last Updated'], filtered.map((row) => [row.service, row.route, row.coverage, row.truckType, row.unit, row.basePrice, row.surcharge, row.totalPrice, row.status, row.updated]));
   }
 
-  if (!configQuery.currentData && configQuery.isFetching) return <PricingLoading />;
+  if ([configQuery, servicesQuery, summaryQuery].some((query) => !query.currentData && query.isFetching)) return <PricingLoading />;
   return (
     <>
       <PageHeader
@@ -305,22 +307,22 @@ export function PricingManagement() {
       />
 
       {notice && <Banner tone="success" action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice}</Banner>}
-      {configQuery.error && <Banner tone="danger" title="Unable to load platform pricing" action={<Button variant="outline" onClick={configQuery.refetch}>Retry</Button>}>{pricingError(configQuery.error)}</Banner>}
-      {configQuery.isFetching && <DriverLoadingNotice>Refreshing pricing settings…</DriverLoadingNotice>}
+      {(readError || actionError) && <Banner tone="danger" title="Unable to load platform pricing" action={<Button variant="outline" onClick={() => { setActionError(null); readQueries.filter((query) => query.error).forEach((query) => query.refetch()); }}>Retry</Button>}>{pricingError(actionError || readError)}</Banner>}
+      {readQueries.some((query) => query.isFetching) && <DriverLoadingNotice>Refreshing pricing settings…</DriverLoadingNotice>}
       <div className="pricing-stats">
         <StatCard
           icon="list-checks"
           tint="blue"
           label="Active Price Lists"
           value={pricingSummary.activePriceLists}
-          caption="Summary unavailable"
+          caption={pricingSummary.activePriceLists === '—' ? 'Summary unavailable' : undefined}
         />
         <StatCard
           icon="package"
           tint="purple"
           label="Total Services"
           value={pricingSummary.totalServices}
-          caption="Summary unavailable"
+          caption={pricingSummary.totalServices === '—' ? 'Summary unavailable' : undefined}
         />
         <StatCard
           icon="trending-up"
@@ -328,21 +330,21 @@ export function PricingManagement() {
           label="Avg. Price Change"
           value={pricingSummary.avgPriceChange}
           direction="down"
-          caption="Summary unavailable"
+          caption={pricingSummary.avgPriceChange === '—' ? 'Summary unavailable' : undefined}
         />
         <StatCard
           icon="triangle-alert"
           tint="amber"
           label="Price Exceptions"
           value={pricingSummary.priceExceptions}
-          caption="Summary unavailable"
+          caption={pricingSummary.priceExceptions === '—' ? 'Summary unavailable' : undefined}
         />
         <StatCard
           icon="badge-percent"
           tint="green"
           label="Surcharges Active"
           value={pricingSummary.surchargesActive}
-          caption="Summary unavailable"
+          caption={pricingSummary.surchargesActive === '—' ? 'Summary unavailable' : undefined}
         />
         <StatCard
           icon="coins"
@@ -366,7 +368,6 @@ export function PricingManagement() {
             items={TABS}
           />
 
-          {demoTab && <Banner title="Demo data" style={{ margin: '14px var(--tk-card-pad)' }}>This section uses sample records. Changes here affect the prototype only.</Banner>}
           {tab === "Service Pricing" && (
             <>
               <TableToolbar
@@ -467,7 +468,7 @@ export function PricingManagement() {
                 >
                   Service Pricing{" "}
                   <span style={{ color: "var(--tk-ink-400)", fontWeight: 500 }}>
-                    ({filtered.length})
+                    ({servicesQuery.currentData && !servicesQuery.error ? filtered.length : '—'})
                   </span>
                 </span>
                 <SearchField
@@ -502,8 +503,8 @@ export function PricingManagement() {
                       <DropdownMenu
                         width={180}
                         items={[
-                          { label: "Export as CSV", icon: "file-text" },
-                          { label: "Export as PDF", icon: "file-text" },
+                          { label: "Export as CSV", icon: "file-text", onClick: exportServices },
+                          { label: "Export as PDF", icon: "file-text", onClick: () => unavailable('PDF export is not documented by the pricing API.') },
                         ]}
                       />
                     </span>
@@ -532,7 +533,7 @@ export function PricingManagement() {
                 </span>
               </div>
 
-              {view === "list" ? (
+              {servicesQuery.isFetching ? <DriverTableLoading columns={11} label="Loading service pricing" /> : view === "list" ? (
                 <DataTable
                   rows={paged}
                   rowKey={(r) => r.id}
@@ -542,7 +543,7 @@ export function PricingManagement() {
                       header: "Service / Job Type",
                       render: (r) => (
                         <Link
-                          to={`/pricing/${r.id}`}
+                          to={pricingDetailUrl(r.id)}
                           style={{
                             font: "600 13px/18px var(--tk-font-sans)",
                             color: "var(--tk-ink-900)",
@@ -575,14 +576,14 @@ export function PricingManagement() {
                       key: "basePrice",
                       header: "Base Price (₦)",
                       align: "right",
-                      render: (r) => r.basePrice.toLocaleString("en-NG"),
+                      render: (r) => pricingNumber(r.basePrice),
                     },
                     {
                       key: "surcharge",
                       header: "Surcharge",
                       render: (r) => (
                         <span style={{ display: "grid", gap: 2 }}>
-                          <span>{r.surcharge.toLocaleString("en-NG")}</span>
+                          <span>{pricingNumber(r.surcharge)}</span>
                           <span className="tk-meta">({r.surchargePct})</span>
                         </span>
                       ),
@@ -598,7 +599,7 @@ export function PricingManagement() {
                             color: "var(--tk-ink-900)",
                           }}
                         >
-                          {r.totalPrice.toLocaleString("en-NG")}
+                          {pricingNumber(r.totalPrice)}
                         </span>
                       ),
                     },
@@ -632,18 +633,18 @@ export function PricingManagement() {
                               icon: "eye",
                               onClick: () => {
                                 setMenuFor(null);
-                                navigate(`/pricing/${r.id}`);
+                                navigate(pricingDetailUrl(r.id));
                               },
                             },
                             {
                               label: "Edit Pricing",
                               icon: "pencil",
-                              onClick: () => setMenuFor(null),
+                              onClick: () => unavailable('The existing form cannot safely edit the API rate card fields.'),
                             },
                             {
                               label: "Duplicate",
                               icon: "copy",
-                              onClick: () => setMenuFor(null),
+                              onClick: () => void changePricing(r, 'duplicate'),
                             },
                             { divider: true },
                             {
@@ -654,11 +655,7 @@ export function PricingManagement() {
                               icon: "circle-slash",
                               tone: "danger",
                               onClick: () => {
-                                setServicePricingStatus(
-                                  r.id,
-                                  r.status === "Active" ? "Inactive" : "Active",
-                                );
-                                setMenuFor(null);
+                                void changePricing(r, r.statusCode === 'ACTIVE' ? 'deactivate' : 'activate');
                               },
                             },
                           ]}
@@ -691,7 +688,7 @@ export function PricingManagement() {
                         }}
                       >
                         <Link
-                          to={`/pricing/${r.id}`}
+                          to={pricingDetailUrl(r.id)}
                           style={{
                             font: "600 13px/18px var(--tk-font-sans)",
                             color: "var(--tk-ink-900)",
@@ -722,7 +719,7 @@ export function PricingManagement() {
               <Pagination
                 page={page}
                 pageSize={PAGE_SIZE}
-                total={filtered.length}
+                total={servicesQuery.currentData && !servicesQuery.error ? filtered.length : '—'}
                 pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
                 onPage={setPage}
                 onPageSize={() => {}}
@@ -733,7 +730,7 @@ export function PricingManagement() {
           {tab === "Surcharges & Fees" && (
             <>
             <Banner style={{ margin: '14px var(--tk-card-pad)' }}>Global fee changes require Super Admin access. Terminal rates can be edited by admins. Flat amounts are in Naira.</Banner>
-            {terminalQuery.isFetching && <><DriverLoadingNotice>Loading terminal rates…</DriverLoadingNotice><DriverTableLoading columns={5} label="Loading terminal rates" /></>}
+            {(terminalQuery.isFetching || customSurchargesQuery.isFetching) && <><DriverLoadingNotice>Loading terminal rates…</DriverLoadingNotice><DriverTableLoading columns={5} label="Loading terminal rates" /></>}
             {terminalQuery.error && <Banner tone="danger" title="Unable to load terminal rates" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>{pricingError(terminalQuery.error)}</Banner>}
             {terminalQuery.currentData?.warnings.length > 0 && <Banner tone="warning" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>Terminal rates could not be loaded for: {terminalQuery.currentData.warnings.join(', ')}.</Banner>}
             {!surcharges.length && !terminalQuery.isFetching && <EmptyState title="Pricing fees unavailable" description="Retry to load the current pricing settings." />}
@@ -794,7 +791,7 @@ export function PricingManagement() {
                       menuFor={menuFor}
                       setMenuFor={setMenuFor}
                       items={[
-                        { label: 'Edit', icon: 'pencil', disabled: !r.editable || (r.source === 'config' ? !canEditConfig || configQuery.isFetching : terminalQuery.isFetching), onClick: () => { setMenuFor(null); if (r.editable && (r.source === 'terminal' || canEditConfig)) setSetting(r); } },
+                        { label: 'Edit', icon: 'pencil', disabled: !r.editable || (r.source === 'config' ? !canEditConfig || configQuery.isFetching : r.source === 'surcharge' ? customSurchargesQuery.isFetching : terminalQuery.isFetching), onClick: () => { setMenuFor(null); if (r.editable && (r.source !== 'config' || canEditConfig)) setSetting(r); } },
                       ]}
                     />
                   ),
@@ -803,7 +800,7 @@ export function PricingManagement() {
             /></>
           )}
 
-          {tab === "Price Lists" && (
+          {tab === "Price Lists" && (listsQuery.isFetching ? <DriverTableLoading columns={6} label="Loading price lists" /> :
             <DataTable
               rows={priceLists}
               rowKey={(r) => r.id}
@@ -826,7 +823,7 @@ export function PricingManagement() {
                   ),
                 },
                 { key: "region", header: "Region / Coverage" },
-                { key: "services", header: "Services", align: "right" },
+                { key: "services", header: "Services", align: "right", render: (r) => r.services ?? '—' },
                 { key: "currency", header: "Currency" },
                 { key: "lastUpdated", header: "Last Updated" },
                 {
@@ -891,10 +888,10 @@ export function PricingManagement() {
             /></>
           )}
 
-          {tab === "Approvals" && (
+          {tab === "Approvals" && (approvalsLoading ? <DriverTableLoading columns={6} label="Loading pricing approvals" /> :
             <DataTable
-              rows={exceptions.filter((e) => e.status === "Pending Approval")}
-              rowKey={(r) => r.id}
+              rows={pendingApprovals}
+              rowKey={(r) => `${r.entity}:${r.id}`}
               columns={[
                 {
                   key: "service",
@@ -939,14 +936,17 @@ export function PricingManagement() {
                     <span style={{ display: "flex", gap: 8 }}>
                       <Button
                         size="sm"
-                        onClick={() => approvePriceException(r.id)}
+                        disabled
+                        title="Live pricing updates are currently unavailable."
+                        onClick={() => void changePricing(r, r.entity === 'exceptions' ? 'approve' : 'activate')}
                       >
                         Approve
                       </Button>
                       <Button
                         size="sm"
                         variant="danger"
-                        onClick={() => rejectPriceException(r.id)}
+                        disabled
+                        title="The API requires a rejection reason; this screen has no reason input."
                       >
                         Reject
                       </Button>
@@ -957,8 +957,7 @@ export function PricingManagement() {
             />
           )}
           {tab === "Approvals" &&
-            exceptions.filter((e) => e.status === "Pending Approval").length ===
-              0 && (
+            !approvalsLoading && !readError && pendingApprovals.length === 0 && (
               <EmptyState
                 icon="circle-check"
                 title="Nothing pending"
@@ -966,7 +965,7 @@ export function PricingManagement() {
               />
             )}
 
-          {tab === "Price Exceptions" && (
+          {tab === "Price Exceptions" && (exceptionsQuery.isFetching ? <DriverTableLoading columns={8} label="Loading price exceptions" /> :
             <DataTable
               rows={exceptions}
               rowKey={(r) => r.id}
@@ -1012,7 +1011,7 @@ export function PricingManagement() {
             />
           )}
 
-          {tab === "Price History" && (
+          {tab === "Price History" && (historyQuery.isFetching ? <DriverTableLoading columns={6} label="Loading price history" /> :
             <DataTable
               rows={history}
               rowKey={(r) => r.id}
@@ -1038,13 +1037,13 @@ export function PricingManagement() {
                   key: "from",
                   header: "From (₦)",
                   align: "right",
-                  render: (r) => r.from.toLocaleString("en-NG"),
+                  render: (r) => pricingNumber(r.from),
                 },
                 {
                   key: "to",
                   header: "To (₦)",
                   align: "right",
-                  render: (r) => <b>{r.to.toLocaleString("en-NG")}</b>,
+                  render: (r) => <b>{pricingNumber(r.to)}</b>,
                 },
                 {
                   key: "pct",
@@ -1136,14 +1135,13 @@ export function PricingManagement() {
               </a>
             }
           >
-            <p className="tk-meta">Demo rate history</p>
-            {recentChanges.map((c) => (
+            {recentHistoryQuery.isFetching ? <DriverTableLoading columns={2} label="Loading recent price changes" /> : recentChanges.map((c) => (
               <PriceChangeRow key={c.id} c={c} />
             ))}
           </SectionCard>
 
           <SectionCard title="Price Approval Summary">
-            <p className="tk-meta">Approval totals are unavailable.</p>
+            <p className="tk-meta">Approved and rejected totals are unavailable.</p>
             <div
               style={{
                 display: "grid",
@@ -1171,12 +1169,12 @@ export function PricingManagement() {
         </div>
       </div>
 
-      {setting && <PricingSettingModal key={setting.id} row={setting} onClose={() => setSetting(null)} onDone={setNotice} />}
+      {setting && <PricingSettingModal key={setting.id} row={setting} writesUnavailable={setting.source === 'config' && (setting.group !== 'fee' || !canEditConfig)} onClose={() => setSetting(null)} onDone={setNotice} />}
       <Modal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         title="Add Pricing"
-        description="Demo pricing entry. Changes are saved only for this prototype session."
+        description="Adding pricing is currently unavailable."
         width={560}
         footer={
           <>
@@ -1185,8 +1183,9 @@ export function PricingManagement() {
             </Button>
             <Button
               disabled={
-                busy || !draft.service || !draft.route || !draft.basePrice
+                true
               }
+              title="The current form cannot supply the API's supported rate units and route fields."
               onClick={submitAdd}
             >
               {busy ? "Saving…" : "Add Pricing"}

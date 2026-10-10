@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Banner, Button, Modal, TextField, Textarea } from '../ds.js';
 import { forwarderError, useReviewAdminForwarderExporterLicenseMutation, useSuspendAdminForwarderMutation, useActivateAdminForwarderMutation, useSendAdminForwarderAnnouncementMutation } from '../store/features/forwarders/forwardersApi.js';
 
@@ -10,8 +10,10 @@ export function ForwarderActionModal({ action, onClose, onDone }) {
   const [activate, activateState] = useActivateAdminForwarderMutation();
   const busy = reviewState.isLoading || suspendState.isLoading || activateState.isLoading;
   const isReview = action.kind === 'review', row = action.forwarder;
+  const submitting = useRef(false);
   async function submit(decision) {
-    setError(null);
+    if (submitting.current || busy) return;
+    submitting.current = true; setError(null);
     try {
       if (isReview) await review({ id: row.id, decision, reason }).unwrap();
       else if (action.kind === 'suspend') await suspend({ id: row.id, reason }).unwrap();
@@ -19,6 +21,7 @@ export function ForwarderActionModal({ action, onClose, onDone }) {
       onDone?.(isReview ? `Exporter license ${decision === 'approve' ? 'approved' : 'rejected'}.` : `Forwarder ${action.kind === 'suspend' ? 'suspended' : 'reactivated'}.`);
       onClose();
     } catch (requestError) { setError(forwarderError(requestError)); }
+    finally { submitting.current = false; }
   }
   return <Modal open title={isReview ? 'Review exporter license' : action.kind === 'suspend' ? 'Suspend forwarder' : 'Reactivate forwarder'} description={row.name} onClose={() => { if (!busy) onClose(); }} footer={<>
     <Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
@@ -32,10 +35,13 @@ export function ForwarderActionModal({ action, onClose, onDone }) {
 export function ForwarderAnnouncementModal({ forwarder, onClose, onDone }) {
   const [title, setTitle] = useState(''), [message, setMessage] = useState(''), [channels, setChannels] = useState(['in-app']), [error, setError] = useState(null);
   const [send, state] = useSendAdminForwarderAnnouncementMutation();
+  const submitting = useRef(false);
   async function submit() {
-    setError(null);
-    try { await send({ id: forwarder?.id, title, message, channels }).unwrap(); onDone?.('Announcement sent.'); onClose(); }
+    if (submitting.current || state.isLoading) return;
+    submitting.current = true; setError(null);
+    try { const result = await send({ id: forwarder?.id, title, message, channels }).unwrap(); onDone?.('Announcement sent to ' + result.sentCount + ' user(s).'); onClose(); }
     catch (requestError) { setError(forwarderError(requestError)); }
+    finally { submitting.current = false; }
   }
   return <Modal open title="Send Announcement" description={forwarder ? `Recipient: ${forwarder.name}` : 'Recipients: all forwarders and exporters'} onClose={() => { if (!state.isLoading) onClose(); }} footer={<><Button variant="outline" disabled={state.isLoading} onClick={onClose}>Cancel</Button><Button disabled={state.isLoading || !title.trim() || !message.trim() || !channels.length} onClick={submit}>{state.isLoading ? 'Sending…' : 'Send Announcement'}</Button></>}>
     <div style={{ display: 'grid', gap: 16 }}>{error && <Banner tone="danger" title="Unable to send">{error}</Banner>}<TextField label="Title" value={title} onChange={(event) => setTitle(event.target.value)} disabled={state.isLoading} /><Textarea label="Message" value={message} onChange={(event) => setMessage(event.target.value)} rows={5} disabled={state.isLoading} /><fieldset style={{ border: 0, padding: 0, margin: 0 }}><legend className="tk-meta">Channels</legend><div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>{['in-app', 'email', 'push'].map((channel) => <label key={channel}><input type="checkbox" checked={channels.includes(channel)} disabled={state.isLoading} onChange={(event) => setChannels((current) => event.target.checked ? [...current, channel] : current.filter((item) => item !== channel))} /> {channel}</label>)}</div></fieldset></div>

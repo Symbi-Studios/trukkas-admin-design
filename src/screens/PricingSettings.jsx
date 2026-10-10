@@ -2,26 +2,30 @@
 import { useState } from 'react';
 import { Banner, Button, Card, Modal, Select, Skeleton, StatCard, TextField } from '../ds.js';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
-import { pricingError, useUpdateAdminPricingConfigMutation, useUpdateAdminPricingTerminalRateMutation } from '../store/features/pricing/pricingApi.js';
+import { pricingError, useUpdateAdminPricingConfigMutation, useUpdateAdminPricingTerminalRateMutation, useUpdateAdminPricingSurchargeMutation } from '../store/features/pricing/pricingApi.js';
 import './PricingManagement.css';
 
-export function PricingSettingModal({ row, onClose, onDone }) {
+export function PricingSettingModal({ row, onClose, onDone, writesUnavailable = false }) {
   const [value, setValue] = useState(String(row.value ?? '')), [error, setError] = useState(null);
   const [updateConfig, configState] = useUpdateAdminPricingConfigMutation();
   const [updateTerminal, terminalState] = useUpdateAdminPricingTerminalRateMutation();
-  const busy = configState.isLoading || terminalState.isLoading;
+  const [updateSurcharge, surchargeState] = useUpdateAdminPricingSurchargeMutation();
+  const busy = configState.isLoading || terminalState.isLoading || surchargeState.isLoading;
   const parsed = Number(value);
-  const valid = row.options ? row.options.includes(value) : value.trim() !== '' && Number.isFinite(parsed) && parsed >= row.min && (row.max == null || parsed <= row.max);
+  const supported = row.editable && (row.source === 'config' || row.source === 'terminal' || (row.source === 'surcharge' && row.statusCode === 'DRAFT'));
+  const valid = supported && (row.options ? row.options.includes(value) : value.trim() !== '' && Number.isFinite(parsed) && parsed >= row.min && (row.max == null || parsed <= row.max));
+  const changed = row.options ? value !== String(row.value) : parsed !== row.value;
   async function save() {
-    if (!valid || busy) return;
+    if (!valid || !changed || busy || writesUnavailable) return;
     setError(null);
     try {
       if (row.source === 'config') await updateConfig({ key: row.key, value: row.options ? value : parsed }).unwrap();
-      else await updateTerminal({ id: row.terminalId, key: row.key, value: parsed }).unwrap();
+      else if (row.source === 'terminal') await updateTerminal({ id: row.terminalId, key: row.key, value: parsed }).unwrap();
+      else await updateSurcharge({ id: row.id, status: row.statusCode, value: parsed }).unwrap();
       onDone?.(`${row.name} updated.`); onClose();
     } catch (requestError) { setError(pricingError(requestError)); }
   }
-  return <Modal open title={`Edit ${row.name}`} description={row.source === 'config' ? 'This change applies to the platform configuration.' : `This change applies to ${row.appliesTo}.`} onClose={() => { if (!busy) onClose(); }} footer={<><Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button disabled={!valid || busy || value === String(row.value)} onClick={save}>{busy ? 'Saving…' : 'Save Changes'}</Button></>}>
+  return <Modal open title={`Edit ${row.name}`} description={row.source === 'config' ? 'This change applies to the platform configuration.' : `This change applies to ${row.appliesTo}.`} onClose={() => { if (!busy) onClose(); }} footer={<><Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button disabled={writesUnavailable || !valid || busy || !changed} title={writesUnavailable ? 'Live pricing updates are unavailable.' : undefined} onClick={save}>{busy ? 'Saving…' : 'Save Changes'}</Button></>}>
     <div style={{ display: 'grid', gap: 16 }}>{error && <Banner tone="danger" title="Unable to update pricing">{error}</Banner>}<p className="tk-meta" style={{ margin: 0 }}>{row.description}</p>{row.options ? <Select label={row.name} options={row.options} value={value} onChange={(event) => setValue(event.target.value)} disabled={busy} /> : <TextField label={`${row.name} (${row.unit})`} type="number" min={row.min} max={row.max} step="any" value={value} onChange={(event) => setValue(event.target.value)} disabled={busy} hint={`Minimum: ${row.min}${row.max == null ? '' : ` · Maximum: ${row.max}`}`} />}</div>
   </Modal>;
 }

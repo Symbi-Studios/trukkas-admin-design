@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import {
-  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Banner,
+  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon,
 } from '../ds.js';
-import { useCollection } from '../mock/useCollection.js';
-import { setServicePricingStatus } from '../mock/api.js';
-import { formatNaira } from '../mock/format.js';
+import { pricingError, pricingMoney as formatNaira, downloadPricingCsv, useGetAdminPricingServiceQuery } from '../store/features/pricing/pricingApi.js';
+import { DriverLoadingNotice } from './DriversLoading.jsx';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
   const TINT = {
@@ -30,16 +30,22 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 }
 
 export function PricingDetail() {
-  const { priceId } = useParams();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const priceId = searchParams.get('id') || params.priceId;
   const navigate = useNavigate();
-  const rows = useCollection('servicePricing') || [];
-  const r = rows.find((x) => x.id === priceId);
+  const pricingQuery = useGetAdminPricingServiceQuery(priceId, { skip: !priceId });
+  const r = pricingQuery.error ? null : pricingQuery.currentData;
   const [menu, setMenu] = useState(false);
+  function exportDetails() {
+    setMenu(false);
+    downloadPricingCsv('pricing-details.csv', ['Pricing ID', 'Service', 'Route', 'Coverage', 'Truck Type / Container', 'Unit', 'Base Price', 'Surcharge', 'Total Price', 'Status', 'Last Updated'], [[r.id, r.service, r.route, r.coverage, r.truckType, r.unit, r.basePrice, r.surcharge, r.totalPrice, r.status, r.updated]]);
+  }
 
   if (!r) {
     return (
       <Card>
-        <span className="tk-body">No pricing entry found with ID {priceId}.</span>
+        {pricingQuery.isFetching ? <DriverLoadingNotice>Loading pricing entry…</DriverLoadingNotice> : <span className="tk-body">{pricingQuery.error ? pricingError(pricingQuery.error) : <>No pricing entry found with ID {priceId}.</>}</span>}
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/pricing')}>Back to Pricing Management</Button>
         </div>
@@ -53,24 +59,23 @@ export function PricingDetail() {
         description="Detailed view of this service pricing entry."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/pricing')}>Back</Button>
-          <Button variant="outline" icon="pencil">Edit Pricing</Button>
+          <Button variant="outline" icon="pencil" disabled title="The existing pricing form cannot safely edit these rate card fields.">Edit Pricing</Button>
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Duplicate Pricing', icon: 'copy' },
+                  { label: 'Duplicate Pricing', icon: 'copy', disabled: true },
                   { label: r.status === 'Active' ? 'Deactivate' : 'Activate', icon: 'circle-slash',
-                    onClick: () => { setServicePricingStatus(r.id, r.status === 'Active' ? 'Inactive' : 'Active'); setMenu(false); } },
+                    disabled: true },
                   { divider: true },
-                  { label: 'Export Details', icon: 'file-text' },
+                  { label: 'Export Details', icon: 'file-text', onClick: exportDetails },
                 ]} />
               </span>
             )}
           </span>
         </>} />
 
-      <Banner title="Demo pricing entry">This service rate is sample data. Changes affect the prototype only.</Banner>
       <Card style={{ display: 'grid', gap: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ width: 56, height: 56, borderRadius: 'var(--tk-r-lg)', background: 'var(--tk-blue-soft)',

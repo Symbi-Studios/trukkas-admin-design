@@ -5,6 +5,117 @@ const number = (value) => (typeof value === 'number' || (typeof value === 'strin
 const date = (value) => { const parsed = value ? new Date(value) : null; return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
 const money = (value) => value == null ? '—' : `₦${value.toLocaleString('en-NG')}`;
 const format = (value, unit) => value == null ? '—' : unit === 'NGN' ? money(value) : unit === 'NGN/day' ? `${money(value)}/day` : unit === 'NGN/km' ? `${money(value)}/km` : unit === '%' ? `${value}%` : `${value.toLocaleString('en-NG')} ${unit}`;
+const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+const count = (value) => Number.isSafeInteger(number(value)) && number(value) >= 0 ? number(value) : null;
+const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) || '—';
+const statusLabels = { DRAFT: 'Draft', PENDING_APPROVAL: 'Pending Approval', PENDING: 'Pending Approval', ACTIVE: 'Active', INACTIVE: 'Inactive', APPROVED: 'Approved', REJECTED: 'Rejected', CANCELLED: 'Cancelled' };
+const unitLabels = { PER_TRUCK: 'Per Truck', PER_KM: 'Per km', PER_TONNE: 'Per Tonne', PER_JOB: 'Per Job' };
+const percentage = (value) => number(value) == null ? '—' : `${number(value) > 0 ? '+' : ''}${number(value).toLocaleString('en-NG', { maximumFractionDigits: 2 })}%`;
+export const pricingMoney = (value) => Number.isFinite(value) ? money(value) : '—';
+export const pricingNumber = (value) => Number.isFinite(value) ? value.toLocaleString('en-NG') : '—';
+export const pricingDetailUrl = (id) => `/pricing/detail?id=${encodeURIComponent(id)}`;
+
+function dateParts(value) {
+  const raw = text(value);
+  if (!raw || !/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(raw)) return { updated: '—', time: '—' };
+  const [year, month, day] = raw.slice(0, 10).split('-').map(Number);
+  const parsed = new Date(raw);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate() || Number.isNaN(parsed.getTime())) return { updated: '—', time: '—' };
+  return { updated: date(raw), time: raw.includes('T') ? parsed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—' };
+}
+function routeLabel(dto) {
+  if (text(dto.route)) return text(dto.route);
+  const origin = text(record(dto.originPort).name) || text(dto.originState);
+  const destination = text(record(dto.destinationPort).name) || text(dto.destinationState);
+  return origin || destination ? `${origin || '—'} → ${destination || '—'}` : '—';
+}
+export function adaptAdminPricingService(value) {
+  const dto = record(value), dates = dateParts(dto.updatedAt);
+  const vehicle = [text(record(dto.containerSize).name), text(record(dto.containerType).name), text(record(dto.truckType).name)].filter(Boolean).join(' / ');
+  return {
+    id: text(dto.id), entity: 'services', service: text(dto.name) || '—', route: routeLabel(dto),
+    coverage: text(dto.coverage) || text(dto.destinationState) || '—', truckType: vehicle || '—',
+    unit: unitLabels[dto.unit] || label(dto.unit), basePrice: number(dto.basePrice),
+    // A rate card is not a quote. Surcharges and totals depend on a particular job.
+    surcharge: number(dto.surchargeTotal), surchargePct: number(dto.surchargePercent) == null ? '—' : `${number(dto.surchargePercent)}%`, totalPrice: number(dto.totalPrice),
+    statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status),
+    updated: dates.updated, updatedTime: dates.time,
+    requestedBy: text(record(dto.createdBy).name) || '—', requesterId: text(dto.createdById) || text(record(dto.createdBy).id),
+    submitted: dateParts(dto.submittedAt).updated, standardPrice: number(dto.currentPrice), exceptionPrice: number(dto.basePrice),
+  };
+}
+function adaptPriceList(value) {
+  const dto = record(value);
+  return { id: text(dto.id), entity: 'price-lists', name: text(dto.name) || '—', service: text(dto.name) || '—', region: text(dto.region) || '—', route: routeLabel(dto),
+    services: count(dto.servicesCount), currency: text(dto.currency) || '—', lastUpdated: dateParts(dto.updatedAt).updated,
+    statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), requestedBy: text(record(dto.createdBy).name) || '—',
+    requesterId: text(dto.createdById) || text(record(dto.createdBy).id), standardPrice: null, exceptionPrice: null, submitted: dateParts(dto.submittedAt).updated };
+}
+function adaptSurcharge(value) {
+  const dto = record(value), parsed = number(dto.value);
+  const unit = dto.calc === 'PERCENT_OF_BASE' ? '%' : dto.calc === 'PER_KM' ? 'NGN/km' : dto.calc === 'FIXED_PER_TRUCK' ? 'NGN/truck' : null;
+  const scope = [text(record(dto.service).name), text(record(dto.priceList).name), text(record(dto.originPort).name), text(dto.destinationState), text(dto.cargoType) ? label(dto.cargoType) : null].filter(Boolean).join(' / ');
+  return { id: text(dto.id), entity: 'surcharges', source: 'surcharge', name: text(dto.name) || '—', service: text(dto.name) || '—',
+    description: text(dto.description) || label(dto.kind), appliesTo: scope || '—', rate: unit ? format(parsed, unit) : '—',
+    unit: unit || '—', value: parsed, min: 0, effectiveFrom: dateParts(dto.effectiveFrom).updated,
+    statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), editable: dto.status === 'DRAFT' && parsed != null && unit != null,
+    icon: 'badge-percent', iconTint: 'amber', route: routeLabel(dto), requestedBy: text(record(dto.createdBy).name) || '—',
+    requesterId: text(dto.createdById) || text(record(dto.createdBy).id), standardPrice: null, exceptionPrice: null, submitted: dateParts(dto.submittedAt).updated };
+}
+function adaptException(value) {
+  const dto = record(value);
+  return { id: text(dto.id), entity: 'exceptions', service: text(record(dto.service).name) || '—',
+    route: routeLabel(record(dto.job).route && typeof record(dto.job).route === 'object' ? record(dto.job).route : dto), reason: text(dto.reason) || '—',
+    requestedBy: text(record(dto.requestedBy).name) || '—', requesterId: text(dto.requestedById) || text(record(dto.requestedBy).id),
+    standardPrice: number(dto.currentPrice), exceptionPrice: number(dto.proposedPrice),
+    statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), submitted: dateParts(dto.createdAt).updated };
+}
+function adaptHistory(value) {
+  const dto = record(value), dates = dateParts(dto.createdAt);
+  const inNaira = dto.currency === 'NGN' || ['NGN', 'NGN/day', 'NGN/km', 'NGN/truck'].includes(dto.unit);
+  return { id: text(dto.id), service: text(dto.entityName) || '—', route: text(dto.route) || '—',
+    // History also contains currency/percentage settings. Render only monetary changes as Naira.
+    from: inNaira ? number(dto.oldValue) : null, to: inNaira ? number(dto.newValue) : null,
+    pct: percentage(dto.changePercent), updated: dates.updated, time: dates.time, by: text(record(dto.admin).name) || '—' };
+}
+const adapters = { services: adaptAdminPricingService, 'price-lists': adaptPriceList, surcharges: adaptSurcharge, exceptions: adaptException, history: adaptHistory };
+const collectionKeys = { services: 'services', 'price-lists': 'priceLists', surcharges: 'surcharges', exceptions: 'exceptions', history: 'history' };
+function pricingPage(response, entity) {
+  const data = record(unwrapApiResponseData(response));
+  const rows = Array.isArray(data.items) ? data.items : data[collectionKeys[entity]];
+  const pagination = record(data.pagination);
+  const total = count(pagination.total) ?? count(data.total), totalPages = count(pagination.totalPages) ?? count(data.totalPages);
+  if (!Array.isArray(rows) || total == null || totalPages == null || rows.some((row) => !text(record(row).id))) throw new Error(`The ${entity} response is missing its records or pagination contract.`);
+  return { rows, total, totalPages };
+}
+async function pricingCollection(entity, baseQuery, signal, params = {}, complete = true, limit = 100) {
+  const rows = new Map(); let page = 1, pages = 1, total = null;
+  try {
+    do {
+      if (signal.aborted) return { error: { status: 'CUSTOM_ERROR', error: 'Pricing request cancelled.' } };
+      const result = await baseQuery({ url: `/admin/pricing/${entity}`, params: { ...params, page, limit } });
+      if (result.error) return { error: result.error };
+      const current = pricingPage(result.data, entity);
+      if (total != null && total !== current.total) throw new Error('Pricing records changed while loading. Please retry.');
+      total = current.total; pages = Math.max(1, current.totalPages);
+      if (page < pages && !current.rows.length) throw new Error('The pricing response ended before all records were loaded.');
+      for (const row of current.rows) rows.set(row.id, adapters[entity](row));
+      page += 1;
+    } while (complete && page <= pages);
+    if (complete && rows.size !== total) throw new Error('The pricing response did not include every record.');
+    return { data: { rows: [...rows.values()], total } };
+  } catch (error) { return { error: { status: 'CUSTOM_ERROR', error: error.message } }; }
+}
+export function downloadPricingCsv(name, headers, rows) {
+  const cell = (value) => {
+    const raw = value == null ? '—' : String(value);
+    const safe = typeof value === 'string' && /^[\s]*[=+@-]/.test(raw) ? `'${raw}` : raw;
+    return `"${safe.replaceAll('"', '""')}"`;
+  };
+  const csv = [headers, ...rows].map((row) => row.map(cell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url);
+}
 
 // Response paths are nested; POST /admin/config accepts these flat DTO keys.
 const fields = [
@@ -48,8 +159,35 @@ function validateValue(field, value) {
   if (parsed == null || parsed < field.min || (field.max != null && parsed > field.max)) throw new Error('Enter a valid value within the allowed range.');
   return parsed;
 }
-export const pricingApi = baseApi.injectEndpoints({
+export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing'] }).injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
+    getAdminPricingSummary: builder.query({
+      query: () => ({ url: '/admin/pricing/summary', params: { days: 30 } }),
+      transformResponse: (response) => {
+        const data = record(unwrapApiResponseData(response));
+        const exceptions = record(data.exceptions), changes = record(data.rateChanges);
+        const exceptionCounts = ['pending', 'approved', 'rejected', 'cancelled'].map((key) => count(exceptions[key]));
+        return { activePriceLists: count(record(data.priceLists).active), totalServices: count(record(data.services).total), avgPriceChange: percentage(changes.avgChangePercent),
+          priceExceptions: exceptionCounts.every((value) => value != null) ? exceptionCounts.reduce((sum, value) => sum + value, 0) : null,
+          surchargesActive: count(record(data.surcharges).active), pending: count(record(data.pendingApprovals).total), approved: null, rejected: null };
+      }, providesTags: ['AdminPricing'],
+    }),
+    getAdminPricingServices: builder.query({ async queryFn(_args, api, _options, baseQuery) { return pricingCollection('services', baseQuery, api.signal); }, providesTags: ['AdminPricing'] }),
+    getAdminPricingPriceLists: builder.query({ async queryFn(_args, api, _options, baseQuery) { return pricingCollection('price-lists', baseQuery, api.signal); }, providesTags: ['AdminPricing'] }),
+    getAdminPricingSurcharges: builder.query({ async queryFn(_args, api, _options, baseQuery) { return pricingCollection('surcharges', baseQuery, api.signal); }, providesTags: ['AdminPricing'] }),
+    getAdminPricingExceptions: builder.query({ async queryFn(_args, api, _options, baseQuery) { return pricingCollection('exceptions', baseQuery, api.signal); }, providesTags: ['AdminPricing'] }),
+    getAdminPricingHistory: builder.query({ async queryFn(_args, api, _options, baseQuery) { return pricingCollection('history', baseQuery, api.signal); }, providesTags: ['AdminPricing'] }),
+    getAdminPricingRecentHistory: builder.query({ async queryFn(_args, api, _options, baseQuery) { return pricingCollection('history', baseQuery, api.signal, {}, false, 5); }, providesTags: ['AdminPricing'] }),
+    getAdminPricingService: builder.query({
+      query: (id) => ({ url: `/admin/pricing/services/${encodeURIComponent(id)}` }),
+      transformResponse: (response) => {
+        const data = record(unwrapApiResponseData(response));
+        const dto = text(data.id) ? data : record(data.service);
+        if (!text(dto.id)) throw new Error('The service detail response is missing its pricing ID.');
+        return adaptAdminPricingService(dto);
+      }, providesTags: ['AdminPricing'],
+    }),
     getAdminPricingConfig: builder.query({ query: () => ({ url: '/admin/config' }), transformResponse: adaptAdminPricingConfig, providesTags: ['AdminPricingConfig'] }),
     getAdminPricingTerminalRates: builder.query({
       async queryFn(_args, _api, _options, baseQuery) {
@@ -66,7 +204,7 @@ export const pricingApi = baseApi.injectEndpoints({
             if (terminalResult.error || !Array.isArray(terminals) || terminals.some((terminal) => !text(terminal?.id))) { warnings.push(text(port.name) || port.id); continue; }
             for (const terminal of terminals) for (const [key, title, unit] of [['handlingFee', 'Terminal Handling Fee', 'NGN'], ['baseFeePerKm', 'Recommended Fare per km', 'NGN/km']]) {
               const value = number(terminal[key]);
-              rows.push({ id: `terminal:${terminal.id}:${key}`, terminalId: terminal.id, key, name: `${title} · ${text(terminal.name) || 'Terminal'}`, description: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, appliesTo: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, source: 'terminal', value, unit, min: 0, rate: format(value, unit), effectiveFrom: '—', lastUpdated: date(terminal.updatedAt), status: terminal.isActive === true && port.isActive === true ? 'Active Terminal' : terminal.isActive === false || port.isActive === false ? 'Inactive Terminal / Port' : '—', icon: 'anchor', iconTint: 'blue', editable: value != null });
+              rows.push({ id: `terminal:${terminal.id}:${key}`, terminalId: terminal.id, key, name: `${title} · ${text(terminal.name) || 'Terminal'}`, description: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, appliesTo: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, source: 'terminal', value, unit, min: 0, rate: format(value, unit), effectiveFrom: '—', lastUpdated: dateParts(terminal.updatedAt).updated, status: terminal.isActive === true && port.isActive === true ? 'Active Terminal' : terminal.isActive === false || port.isActive === false ? 'Inactive Terminal / Port' : '—', icon: 'anchor', iconTint: 'blue', editable: value != null });
             }
           }
         }
@@ -75,14 +213,22 @@ export const pricingApi = baseApi.injectEndpoints({
     }),
     updateAdminPricingConfig: builder.mutation({
       query: ({ key, value }) => ({ url: '/admin/config', method: 'POST', body: { [key]: validateValue(fields.find((field) => field.key === key), value) } }),
-      invalidatesTags: ['AdminPricingConfig'],
+      invalidatesTags: (_result, error) => error ? [] : ['AdminPricingConfig', 'AdminPricing'],
     }),
     updateAdminPricingTerminalRate: builder.mutation({
       query: ({ id, key, value }) => {
         if (!text(id) || !['handlingFee', 'baseFeePerKm'].includes(key)) throw new Error('Unsupported terminal pricing setting.');
         return { url: `/admin/reference/terminals/${encodeURIComponent(id)}`, method: 'PATCH', body: { [key]: validateValue({ min: 0 }, value) } };
-      }, invalidatesTags: ['AdminTerminalRates'],
+      }, invalidatesTags: (_result, error) => error ? [] : ['AdminTerminalRates', 'AdminPricing'],
+    }),
+    updateAdminPricingSurcharge: builder.mutation({
+      query: ({ id, status, value }) => {
+        if (!text(id) || status !== 'DRAFT') throw new Error('Only draft surcharges can be edited.');
+        return { url: `/admin/pricing/surcharges/${encodeURIComponent(id)}`, method: 'PATCH', body: { value: validateValue({ min: 0 }, value) } };
+      }, invalidatesTags: (_result, error) => error ? [] : ['AdminPricing'],
     }),
   }),
 });
-export const { useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useUpdateAdminPricingConfigMutation, useUpdateAdminPricingTerminalRateMutation } = pricingApi;
+export const { useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useUpdateAdminPricingConfigMutation, useUpdateAdminPricingTerminalRateMutation, useUpdateAdminPricingSurchargeMutation,
+  useGetAdminPricingSummaryQuery, useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
+  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery, useGetAdminPricingServiceQuery } = pricingApi;

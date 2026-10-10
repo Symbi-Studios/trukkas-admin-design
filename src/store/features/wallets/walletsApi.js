@@ -3,6 +3,8 @@ import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const number = (value) => (typeof value === 'number' || (typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value.trim()))) && Number.isFinite(Number(value)) ? Number(value) : null;
+const count = (value) => Number.isSafeInteger(number(value)) && number(value) >= 0 ? number(value) : null;
+const naira = (value, currency) => currency === 'NGN' ? number(value) : null;
 const display = (value) => text(value) ?? '—';
 const status = (value) => text(value)?.toLowerCase().split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ') ?? '—';
 
@@ -12,9 +14,21 @@ export const escrowMillions = (value) => number(value) == null ? '—' : `₦${(
 export const escrowCount = (value, unit) => number(value) == null ? '—' : `${escrowNumber(value)} ${unit}`;
 
 function datePart(value, time = false) {
-  const date = text(value) ? new Date(value) : null;
+  if (!text(value) || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value)) return '—';
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return '—';
+  if (value.length > 10) {
+    const [hour, minute, second] = value.slice(11, 19).split(':').map(Number);
+    const offset = value.match(/[+-](\d{2}):(\d{2})$/);
+    if (hour > 23 || minute > 59 || second > 59 || offset && (Number(offset[1]) > 23 || Number(offset[2]) > 59)) return '—';
+  }
+  const date = new Date(value);
   if (!date || Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', ...(time ? { hour: '2-digit', minute: '2-digit' } : { month: 'short', day: 'numeric', year: 'numeric' }) }).format(date);
+}
+function dateTime(value) {
+  const date = datePart(value), time = datePart(value, true);
+  return date === '—' || time === '—' ? '—' : date + ' ' + time;
 }
 function partyName(value) {
   const party = record(value);
@@ -30,25 +44,37 @@ const balanceFields = [
 const summaryFields = ['totalEscrowBalance', 'heldInEscrow', 'pendingRelease', 'availableToSettle', 'completedReleases', 'disputedAmounts'];
 export function adaptEscrowOverview(response) {
   const dto = record(unwrapApiResponseData(response));
-  const escrow = record(dto.escrow);
-  const breakdown = Array.isArray(dto.charts?.escrowBreakdown) ? dto.charts.escrowBreakdown : [];
-  const disputed = breakdown.find((row) => row?.label === 'Held in disputes');
-  const summary = Object.fromEntries(summaryFields.map((field) => [field, number(escrow[field])]));
-  summary.heldInEscrow = number(escrow.heldInEscrow ?? escrow.inEscrow);
-  summary.completedReleases = number(escrow.completedReleases ?? escrow.totalPaidOut);
-  summary.disputedAmounts = number(escrow.disputedAmounts ?? disputed?.value);
-  // The overview does not document comparison windows for the screen's dates.
-  for (const field of summaryFields) summary[`${field}Delta`] = '—';
+  const balances = record(dto.escrowBalances), escrow = record(dto.escrow), comparison = record(dto.escrowComparison);
+  const summary = {
+    totalEscrowBalance: number(balances.totalBalance), heldInEscrow: number(balances.heldFunds),
+    pendingRelease: number(balances.pendingRelease), availableToSettle: number(balances.availableToSettle),
+    completedReleases: number(escrow.totalPaidOut), disputedAmounts: number(balances.disputed),
+  };
+  const deltas = {
+    totalEscrowBalance: comparison.totalBalancePct, heldInEscrow: comparison.heldFundsPct,
+    pendingRelease: comparison.pendingReleasePct, availableToSettle: comparison.availableToSettlePct,
+    completedReleases: escrow.totalPaidOutVsLastPeriodPct, disputedAmounts: comparison.disputedPct,
+  };
+  for (const field of summaryFields) summary[field + 'Delta'] = number(deltas[field]) == null ? '—' : number(deltas[field]) + '%';
+  const weeklyActivity = Object.fromEntries(Object.keys(unavailableEscrowWeeklyActivity).map((field) => [field,
+    ['fundsHeldTx', 'fundsReleasedTx', 'settlementsCount', 'newDisputes'].includes(field) ? count(dto.weeklyActivity?.[field]) : number(dto.weeklyActivity?.[field]),
+  ]));
+  // A pie needs a complete partition. These balances may overlap (available
+  // to settle can be part of pending release); keep the legend's real values
+  // without plotting a misleading distribution.
+  const categoryValues = balanceFields.map(([, field]) => summary[field]);
+  const canPlot = summary.totalEscrowBalance != null && categoryValues.every((value) => value != null && value >= 0) && Math.abs(categoryValues.reduce((sum, value) => sum + value, 0) - summary.totalEscrowBalance) < 0.01;
   return {
-    summary,
+    summary, weeklyActivity,
     breakdown: balanceFields.map(([label, field, color]) => {
       const value = summary[field];
-      return { label, value, color, pct: value != null && summary.totalEscrowBalance > 0 ? `${(value / summary.totalEscrowBalance * 100).toFixed(1)}%` : '—' };
+      return { label, value, chartValue: canPlot ? value : null, color, pct: value != null && summary.totalEscrowBalance > 0 ? (value / summary.totalEscrowBalance * 100).toFixed(1) + '%' : '—' };
     }),
   };
 }
-export const emptyEscrowOverview = adaptEscrowOverview(null);
 export const unavailableEscrowWeeklyActivity = Object.fromEntries(['fundsHeld', 'fundsHeldTx', 'fundsReleased', 'fundsReleasedTx', 'settlementsMade', 'settlementsCount', 'newDisputes', 'newDisputesAmount'].map((field) => [field, null]));
+
+export const emptyEscrowOverview = adaptEscrowOverview(null);
 
 // These are the existing rule rows, not generated records. Undocumented rule
 // values stay unavailable; demurrage grace periods are not escrow hold periods.
@@ -67,43 +93,73 @@ const invalid = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message 
 // silently publish an incomplete list following a failed or malformed page.
 async function readAll(baseQuery, api, url, key, filters = {}) {
   const rows = [], ids = new Set();
-  for (let page = 1; ; page += 1) {
+  let expectedTotal = null, expectedPages = null;
+  for (let page = 1; page <= 500; page += 1) {
     if (api.signal.aborted) return invalid('The request was cancelled.');
     const result = await baseQuery({ url, params: { ...filters, page, limit: 100 } });
     if (result.error) return { error: result.error };
     const dto = record(unwrapApiResponseData(result.data));
     if (!Array.isArray(dto[key])) return invalid('The response is missing its record list.');
-    const totalPages = number(dto.pagination?.totalPages);
-    if (totalPages == null || !Number.isInteger(totalPages) || totalPages < 0) return invalid('The response is missing valid pagination.');
-    let added = 0;
+    const totalPages = count(dto.pagination?.totalPages), total = count(dto.pagination?.total);
+    const returnedPage = count(dto.pagination?.page), limit = count(dto.pagination?.limit);
+    if (totalPages == null || total == null || returnedPage !== page || !limit || limit > 100 || !(totalPages === Math.ceil(total / limit) || total === 0 && totalPages === 1) || totalPages > 500 || dto[key].length > limit) return invalid('The response is missing valid pagination.');
+    if (expectedTotal != null && (total !== expectedTotal || totalPages !== expectedPages)) return invalid('The record list changed while loading. Please reload.');
+    expectedTotal = total; expectedPages = totalPages;
     for (const row of dto[key]) {
-      const id = text(row?.id) ?? text(row?.tripId);
-      if (!id) return invalid('The response contains a record without an ID.');
-      if (!ids.has(id)) { ids.add(id); rows.push(row); added += 1; }
+      const id = text(row?.id);
+      if (!id || ids.has(id)) return invalid('The response contains a missing or repeated record ID.');
+      ids.add(id); rows.push(row);
     }
-    if (page >= totalPages) return { data: rows };
-    if (!added) return invalid('The response did not advance to the next page.');
+    if (page >= totalPages) return rows.length === total ? { data: rows } : invalid('The response contains an incomplete record list.');
+    if (dto[key].length !== limit) return invalid('The response did not return a complete page.');
   }
+  return invalid('The record list exceeds the supported page count.');
 }
 
-export function adaptEscrowTrip(trip, jobResponse) {
-  const dto = record(trip), financials = record(dto.financials), escrow = record(financials.escrow);
-  const job = record(unwrapApiResponseData(jobResponse));
-  const holdId = text(escrow.id), jobApiId = text(dto.jobId), tripId = text(dto.tripId);
-  if (!holdId || !jobApiId || !tripId) return null;
+function routeLabel(value) {
+  const route = record(value);
+  const place = (location) => text(location?.address) ?? text(location?.port?.name);
+  const origin = place(route.origin), destination = place(route.destination);
+  return origin && destination ? origin + ' → ' + destination : '—';
+}
+export function adaptEscrowHold(value) {
+  const dto = record(value), holdId = text(dto.id);
+  if (!holdId) return null;
   return {
-    holdId, jobApiId, tripId,
-    detailUrl: `/escrow/detail?id=${encodeURIComponent(holdId)}&tripId=${encodeURIComponent(tripId)}`,
-    jobId: text(dto.jobNumber) ?? jobApiId,
-    customer: partyName(job.forwarder) ?? '—',
-    route: display(dto.route),
-    // Trips expose payout installments, not the current held balance or hold
-    // timestamps. Do not substitute job value, ETA, or trip creation time.
-    amount: number(escrow.totalAmount),
-    heldOn: datePart(escrow.heldAt), heldTime: datePart(escrow.heldAt, true), releaseBy: datePart(escrow.releaseBy),
-    heldAt: text(escrow.heldAt), statusCode: text(escrow.status), status: status(escrow.status),
-    activity: Array.isArray(job.activityLog) ? job.activityLog.filter((event) => event?.category === 'PAYMENT') : [],
+    holdId, jobApiId: text(dto.jobId), jobId: display(dto.jobNumber),
+    detailUrl: '/escrow/detail?id=' + encodeURIComponent(holdId),
+    customer: partyName(dto.customer) ?? '—', route: routeLabel(dto.route),
+    // Held Amount is the unpaid balance, rather than the original job price.
+    amount: naira(dto.currentHeldAmount, dto.currency),
+    heldOn: datePart(dto.heldAt), heldTime: datePart(dto.heldAt, true), releaseBy: datePart(dto.releaseBy),
+    heldAt: text(dto.heldAt), statusCode: text(dto.status), status: status(dto.status),
   };
+}
+export function adaptEscrowRelease(value) {
+  const dto = record(value), actor = record(dto.releasedBy);
+  return {
+    releaseId: display(dto.id), escrowId: text(dto.escrowId), jobId: display(dto.jobNumber),
+    releasedTo: partyName(dto.recipient) ?? '—', amount: number(dto.amount),
+    releasedOn: datePart(dto.releasedAt), releasedTime: datePart(dto.releasedAt, true),
+    releasedBy: actor.type === 'SYSTEM' ? 'System' : actor.type === 'ADMIN' ? partyName(actor.admin) ?? '—' : '—',
+    reference: display(dto.reference), settlementReference: display(dto.settlementReference),
+    statusCode: text(dto.status), status: status(dto.status), createdAt: text(dto.createdAt),
+  };
+}
+function adaptActivity(value) {
+  const dto = record(value), actor = record(dto.actor);
+  return {
+    text: display(dto.text), actor: actor.type === 'SYSTEM' ? 'System' : partyName(actor.admin) ?? partyName(actor.party) ?? partyName(actor) ?? '—',
+    time: dateTime(dto.occurredAt),
+    state: ['SUCCESS', 'COMPLETED'].includes(dto.result) ? 'done' : ['FAILED', 'FAILURE'].includes(dto.result) ? 'danger' : 'pending',
+  };
+}
+async function readCollection(baseQuery, url, key, adapt) {
+  const result = await baseQuery({ url });
+  if (result.error) return result;
+  const rows = unwrapApiResponseData(result.data)?.[key];
+  if (!Array.isArray(rows) || rows.some((row) => !text(row?.id)) || new Set(rows.map((row) => row.id)).size !== rows.length) return invalid('The response is missing a valid record list.');
+  return { data: rows.map(adapt) };
 }
 
 export function adaptEscrowTransaction(row) {
@@ -113,7 +169,7 @@ export function adaptEscrowTransaction(row) {
   const released = type === 'ESCROW_RELEASE';
   return {
     id: display(row.id), reference: display(row.reference), jobId: display(row.jobId),
-    party: partyName(row.party) ?? '—', type: status(type), typeCode: type,
+    party: partyName(row.party) ?? '—', type: text(row.typeLabel) ?? status(type), typeCode: type,
     amount: number(row.amount), pos, statusCode: text(row.status), status: status(row.status),
     date: datePart(row.createdAt), time: datePart(row.createdAt, true), createdAt: text(row.createdAt),
     icon: held ? 'hourglass' : released ? 'arrow-up' : 'coins',
@@ -122,19 +178,18 @@ export function adaptEscrowTransaction(row) {
     releasedOn: datePart(row.releasedAt), releasedTime: datePart(row.releasedAt, true), releasedBy: '—', settlementReference: display(row.settlementReference),
   };
 }
-export const escrowReleasesFromTransactions = (rows) => rows.filter((row) => row.typeCode === 'ESCROW_RELEASE' && row.statusCode === 'COMPLETED');
 
 function adaptDispute(row, detail) {
   const source = record(detail), escrow = record(source.job?.escrow);
   return {
     id: display(row.id), jobId: text(row.job?.jobNumber) ?? display(row.jobId), jobApiId: text(row.jobId),
     holdId: display(escrow.id), amount: number(escrow.totalAmount),
-    customer: partyName(row.raisedBy) ?? '—', reason: display(row.reason),
+    customer: partyName([source.raisedBy, source.against, row.raisedBy, row.against].find((party) => party?.role === 'FORWARDER')) ?? '—', reason: display(row.reason),
     opened: datePart(row.createdAt), statusCode: text(row.status), status: status(row.status),
   };
 }
 
-export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowOverview', 'AdminEscrowLedger', 'AdminEscrowDisputes', 'AdminEscrowActivity'] }).injectEndpoints({
+export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowOverview', 'AdminEscrowLedger', 'AdminEscrowDisputes', 'AdminEscrowActivity', 'AdminEscrowHolds', 'AdminEscrowReleases', 'AdminEscrowAccounts', 'AdminEscrowAlerts'] }).injectEndpoints({
   endpoints: (builder) => ({
     getAdminEscrowOverview: builder.query({
       query: () => ({ url: '/admin/payments/overview', params: { period: 'all' } }),
@@ -142,39 +197,38 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
     }),
     getAdminEscrowRegister: builder.query({
       async queryFn(_args, api, _options, baseQuery) {
-        const result = await readAll(baseQuery, api, '/admin/trips', 'trips');
-        if (result.error) return result;
-        const escrows = new Map();
-        for (const trip of result.data) {
-          const id = text(trip.financials?.escrow?.id);
-          // An escrow is per job, even when a job has multiple trips.
-          if (id && text(trip.jobId) && text(trip.tripId) && !escrows.has(id)) escrows.set(id, trip);
-        }
-        const rows = [];
-        const trips = [...escrows.values()];
-        for (let start = 0; start < trips.length; start += 4) {
-          if (api.signal.aborted) return invalid('The request was cancelled.');
-          const details = await Promise.all(trips.slice(start, start + 4).map(async (trip) => ({ trip, result: await baseQuery({ url: `/admin/jobs/${encodeURIComponent(trip.jobId)}` }) })));
-          for (const { trip, result: detail } of details) {
-            if (detail.error?.status === 401) return { error: detail.error };
-            const row = adaptEscrowTrip(trip, detail.error ? null : detail.data);
-            if (row) rows.push(row);
-          }
-        }
-        return { data: rows };
-      }, providesTags: ['AdminTrips', 'AdminJobs'],
+        const result = await readAll(baseQuery, api, '/admin/escrow/holds', 'holds', { status: 'ACTIVE' });
+        return result.error ? result : { data: result.data.map(adaptEscrowHold) };
+      }, providesTags: ['AdminEscrowHolds'],
     }),
-    getAdminEscrowTrip: builder.query({
-      async queryFn({ tripId, holdId }, _api, _options, baseQuery) {
-        const result = await baseQuery({ url: `/admin/trips/${encodeURIComponent(tripId)}` });
+    getAdminEscrowHold: builder.query({
+      async queryFn({ holdId }, _api, _options, baseQuery) {
+        const result = await baseQuery({ url: '/admin/escrow/holds/' + encodeURIComponent(holdId) });
         if (result.error) return result;
-        const trip = record(unwrapApiResponseData(result.data));
-        if (trip.financials?.escrow?.id !== holdId || !text(trip.jobId)) return invalid('This trip does not belong to the selected escrow.');
-        const detail = await baseQuery({ url: `/admin/jobs/${encodeURIComponent(trip.jobId)}` });
-        if (detail.error?.status === 401) return { error: detail.error };
-        const row = adaptEscrowTrip(trip, detail.error ? null : detail.data);
-        return row ? { data: row } : invalid('The trip response is missing its escrow details.');
-      }, providesTags: ['AdminTrips', 'AdminJobs'],
+        const dto = record(unwrapApiResponseData(result.data));
+        if (dto.id !== holdId) return invalid('The response does not belong to the selected escrow.');
+        return { data: adaptEscrowHold(dto) };
+      }, providesTags: ['AdminEscrowHolds'],
+    }),
+    getAdminEscrowReleases: builder.query({
+      async queryFn({ escrowId } = {}, api, _options, baseQuery) {
+        const result = await readAll(baseQuery, api, '/admin/escrow/releases', 'releases', escrowId ? { escrowId } : {});
+        if (result.error) return result;
+        if (escrowId && result.data.some((row) => row.escrowId !== escrowId)) return invalid('The response contains releases for another escrow.');
+        return { data: result.data.map(adaptEscrowRelease) };
+      }, providesTags: ['AdminEscrowReleases'],
+    }),
+    getAdminEscrowAccounts: builder.query({
+      queryFn: (_args, _api, _options, baseQuery) => readCollection(baseQuery, '/admin/escrow/accounts', 'accounts', (row) => ({
+        id: row.id, name: display(row.name), balance: naira(row.balance, row.currency), status: status(row.status),
+      })), providesTags: ['AdminEscrowAccounts'],
+    }),
+    getAdminEscrowAlerts: builder.query({
+      queryFn: (_args, _api, _options, baseQuery) => readCollection(baseQuery, '/admin/escrow/alerts', 'alerts', (row) => ({
+        id: row.id, title: display(row.title), description: display(row.description),
+        time: dateTime(row.occurredAt),
+        icon: 'triangle-alert', tone: row.severity === 'CRITICAL' || row.severity === 'ERROR' ? 'danger' : row.severity === 'INFO' ? 'info' : 'warning',
+      })), providesTags: ['AdminEscrowAlerts'],
     }),
     getAdminEscrowLedger: builder.query({
       async queryFn(_args, api, _options, baseQuery) {
@@ -191,8 +245,10 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
           if (api.signal.aborted) return invalid('The request was cancelled.');
           const details = await Promise.all(result.data.slice(start, start + 4).map(async (row) => ({ row, result: await baseQuery({ url: `/admin/disputes/${encodeURIComponent(row.id)}` }) })));
           for (const { row, result: detail } of details) {
-            if (detail.error?.status === 401) return { error: detail.error };
-            rows.push(adaptDispute(row, detail.error ? null : unwrapApiResponseData(detail.data)));
+            if ([401, 403].includes(detail.error?.status)) return { error: detail.error };
+            const dto = detail.error ? null : record(unwrapApiResponseData(detail.data));
+            if (dto && (dto.id !== row.id || dto.jobId !== row.jobId)) return invalid('The response does not belong to the selected dispute.');
+            rows.push(adaptDispute(row, dto));
           }
         }
         return { data: rows };
@@ -201,12 +257,11 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
     getAdminEscrowRules: builder.query({ query: () => ({ url: '/admin/config' }), transformResponse: adaptEscrowRules, providesTags: ['AdminPricingConfig'] }),
     getAdminEscrowActivity: builder.query({
       async queryFn(_args, api, _options, baseQuery) {
-        const result = await readAll(baseQuery, api, '/admin/audit-logs', 'logs', { search: 'escrow' });
-        if (result.error) return result;
-        return { data: result.data.filter((row) => row.entityType === 'ESCROW' || /escrow/i.test(text(row.action) ?? '')).map((row) => ({ text: display(row.action), actor: partyName(row.admin) ?? '—', time: `${datePart(row.createdAt)} ${datePart(row.createdAt, true)}`, state: row.result === 'SUCCESS' ? 'done' : row.result === 'FAILED' ? 'danger' : 'pending' })) };
+        const result = await readAll(baseQuery, api, '/admin/escrow/activity', 'events');
+        return result.error ? result : { data: result.data.map(adaptActivity) };
       }, providesTags: ['AdminEscrowActivity'],
     }),
   }),
 });
 
-export const { useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery, useGetAdminEscrowTripQuery, useGetAdminEscrowLedgerQuery, useGetAdminEscrowDisputesQuery, useGetAdminEscrowRulesQuery, useGetAdminEscrowActivityQuery } = walletsApi;
+export const { useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery, useGetAdminEscrowHoldQuery, useGetAdminEscrowReleasesQuery, useGetAdminEscrowAccountsQuery, useGetAdminEscrowAlertsQuery, useGetAdminEscrowLedgerQuery, useGetAdminEscrowDisputesQuery, useGetAdminEscrowRulesQuery, useGetAdminEscrowActivityQuery } = walletsApi;

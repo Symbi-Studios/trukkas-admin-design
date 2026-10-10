@@ -128,12 +128,15 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   // name redaction cannot reliably identify. Keep the request/status log only.
   const auditResponse = !result.error && (typeof args === 'string' ? args : args.url).split('?')[0] === '/admin/audit-logs';
   const driverActivityResponse = !result.error && api.endpoint === 'getAdminDriverActivity';
+  const pricingHistoryResponse = !result.error && ['getAdminPricingHistory', 'getAdminPricingRecentHistory', 'getAdminPricingExceptions'].includes(api.endpoint);
   const responseBody = csvResponse
     ? '[CSV content omitted]'
     : auditResponse
       ? '[Audit log content omitted]'
     : driverActivityResponse
       ? '[Driver activity content omitted]'
+    : pricingHistoryResponse
+      ? '[Pricing history and exception content omitted]'
     : result.error
       ? (result.error.data ?? { error: result.error.error ?? result.error.status })
       : result.data;
