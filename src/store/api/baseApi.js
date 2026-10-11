@@ -28,7 +28,7 @@ const refreshBaseQuery = fetchBaseQuery({ baseUrl });
 let activeRefresh = null;
 
 const REDACTED = '[REDACTED]';
-const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|route|plate|notes|comment|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
+const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|route|plate|notes?|comment|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
 const identityCollection = new Set([
   'users', 'admins', 'drivers', 'forwarders', 'customers', 'profiles',
   'companies', 'accounts', 'recipients', 'contacts', 'verification',
@@ -129,6 +129,8 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const auditResponse = !result.error && (typeof args === 'string' ? args : args.url).split('?')[0] === '/admin/audit-logs';
   const driverActivityResponse = !result.error && api.endpoint === 'getAdminDriverActivity';
   const pricingHistoryResponse = !result.error && ['getAdminPricingHistory', 'getAdminPricingRecentHistory', 'getAdminPricingExceptions'].includes(api.endpoint);
+  const transactionContentResponse = !result.error && ['getAdminTransactionLedger', 'getAdminTransactionDetail', 'getAdminTransactionStats', 'reportAdminTransactionIssue'].includes(api.endpoint);
+  const settlementResponse = !result.error && ['getAdminSettlements', 'getAdminSettlement', 'getAdminSettlementAlerts', 'approveAdminSettlement', 'retryAdminSettlement'].includes(api.endpoint);
   const responseBody = csvResponse
     ? '[CSV content omitted]'
     : auditResponse
@@ -137,6 +139,10 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
       ? '[Driver activity content omitted]'
     : pricingHistoryResponse
       ? '[Pricing history and exception content omitted]'
+    : transactionContentResponse
+      ? '[Transaction content omitted]'
+    : settlementResponse
+      ? '[Settlement content omitted]'
     : result.error
       ? (result.error.data ?? { error: result.error.error ?? result.error.status })
       : result.data;

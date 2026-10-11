@@ -28,10 +28,12 @@ import {
 } from "../ds.js";
 import {
   useGetAdminTransactionLedgerQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
+  useGetAdminTransactionStatsQuery, useLazyGetAdminTransactionDetailQuery, useLazyGetAdminTransactionReceiptQuery, downloadTransactionPdf,
   transactionInsights, transactionNumber, transactionMoney as formatNaira, transactionAmount, transactionDetailUrl,
 } from "../store/features/transactions/transactionsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
+import styles from "./Transactions.module.css";
 
 const EMPTY_ROWS = [];
 
@@ -146,7 +148,11 @@ function downloadCsv(rows) {
   ]);
   const csv = [header, ...body]
     .map((row) =>
-      row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","),
+      row.map((v) => {
+        const raw = String(v ?? "");
+        const safe = typeof v === "string" && /^\s*[=+@-]/.test(raw) ? `'${raw}` : raw;
+        return `"${safe.replace(/"/g, '""')}"`;
+      }).join(","),
     )
     .join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -218,8 +224,10 @@ export function Transactions() {
   const canReverse = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
   const [retryTransaction, retryState] = useRetryAdminTransactionMutation();
   const [reverseTransaction, reverseState] = useReverseAdminTransactionMutation();
+  const [readTransaction, detailState] = useLazyGetAdminTransactionDetailQuery();
+  const [readReceipt, receiptState] = useLazyGetAdminTransactionReceiptQuery();
   const operationPending = useRef(false);
-  const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching;
+  const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching || detailState.isFetching || receiptState.isFetching;
 
   const [tab, setTab] = useState("All Transactions");
   const [dateLabel, setDateLabel] = useState("May 24 – May 30, 2026");
@@ -231,13 +239,22 @@ export function Transactions() {
   const [menuFor, setMenuFor] = useState(null);
   const [selected, setSelected] = useState([]);
 
-  const insights = useMemo(() => transactionInsights(ledger?.rows, applied.from, applied.to), [ledger, applied.from, applied.to]);
+  const statsQuery = useGetAdminTransactionStatsQuery({ from: applied.from, to: applied.to }, { skip: !applied.from || !applied.to });
+  const stats = statsQuery.error || !applied.from || !applied.to ? null : statsQuery.currentData;
+  const insights = useMemo(() => transactionInsights(ledger?.rows, applied.from, applied.to, stats), [ledger, applied.from, applied.to, stats]);
   const transactionSummary = insights.summary;
   const transactionVolumeBreakdown = insights.volume;
   const transactionStatusBreakdown = insights.statuses;
   const transactionAlerts = insights.alerts;
-  const metric = (value) => !ledger && ledgerQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value;
-  const unavailable = (feature) => window.alert(`${feature} is not available yet.`);
+  const metric = (value) => (!ledger && ledgerQuery.isFetching) || (!stats && statsQuery.isFetching) ? <Skeleton as="span" width={54} height={23} /> : value;
+
+  async function downloadReceipt(row) {
+    if (operationPending.current || busy) return;
+    setMenuFor(null); operationPending.current = true;
+    try { downloadTransactionPdf(await readReceipt(row.id, false).unwrap()); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
+  }
 
   async function handleMutation(row, reverse = false) {
     if (operationPending.current || busy) return;
@@ -246,6 +263,12 @@ export function Transactions() {
     if (row.statusCode !== (reverse ? "COMPLETED" : "FAILED")) return;
     operationPending.current = true;
     try {
+      if (reverse) {
+        const detail = await readTransaction(row.id, false).unwrap();
+        if (detail.statusCode !== 'COMPLETED' || detail.actions.canReverse !== true) {
+          window.alert(detail.actions.reverseReason || 'Reversing this transaction is not available yet.'); return;
+        }
+      }
       await (reverse ? reverseTransaction : retryTransaction)(row.id).unwrap();
     } catch (error) {
       window.alert(getApiErrorMessage(error));
@@ -265,13 +288,11 @@ export function Transactions() {
   const tabFiltered = useMemo(() => {
     switch (tab) {
       case "Escrow":
-        return all.filter(
-          (r) => r.type === "Escrow Release" || r.type === "Escrow Hold",
-        );
+        return all.filter((r) => r.isEscrow);
       case "Payments In":
-        return all.filter((r) => r.type === "Payment In");
+        return all.filter((r) => r.pos === true);
       case "Payments Out":
-        return all.filter((r) => r.type === "Payment Out");
+        return all.filter((r) => r.pos === false);
       case "Wallet Transfers":
         return all.filter((r) => r.type === "Wallet Funding");
       case "Settlements":
@@ -299,7 +320,7 @@ export function Transactions() {
         (!from || (Number.isFinite(fromD) && rd != null && rd >= fromD)) &&
         (!to || (Number.isFinite(toD) && rd != null && rd <= toD));
       return (
-        (type === "All Types" || r.type === type) &&
+        (type === "All Types" || r.filterTypes.includes(type)) &&
         (status === "All Statuses" || r.status === status) &&
         (related === RELATED_OPTIONS[0] ||
           (r.relatedKind || relatedKind(r.relatedTo)) === related) &&
@@ -332,6 +353,7 @@ export function Transactions() {
     setQ("");
     setPage(1);
     if (ledgerQuery.error) ledgerQuery.refetch();
+    if (statsQuery.error) statsQuery.refetch();
   }
   function jumpToStatus(status) {
     const next = { ...DEFAULT_FILTERS, status };
@@ -458,7 +480,7 @@ export function Transactions() {
           alignItems: "start",
         }}
       >
-        <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
+        <SectionCard title="" pad="none" className={styles.panel} style={{ paddingTop: 4 }}>
           <Tabs
             value={tab}
             onChange={(v) => {
@@ -470,10 +492,9 @@ export function Transactions() {
           />
 
           {showFilters && (
-            <div
+            <div className={styles.filters}
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(6, minmax(120px, 1fr))",
                 gap: 10,
                 padding: "14px var(--tk-card-pad) 0",
               }}
@@ -563,7 +584,7 @@ export function Transactions() {
             <EmptyState
               icon="receipt"
               title="No transactions found"
-              description={ledgerQuery.error ? getApiErrorMessage(ledgerQuery.error) : "Try adjusting your filters or search."}
+              description={ledgerQuery.error || statsQuery.error ? getApiErrorMessage(ledgerQuery.error || statsQuery.error) : "Try adjusting your filters or search."}
             />
           ) : (
             <>
@@ -707,7 +728,7 @@ export function Transactions() {
                                 },
                               ]
                             : []),
-                          { label: "Download Receipt", icon: "file-text", onClick: () => { setMenuFor(null); unavailable("Downloading receipts"); } },
+                          { label: "Download Receipt", icon: "file-text", disabled: busy, onClick: () => downloadReceipt(r) },
                         ]}
                       />
                     ),
@@ -751,7 +772,7 @@ export function Transactions() {
               <DonutChart
                 size={180}
                 thickness={18}
-                centerValue="—"
+                centerValue={formatNaira(insights.volumeTotal)}
                 centerLabel="Total Volume"
                 data={transactionVolumeBreakdown.filter((d) => d.pct != null).map((d) => ({
                   label: d.label,
@@ -922,7 +943,7 @@ export function Transactions() {
               </a>
             }
           >
-            {!transactionAlerts.length && <span className="tk-meta">—</span>}
+            {!transactionAlerts.length && <span className="tk-meta">{statsQuery.error ? getApiErrorMessage(statsQuery.error) : '—'}</span>}
             {transactionAlerts.map((a, i) => (
               <AlertRow
                 key={i}

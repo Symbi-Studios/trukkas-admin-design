@@ -9,7 +9,8 @@ import {
   Timeline, AttachmentCard, Modal, TextField, Textarea, Banner, Skeleton,
 } from '../ds.js';
 import {
-  useGetAdminTransactionLedgerQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
+  useGetAdminTransactionDetailQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
+  useRefundAdminTransactionMutation, useReportAdminTransactionIssueMutation, useLazyGetAdminTransactionStatementQuery, downloadTransactionPdf,
   transactionMoney as formatNaira, transactionAmount, transactionJobUrl,
 } from '../store/features/transactions/transactionsApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
@@ -82,13 +83,17 @@ export function TransactionDetail() {
   const params = useParams(), search = useSearchParams();
   const transactionId = search.get('id') || params.transactionId || '';
   const navigate = useNavigate();
-  const ledgerQuery = useGetAdminTransactionLedgerQuery();
-  const rows = ledgerQuery.error ? [] : ledgerQuery.currentData?.rows || [];
-  const r = rows.find((x) => x.id === transactionId);
-  const canReverse = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
+  const detailQuery = useGetAdminTransactionDetailQuery(transactionId, { skip: !transactionId });
+  const r = detailQuery.error ? null : detailQuery.currentData;
+  const role = useSelector((state) => state.auth.admin?.role);
+  const canReverse = role === 'SUPER_ADMIN';
+  const canRefund = ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(role) && r?.actions.canRefund === true;
   const [retryTransaction, retryState] = useRetryAdminTransactionMutation();
   const [reverseTransaction, reverseState] = useReverseAdminTransactionMutation();
-  const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching;
+  const [refundTransaction, refundState] = useRefundAdminTransactionMutation();
+  const [reportIssue, issueState] = useReportAdminTransactionIssueMutation();
+  const [readStatement, statementState] = useLazyGetAdminTransactionStatementQuery();
+  const busy = retryState.isLoading || reverseState.isLoading || refundState.isLoading || issueState.isLoading || statementState.isFetching || detailQuery.isFetching;
   const operationPending = useRef(false);
   const flashTimer = useRef(null);
 
@@ -104,7 +109,7 @@ export function TransactionDetail() {
     return () => clearTimeout(flashTimer.current);
   }, [transactionId]);
 
-  if (!ledgerQuery.currentData && ledgerQuery.isFetching) return <>
+  if (!detailQuery.currentData && detailQuery.isFetching) return <>
     <Card><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
     <DriverLoadingNotice>Loading transaction details…</DriverLoadingNotice>
     <Card><Skeleton width="40%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
@@ -113,7 +118,7 @@ export function TransactionDetail() {
   if (!r) {
     return (
       <Card>
-        <span className="tk-body">{ledgerQuery.error ? getApiErrorMessage(ledgerQuery.error) : <>No transaction found with reference {transactionId}.</>}</span>
+        <span className="tk-body">{detailQuery.error ? getApiErrorMessage(detailQuery.error) : <>No transaction found with reference {transactionId}.</>}</span>
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/transactions')}>Back to Transactions</Button>
         </div>
@@ -148,6 +153,7 @@ export function TransactionDetail() {
   async function handleReverse() {
     if (operationPending.current || busy || r.statusCode !== 'COMPLETED') return;
     if (!canReverse) { flash('Reversing transactions requires Super Admin access.', 'info'); return; }
+    if (r.actions.canReverse !== true) { flash(r.actions.reverseReason || 'Reversing this transaction is not available yet.', 'info'); return; }
     operationPending.current = true;
     try {
       const response = await reverseTransaction(r.id).unwrap();
@@ -158,15 +164,31 @@ export function TransactionDetail() {
 
   async function handleRefundSubmit() {
     const value = Number(refundAmount);
-    if (!value || value <= 0) return;
-    setModal(null);
-    unavailable('Creating transaction refunds');
+    if (operationPending.current || busy || !canRefund || !Number.isFinite(value) || value <= 0 || (r.amount != null && value > r.amount)) return;
+    operationPending.current = true;
+    try {
+      const response = await refundTransaction({ id: r.id, amount: value }).unwrap();
+      setModal(null); flash(`Transaction status: ${response.status}`);
+    } catch (error) { flash(getApiErrorMessage(error), 'danger'); }
+    finally { operationPending.current = false; }
   }
 
   async function handleIssueSubmit() {
-    if (!issueNote.trim()) return;
-    setModal(null);
-    unavailable('Reporting transaction issues');
+    if (operationPending.current || busy || !issueNote.trim()) return;
+    operationPending.current = true;
+    try {
+      const response = await reportIssue({ id: r.id, note: issueNote.trim() }).unwrap();
+      setModal(null); setIssueNote(''); flash(`Transaction status: ${response.status}`);
+    } catch (error) { flash(getApiErrorMessage(error), 'danger'); }
+    finally { operationPending.current = false; }
+  }
+
+  async function downloadStatement() {
+    if (operationPending.current || busy) return;
+    setMenu(false); operationPending.current = true;
+    try { downloadTransactionPdf(await readStatement(r.id, false).unwrap()); }
+    catch (error) { flash(getApiErrorMessage(error), 'danger'); }
+    finally { operationPending.current = false; }
   }
 
   const docs = showAllDocs ? r.documents : r.documents.slice(0, 2);
@@ -184,7 +206,7 @@ export function TransactionDetail() {
             <Button icon="rotate-ccw" disabled={busy} onClick={handleRetry}>{busy ? 'Retrying…' : 'Retry Transaction'}</Button>
           )}
           {r.status === 'Completed' && (
-            <Button variant="danger" icon="undo-2" disabled={busy || !canReverse} onClick={handleReverse}>{busy ? 'Reversing…' : 'Reverse'}</Button>
+            <Button variant="danger" icon="undo-2" disabled={busy || !canReverse || r.actions.canReverse !== true} title={r.actions.reverseReason || undefined} onClick={handleReverse}>{busy ? 'Reversing…' : 'Reverse'}</Button>
           )}
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More</Button>
@@ -192,7 +214,7 @@ export function TransactionDetail() {
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
                   { label: 'Copy Transaction ID', icon: 'copy', onClick: () => { setMenu(false); copy(r.id, 'Transaction ID copied.'); } },
-                  { label: 'Download Statement', icon: 'file-text', onClick: () => { setMenu(false); unavailable('Downloading transaction statements'); } },
+                  { label: 'Download Statement', icon: 'file-text', disabled: busy, onClick: downloadStatement },
                 ]} />
               </span>
             )}
@@ -227,7 +249,7 @@ export function TransactionDetail() {
             <LabelValue label="Transaction ID" value={<CopyableId id={r.id} onCopy={(id) => copy(id, `${id} copied.`)} />} />
             <LabelValue label="Date & Time" value={`${r.date}, ${r.time}`} />
             <LabelValue label="Status" value={<Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>} />
-            <LabelValue label="Reference" value={<span className="tk-mono">{r.relatedTo}</span>} />
+            <LabelValue label="Reference" value={<span className="tk-mono">{r.displayId}</span>} />
             <LabelValue label="Related To" value={
               r.jobInfo
                 ? <Link to={transactionJobUrl(r.jobInfo.jobId)} style={{ color: 'var(--tk-blue)', font: '600 14px/20px var(--tk-font-sans)' }}>Job Details →</Link>
@@ -301,8 +323,8 @@ export function TransactionDetail() {
           )}>
             <div style={{ display: 'grid', gap: 10 }}>
               {!docs.length && <span className="tk-meta">—</span>}
-              {docs.map((d) => (
-                <AttachmentCard key={d.name} name={d.name} size={d.size} kind={d.kind}
+              {docs.map((d, index) => (
+                <AttachmentCard key={d.id || index} name={d.name} size={d.size} kind={d.kind}
                   onOpen={() => {
                     if (d.url && /^https?:\/\//i.test(d.url)) window.open(d.url, '_blank', 'noopener,noreferrer');
                     else unavailable('Downloading this document');
@@ -317,7 +339,7 @@ export function TransactionDetail() {
                 onClick={() => r.jobInfo && navigate(transactionJobUrl(r.jobInfo.jobId))}>
                 View Related Job
               </Button>
-              <Button variant="outline" icon="rotate-ccw" fullWidth onClick={() => { setRefundAmount(r.amount == null ? '' : String(r.amount)); setModal('refund'); }}>
+              <Button variant="outline" icon="rotate-ccw" fullWidth disabled={busy || !canRefund} title={r.actions.refundReason || undefined} onClick={() => { setRefundAmount(r.amount == null ? '' : String(r.amount)); setModal('refund'); }}>
                 Create Refund
               </Button>
               <Button variant="danger" icon="flag" fullWidth onClick={() => setModal('issue')}>
@@ -342,7 +364,7 @@ export function TransactionDetail() {
         description={`Issue a refund against ${r.id}.`}
         footer={<>
           <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
-          <Button disabled={busy || !Number(refundAmount) || Number(refundAmount) <= 0} onClick={handleRefundSubmit}>
+          <Button disabled={busy || !canRefund || !Number.isFinite(Number(refundAmount)) || !Number(refundAmount) || Number(refundAmount) <= 0 || (r.amount != null && Number(refundAmount) > r.amount)} onClick={handleRefundSubmit}>
             {busy ? 'Processing…' : 'Create Refund'}
           </Button>
         </>}>

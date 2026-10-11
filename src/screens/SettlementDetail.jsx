@@ -7,9 +7,11 @@ import {
   PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline, Skeleton,
 } from '../ds.js';
 import {
-  useGetAdminJobSettlementsQuery, useGetAdminJobSettlementDetailQuery,
-  settlementMoney as formatNaira, downloadSettlementReceipt,
+  useGetAdminSettlementQuery, canApproveSettlement, canRetrySettlement,
+  settlementMoney as formatNaira,
 } from '../store/features/settlements/settlementsApi.js';
+
+import { useSettlementOperations } from '../store/features/settlements/useSettlementOperations.js';
 
 const STATUS_TONE = { Completed: 'success', Pending: 'warning', 'On Hold': 'info', Failed: 'danger' };
 
@@ -36,25 +38,21 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 export function SettlementDetail() {
   const { settlementId } = useParams();
   const search = useSearchParams();
-  const userId = search.get('userId') || '', jobId = search.get('jobId') || '';
-  const direct = Boolean(userId && jobId);
+  const id = search.get('id') || settlementId || '';
   const navigate = useNavigate();
-  const legacyQuery = useGetAdminJobSettlementsQuery(undefined, { skip: direct || !settlementId });
-  const legacyRow = legacyQuery.error ? null : legacyQuery.currentData?.find((row) => row.id !== '—' && row.id === settlementId);
-  const detailQuery = useGetAdminJobSettlementDetailQuery({ userId: direct ? userId : legacyRow?.userId, jobId: direct ? jobId : legacyRow?.jobId }, { skip: !direct && !legacyRow });
-  const query = direct || legacyRow ? detailQuery : legacyQuery;
-  const row = query.error || (!direct && !legacyRow) ? null : detailQuery.currentData;
-  const loading = query.isLoading || (query.isFetching && !row) || (Boolean(legacyRow) && detailQuery.isUninitialized);
+  const operations = useSettlementOperations();
+  const query = useGetAdminSettlementQuery({ id, owner: operations.owner }, { skip: !operations.authenticated || !id });
+  const row = operations.authenticated && !query.error ? query.currentData : null;
+  const loading = query.isLoading || (query.isFetching && !row);
   const r = row || { id:'—', payer:'—', payee:'—', payerType:'—', payeeType:'—', route:'—', relatedTo:'—', amount:null, type:'—', method:'—', status:'—', settledOn:'—', settledTime:'—' };
   const [menu, setMenu] = useState(false);
   const value = (content) => loading ? <Skeleton as="span" width={100} height={16} /> : content;
   const settledOn = r.settledOn === '—' ? '—' : r.settledOn + ' ' + r.settledTime;
 
-  // Missing IDs in the documented DTO cannot establish that a legacy ID is absent.
   if (!loading && query.error?.status === 404) {
     return (
       <Card>
-        <span className="tk-body">No settlement found with ID {settlementId || '—'}.</span>
+        <span className="tk-body">No settlement found with ID {id || '—'}.</span>
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back to Settlements</Button>
         </div>
@@ -75,7 +73,7 @@ export function SettlementDetail() {
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back</Button>
           {(r.status === 'Failed' || r.status === 'Pending' || r.status === 'On Hold') && (
-            <Button icon={r.status === 'Failed' ? 'rotate-ccw' : 'circle-check'} disabled>
+            <Button icon={r.status === 'Failed' ? 'rotate-ccw' : 'circle-check'} disabled={operations.busy || query.isFetching || !operations.canManage || !(r.status === 'Failed' ? canRetrySettlement(r) : canApproveSettlement(r))} onClick={() => void operations.settle(r, r.status === 'Failed' ? 'retry' : 'approve')}>
               {r.status === 'Failed' ? 'Retry Settlement' : 'Approve & Settle'}
             </Button>
           )}
@@ -84,7 +82,7 @@ export function SettlementDetail() {
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Download Receipt', icon: 'file-text', onClick: () => { if (row) downloadSettlementReceipt(row); setMenu(false); } },
+                  { label: 'Download Receipt', icon: 'file-text', onClick: () => { if (row) void operations.download(row); setMenu(false); } },
                   { label: 'View Related Job', icon: 'package', onClick: () => { if (row?.jobUrl) navigate(row.jobUrl); setMenu(false); } },
                 ]} />
               </span>

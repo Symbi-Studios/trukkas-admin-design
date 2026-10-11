@@ -24,10 +24,11 @@ import {
   Skeleton,
 } from "../ds.js";
 import {
-  useGetAdminJobSettlementsQuery, settlementInsights,
+  useGetAdminSettlementsQuery, useGetAdminSettlementSummaryQuery, useGetAdminSettlementAlertsQuery, emptySettlementInsights,
   settlementMoney as formatNaira, settlementNumber, settlementMillions,
-  settlementDetailUrl, exportSettlementRows, downloadSettlementReceipt,
+  settlementDetailUrl, exportSettlementRows,
 } from '../store/features/settlements/settlementsApi.js';
+import { useSettlementOperations } from '../store/features/settlements/useSettlementOperations.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
 
 const TABS = [
@@ -105,12 +106,6 @@ const TYPE_TONE = {
 
 export function Settlements() {
   const navigate = useNavigate();
-  const query = useGetAdminJobSettlementsQuery();
-  const all = useMemo(() => query.error ? [] : query.currentData || [], [query.currentData, query.error]);
-  const { summary: settlementSummary, payouts: payoutSummary, statuses: settlementStatusBreakdown, alerts: settlementAlerts } = settlementInsights(query.error ? null : query.currentData);
-  const loading = query.isLoading || (query.isFetching && !query.currentData);
-  const value = (content) => loading ? <Skeleton as="span" width={90} height={23} /> : content;
-
   const [tab, setTab] = useState("All Settlements");
   const [q, setQ] = useState("");
   const [settlementType, setSettlementType] = useState("All Types");
@@ -124,8 +119,17 @@ export function Settlements() {
   const [view, setView] = useState("list");
   const [menuFor, setMenuFor] = useState(null);
 
+  const operations = useSettlementOperations();
+  const query = useGetAdminSettlementsQuery({ owner: operations.owner, groupBy: tab === 'By Trip' ? 'trip' : 'job' }, { skip: !operations.authenticated });
+  const summaryQuery = useGetAdminSettlementSummaryQuery({ owner: operations.owner }, { skip: !operations.authenticated });
+  const alertsQuery = useGetAdminSettlementAlertsQuery({ owner: operations.owner }, { skip: !operations.authenticated });
+  const all = useMemo(() => operations.authenticated && !query.error ? query.currentData || [] : [], [query.currentData, query.error, operations.authenticated]);
+  const { summary: settlementSummary, payouts: payoutSummary, statuses: settlementStatusBreakdown } = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData || emptySettlementInsights : emptySettlementInsights;
+  const settlementAlerts = operations.authenticated && !alertsQuery.error ? alertsQuery.currentData || [] : [];
+  const loading = query.isLoading || (query.isFetching && !query.currentData);
+  const value = (content) => summaryQuery.isLoading ? <Skeleton as="span" width={90} height={23} /> : content;
+
   const tabFiltered = useMemo(() => {
-    if (tab === "By Trip") return [];
     if (tab === "Driver Settlements")
       return all.filter((s) => s.type === "Driver Payout");
     if (tab === "Vendor Settlements")
@@ -141,12 +145,12 @@ export function Settlements() {
     let rows = tabFiltered.filter(
       (s) =>
         (settlementType === "All Types" || s.type === settlementType) &&
-        (status === "All Status" || s.status === status) &&
+        (status === "All Status" || s.status === status || status === "Pending" && s.statusCode === "PROCESSING") &&
         (payerType === "All Payers" || s.payerType === payerType) &&
         (payeeType === "All Payees" || s.payeeType === payeeType) &&
         (method === "All Methods" || s.method === method) &&
         (!q ||
-          [s.id, s.relatedTo, s.payer, s.payee].some(
+          [s.id, s.relatedTo, s.payer, s.payee, ...s.transactionReferences].some(
             (v) => v && v.toLowerCase().includes(q.toLowerCase()),
           )),
     );
@@ -171,11 +175,8 @@ export function Settlements() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(Math.max(1, page), pageCount);
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  // The documented collection covers truckers only; other party tabs are unconfirmed.
-  const unsupportedTab = ["By Trip", "Driver Settlements", "Vendor Settlements", "Customer Settlements"].includes(tab);
-  const unsupportedFilter = ["Driver Payout", "Vendor Payment", "Customer Refund"].includes(settlementType)
-    || ["Driver", "Vendor", "Customer"].includes(payeeType) || payerType !== "All Payers" || status === "Failed" || method === "Bank Transfer";
-  const knownCollection = query.isSuccess && !query.error && !unsupportedTab && !unsupportedFilter;
+  // Importer/Customer/Internal are not documented payer types for this ledger.
+  const knownCollection = operations.authenticated && query.isSuccess && !query.error && payerType === "All Payers";
 
   return (
     <>
@@ -408,7 +409,7 @@ export function Settlements() {
           ) : (
             <>
               <DataTable
-                rows={unsupportedTab ? [] : paged}
+                rows={paged}
                 rowKey={(r) => r.key}
                 columns={[
                   {
@@ -520,6 +521,7 @@ export function Settlements() {
                                   icon: "rotate-ccw",
                                   onClick: () => {
                                     setMenuFor(null);
+                                    void operations.settle(r, "retry");
                                   },
                                 },
                               ]
@@ -531,12 +533,13 @@ export function Settlements() {
                                   icon: "circle-check",
                                   onClick: () => {
                                     setMenuFor(null);
+                                    void operations.settle(r, "approve");
                                   },
                                 },
                               ]
                             : []),
                           { divider: true },
-                          { label: "Download Receipt", icon: "file-text", onClick: () => { downloadSettlementReceipt(r); setMenuFor(null); } },
+                          { label: "Download Receipt", icon: "file-text", onClick: () => { void operations.download(r); setMenuFor(null); } },
                         ]}
                       />
                     ),
@@ -564,13 +567,13 @@ export function Settlements() {
         >
           <SectionCard
             title="Payout Summary"
-            footer={<a href="#">View Report →</a>}
+            footer={<a href="#" onClick={(event) => { event.preventDefault(); void operations.downloadReport(); }}>View Report →</a>}
           >
             <div style={{ display: "grid", justifyItems: "center", gap: 14 }}>
               <DonutChart
                 size={160}
                 thickness={18}
-                centerValue={settlementMillions(settlementSummary.totalSettlements)}
+                centerValue={settlementMillions(settlementSummary.completedSettlements)}
                 centerLabel="Total Settled"
                 data={payoutSummary.filter((d) => Number.isFinite(d.pct)).map((d) => ({
                   label: d.label,
@@ -696,7 +699,7 @@ export function Settlements() {
             title="Settlement Alerts"
             action={<a href="#">View All</a>}
           >
-            {settlementAlerts.map((a, i) => (
+            {alertsQuery.isLoading ? <DriverTableLoading columns={3} label="Loading settlements" /> : settlementAlerts.map((a, i) => (
               <AlertRow
                 key={i}
                 icon={a.icon}
