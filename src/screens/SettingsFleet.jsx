@@ -23,8 +23,8 @@ export function SettingsFleet() {
   const updateDeletionArchiving = editor.change('settingsDeletionArchiving');
   const updateFleetDataRetention = editor.change('settingsFleetDataRetention');
   const saveFleetSettings = () => editor.save();
-  const resetFleetSettings = () => editor.unavailable('Reset Fleet Settings');
-  const fleetStatus = { headline: '—', caption: '—', lastChecked: '—', items: (fleetStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const resetFleetSettings = () => editor.reset();
+  const fleetStatus = editor.status(fleetStatusTemplate);
   const prefs = editor.group('settingsFleetPreferences');
   const numbering = editor.group('settingsAssetNumbering');
   const reminders = editor.group('settingsDefaultReminders');

@@ -41,8 +41,8 @@ export function SettingsFinance() {
   const updateInvoicingReceipts = editor.change('settingsInvoicing');
   const updateAccountingTax = editor.change('settingsAccountingTax');
   const saveFinanceSettings = () => editor.save();
-  const resetFinanceSettings = () => editor.unavailable('Reset Finance Settings');
-  const financeStatus = { headline: '—', caption: '—', lastChecked: '—', items: (financeStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const resetFinanceSettings = () => editor.reset();
+  const financeStatus = editor.status(financeStatusTemplate);
   const policies = editor.group('settingsFinancialPolicies');
   const fees = editor.group('settingsPlatformFees');
   const escrow = editor.group('settingsEscrow');

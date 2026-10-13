@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PageHeader, Button, SectionCard, Icon, QuickActionsCard, Banner } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
+import { SettingsEventsDialog, SettingsPasswordDialog } from './SettingsActionDialogs.jsx';
 import { DriverDetailLoading } from './DriversLoading.jsx';
 
 import { DIGEST_FREQUENCIES, securityAlertsStatus as securityAlertsStatusTemplate, securityAlertsQuickActions, securityTip, securityAlertEvents as securityAlertControls } from '../mock/fixtures/settings.js';
@@ -37,12 +38,14 @@ function AlertEventRow({ event, onToggle }) {
 
 export function SettingsSecurityAlerts() {
   const editor = useSettingsEditor('security-alerts');
+  const [dialog, setDialog] = useState(null);
+  const openEvents = (type) => setDialog({ admin: editor.admin, kind: 'events', type });
   const toggleSecurityAlertChannel = () => editor.unavailable('Toggle Security Alert Channel');
   const updateAlertDelivery = editor.change('settingsAlertDelivery');
   const updateSecurityAlertsQuietHours = editor.change('settingsSecurityAlertsQuietHours');
   const saveSecurityAlertsSettings = () => editor.save();
   const resetSecurityAlertsSettings = () => editor.unavailable('Reset Security Alerts Settings');
-  const securityAlertsStatus = { headline: '—', caption: '—', lastChecked: '—', items: (securityAlertsStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const securityAlertsStatus = editor.status(securityAlertsStatusTemplate);
   const recentSecurityAlerts = [];
   const events = securityAlertControls.map(({ key, icon, label, description }) => ({ key, icon, label, description, inApp: null, email: null, sms: null }));
   const delivery = editor.group('settingsAlertDelivery');
@@ -142,7 +145,7 @@ export function SettingsSecurityAlerts() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Recent Security Alerts" action={<a href="#" onClick={(event) => { event.preventDefault(); editor.unavailable('View All Security Events'); }}>View All</a>}>
+          <SectionCard title="Recent Security Alerts" action={<a href="#" onClick={(event) => { event.preventDefault(); openEvents(); }}>View All</a>}>
             <div style={{ display: 'grid', gap: 14, marginBottom: 14 }}>
               {recentSecurityAlerts.map((a, i) => (
                 <div key={i} style={{ display: 'flex', gap: 10 }}>
@@ -159,15 +162,20 @@ export function SettingsSecurityAlerts() {
               ))}
               {'—'}
             </div>
-            <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => editor.unavailable('View All Security Events')}>View All Security Events</Button>
+            <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => openEvents()}>View All Security Events</Button>
           </SectionCard>
 
-          <QuickActionsCard items={editor.quickActions(securityAlertsQuickActions)} />
+          <QuickActionsCard items={editor.quickActions(securityAlertsQuickActions, {
+            'View Login History': () => openEvents('login'),
+            'Update Password': () => setDialog({ admin: editor.admin, kind: 'password' }),
+          })} />
 
           <Banner tone="info" title="Security Tip">{securityTip}</Banner>
           <SettingsMetaFooter meta={meta} />
         </div>
       </div>
+      {dialog && dialog.admin === editor.admin && dialog.kind === 'events' && <SettingsEventsDialog admin={editor.admin} type={dialog.type} onClose={() => setDialog(null)} />}
+      {dialog && dialog.admin === editor.admin && dialog.kind === 'password' && <SettingsPasswordDialog admin={editor.admin} onClose={() => setDialog(null)} />}
     </>
   );
 }

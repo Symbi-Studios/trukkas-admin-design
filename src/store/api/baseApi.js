@@ -125,6 +125,8 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const userManagementContent = /(?:UserManagement|ManagedUser|ManagedAdmin)/.test(api.endpoint);
   const reportContent = /^(?:get|preview|create|download|save|schedule)AdminReport/.test(api.endpoint);
   const roleContent = /^(?:getAdminRolesDirectory|getAdminRole|getAdminPermissions|changeAdminRole)$/.test(api.endpoint);
+  const ticketContent = /^\/admin\/support\/(?:threads|tickets|agents|stats)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
+  const settingsContent = /^\/admin\/(?:settings(?:\/|$)|sessions(?:\/|$)|security(?:\/|$)|data-protection(?:\/|$)|platform\/version$|auth\/password$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const csvResponse = !result.error && (
     ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips', 'exportAdminMaintenance', 'exportAdminDriverCompliance'].includes(api.endpoint)
     || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')
@@ -138,7 +140,14 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const settlementResponse = !result.error && ['getAdminSettlements', 'getAdminSettlement', 'getAdminSettlementAlerts', 'approveAdminSettlement', 'retryAdminSettlement'].includes(api.endpoint);
   const feeContentResponse = !result.error && ['getAdminFeeRules', 'getAdminFeeRule', 'getAdminFeeRuleHistory', 'updateAdminFeeRule', 'setAdminFeeRuleStatus', 'bulkUpdateAdminFeeRules'].includes(api.endpoint);
   const demurrageResponse = /Demurrage/.test(api.endpoint);
-  const responseBody = userManagementContent
+  const faqContent = /^\/admin\/faq(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
+  const responseBody = faqContent
+    ? '[FAQ content omitted]'
+    : ticketContent
+    ? '[Support ticket content omitted]'
+    : settingsContent
+    ? '[Settings and security content omitted]'
+    : userManagementContent
     ? '[User management content omitted]'
     : roleContent
     ? '[Role and permission content omitted]'
@@ -172,7 +181,7 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
     method,
     url,
     headers: sanitizeForLog(request?.headers),
-    body: userManagementContent ? '[User management request content omitted]' : roleContent ? '[Role request content omitted]' : reportContent ? '[Report request content omitted]' : verificationContent ? '[Verification request content omitted]' : sanitizeForLog(requestBody),
+    body: faqContent ? '[FAQ request content omitted]' : ticketContent ? '[Support ticket request content omitted]' : settingsContent ? '[Settings and security request content omitted]' : userManagementContent ? '[User management request content omitted]' : roleContent ? '[Role request content omitted]' : reportContent ? '[Report request content omitted]' : verificationContent ? '[Verification request content omitted]' : sanitizeForLog(requestBody),
   });
   console.info('Response body:', sanitizeForLog(responseBody));
   console.groupEnd();

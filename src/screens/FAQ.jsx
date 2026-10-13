@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+import { useNavigate } from "../router.js";
 import {
   PageHeader,
   Card,
@@ -10,8 +12,10 @@ import {
   Icon,
   QuickActionsCard,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { FAQ_CATEGORIES, faqQuickTopics } from "../mock/fixtures/faq.js";
+import { faqQuickTopics } from "../mock/fixtures/faq.js";
+import { FAQ_CATEGORIES, useGetAdminFaqDirectoryQuery } from "../store/features/faq/faqApi.js";
+import { DriverTableLoading } from "./DriversLoading.jsx";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 
 function FaqItem({ item, open, onToggle }) {
   return (
@@ -63,10 +67,24 @@ function FaqItem({ item, open, onToggle }) {
 }
 
 export function FAQ() {
-  const groups = useCollection("faqGroups") || [];
+  const admin = useSelector((state) => state.auth.admin);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const navigate = useNavigate();
+  const query = useGetAdminFaqDirectoryQuery({ owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const groups = useMemo(() => authenticated && !query.error ? query.currentData || [] : [], [authenticated, query.error, query.currentData]);
+  const loading = !authenticated || query.isLoading || query.isFetching;
   const [category, setCategory] = useState("All Categories");
   const [q, setQ] = useState("");
   const [openKey, setOpenKey] = useState(null);
+  useEffect(() => { setOpenKey(null); }, [admin?.id]);
+  const available = authenticated && !query.error && Boolean(query.currentData)
+    && (category === "All Categories" || groups.every((group) => group.categoryAvailable))
+    && (!q.trim() || groups.every((group) => group.questions.every((item) => item.questionAvailable && item.answerAvailable)));
+  const quickTopics = faqQuickTopics.map((topic) => ({
+    ...topic,
+    onClick: topic.label === "Visit Knowledge Base" ? () => navigate("/knowledge-base")
+      : () => window.alert(`${topic.label} is not available for an admin requester through the documented API.`),
+  }));
 
   const visibleGroups = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -117,13 +135,14 @@ export function FAQ() {
             onChange={(e) => setQ(e.target.value)}
           />
 
-          {visibleGroups.length === 0 && (
+          {loading && <Card pad="none"><DriverTableLoading columns={1} label="Loading FAQs" /></Card>}
+          {!loading && (!available || visibleGroups.length === 0) && (
             <Card>
-              <span className="tk-body">No questions match "{q}".</span>
+              <span className="tk-body">{query.error ? getApiErrorMessage(query.error) : !available ? "—" : <>No questions match "{q}".</>}</span>
             </Card>
           )}
 
-          {visibleGroups.map((g) => (
+          {!loading && available && visibleGroups.map((g) => (
             <SectionCard
               key={g.key}
               title={g.key}
@@ -132,7 +151,7 @@ export function FAQ() {
             >
               <div>
                 {g.questions.map((item) => {
-                  const key = g.key + "::" + item.q;
+                  const key = item.key;
                   return (
                     <FaqItem
                       key={key}
@@ -196,7 +215,7 @@ export function FAQ() {
             </div>
           </SectionCard>
 
-          <QuickActionsCard title="Popular Topics" items={faqQuickTopics} />
+          <QuickActionsCard title="Popular Topics" items={quickTopics} />
         </div>
       </div>
     </>

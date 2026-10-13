@@ -31,10 +31,10 @@ export function SettingsDataProtection() {
   const updateDataExportAccess = editor.change('settingsDataExportAccess');
   const updateDataDeletion = editor.change('settingsDataDeletion');
   const saveDataProtectionSettings = () => editor.save();
-  const resetDataProtectionSettings = () => editor.unavailable('Reset Data Protection Settings');
+  const resetDataProtectionSettings = () => editor.reset();
   const complianceStandards = [];
-  const thirdPartyProcessors = [];
-  const dataProtectionStatus = { headline: '—', caption: '—', lastChecked: '—', items: (dataProtectionStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const thirdPartyProcessors = editor.processors;
+  const dataProtectionStatus = editor.status(dataProtectionStatusTemplate);
   const consent = editor.group('settingsDataPrivacyConsent');
   const encryption = editor.group('settingsDataEncryption');
   const retention = editor.group('settingsDataRetentionSecurity');
@@ -186,7 +186,7 @@ export function SettingsDataProtection() {
                   <Icon name="chevron-right" size={15} color="var(--tk-ink-300)" />
                 </button>
               ))}
-              {'—'}
+              {thirdPartyProcessors.length ? null : '—'}
             </div>
           </SectionCard>
 

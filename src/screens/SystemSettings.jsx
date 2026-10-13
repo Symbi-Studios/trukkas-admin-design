@@ -47,8 +47,8 @@ export function SystemSettings() {
   const updateOperationalGeneral = editor.change('settingsOperationalGeneral');
   const updateNotificationGeneral = editor.change('settingsNotificationGeneral');
   const resetPlatformSettings = () => editor.unavailable('Reset Platform Settings');
-  const systemStatus = { headline: '—', caption: '—', lastChecked: '—', items: (systemStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
-  const platformVersion = { currentVersion: '—', lastUpdated: '—', environment: '—', buildNumber: '—' };
+  const systemStatus = editor.status(systemStatusTemplate);
+  const platformVersion = editor.platformVersion || { currentVersion: '—', lastUpdated: '—', environment: '—', buildNumber: '—' };
   const platformInfo = editor.group('settingsPlatformInfo');
   const operational = editor.group('settingsOperationalGeneral');
   const notif = editor.group('settingsNotificationGeneral');

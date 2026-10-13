@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { PageHeader, Button, SectionCard, Avatar, DataTable, Pagination } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSwitch as Switch, SettingsCheckbox as Checkbox, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
+import { useGetAdminSettingsSessionsQuery } from '../store/features/settings/settingsApi.js';
+import { SettingsSessionReasonDialog } from './SettingsActionDialogs.jsx';
 import { DriverDetailLoading } from './DriversLoading.jsx';
 import { SettingsTabStrip, SettingsDangerZone, SettingsMetaFooter } from './settingsShared.jsx';
 
@@ -14,20 +16,31 @@ export function SettingsPasswords() {
   const updatePasswordRequirements = editor.change('settingsPasswordRequirements');
   const updateSessionSettings = editor.change('settingsSessionSettings');
   const updateLoginNotifications = editor.change('settingsLoginNotifications');
-  const terminateSession = () => editor.unavailable('Terminate Session');
+  const [sessionPage, setSessionPage] = useState(1);
+  const [sessionDialog, setSessionDialog] = useState(null);
+  const sessionsQuery = useGetAdminSettingsSessionsQuery({ owner: editor.owner, page: sessionPage, limit: 5 }, { skip: !editor.authenticated, refetchOnMountOrArgChange: true });
+  const sessionData = sessionsQuery.error ? null : sessionsQuery.currentData;
+  const terminateSession = (id) => {
+    const session = sessionData?.rows.find((row) => row.id === id);
+    if (session?.status !== 'ACTIVE') { editor.unavailable('Terminating this unconfirmed active session'); return; }
+    setSessionDialog({ admin: editor.admin, session });
+  };
   const savePasswordSettings = () => editor.save();
   const resetPasswordSettings = () => editor.unavailable('Reset Password Settings');
-  const resetAllUserSessions = () => editor.unavailable('Reset All User Sessions');
-  const activeSessionsTotal = null;
+  const resetAllUserSessions = () => {
+    if (editor.admin?.role !== 'SUPER_ADMIN') { window.alert('Only Super Admins can terminate all app-user sessions.'); return; }
+    setSessionDialog({ admin: editor.admin, all: true });
+  };
+  const activeSessionsTotal = sessionData?.total ?? null;
   const req = editor.group('settingsPasswordRequirements');
   const sessionSettings = editor.group('settingsSessionSettings');
   const loginNotif = editor.group('settingsLoginNotifications');
-  const sessions = [];
+  const sessions = sessionData?.rows || [];
   const meta = editor.group('settingsMeta');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  if (editor.loading) return <DriverDetailLoading />;
+  if (editor.loading || sessionsQuery.isLoading || (sessionsQuery.isFetching && !sessionsQuery.currentData)) return <DriverDetailLoading />;
   if (!req || !sessionSettings || !loginNotif) return null;
 
   async function handleSave() {
@@ -46,7 +59,7 @@ export function SettingsPasswords() {
           <Button icon="save" disabled={saving} onClick={handleSave}>{saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save Changes'}</Button>
         </>} />
       <SettingsTabStrip active="passwords" />
-      <SettingsReadNotice error={editor.error} />
+      <SettingsReadNotice error={editor.error || sessionsQuery.error} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
@@ -107,8 +120,8 @@ export function SettingsPasswords() {
                 { key: 'actions', header: 'Actions', render: (r) => (
                   <Button variant="danger" size="sm" onClick={() => terminateSession(r.id)}>Terminate</Button>) },
               ]} />
-            {'—'}
-            <Pagination page={1} pageSize={5} total={activeSessionsTotal} pageCount={null} onPage={() => editor.unavailable('Session pagination')} />
+            {activeSessionsTotal ?? '—'}
+            <Pagination page={sessionPage} pageSize={5} total={activeSessionsTotal} pageCount={sessionData?.pageCount ?? null} onPage={setSessionPage} />
           </SectionCard>
         </div>
 
@@ -153,6 +166,7 @@ export function SettingsPasswords() {
           <SettingsMetaFooter meta={meta} />
         </div>
       </div>
+      {sessionDialog && sessionDialog.admin === editor.admin && <SettingsSessionReasonDialog admin={editor.admin} session={sessionDialog.session} all={sessionDialog.all} onClose={() => setSessionDialog(null)} onSaved={() => { void sessionsQuery.refetch(); }} />}
     </>
   );
 }

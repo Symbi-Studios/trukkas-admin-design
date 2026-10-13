@@ -49,8 +49,8 @@ export function SettingsOperations() {
   const updateTimingSlas = editor.change('settingsTimingSlas');
   const updateOperationsCommunication = editor.change('settingsOperationsCommunication');
   const saveOperationsSettings = () => editor.save();
-  const resetOperationsSettings = () => editor.unavailable('Reset Operations Settings');
-  const operationsStatus = { headline: '—', caption: '—', lastChecked: '—', items: (operationsStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
+  const resetOperationsSettings = () => editor.reset();
+  const operationsStatus = editor.status(operationsStatusTemplate);
   const jobTrip = editor.group('settingsJobTrip');
   const bidding = editor.group('settingsBiddingAssignment');
   const dispatch = editor.group('settingsDispatchTracking');

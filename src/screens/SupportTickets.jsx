@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
@@ -22,7 +22,8 @@ import {
 } from "../ds.js";
 import {
   useGetAdminSupportTicketDirectoryQuery, useGetAdminSupportTicketStatsQuery, useGetAdminTicketAgentsQuery,
-  ticketWithAgents, ticketSummary, ticketDetailUrl, TICKET_PRIORITY_CODES,
+  useCreateAdminSupportTicketMutation,
+  ticketWithAgents, ticketSummary, ticketDetailUrl, TICKET_PRIORITY_CODES, TICKET_STATUS_CODES, TICKET_CATEGORY_CODES,
 } from "../store/features/tickets/ticketsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
@@ -53,40 +54,49 @@ export function SupportTickets() {
     subject: "",
     customer: "",
     email: "",
-    category: "Trips & Jobs",
+    category: "General",
     priority: "Medium",
     description: "",
   });
+  const [createTicket, createState] = useCreateAdminSupportTicketMutation();
+  const creating = createState.isLoading;
+  const createLock = useRef(false), currentOwner = useRef(admin?.id);
+  currentOwner.current = admin?.id;
+  useEffect(() => { if (!authenticated) setCreate(false); }, [authenticated]);
   useEffect(() => { const timer = setTimeout(() => setSearch(q.trim()), 250); return () => clearTimeout(timer); }, [q]);
   const directory = useGetAdminSupportTicketDirectoryQuery(undefined, { skip: !authenticated });
-  const serverFilters = Boolean(search || priority !== "All");
-  const searched = useGetAdminSupportTicketDirectoryQuery({ search, priority: TICKET_PRIORITY_CODES[priority] }, { skip: !authenticated || !serverFilters });
+  const serverFilters = Boolean(search || priority !== "All" || status !== "All" || category !== "All");
+  const searched = useGetAdminSupportTicketDirectoryQuery({ search, priority: TICKET_PRIORITY_CODES[priority], status: TICKET_STATUS_CODES[status], category: TICKET_CATEGORY_CODES[category] }, { skip: !authenticated || !serverFilters });
   const statsQuery = useGetAdminSupportTicketStatsQuery(undefined, { skip: !authenticated });
-  const agentsQuery = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated || admin?.role !== "SUPER_ADMIN" });
-  const agents = authenticated && admin?.role === "SUPER_ADMIN" && !agentsQuery.error ? agentsQuery.currentData : undefined;
+  const agentsQuery = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated });
+  const agents = authenticated && !agentsQuery.error ? agentsQuery.currentData : undefined;
   const tickets = authenticated && !directory.error ? directory.currentData : undefined;
   const source = serverFilters ? searched : directory;
   const rows = authenticated && !source.error ? source.currentData : undefined;
   const loading = authenticated && (source.isFetching || q.trim() !== search);
   const summary = ticketSummary(tickets, authenticated && !statsQuery.error ? statsQuery.currentData : undefined);
-  const value = (content) => directory.isFetching ? <Skeleton as="span" width={54} height={23} /> : content;
-  const categories = [...new Set((tickets || []).map((t) => t.category).filter((name) => name !== "—"))];
-  const filtersAvailable = Boolean(rows) && !["In Progress", "Pending"].includes(status)
-    && (status === "All" || rows.every((ticket) => ticket.statusCode))
-    && (category === "All" || rows.every((ticket) => ticket.categoryKnown));
-  const filtered = useMemo(
-    () =>
-      (rows || []).filter(
-        (t) =>
-          (status === "All" || t.status === status) &&
-          (category === "All" || t.category === category),
-      ),
-    [rows, status, category],
-  );
+  const value = (content) => statsQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : content;
+  const categories = Object.keys(TICKET_CATEGORY_CODES);
+  const filtersAvailable = Boolean(rows);
+  const filtered = rows || [];
   const total = filtersAvailable ? filtered.length : null;
   const pageCount = total == null ? null : Math.max(1, Math.ceil(total / PAGE_SIZE));
   const paged = filtersAvailable ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((ticket) => ticketWithAgents(ticket, agents)) : [];
   useEffect(() => { if (pageCount != null && page > pageCount) setPage(pageCount); }, [page, pageCount]);
+
+  async function submitTicket() {
+    if (createLock.current || creating || !authenticated) return;
+    const owner = admin?.id;
+    createLock.current = true;
+    try {
+      const saved = await createTicket({ values: form }).unwrap();
+      if (currentOwner.current !== owner) return;
+      setCreate(false);
+      setForm({ subject: '', customer: '', email: '', category: 'General', priority: 'Medium', description: '' });
+      navigate(ticketDetailUrl(saved.id));
+    } catch (error) { if (currentOwner.current === owner) window.alert(getApiErrorMessage(error)); }
+    finally { createLock.current = false; }
+  }
 
   return (
     <div className="support-page">
@@ -105,8 +115,8 @@ export function SupportTickets() {
           icon="ticket"
           label="Total Tickets"
           value={value(summary.total)}
-          delta="—"
-          direction={null}
+          delta={summary.changes.total.delta}
+          direction={summary.changes.total.direction}
           caption="from last 7 days"
         />
         <StatCard
@@ -114,8 +124,8 @@ export function SupportTickets() {
           tint="blue"
           label="Open"
           value={value(summary.open)}
-          delta="—"
-          direction={null}
+          delta={summary.changes.open.delta}
+          direction={summary.changes.open.direction}
           caption="from last 7 days"
         />
         <StatCard
@@ -123,8 +133,8 @@ export function SupportTickets() {
           tint="purple"
           label="In Progress"
           value={value(summary.progress)}
-          delta="—"
-          direction={null}
+          delta={summary.changes.progress.delta}
+          direction={summary.changes.progress.direction}
           caption="from last 7 days"
         />
         <StatCard
@@ -132,8 +142,8 @@ export function SupportTickets() {
           tint="amber"
           label="Pending"
           value={value(summary.pending)}
-          delta="—"
-          direction={null}
+          delta={summary.changes.pending.delta}
+          direction={summary.changes.pending.direction}
           caption="from last 7 days"
         />
         <StatCard
@@ -141,8 +151,8 @@ export function SupportTickets() {
           tint="green"
           label="Resolved"
           value={value(summary.resolved)}
-          delta="—"
-          direction={null}
+          delta={summary.changes.resolved.delta}
+          direction={summary.changes.resolved.direction}
           caption="from last 7 days"
         />
       </div>
@@ -317,17 +327,18 @@ export function SupportTickets() {
       </SectionCard>
       <Modal
         open={create}
-        onClose={() => setCreate(false)}
+        onClose={() => { if (!creating) setCreate(false); }}
         title="New Support Ticket"
         description="Create a support request on behalf of a customer."
         width={580}
         footer={
           <>
-            <Button variant="outline" onClick={() => setCreate(false)}>
+            <Button variant="outline" disabled={creating} onClick={() => setCreate(false)}>
               Cancel
             </Button>
             <Button
-              disabled
+              disabled={creating || !authenticated || !form.subject.trim() || !form.email.trim() || !form.description.trim() || !TICKET_CATEGORY_CODES[form.category]}
+              onClick={submitTicket}
             >
               Create Ticket
             </Button>
@@ -338,17 +349,20 @@ export function SupportTickets() {
           <TextField
             label="Subject"
             value={form.subject}
+            disabled={creating}
             onChange={(e) => setForm({ ...form, subject: e.target.value })}
           />
           <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <TextField
               label="Customer"
               value={form.customer}
+              disabled={creating}
               onChange={(e) => setForm({ ...form, customer: e.target.value })}
             />
             <TextField
               label="Email"
               value={form.email}
+              disabled={creating}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
           </div>
@@ -356,12 +370,14 @@ export function SupportTickets() {
             <Select
               label="Category"
               value={form.category}
-              options={[...new Set([form.category, ...categories])]}
+              disabled={creating}
+              options={categories}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
             />
             <Select
               label="Priority"
               value={form.priority}
+              disabled={creating}
               options={["High", "Medium", "Low"]}
               onChange={(e) => setForm({ ...form, priority: e.target.value })}
             />
@@ -370,6 +386,7 @@ export function SupportTickets() {
             label="Description"
             rows={4}
             value={form.description}
+            disabled={creating}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
         </div>

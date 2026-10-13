@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PageHeader, Button, SectionCard, Icon, QuickActionsCard } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsTextarea as Textarea, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
+import { SettingsEventsDialog } from './SettingsActionDialogs.jsx';
 import { DriverDetailLoading } from './DriversLoading.jsx';
 
 import { ACCESS_CONTROL_OPTIONS, securityStatus as securityStatusTemplate, securityQuickActions } from '../mock/fixtures/settings.js';
@@ -21,6 +22,8 @@ function Field({ children }) { return <div style={{ marginBottom: 14 }}>{childre
 
 export function SettingsSecurity() {
   const editor = useSettingsEditor('security');
+  const [dialog, setDialog] = useState(null);
+  const openEvents = (type) => setDialog({ admin: editor.admin, kind: 'events', type });
   const updateAuthSettings = editor.change('settingsAuth');
   const updatePasswordPolicyOverview = editor.change('settingsPasswordPolicyOverview');
   const updateSessionManagementOverview = editor.change('settingsSessionManagementOverview');
@@ -29,8 +32,8 @@ export function SettingsSecurity() {
   const updateSecurityAlertsOverview = editor.change('settingsSecurityAlertsOverview');
   const saveSecuritySettings = () => editor.save();
   const resetSecuritySettings = () => editor.unavailable('Reset Security Settings');
-  const securityStatus = { headline: '—', caption: '—', lastChecked: '—', items: (securityStatusTemplate.items || []).map(({ label }) => ({ label, status: '—' })) };
-  const recentSecurityEvents = [];
+  const securityStatus = editor.status(securityStatusTemplate);
+  const recentSecurityEvents = editor.events;
   const auth = editor.group('settingsAuth');
   const passwordPolicy = editor.group('settingsPasswordPolicyOverview');
   const sessionMgmt = editor.group('settingsSessionManagementOverview');
@@ -183,7 +186,7 @@ export function SettingsSecurity() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Recent Security Events" action={<a href="#" onClick={(event) => { event.preventDefault(); editor.unavailable('View All Security Events'); }}>View All</a>}>
+          <SectionCard title="Recent Security Events" action={<a href="#" onClick={(event) => { event.preventDefault(); openEvents(); }}>View All</a>}>
             <div style={{ display: 'grid', gap: 14 }}>
               {recentSecurityEvents.map((e, i) => (
                 <div key={i} style={{ display: 'flex', gap: 10 }}>
@@ -198,7 +201,7 @@ export function SettingsSecurity() {
                   </div>
                 </div>
               ))}
-              {'—'}
+              {recentSecurityEvents.length ? null : '—'}
             </div>
           </SectionCard>
 
@@ -208,6 +211,7 @@ export function SettingsSecurity() {
           <SettingsMetaFooter meta={meta} />
         </div>
       </div>
+      {dialog && dialog.admin === editor.admin && dialog.kind === 'events' && <SettingsEventsDialog admin={editor.admin} type={dialog.type} onClose={() => setDialog(null)} />}
     </>
   );
 }

@@ -187,8 +187,8 @@ export function SettingsNotifications() {
   const toggleEventNotification = () => editor.unavailable('Toggle Event Notification');
   const setEventNotificationFrequency = () => editor.unavailable('Set Event Notification Frequency');
   const saveNotificationPreferences = () => editor.save();
-  const resetNotificationPreferences = () => editor.unavailable('Reset Notification Preferences');
-  const notificationChannelsStatus = notificationChannelControls.map(({ label, icon }) => ({ label, icon, detail: '—', status: '—' }));
+  const resetNotificationPreferences = () => editor.reset();
+  const notificationChannelsStatus = notificationChannelControls.map(({ label, icon }) => ({ label, icon, ...(editor.channels?.[({ 'Email Notifications': 'email', 'SMS Notifications': 'sms', 'In-App Notifications': 'inApp' })[label]] || { detail: '—', status: '—' }) }));
   const navigate = useNavigate();
   const channels = editor.group('settingsNotificationChannels');
   const quiet = editor.group('settingsQuietHours');

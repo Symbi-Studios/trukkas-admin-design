@@ -9,11 +9,13 @@ const count = (value) => {
   return Number.isSafeInteger(number) && number >= 0 ? number : null;
 };
 export const ticketCount = (value) => count(value) == null ? '—' : count(value).toLocaleString('en-NG');
-export const TICKET_STATUS_CODES = { Open: 'OPEN', Resolved: 'RESOLVED', Closed: 'CLOSED' };
+export const TICKET_STATUS_CODES = { Open: 'OPEN', 'In Progress': 'IN_PROGRESS', Pending: 'PENDING', Resolved: 'RESOLVED', Closed: 'CLOSED' };
 export const TICKET_PRIORITY_CODES = { High: 'HIGH', Medium: 'MEDIUM', Low: 'LOW' };
-const STATUS_LABELS = { OPEN: 'Open', ESCALATED: 'Escalated', RESOLVED: 'Resolved', CLOSED: 'Closed' };
+export const TICKET_CATEGORY_CODES = { 'Delivery Delay': 'DELIVERY_DELAY', 'Payment Issue': 'PAYMENT_ISSUE', Dispute: 'DISPUTE', 'Driver Issue': 'DRIVER_ISSUE', 'Document Query': 'DOCUMENT_QUERY', General: 'GENERAL' };
+const STATUS_LABELS = { OPEN: 'Open', IN_PROGRESS: 'In Progress', PENDING: 'Pending', ESCALATED: 'Escalated', RESOLVED: 'Resolved', CLOSED: 'Closed' };
 const PRIORITY_LABELS = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
-const titleCase = (value) => text(value)?.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || '—';
+const CATEGORY_LABELS = Object.fromEntries(Object.entries(TICKET_CATEGORY_CODES).map(([label, code]) => [code, label]));
+const SOURCE_LABELS = { APP: 'App', ADMIN_TICKET: 'Admin Ticket', ADMIN_MESSAGE: 'Admin Message' };
 function timestamp(value) {
   if (!text(value) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
   const [year, month, day, hour, minute, second] = value.slice(0, 19).split(/[-T:]/).map(Number);
@@ -32,69 +34,86 @@ function age(value) {
   return days === 0 ? 'Created today' : `Created ${days} ${days === 1 ? 'day' : 'days'} ago`;
 }
 export function ticketFileUrl(value) {
+  if (!text(value)) return null;
   try {
     const url = new URL(value);
     return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : null;
   } catch { return null; }
 }
 function attachment(value) {
-  const url = ticketFileUrl(value);
+  const file = record(value), url = ticketFileUrl(typeof value === 'string' ? value : file.url);
   if (!url) return null;
-  let name = '—';
-  try { name = decodeURIComponent(new URL(url).pathname.split('/').pop()) || '—'; } catch { /* Keep unavailable filename. */ }
-  return { url, name, size: '—', icon: /\.(png|jpe?g|webp)$/i.test(name) ? 'image' : 'file-text' };
+  let name = text(file.name);
+  if (!name) { try { name = decodeURIComponent(new URL(url).pathname.split('/').pop()); } catch { /* Unavailable filename. */ } }
+  const bytes = count(file.sizeBytes);
+  const size = bytes == null ? '—' : bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+  return { url, name: name || '—', size, icon: /^image\//.test(text(file.mimeType) || '') || /\.(png|jpe?g|webp)$/i.test(name || '') ? 'image' : 'file-text' };
 }
 const personName = (user) => text(user.name) || [text(user.firstName), text(user.lastName)].filter(Boolean).join(' ') || '—';
 export const emptyTicket = {
-  id: '—', subject: '—', customer: '—', email: '—', company: '—', category: '—', categoryKnown: false,
+  id: '—', subject: '—', subjectValue: null, userId: null, customer: '—', email: '—', company: '—', category: '—', categoryKnown: false, categoryCode: null,
   subcategory: '—', priority: '—', priorityCode: null, status: '—', statusCode: null, assignee: '—', assignedTo: null,
   source: '—', created: '—', createdAge: '—', updated: '—', description: '—', attachments: [], attachmentsKnown: false,
-  messages: [], messagesKnown: false,
+  messages: [], messagesKnown: false, history: [], mergedInto: null, sourceData: {},
 };
 function adaptTicket(dto, currentAdmin) {
-  const user = record(dto.user), statusCode = text(dto.status)?.toUpperCase(), priorityCode = text(dto.priority)?.toUpperCase();
+  const user = record(dto.user), assignedAdmin = record(dto.assignedAdmin);
+  const statusCode = text(dto.status), priorityCode = text(dto.priority), categoryCode = text(dto.category);
   const customer = personName(user), assignedTo = text(dto.assignedTo);
-  const messagesKnown = Array.isArray(dto.messages);
-  const messages = messagesKnown ? dto.messages.map((item) => {
-    const message = record(item), senderType = text(message.senderType), senderId = text(message.senderId);
+  const publicKnown = Array.isArray(dto.messages), notesKnown = Array.isArray(dto.notes);
+  const allEntries = [...(publicKnown ? dto.messages.map((item) => ({ item, internal: false })) : []), ...(notesKnown ? dto.notes.map((item) => ({ item, internal: true })) : [])];
+  const entries = allEntries.filter(({ item }) => text(item?.id));
+  const entriesKnown = entries.length === allEntries.length;
+  const messages = entries.map(({ item, internal }) => {
+    const message = record(item), sender = record(message.sender);
+    const senderType = text(sender.type) || text(message.senderType), senderId = text(sender.id) || text(message.senderId);
     return {
       id: text(message.id), senderId, senderType,
-      author: senderType === 'USER' && senderId === (text(user.id) || text(dto.userId)) ? customer
-        : senderType === 'ADMIN' && senderId === currentAdmin?.id ? personName(record(currentAdmin)) : '—',
-      role: senderType === 'USER' ? 'Ticket Creator' : senderType === 'ADMIN' ? 'Support Agent' : '—',
-      internal: false, body: text(message.content) || '—', time: date(message.createdAt),
+      author: text(sender.name) || (senderType === 'USER' && senderId === (text(user.id) || text(dto.userId)) ? customer
+        : senderType === 'ADMIN' && senderId === currentAdmin?.id ? personName(record(currentAdmin)) : '—'),
+      role: internal ? 'Internal Note' : senderType === 'USER' ? 'Ticket Creator' : senderType === 'ADMIN' ? 'Support Agent' : '—',
+      internal, body: text(message.content) || '—', time: date(message.createdAt), timestamp: timestamp(message.createdAt),
     };
-  }) : [];
-  // The attachment section shows the real files attached to this conversation.
-  const attachmentsKnown = messagesKnown && dto.messages.every((message) => Array.isArray(message?.attachmentUrls) && message.attachmentUrls.every((url) => ticketFileUrl(url)));
-  const urls = messagesKnown ? [...new Set(dto.messages.flatMap((message) => Array.isArray(message?.attachmentUrls) ? message.attachmentUrls : []))] : [];
+  }).sort((a, b) => a.timestamp != null && b.timestamp != null ? a.timestamp - b.timestamp : 0);
+  const fileLists = entries.map(({ item }) => Array.isArray(item?.attachments) ? item.attachments : Array.isArray(item?.attachmentUrls) ? item.attachmentUrls : null);
+  const attachmentsKnown = publicKnown && notesKnown && entriesKnown && fileLists.every((list) => list && list.every((item) => attachment(item)));
+  const files = new Map();
+  fileLists.forEach((list) => (list || []).forEach((item) => { const file = attachment(item); if (file) files.set(file.url, file); }));
+  // Only the two existing update slots follow the creation slot; no timeline rows are added.
+  const history = Array.isArray(dto.statusHistory) ? dto.statusHistory.map((item) => ({
+    time: date(item?.createdAt), timestamp: timestamp(item?.createdAt), description: text(item?.description) || '—',
+    // The actor's nested schema is not documented; do not infer a name from an ID.
+    actor: '—',
+  })).filter((item) => item.timestamp != null && item.timestamp !== timestamp(dto.createdAt)).sort((a, b) => a.timestamp - b.timestamp).slice(-2) : [];
   return {
-    ...emptyTicket, id: dto.id, subject: text(dto.subject) || '—', customer,
+    ...emptyTicket, id: dto.id, subject: text(dto.subject) || '—', subjectValue: text(dto.subject), userId: text(user.id) || text(dto.userId), customer,
     email: text(user.email) || '—', company: text(user.businessName) || '—',
-    category: titleCase(dto.category), categoryKnown: Boolean(text(dto.category)), subcategory: text(dto.subcategory) || '—',
-    priority: PRIORITY_LABELS[priorityCode] || '—', priorityCode: PRIORITY_LABELS[priorityCode] ? priorityCode : null,
+    category: CATEGORY_LABELS[categoryCode] || '—', categoryKnown: Boolean(CATEGORY_LABELS[categoryCode]), categoryCode: CATEGORY_LABELS[categoryCode] ? categoryCode : null,
+    subcategory: text(dto.subcategory) || '—', priority: PRIORITY_LABELS[priorityCode] || '—', priorityCode: PRIORITY_LABELS[priorityCode] ? priorityCode : null,
     status: STATUS_LABELS[statusCode] || '—', statusCode: STATUS_LABELS[statusCode] ? statusCode : null,
-    assignedTo, assignee: assignedTo && assignedTo === currentAdmin?.id ? personName(record(currentAdmin)) : '—',
-    source: text(dto.source) || '—', created: date(dto.createdAt), createdAge: age(dto.createdAt), updated: date(dto.updatedAt),
-    description: text(dto.description) || '—', messages, messagesKnown,
-    attachments: urls.map(attachment).filter(Boolean), attachmentsKnown,
+    assignedTo, assignee: assignedAdmin.id === assignedTo && text(assignedAdmin.name) ? text(assignedAdmin.name)
+      : assignedTo && assignedTo === currentAdmin?.id ? personName(record(currentAdmin)) : '—',
+    source: SOURCE_LABELS[dto.source] || '—', created: date(dto.createdAt), createdAge: age(dto.createdAt), updated: date(dto.updatedAt),
+    description: text(dto.description) || '—', messages, messagesKnown: publicKnown && notesKnown && entriesKnown,
+    attachments: [...files.values()], attachmentsKnown, history, mergedInto: text(dto.mergedInto), sourceData: dto,
   };
 }
 export function ticketWithAgents(ticket, agents = []) {
   const names = new Map(agents.map((agent) => [agent.id, agent.name]));
   return {
     ...ticket, assignee: names.get(ticket.assignedTo) || ticket.assignee,
-    messages: ticket.messages.map((message) => ({ ...message, author: message.senderType === 'ADMIN' ? names.get(message.senderId) || message.author : message.author })),
+    messages: ticket.messages.map((message) => ({ ...message, author: message.author === '—' && message.senderType === 'ADMIN' ? names.get(message.senderId) || message.author : message.author })),
   };
 }
-export function ticketSummary(rows, stats) {
-  const statusesKnown = Array.isArray(rows) && rows.every((ticket) => ticket.statusCode);
+function change(value) {
+  const number = typeof value === 'number' ? value : NaN;
+  return { delta: Number.isFinite(number) ? `${Math.abs(number).toLocaleString('en-NG', { maximumFractionDigits: 2 })}%` : '—', direction: Number.isFinite(number) && number !== 0 ? number > 0 ? 'up' : 'down' : null };
+}
+export function ticketSummary(_rows, stats) {
   return {
-    total: ticketCount(rows?.length),
-    open: ticketCount(count(stats?.openThreads) ?? (statusesKnown ? rows.filter((ticket) => ticket.statusCode === 'OPEN').length : null)),
-    // ESCALATED is not documented as either In Progress or Pending.
-    progress: '—', pending: '—',
-    resolved: ticketCount(statusesKnown ? rows.filter((ticket) => ['RESOLVED', 'CLOSED'].includes(ticket.statusCode)).length : null),
+    total: ticketCount(stats?.totalThreads), open: ticketCount(stats?.openThreads), progress: ticketCount(stats?.inProgressThreads),
+    pending: ticketCount(stats?.pendingThreads), resolved: ticketCount(stats?.resolvedThreads),
+    changes: Object.fromEntries(['total', 'open', 'progress', 'pending', 'resolved'].map((key) => [key, change(stats?.changes?.period === '7d' ? stats.changes[key === 'progress' ? 'inProgress' : key] : null)])),
   };
 }
 export const ticketDetailUrl = (id) => `/tickets/detail?ticketId=${encodeURIComponent(id)}`;
@@ -109,6 +128,7 @@ async function readAll(baseQuery, url, collection, params = {}) {
   const rows = [], seen = new Set();
   let page = 1, totalPages = 1, total = null;
   do {
+    if (page > 500) return failure('The support directory exceeds the supported page count.');
     const result = await baseQuery({ url, params: { ...params, page, limit: 100 } });
     if (result.error) return result;
     const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
@@ -125,16 +145,33 @@ async function readAll(baseQuery, url, collection, params = {}) {
   } while (page <= totalPages);
   return rows.length === total ? { data: rows } : failure('The support response did not return the complete directory.');
 }
+const path = (id) => `/admin/support/threads/${encodeURIComponent(id)}`;
+const account = (api) => api.getState().auth.admin;
+const owns = (api, owner) => !api.signal.aborted && Boolean(api.getState().auth.accessToken && owner?.id && account(api)?.id === owner.id && account(api)?.role === owner.role);
+const sessionError = () => failure('The admin session changed. Sign in and review the ticket again.', 401);
+async function readTicket(id, baseQuery) {
+  if (!text(id)) return failure('A ticket ID is required.');
+  const result = await baseQuery(path(id));
+  if (result.error) return result;
+  const data = record(unwrapApiResponseData(result.data)), dto = data.thread && typeof data.thread === 'object' ? record(data.thread) : data;
+  return dto.id === id ? { data: dto } : failure('The support response did not identify this ticket.');
+}
 const ticketTags = (id) => [{ type: 'AdminSupportTickets', id: 'LIST' }, { type: 'AdminSupportTickets', id }];
 export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupportTickets', 'AdminTicketAgents'] }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminSupportTicketDirectory: builder.query({
-      async queryFn({ search, priority } = {}, api, _options, baseQuery) {
-        if (priority && !Object.values(TICKET_PRIORITY_CODES).includes(priority)) return failure('Select a supported priority.');
-        // The spec requires a string with no All sentinel or minimum length. Keep the unfiltered value empty.
-        const result = await readAll(baseQuery, '/admin/support/threads', 'threads', { tab: 'all', priority: priority || '', ...(text(search) ? { search: search.trim() } : {}) });
-        return result.error ? result : { data: result.data.map((row) => adaptTicket(row, api.getState().auth.admin)) };
+      async queryFn({ search, priority, status, category } = {}, api, _options, baseQuery) {
+        if (priority && !Object.values(TICKET_PRIORITY_CODES).includes(priority) || status && ![...Object.values(TICKET_STATUS_CODES), 'ESCALATED'].includes(status)
+          || category && !Object.values(TICKET_CATEGORY_CODES).includes(category)) return failure('Select supported ticket filters.');
+        const owner = account(api), params = { tab: 'all' };
+        if (text(search)) params.search = search.trim();
+        if (priority) params.priority = priority;
+        if (status) params.status = status;
+        if (category) params.category = category;
+        const result = await readAll(baseQuery, '/admin/support/threads', 'threads', params);
+        if (!owns(api, owner)) return sessionError();
+        return result.error ? result : { data: result.data.map((row) => adaptTicket(row, owner)) };
       }, providesTags: [{ type: 'AdminSupportTickets', id: 'LIST' }],
     }),
     getAdminSupportTicketStats: builder.query({
@@ -143,41 +180,70 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
     }),
     getAdminSupportTicketDetail: builder.query({
       async queryFn(id, api, _options, baseQuery) {
-        if (!text(id)) return failure('A ticket ID is required.');
-        const result = await baseQuery(`/admin/support/threads/${encodeURIComponent(id)}`);
-        if (result.error) return result;
-        const dto = record(unwrapApiResponseData(result.data));
-        if (dto.id !== id) return failure('The support response did not identify this ticket.');
-        return { data: adaptTicket(dto, api.getState().auth.admin) };
+        const owner = account(api), result = await readTicket(id, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        return result.error ? result : { data: adaptTicket(result.data, owner) };
       }, providesTags: (_result, _error, id) => [{ type: 'AdminSupportTickets', id }],
     }),
     getAdminTicketAgents: builder.query({
       async queryFn(_args, api, _options, baseQuery) {
-        if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return failure('Only Super Admins can view the admin account directory.', 403);
-        const result = await readAll(baseQuery, '/admin/admins', 'admins');
+        const owner = account(api), result = await readAll(baseQuery, '/admin/support/agents', 'agents', { includeInactive: 'false' });
+        if (!owns(api, owner)) return sessionError();
         return result.error ? result : { data: result.data.filter((agent) => text(agent.name)).map((agent) => ({ id: agent.id, name: agent.name.trim(), isActive: typeof agent.isActive === 'boolean' ? agent.isActive : null })) };
       }, providesTags: ['AdminTicketAgents'],
     }),
-    updateAdminSupportTicket: builder.mutation({
-      async queryFn({ id, changes }, _api, _options, baseQuery) {
-        const body = record(changes), keys = Object.keys(body);
-        if (!text(id) || !keys.length || keys.some((key) => !['status', 'priority', 'assignedTo'].includes(key))
-          || (body.status !== undefined && !['OPEN', 'RESOLVED', 'ESCALATED', 'CLOSED'].includes(body.status))
-          || (body.priority !== undefined && !['HIGH', 'MEDIUM', 'LOW'].includes(body.priority))
-          || (body.assignedTo !== undefined && !text(body.assignedTo))) return failure('This ticket change is not supported by the API.');
-        const result = await baseQuery({ url: `/admin/support/threads/${encodeURIComponent(id)}`, method: 'PATCH', body });
+    createAdminSupportTicket: builder.mutation({
+      async queryFn({ values }, api, _options, baseQuery) {
+        const owner = account(api);
+        if (!owns(api, owner)) return sessionError();
+        const form = record(values), category = TICKET_CATEGORY_CODES[form.category], priority = TICKET_PRIORITY_CODES[form.priority];
+        if (!text(form.subject) || !text(form.description) || !text(form.email) || !category || !priority) return failure('Enter the subject, existing customer email, category, priority and description.');
+        const body = { subject: form.subject.trim(), email: form.email.trim(), category, priority, description: form.description.trim(), ...(text(form.customer) ? { customerName: form.customer.trim() } : {}) };
+        const result = await baseQuery({ url: '/admin/support/tickets', method: 'POST', body });
+        if (!owns(api, owner)) return sessionError();
         if (result.error) return result;
-        const dto = record(unwrapApiResponseData(result.data)), thread = record(dto.thread);
-        if (thread.id !== id || keys.some((key) => thread[key] !== body[key] && !(key === 'status' && body.status === 'CLOSED' && thread.status === 'RESOLVED'))) return failure('The ticket update could not be confirmed. Refresh before trying again.');
-        return { data: { id: thread.id } };
-      }, invalidatesTags: (_result, _error, { id }) => ticketTags(id),
+        const dto = record(record(unwrapApiResponseData(result.data)).thread);
+        if (!text(dto.id)) return failure('Creation was accepted but the ticket ID was not returned. Refresh the list before creating it again.');
+        const check = await readTicket(dto.id, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        if (check.error || ['subject', 'category', 'priority', 'description'].some((key) => check.data[key] !== body[key])
+          || text(record(check.data.user).email)?.toLowerCase() !== body.email.toLowerCase()) return failure('Creation was accepted but the saved ticket could not be confirmed. Refresh the list before creating it again.');
+        return { data: adaptTicket(check.data, owner) };
+      }, invalidatesTags: [{ type: 'AdminSupportTickets', id: 'LIST' }],
+    }),
+    updateAdminSupportTicket: builder.mutation({
+      async queryFn({ id, changes, expectedUpdatedAt }, api, _options, baseQuery) {
+        const owner = account(api), body = record(changes), keys = Object.keys(body);
+        if (!owns(api, owner)) return sessionError();
+        if (!text(id) || !keys.length || keys.some((key) => !['status', 'priority', 'assignedTo', 'subject', 'category'].includes(key))
+          || body.status !== undefined && ![...Object.values(TICKET_STATUS_CODES), 'ESCALATED'].includes(body.status)
+          || body.priority !== undefined && !Object.values(TICKET_PRIORITY_CODES).includes(body.priority)
+          || body.category !== undefined && !Object.values(TICKET_CATEGORY_CODES).includes(body.category)
+          || body.subject !== undefined && (!text(body.subject) || body.subject.length > 200)
+          || body.assignedTo !== undefined && body.assignedTo !== null && !text(body.assignedTo)) return failure('This ticket change is not supported by the API.');
+        const current = await readTicket(id, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        if (current.error) return current;
+        if (text(current.data.mergedInto)) return failure('Merged tickets cannot be edited.', 409);
+        if (expectedUpdatedAt && current.data.updatedAt !== expectedUpdatedAt) return failure('The ticket changed. Refresh and review it before saving.', 409);
+        const result = await baseQuery({ url: path(id), method: 'PATCH', body });
+        if (!owns(api, owner)) return sessionError();
+        if (result.error) return result;
+        const check = await readTicket(id, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        if (check.error || keys.some((key) => check.data[key] !== body[key] && !(key === 'status' && body.status === 'CLOSED' && check.data.status === 'RESOLVED'))) return failure('The update was accepted but could not be confirmed. Refresh before trying again.');
+        return { data: adaptTicket(check.data, owner) };
+      }, invalidatesTags: (_result, _error, { id }) => [...ticketTags(id), 'AdminTicketAgents'],
     }),
     uploadAdminTicketReplyAttachments: builder.mutation({
-      async queryFn({ id, files }, _api, _options, baseQuery) {
+      async queryFn({ id, files }, api, _options, baseQuery) {
+        const owner = account(api);
+        if (!owns(api, owner)) return sessionError();
         if (!text(id) || !Array.isArray(files) || files.length < 1 || files.length > 5 || files.some((file) => !(file instanceof File)
-          || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) || file.size > 10 * 1024 * 1024 || file.size === 0)) return failure('Choose 1–5 JPEG, PNG, WebP or PDF files, up to 10 MB each.');
+          || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) || file.size > 10 * 1024 * 1024 || file.size === 0)) return failure('Choose 1-5 JPEG, PNG, WebP or PDF files, up to 10 MB each.');
         const body = new FormData(); files.forEach((file) => body.append('files', file));
-        const result = await baseQuery({ url: `/admin/support/threads/${encodeURIComponent(id)}/attachments`, method: 'POST', body });
+        const result = await baseQuery({ url: path(id) + '/attachments', method: 'POST', body });
+        if (!owns(api, owner)) return sessionError();
         if (result.error) return result;
         const dto = record(unwrapApiResponseData(result.data));
         if (!Array.isArray(dto.urls) || dto.urls.length !== files.length || !dto.urls.every((url) => ticketFileUrl(url))) return failure('The uploaded attachment URLs could not be confirmed.');
@@ -185,19 +251,56 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
       },
     }),
     sendAdminTicketReply: builder.mutation({
-      async queryFn({ id, content, attachmentUrls = [] }, _api, _options, baseQuery) {
-        if (!text(id) || !text(content) || !Array.isArray(attachmentUrls) || !attachmentUrls.every((url) => ticketFileUrl(url))) return failure('Enter a reply and valid attachments.');
-        const body = { content: content.trim(), attachmentUrls };
-        const result = await baseQuery({ url: `/admin/support/threads/${encodeURIComponent(id)}/messages`, method: 'POST', body });
+      async queryFn(args, api, _options, baseQuery) { return sendEntry(args, false, api, baseQuery); },
+      invalidatesTags: (_result, _error, { id }) => ticketTags(id),
+    }),
+    addAdminTicketNote: builder.mutation({
+      async queryFn(args, api, _options, baseQuery) { return sendEntry(args, true, api, baseQuery); },
+      invalidatesTags: (_result, _error, { id }) => ticketTags(id),
+    }),
+    mergeAdminSupportTicket: builder.mutation({
+      async queryFn({ id, targetThreadId }, api, _options, baseQuery) {
+        const owner = account(api);
+        if (!owns(api, owner)) return sessionError();
+        if (!text(id) || !text(targetThreadId) || id === targetThreadId) return failure('Choose another ticket belonging to the same customer.');
+        const source = await readTicket(id, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        if (source.error) return source;
+        const target = await readTicket(targetThreadId, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        if (target.error) return target;
+        const userId = text(source.data.userId) || text(record(source.data.user).id), targetUser = text(target.data.userId) || text(record(target.data.user).id);
+        if (!userId || userId !== targetUser || text(source.data.mergedInto) || text(target.data.mergedInto)) return failure('Both tickets must belong to the same customer and must not already be merged.');
+        const result = await baseQuery({ url: path(id) + '/merge', method: 'POST', body: { targetThreadId } });
+        if (!owns(api, owner)) return sessionError();
         if (result.error) return result;
         const dto = record(unwrapApiResponseData(result.data));
-        if (!text(dto.id) || dto.threadId !== id || dto.senderType !== 'ADMIN' || dto.content !== body.content) return failure('The reply could not be confirmed. Refresh before sending it again.');
-        return { data: { id: dto.id } };
-      }, invalidatesTags: (_result, _error, { id }) => ticketTags(id),
+        if (dto.survivingThreadId !== targetThreadId || dto.mergedThreadId !== id) return failure('The merge was accepted but its result could not be confirmed. Refresh before trying again.');
+        const check = await readTicket(targetThreadId, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        if (check.error || text(check.data.mergedInto)) return failure('The merge was accepted but the surviving ticket could not be loaded. Refresh the list before trying again.');
+        return { data: adaptTicket(check.data, owner) };
+      }, invalidatesTags: (_result, _error, { id, targetThreadId }) => [...ticketTags(id), ...ticketTags(targetThreadId), 'AdminTicketAgents'],
     }),
   }),
 });
+async function sendEntry({ id, content, attachmentUrls = [] }, internal, api, baseQuery) {
+  const owner = account(api);
+  if (!owns(api, owner)) return sessionError();
+  if (!text(id) || !text(content) || !Array.isArray(attachmentUrls) || !attachmentUrls.every((url) => ticketFileUrl(url))) return failure('Enter a message and valid attachments.');
+  const body = { content: content.trim(), attachmentUrls }, section = internal ? 'notes' : 'messages';
+  const result = await baseQuery({ url: path(id) + '/' + section, method: 'POST', body });
+  if (!owns(api, owner)) return sessionError();
+  if (result.error) return result;
+  const dto = record(unwrapApiResponseData(result.data));
+  if (!text(dto.id) || dto.threadId !== id || dto.content !== body.content || internal && dto.isInternal !== true) return failure('The message was accepted but could not be confirmed. Refresh before sending it again.');
+  const check = await readTicket(id, baseQuery);
+  if (!owns(api, owner)) return sessionError();
+  if (check.error || !Array.isArray(check.data[section]) || !check.data[section].some((entry) => entry?.id === dto.id && entry.content === body.content)) return failure('The message was accepted but could not be read back. Refresh before sending it again.');
+  return { data: { id: dto.id, ticket: adaptTicket(check.data, owner) } };
+}
 export const {
   useGetAdminSupportTicketDirectoryQuery, useGetAdminSupportTicketStatsQuery, useGetAdminSupportTicketDetailQuery,
-  useGetAdminTicketAgentsQuery, useUpdateAdminSupportTicketMutation, useUploadAdminTicketReplyAttachmentsMutation, useSendAdminTicketReplyMutation,
+  useGetAdminTicketAgentsQuery, useCreateAdminSupportTicketMutation, useUpdateAdminSupportTicketMutation,
+  useUploadAdminTicketReplyAttachmentsMutation, useSendAdminTicketReplyMutation, useAddAdminTicketNoteMutation, useMergeAdminSupportTicketMutation,
 } = ticketsApi;
