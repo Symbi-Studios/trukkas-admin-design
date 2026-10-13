@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useSelector } from 'react-redux';
+import { useEffect, useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, Card, Select, FilterSelect,
@@ -11,7 +10,13 @@ import {
 import { useReportDraft, useReportEntities } from '../store/features/reports/useReportDraft.js';
 import { REPORT_TYPES } from '../store/features/reports/reportsConfig.js';
 import { currentReportRange, reportComparisonRange, reportDateLabel, reportRangeQuery } from '../store/features/reports/reportDraft.js';
-import { useGetAdminReportJobStatsQuery, REPORT_CAPABILITIES, emptyReportOverview, reportCount, reportMoney as formatNaira, reportPercent, reportChange } from '../store/features/reports/reportsApi.js';
+import { useGetAdminReportOverviewQuery, REPORT_CAPABILITIES, emptyReportOverview, reportCount, reportMoney as formatNaira, reportPercent } from '../store/features/reports/reportsApi.js';
+
+import { ReportDateDialog } from './ReportDialogs.jsx';
+import { useReportOperations } from '../store/features/reports/useReportOperations.js';
+import { reportEntityScope } from '../store/features/reports/reportContracts.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { DriverTableLoading } from './DriversLoading.jsx';
 
 const COMPARE_OPTIONS = ['Previous 7 days', 'Previous Period', 'Previous Month', 'Previous Year'];
 const GROUP_BY_OPTIONS = ['Daily', 'Weekly', 'Monthly'];
@@ -20,9 +25,11 @@ const SORT_OPTIONS = ['By Revenue', 'By Jobs', 'By Growth'];
 
 export function ReportsAnalytics() {
   const navigate = useNavigate();
-  const { updateReportDraft } = useReportDraft();
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
-  const [range] = useState(currentReportRange);
+  const { draft, updateReportDraft } = useReportDraft();
+  const operations = useReportOperations(draft);
+  const authenticated = operations.authenticated;
+  const [range, setRange] = useState(currentReportRange);
+  const [dateOpen, setDateOpen] = useState(false);
 
   const [entityTypeFilter, setEntityTypeFilter] = useState('All Types');
   const [entityFilter, setEntityFilter] = useState('All Entities');
@@ -33,27 +40,37 @@ export function ReportsAnalytics() {
   const [sortEntities, setSortEntities] = useState('By Revenue');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({ reportType: 'operations', frequency: 'Weekly', recipients: '' });
-  const busy = false;
+  const busy = operations.busy;
+  useEffect(() => { setScheduleOpen(false); setDateOpen(false); setEntityFilter('All Entities'); setScheduleForm({ reportType: 'operations', frequency: 'Weekly', recipients: '' }); }, [operations.owner]);
   const { options: entityOptions } = useReportEntities(entityTypeFilter);
   const filtersActive = entityTypeFilter !== 'All Types' || entityFilter !== 'All Entities';
   const comparison = reportComparisonRange(range, compareTo);
   const args = reportRangeQuery(range);
   const compareArgs = reportRangeQuery(comparison);
-  const jobs = useGetAdminReportJobStatsQuery(args, { skip: !authenticated || filtersActive || !args });
-  const previous = useGetAdminReportJobStatsQuery(compareArgs, { skip: !authenticated || filtersActive || !compareArgs });
-  const overview = authenticated && !filtersActive && !jobs.isError && jobs.currentData ? jobs.currentData : emptyReportOverview();
-  const { dashboardSummary, operationsOverview, jobsByStatus, jobsByType, geographicalDistribution,
-    topPerformingEntities: filteredEntities, financialSummary, userEngagement, complianceOverview, alertsExceptions, trendData } = overview;
-  const comparisonAvailable = authenticated && !filtersActive && !previous.isError && previous.currentData;
-  const totalChange = comparisonAvailable ? reportChange(dashboardSummary.totalJobs, previous.currentData.dashboardSummary.totalJobs) : null;
-  const completedChange = comparisonAvailable ? reportChange(dashboardSummary.completedJobs, previous.currentData.dashboardSummary.completedJobs) : null;
+  const scope = reportEntityScope({ entityType: entityTypeFilter, entity: entityFilter });
+  const overviewArgs = args && compareArgs ? { ...args, compareFrom: compareArgs.dateFrom, compareTo: compareArgs.dateTo, ...scope.params,
+    groupBy: { Daily: 'day', Weekly: 'week', Monthly: 'month' }[groupBy], metric: overviewMetric.toLowerCase(), sortBy: sortEntities === 'By Jobs' ? 'jobs' : 'revenue', owner: operations.owner } : null;
+  const reports = useGetAdminReportOverviewQuery(overviewArgs, { skip: !authenticated || Boolean(scope.error) || !overviewArgs, refetchOnMountOrArgChange: true });
+  const overview = authenticated && !scope.error && !reports.error && reports.currentData ? reports.currentData : emptyReportOverview();
+  const dashboardSummary = overview.dashboardSummary;
+  const { operationsOverview, jobsByStatus, jobsByType, geographicalDistribution,
+    topPerformingEntities, financialSummary, userEngagement, complianceOverview, alertsExceptions, trendData } = overview;
+  const filteredEntities = sortEntities === 'By Growth' ? [] : topPerformingEntities;
+  const totalChange = overview.deltaValues?.totalJobs ?? null;
+  const completedChange = overview.deltaValues?.completedJobs ?? null;
   const comparisonCaption = 'vs ' + reportDateLabel(comparison);
-  const loading = !filtersActive && jobs.isFetching;
+  const loading = reports.isFetching && !scope.error;
   const value = (content) => loading ? <Skeleton as="span" width={90} height={23} /> : content;
-  const banner = authenticated && jobs.isError && !filtersActive ? (jobs.error?.status === 403 ? 'You do not have permission to view reports.' : 'Unable to load report data. Please try again.') : null;
+  const banner = scope.error || operations.error || (authenticated && reports.error ? getApiErrorMessage(reports.error) : null);
+  const amount = (v) => typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('en-NG', { maximumFractionDigits: 2 }) : '—';
   const statusChartData = jobsByStatus.every((status) => status.count != null)
     && jobsByStatus.reduce((total, status) => total + status.count, 0) === dashboardSummary.totalJobs
     ? jobsByStatus.map((status) => ({ label: status.label, value: status.count, color: status.color })) : [];
+
+  async function scheduleReport() {
+    if (scope.error) { window.alert(scope.error); return; }
+    if (await operations.scheduleDashboard(scheduleForm, scope.params)) setScheduleOpen(false);
+  }
 
   function clearAll() {
     setEntityTypeFilter('All Types'); setEntityFilter('All Entities');
@@ -72,14 +89,14 @@ export function ReportsAnalytics() {
         description="Holistic insights across operations, performance, finance, compliance and users."
         actions={<>
           <Button variant="outline" icon="calendar-clock" onClick={() => setScheduleOpen(true)}>Schedule Reports</Button>
-          <Button variant="outline" icon="download" onClick={() => navigate('/reports/export')}>Export Report</Button>
+          <Button variant="outline" icon="download" onClick={() => goExport(draft.reportType)}>Export Report</Button>
           <Button icon="plus" onClick={() => goExport('custom')}>Custom Report</Button>
         </>} />
 
       {banner && <Banner tone="error" title={banner} />}
 
       <Card style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
-        <FilterSelect label={reportDateLabel(range)} icon="calendar" />
+        <FilterSelect label={reportDateLabel(range)} icon="calendar" onClick={() => setDateOpen(true)} />
         <Select label="Compare to" value={compareTo} options={COMPARE_OPTIONS} onChange={(e) => setCompareTo(e.target.value)} style={{ minWidth: 160 }} />
         <Select label="Group By" value={groupBy} options={GROUP_BY_OPTIONS} onChange={(e) => setGroupBy(e.target.value)} style={{ minWidth: 130 }} />
         <Select label="Entity Type" value={entityTypeFilter} options={['All Types', 'Forwarder', 'Exporter', 'Truck Company']} onChange={(e) => { setEntityTypeFilter(e.target.value); setEntityFilter('All Entities'); }} style={{ minWidth: 150 }} />
@@ -95,10 +112,10 @@ export function ReportsAnalytics() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--tk-space-4)' }}>
         <StatCard icon="calendar-days" tint="navy" label="Total Jobs" value={value(reportCount(dashboardSummary.totalJobs))} delta={reportPercent(totalChange)} direction={totalChange == null ? null : totalChange < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalJobsTrend} color="var(--tk-viz-1)" />} />
         <StatCard icon="circle-check" tint="green" label="Completed Jobs" value={value(reportCount(dashboardSummary.completedJobs))} delta={reportPercent(completedChange)} direction={completedChange == null ? null : completedChange < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.completedJobsTrend} color="var(--tk-viz-2)" />} />
-        <StatCard icon="banknote" tint="purple" label="Total Revenue" value={formatNaira(dashboardSummary.totalRevenue)} delta={dashboardSummary.totalRevenueDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalRevenueTrend} color="var(--tk-viz-5)" />} />
-        <StatCard icon="wallet" tint="amber" label="Total Payouts" value={formatNaira(dashboardSummary.totalPayouts)} delta={dashboardSummary.totalPayoutsDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalPayoutsTrend} color="var(--tk-viz-3)" />} />
-        <StatCard icon="users" tint="teal" label="Active Users" value={reportCount(dashboardSummary.activeUsers)} delta={dashboardSummary.activeUsersDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.activeUsersTrend} color="var(--tk-viz-6)" />} />
-        <StatCard icon="shield-check" tint="blue" label="Compliance Rate" value={reportPercent(dashboardSummary.complianceRate)} delta={dashboardSummary.complianceRateDelta} direction={null} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.complianceRateTrend} color="var(--tk-viz-2)" />} />
+        <StatCard icon="banknote" tint="purple" label="Total Revenue" value={value(formatNaira(dashboardSummary.totalRevenue))} delta={dashboardSummary.totalRevenueDelta} direction={overview.deltaValues?.totalRevenue == null ? null : overview.deltaValues.totalRevenue < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalRevenueTrend} color="var(--tk-viz-5)" />} />
+        <StatCard icon="wallet" tint="amber" label="Total Payouts" value={value(formatNaira(dashboardSummary.totalPayouts))} delta={dashboardSummary.totalPayoutsDelta} direction={overview.deltaValues?.totalPayouts == null ? null : overview.deltaValues.totalPayouts < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalPayoutsTrend} color="var(--tk-viz-3)" />} />
+        <StatCard icon="users" tint="teal" label="Active Users" value={value(reportCount(dashboardSummary.activeUsers))} delta={dashboardSummary.activeUsersDelta} direction={overview.deltaValues?.activeUsers == null ? null : overview.deltaValues.activeUsers < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.activeUsersTrend} color="var(--tk-viz-6)" />} />
+        <StatCard icon="shield-check" tint="blue" label="Compliance Rate" value={value(reportPercent(dashboardSummary.complianceRate))} delta={dashboardSummary.complianceRateDelta} direction={null} caption={'—'} sparkline={<Sparkline points={dashboardSummary.complianceRateTrend} color="var(--tk-viz-2)" />} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.1fr 0.9fr', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
@@ -113,7 +130,7 @@ export function ReportsAnalytics() {
             ))}
           </div>
           <LineChart height={220} labels={operationsOverview.labels}
-            series={operationsOverview.series} format={() => '—'} />
+            series={operationsOverview.series} format={overviewMetric === 'Revenue' ? amount : reportCount} />
         </SectionCard>
 
         <SectionCard title="Revenue & Payouts Trend">
@@ -125,7 +142,7 @@ export function ReportsAnalytics() {
               <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--tk-viz-2)' }} />Payouts (₦)
             </span>
           </div>
-          <BarChart height={190} labels={trendData.labels} format={() => '—'}
+          <BarChart height={190} labels={trendData.labels} format={amount}
             series={[
               { name: 'Revenue', color: 'var(--tk-viz-1)', points: trendData.revenue },
               { name: 'Payouts', color: 'var(--tk-viz-2)', points: trendData.payouts },
@@ -148,7 +165,7 @@ export function ReportsAnalytics() {
         <SectionCard title="Top Performing Entities" action={
           <Select value={sortEntities} options={SORT_OPTIONS} onChange={(e) => setSortEntities(e.target.value)} style={{ minWidth: 130 }} />
         } footer={<Button variant="outline" fullWidth onClick={() => navigate('/forwarders')}>View All Entities</Button>}>
-          <DataTable rows={filteredEntities} rowKey={(r) => r.rank}
+          <DataTable rows={loading ? [] : filteredEntities} rowKey={(r) => r._key}
             columns={[
               { key: 'rank', header: 'Rank', width: 50 },
               { key: 'entity', header: 'Entity', render: (r) => (
@@ -157,18 +174,19 @@ export function ReportsAnalytics() {
                   <span className="tk-meta">{r.entityType}</span>
                 </span>) },
               { key: 'jobs', header: 'Jobs', align: 'right' },
-              { key: 'revenue', header: 'Revenue (₦)', align: 'right', render: (r) => reportCount(r.revenue) },
+              { key: 'revenue', header: 'Revenue (₦)', align: 'right', render: (r) => amount(r.revenue) },
               { key: 'growth', header: 'Growth', align: 'right', render: (r) => (
                 <span style={{ color: 'var(--tk-success)', font: '600 13px/18px var(--tk-font-sans)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <Icon name="arrow-up" size={12} />{r.growth}
                 </span>) },
             ]} />
+          {loading && <DriverTableLoading columns={5} label="Loading report entities" />}
         </SectionCard>
 
         <SectionCard title="Jobs by Type" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
           <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
             <DonutChart size={150} thickness={20} centerValue={loading ? '—' : reportCount(dashboardSummary.totalJobs)} centerLabel="Total"
-              data={jobsByType.filter((s) => s.count != null).map((s) => ({ label: s.label, value: s.count, color: s.color }))} />
+              data={jobsByType.every((s) => s.count != null) && jobsByType.reduce((sum, s) => sum + s.count, 0) === dashboardSummary.totalJobs ? jobsByType.map((s) => ({ label: s.label, value: s.count, color: s.color })) : []} />
             <LegendList style={{ width: '100%' }}
               items={jobsByType.map((s) => ({ label: s.label, value: s.count, display: `${reportCount(s.count)} (${s.pct})`, color: s.color }))}
               showShare={false} />
@@ -258,11 +276,11 @@ export function ReportsAnalytics() {
         </SectionCard>
       </div>
 
-      <Modal open={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Schedule Reports"
+      <Modal open={scheduleOpen} onClose={() => { if (!busy) setScheduleOpen(false); }} title="Schedule Reports"
         description="Automatically generate and deliver a report on a recurring basis."
         footer={<>
           <Button variant="outline" onClick={() => setScheduleOpen(false)}>Cancel</Button>
-          <Button disabled={!REPORT_CAPABILITIES.schedule || busy || !scheduleForm.recipients.trim()}>{busy ? 'Scheduling…' : 'Schedule'}</Button>
+          <Button disabled={!REPORT_CAPABILITIES.schedule || busy || !authenticated || !scheduleForm.recipients.trim()} onClick={scheduleReport}>{busy ? 'Scheduling…' : 'Schedule'}</Button>
         </>}>
         <div style={{ display: 'grid', gap: 14 }}>
           <Select label="Report Type" value={scheduleForm.reportType}
@@ -274,6 +292,7 @@ export function ReportsAnalytics() {
             value={scheduleForm.recipients} onChange={(e) => setScheduleForm((f) => ({ ...f, recipients: e.target.value }))} />
         </div>
       </Modal>
+      {dateOpen && <ReportDateDialog range={range} onChange={setRange} onClose={() => setDateOpen(false)} />}
     </>
   );
 }

@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import {
   PageHeader, Button, Badge, Tag, Card, SectionCard, LabelValue, DataTable, DropdownMenu,
-  Avatar, Icon,
+  Avatar, Icon, Skeleton,
 } from '../ds.js';
-import { unavailableFeeRule } from '../store/features/fees/feesApi.js';
+import { unavailableFeeRule, useGetAdminFeeRuleQuery, useGetAdminFeeRuleHistoryQuery, editableFeeRule } from '../store/features/fees/feesApi.js';
+import { useFeeOperations } from '../store/features/fees/useFeeOperations.js';
+import { FeeRuleEditDialog } from './FeeRuleDialogs.jsx';
+import { DriverTableLoading } from './DriversLoading.jsx';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
   const TINT = {
@@ -32,16 +36,22 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 export function FeeRuleDetail() {
   const { ruleId } = useParams();
   const navigate = useNavigate();
-  // The API exposes global settings, not records identifiable by a fee-rule ID.
-  const r = unavailableFeeRule;
-  // No documented lookup exists to confirm that this rule ID is missing.
-  const confirmedMissing = false;
+  const search = useSearchParams(), id = search.get('id') || ruleId || '';
+  const operations = useFeeOperations();
+  const query = useGetAdminFeeRuleQuery({ id, owner: operations.owner }, { skip: !id || !operations.authenticated });
+  const r = operations.authenticated && !query.error ? query.currentData || unavailableFeeRule : unavailableFeeRule;
+  const historyQuery = useGetAdminFeeRuleHistoryQuery({ id, owner: operations.owner }, { skip: !id || !operations.authenticated || !query.currentData || Boolean(query.error) });
+  const auditHistory = operations.authenticated && !query.error && !historyQuery.error ? historyQuery.currentData || [] : [];
+  const loading = query.isLoading || (query.isFetching && !query.currentData);
+  const value = (content) => loading ? <Skeleton as="span" width={100} height={16} /> : content;
+  const confirmedMissing = !loading && query.error?.status === 404;
   const [menu, setMenu] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   if (confirmedMissing) {
     return (
       <Card>
-        <span className="tk-body">No fee rule found with ID {ruleId}.</span>
+        <span className="tk-body">No fee rule found with ID {id}.</span>
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/fees')}>Back to Fee Rules</Button>
         </div>
@@ -55,18 +65,18 @@ export function FeeRuleDetail() {
         description="Detailed information about this fee rule and how it is applied."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/fees')}>Back to Fee Rules</Button>
-          <Button variant="outline" icon="pencil" disabled>Edit Fee Rule</Button>
+          <Button variant="outline" icon="pencil" disabled={loading || query.isFetching || operations.busy || !operations.canManage || !editableFeeRule(r)} onClick={() => setEditOpen(true)}>Edit Fee Rule</Button>
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Duplicate Fee Rule', icon: 'copy' },
-                  { label: r.status === 'Active' ? 'Deactivate Rule' : 'Activate Rule', icon: 'circle-slash' },
+                  { label: 'Duplicate Fee Rule', icon: 'copy', onClick: () => { setMenu(false); operations.unavailable('Duplicating fee rules'); } },
+                  { label: r.status === 'Active' ? 'Deactivate Rule' : 'Activate Rule', icon: 'circle-slash', disabled: loading || query.isFetching || operations.busy || !operations.canManage || !editableFeeRule(r), onClick: () => { setMenu(false); void operations.toggle(r); } },
                   { divider: true },
-                  { label: 'Export Rule Details', icon: 'file-text' },
+                  { label: 'Export Rule Details', icon: 'file-text', disabled: loading || !query.currentData || Boolean(query.error), onClick: () => { setMenu(false); void operations.download('rule', 'csv', r); } },
                   { divider: true },
-                  { label: 'Delete Fee Rule', icon: 'trash-2', tone: 'danger' },
+                  { label: 'Delete Fee Rule', icon: 'trash-2', tone: 'danger', onClick: () => { setMenu(false); operations.unavailable('Deleting fee rules'); } },
                 ]} />
               </span>
             )}
@@ -81,10 +91,10 @@ export function FeeRuleDetail() {
           </span>
           <div style={{ flex: 1, minWidth: 200, display: 'grid', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 className="tk-title" style={{ fontSize: 22 }}>{r.name}</h2>
+              <h2 className="tk-title" style={{ fontSize: 22 }}>{value(r.name)}</h2>
               <Badge>{r.status}</Badge>
             </div>
-            <span className="tk-meta">{r.description}</span>
+            <span className="tk-meta">{value(r.description)}</span>
             {r.systemRule && <Tag tone="blue" style={{ justifySelf: 'start' }}>System Rule</Tag>}
           </div>
         </div>
@@ -97,7 +107,7 @@ export function FeeRuleDetail() {
           ].map((f, i) => (
             <div key={f.label} style={{ flex: '1 1 150px', padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
               <div className="tk-meta" style={{ marginBottom: 4 }}>{f.label}</div>
-              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{f.value}</div>
+              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(f.value)}</div>
             </div>
           ))}
         </div>
@@ -105,30 +115,30 @@ export function FeeRuleDetail() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="Rule Details">
-          <LabelValue label="Rule Name" value={r.name} />
-          <LabelValue label="Description" value={r.description} />
+          <LabelValue label="Rule Name" value={value(r.name)} />
+          <LabelValue label="Description" value={value(r.description)} />
           <LabelValue label="Status" value={<Badge>{r.status}</Badge>} />
-          <LabelValue label="Priority" value={r.priority} />
-          <LabelValue label="Calculation Type" value={r.calcType} />
-          <LabelValue label="Rate" value={r.rate} />
-          <LabelValue label="Minimum Fee" value={r.minFee} />
-          <LabelValue label="Maximum Fee" value={r.maxFee} />
-          <LabelValue label="Currency" value={r.currency} />
-          <LabelValue label="Effective From" value={r.effectiveFrom} />
-          <LabelValue label="Effective To" value={r.effectiveTo} />
-          <LabelValue label="Applicable On" value={r.applicableOn} />
-          <LabelValue label="Rounding" value={r.rounding} />
-          <LabelValue label="Tax Inclusive" value={r.taxInclusive} />
+          <LabelValue label="Priority" value={value(r.priority)} />
+          <LabelValue label="Calculation Type" value={value(r.calcType)} />
+          <LabelValue label="Rate" value={value(r.rate)} />
+          <LabelValue label="Minimum Fee" value={value(r.minFee)} />
+          <LabelValue label="Maximum Fee" value={value(r.maxFee)} />
+          <LabelValue label="Currency" value={value(r.currency)} />
+          <LabelValue label="Effective From" value={value(r.effectiveFrom)} />
+          <LabelValue label="Effective To" value={value(r.effectiveTo)} />
+          <LabelValue label="Applicable On" value={value(r.applicableOn)} />
+          <LabelValue label="Rounding" value={value(r.rounding)} />
+          <LabelValue label="Tax Inclusive" value={value(r.taxInclusive)} />
         </SectionCard>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
           <SectionCard title="Applies To" pad="none" style={{ padding: '4px var(--tk-card-pad) 8px' }}>
-            <Fact icon="users" iconTint="blue" label="Applies To" value={r.appliesTo} />
-            <Fact icon="calendar" iconTint="amber" label="User Types" value={r.userTypes} />
-            <Fact icon="package" iconTint="purple" label="Job Types" value={r.jobTypes} />
-            <Fact icon="boxes" iconTint="teal" label="Cargo Types" value={r.cargoTypes} />
-            <Fact icon="map-pin" iconTint="amber" label="Locations" value={r.locations} />
-            <Fact icon="filter" iconTint="blue" label="Other Conditions" value={r.otherConditions} />
+            <Fact icon="users" iconTint="blue" label="Applies To" value={value(r.appliesTo)} />
+            <Fact icon="calendar" iconTint="amber" label="User Types" value={value(r.userTypes)} />
+            <Fact icon="package" iconTint="purple" label="Job Types" value={value(r.jobTypes)} />
+            <Fact icon="boxes" iconTint="teal" label="Cargo Types" value={value(r.cargoTypes)} />
+            <Fact icon="map-pin" iconTint="amber" label="Locations" value={value(r.locations)} />
+            <Fact icon="filter" iconTint="blue" label="Other Conditions" value={value(r.otherConditions)} />
           </SectionCard>
 
           <div style={{ borderRadius: 'var(--tk-r-lg)', border: '1px solid var(--tk-success-soft)',
@@ -138,18 +148,18 @@ export function FeeRuleDetail() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20 }}>
               <div style={{ display: 'grid', gap: 6 }}>
                 <span className="tk-meta" style={{ textTransform: 'uppercase', letterSpacing: '.4px' }}>Formula</span>
-                <span style={{ font: '700 18px/24px var(--tk-font-mono)', color: 'var(--tk-ink-900)' }}>{r.formula}</span>
+                <span style={{ font: '700 18px/24px var(--tk-font-mono)', color: 'var(--tk-ink-900)' }}>{value(r.formula)}</span>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <span className="tk-meta" style={{ textTransform: 'uppercase', letterSpacing: '.4px' }}>Example Calculation</span>
                 <span style={{ font: '400 13px/20px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>
-                  Job Value: {r.exampleJobValue}<br />Fee: {r.exampleFee}
+                  Job Value: {value(r.exampleJobValue)}<br />Fee: {value(r.exampleFee)}
                 </span>
               </div>
             </div>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8,
                            font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-success)' }}>
-              <Icon name="circle-check" size={15} />{r.exampleNote}
+              <Icon name="circle-check" size={15} />{value(r.exampleNote)}
             </span>
           </div>
         </div>
@@ -157,9 +167,9 @@ export function FeeRuleDetail() {
 
       <SectionCard title="Audit History" pad="none" action={
         <span style={{ position: 'relative' }}>
-          <Button variant="outline" iconRight="chevron-down" size="sm">View Full Audit Log</Button>
+          <Button variant="outline" iconRight="chevron-down" size="sm" disabled={!operations.authenticated || !query.currentData || Boolean(query.error) || historyQuery.isFetching} onClick={() => { if (!historyQuery.isUninitialized) void historyQuery.refetch(); }}>View Full Audit Log</Button>
         </span>}>
-        <DataTable rows={r.auditHistory || []} rowKey={(row, i) => row.date + i}
+        {historyQuery.isLoading ? <DriverTableLoading columns={4} label="Loading fee rule history" /> : <DataTable rows={auditHistory} rowKey={(row, i) => row.date + i}
           columns={[
             { key: 'date', header: 'Date & Time' },
             { key: 'action', header: 'Action', render: (row) => <Badge tone={row.action === 'Created' ? 'info' : 'warning'}>{row.action}</Badge> },
@@ -168,8 +178,9 @@ export function FeeRuleDetail() {
                 <Avatar name={row.by} size={24} />{row.by}
               </span>) },
             { key: 'changes', header: 'Changes' },
-          ]} />
+          ]} />}
       </SectionCard>
+      {editOpen && <FeeRuleEditDialog key={id} rule={r} canManage={operations.canManage} onClose={() => setEditOpen(false)} />}
     </>
   );
 }

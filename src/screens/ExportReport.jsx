@@ -1,14 +1,17 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, Card, SectionCard, ChoiceCard, Select, TextField, Checkbox, Radio,
-  Icon, Modal, Banner,
+  Icon, Banner,
 } from '../ds.js';
 import { useReportDraft, useReportEntities } from '../store/features/reports/useReportDraft.js';
 import { REPORT_TYPES, ENTITY_TYPE_OPTIONS, STATUS_OPTIONS, LOCATION_OPTIONS } from '../store/features/reports/reportsConfig.js';
-import { REPORT_CAPABILITIES, unavailableReportPreview, reportCount } from '../store/features/reports/reportsApi.js';
+import { reportCount } from '../store/features/reports/reportsApi.js';
+import { ReportTemplateDialog } from './ReportDialogs.jsx';
+import { useReportPreview } from '../store/features/reports/useReportPreview.js';
+import { useReportOperations } from '../store/features/reports/useReportOperations.js';
 import { reportRangeQuery } from '../store/features/reports/reportDraft.js';
 
 const STEPS = [
@@ -33,8 +36,10 @@ export function ExportReport() {
   const { draft, updateReportDraft } = useReportDraft();
   const [saveOpen, setSaveOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
-  const busy = false;
-  const banner = null;
+  const operations = useReportOperations(draft);
+  const estimate = useReportPreview(draft, 1, 1);
+  const banner = estimate.error || operations.error;
+  useEffect(() => { setSaveOpen(false); setTemplateName(''); }, [operations.owner]);
   const sectionRefs = useRef({});
   const { options: entityOptions } = useReportEntities(draft.filters.entityType);
 
@@ -56,7 +61,7 @@ export function ExportReport() {
         description="Configure your report preferences and export data in your preferred format."
         actions={<Button variant="outline" icon="bookmark" onClick={() => setSaveOpen(true)}>Save Template</Button>} />
 
-      {banner && <Banner tone="success" title={banner} />}
+      {banner && <Banner tone="error" title={banner} />}
 
       <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <Card style={{ display: 'grid', gap: 4, position: 'sticky', top: 16 }}>
@@ -165,7 +170,7 @@ export function ExportReport() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <Button variant="outline" onClick={() => navigate('/reports')}>Cancel</Button>
-              <Button iconRight="arrow-right" disabled={!reportRangeQuery(draft) || selCount === 0} onClick={() => navigate('/reports/export/preview')}>
+              <Button iconRight="arrow-right" disabled={!estimate.authenticated || !reportRangeQuery(draft) || selCount === 0 || Boolean(estimate.configurationError)} onClick={() => navigate('/reports/export/preview')}>
                 Preview & Export Report
               </Button>
             </div>
@@ -186,22 +191,14 @@ export function ExportReport() {
               <Icon name="database" size={18} color="var(--tk-blue)" style={{ flex: '0 0 auto' }} />
               <div>
                 <div style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-blue-ink)' }}>Estimated Data</div>
-                <div className="tk-meta">This report will include approximately {reportCount(unavailableReportPreview.totalRecords)} records across {reportCount(unavailableReportPreview.entityCount)} entities.</div>
+                <div className="tk-meta">This report will include approximately {reportCount(estimate.preview.totalRecords)} records across {reportCount(estimate.preview.entityCount)} entities.</div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <Modal open={saveOpen} onClose={() => setSaveOpen(false)} title="Save Report Template"
-        description="Save your current selections so you can reuse them later."
-        footer={<>
-          <Button variant="outline" onClick={() => setSaveOpen(false)}>Cancel</Button>
-          <Button disabled={!REPORT_CAPABILITIES.templates || busy || !templateName.trim()}>{busy ? 'Saving…' : 'Save Template'}</Button>
-        </>}>
-        <TextField label="Template Name" required placeholder="e.g. Weekly Verification Snapshot"
-          value={templateName} onChange={(e) => setTemplateName(e.target.value)} />
-      </Modal>
+      {saveOpen && <ReportTemplateDialog key={operations.owner} name={templateName} onNameChange={setTemplateName} operations={operations} onClose={() => setSaveOpen(false)} />}
     </>
   );
 }

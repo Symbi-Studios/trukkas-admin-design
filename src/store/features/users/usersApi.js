@@ -1,176 +1,923 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { setCredentials } from '../auth/authSlice.js';
-
-const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
-const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
-const failure = (message, status = 'CUSTOM_ERROR') => ({ error: { status, error: message, data: { message } } });
-const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) || '—';
-const roles = { SUPER_ADMIN: 'Super Admin', OPS_ADMIN: 'Operations Admin', FINANCE_ADMIN: 'Finance Admin', FORWARDER: 'Forwarder', TRUCKER: 'Trucker', DRIVER: 'Driver' };
-function timestamp(value) {
-  if (!text(value) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
-  const [year, month, day, hour, minute, second] = value.slice(0, 19).split(/[-T:]/).map(Number);
-  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate() || hour > 23 || minute > 59 || second > 59) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-function date(value, withTime = false) {
-  const parsed = timestamp(value);
-  if (parsed == null) return '—';
-  return new Date(parsed).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}) });
-}
-export function adaptManagedUser(dto, source = 'user', profile = false) {
-  const details = record(dto.details), company = record(details.company), account = record(details.account);
-  const id = text(dto.id), joinedAt = text(profile ? dto.joinedAt : dto.createdAt) || (profile ? text(account.dateJoined) : null);
-  const statusCode = source === 'admin' ? (dto.isActive === true ? 'ACTIVE' : dto.isActive === false ? 'INACTIVE' : null) : text(dto.status);
-  return {
-    id: `${source}:${id}`, backendId: id, source, roleCode: text(dto.role), statusCode,
-    name: text(dto.name) || [text(dto.firstName), text(dto.lastName)].filter(Boolean).join(' ') || text(dto.businessName) || '—',
-    email: text(dto.email) || '—', phone: text(dto.phone) || '—',
-    role: roles[dto.role] || label(dto.role), roleTone: { SUPER_ADMIN: 'purple', OPS_ADMIN: 'info', FINANCE_ADMIN: 'orange', DRIVER: 'teal' }[dto.role] || 'neutral',
-    status: label(statusCode), entity: text(dto.businessName) || text(company.businessName) || '—',
-    location: text(company.businessAddress) || '—', joinedAt, joinedOn: date(joinedAt), accountCreated: date(joinedAt, true),
-    lastActive: date(dto.lastLoginAt || account.lastLogin, true),
-    // Login time does not establish online presence or security/session state.
-    online: null, passwordLastChanged: '—', department: '—', permissionsCaption: '—',
-    totalLogins: null, failedLogins: null, activeSessions: null, lastLoginDetail: '—',
-    emailNotifications: null, loginNotifications: null, emailVerified: null, phoneVerified: null,
-    twoFactor: null, passwordStrengthPct: null, passwordStrength: '—', passwordExpires: '—',
-  };
-}
-async function readDirectory(baseQuery, source) {
-  const key = source === 'admin' ? 'admins' : 'users', url = source === 'admin' ? '/admin/admins' : '/admin/users';
-  const rows = [], seen = new Set();
-  let page = 1, total = null, totalPages = 1;
-  do {
-    const result = await baseQuery({ url, params: { page, limit: 100 } });
-    if (result.error) return result;
-    const dto = record(unwrapApiResponseData(result.data)), meta = record(dto.pagination);
-    if (!Array.isArray(dto[key]) || meta.page !== page || count(meta.total) == null || count(meta.totalPages) == null
-      || (meta.total > 0 && meta.totalPages === 0) || (meta.total === 0 && meta.totalPages > 1) || page > Math.max(1, meta.totalPages)) {
-      return failure('The user directory returned incomplete pagination. Refresh before filtering or exporting.');
+const text = v => typeof v === 'string' && v.trim() ? v.trim() : null;
+const record = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+const count = v => Number.isSafeInteger(v) && v >= 0 ? v : null;
+const number = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+const boolean = v => typeof v === 'boolean' ? v : null;
+const label = v => text(v)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) || '—';
+const failure = (message, status = 'CUSTOM_ERROR') => ({
+  error: {
+    status,
+    error: message,
+    data: {
+      message
     }
-    if (total != null && (total !== meta.total || totalPages !== Math.max(1, meta.totalPages))) return failure('The user directory changed while loading. Refresh to load all records.');
-    total = meta.total; totalPages = Math.max(1, meta.totalPages);
-    if (page < totalPages && !dto[key].length) return failure('The user directory returned an incomplete collection.');
-    for (const item of dto[key]) {
-      if (!text(item?.id) || seen.has(item.id)) return failure('The user directory returned missing or duplicate IDs.');
-      seen.add(item.id); rows.push(adaptManagedUser(item, source));
-    }
-    page += 1;
-  } while (page <= totalPages);
-  if (rows.length !== total) return failure('The user directory did not return all records.');
-  return { data: rows };
+  }
+});
+const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN']);
+const STATUSES = new Set(['ACTIVE', 'PENDING_PROFILE', 'PENDING_REVIEW', 'INACTIVE', 'SUSPENDED', 'BANNED', 'LOCKED', 'PENDING_INVITATION', 'REVOKED', 'DELETED']);
+const ROLE_LABELS = {
+  SUPER_ADMIN: 'Admin',
+  OPS_ADMIN: 'Operations Admin',
+  FINANCE_ADMIN: 'Finance Admin',
+  FORWARDER: 'Forwarder',
+  EXPORTER: 'Exporter',
+  TRUCKER: 'Trucker',
+  TRUCKING_COMPANY: 'Trucking company',
+  DRIVER: 'Driver'
+};
+const ROOT = '/admin/user-management';
+const allTags = ['AdminManagedUsers', 'AdminAuditLogs', 'AdminRoles', 'AdminPermissions', 'AdminDrivers', 'AdminDriverStats', 'AdminCompanies', 'AdminForwarders'];
+function access(api, source) {
+  const role = api.getState().auth.admin?.role;
+  if (!ADMIN_ROLES.has(role)) return failure('Admin access is required.', 403);
+  if (source && !['user', 'admin'].includes(source)) return failure('The user source is invalid.');
+  if (source === 'admin' && role !== 'SUPER_ADMIN') return failure('Only Super Admins can manage admin accounts.', 403);
+  return null;
 }
-async function readProfile(baseQuery, id) {
-  const result = await baseQuery({ url: `/admin/users/${encodeURIComponent(id)}/profile` });
-  if (result.error) return result;
-  const dto = record(unwrapApiResponseData(result.data));
-  if (dto.id !== id) return failure('The profile response does not match the requested user.');
-  return { data: adaptManagedUser(dto, 'user', true) };
+function timestamp(v) {
+  const parts = text(v)?.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
+  if (!parts || +parts[4] > 23 || +parts[5] > 59 || +parts[6] > 59) return null;
+  const calendar = new Date(`${parts[1]}-${parts[2]}-${parts[3]}T00:00:00Z`),
+    at = Date.parse(v);
+  return Number.isFinite(at) && calendar.getUTCFullYear() === +parts[1] && calendar.getUTCMonth() + 1 === +parts[2] && calendar.getUTCDate() === +parts[3] ? at : null;
 }
-export function managedUserSummary(rows, stats) {
-  const total = rows ? rows.length : null;
-  const knownStatuses = rows?.every((row) => row.statusCode != null);
-  const now = new Date(), monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const datesKnown = rows?.every((row) => timestamp(row.joinedAt) != null);
-  const scoped = !rows?.some((row) => row.source === 'admin');
-  return {
-    total, active: knownStatuses ? rows.filter((row) => row.statusCode === 'ACTIVE').length : null,
-    inactive: knownStatuses ? rows.filter((row) => row.statusCode === 'INACTIVE').length : null,
-    locked: null,
-    newThisMonth: rows && scoped && count(stats?.newThisMonth) != null ? stats.newThisMonth
-      : datesKnown ? rows.filter((row) => timestamp(row.joinedAt) >= monthStart && timestamp(row.joinedAt) <= now.getTime()).length : null,
-    totalCaption: '— vs last month', activeCaption: '— vs last month', inactiveCaption: '— vs last month',
-    lockedCaption: '— vs last month', newThisMonthCaption: '— vs last month',
-    totalDirection: null, activeDirection: null, inactiveDirection: null, lockedDirection: null, newThisMonthDirection: null,
-  };
-}
-export function managedUserRoleChart(rows, adminsIncluded = false) {
-  const labels = ['Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Driver', 'Viewer'];
-  const colors = ['var(--tk-viz-1)', 'var(--tk-blue-hover)', 'var(--tk-viz-3)', 'var(--tk-viz-5)', 'var(--tk-viz-6)', 'var(--tk-viz-2)', 'var(--tk-ink-300)'];
-  return labels.map((name, index) => {
-    const supported = rows && (name === 'Driver' || (name === 'Super Admin' && adminsIncluded));
-    const value = supported ? rows.filter((row) => row.role === name).length : null;
-    const share = value == null || !rows.length ? null : value / rows.length * 100;
-    return { label: name, color: colors[index], value, display: value == null ? '—' : `${value} (${share == null ? '—' : `${Math.round(share * 10) / 10}%`})` };
+export function managedUserDate(v, withTime = true) {
+  const at = timestamp(v);
+  return at == null ? '—' : new Date(at).toLocaleString('en-US', {
+    timeZone: 'Africa/Lagos',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    ...(withTime ? {
+      hour: '2-digit',
+      minute: '2-digit'
+    } : {})
   });
 }
-export function managedUserStatusChart(rows, summary) {
-  return ['Active', 'Inactive', 'Locked', 'Pending Invitation'].map((name) => {
-    const value = name === 'Active' ? summary.active : name === 'Inactive' ? summary.inactive : null;
-    return { label: name, value: value ?? '—', share: value == null || !rows?.length ? '—' : `${Math.round(value / rows.length * 1000) / 10}%` };
+export function managedUserKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  if (!globalThis.crypto?.getRandomValues) throw new Error('A secure request key could not be created.');
+  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), v => v.toString(16).padStart(2, '0')).join('');
+}
+const validKey = v => typeof v === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(v);
+function roleData(raw, source) {
+  const r = record(raw),
+    bare = text(raw),
+    code = text(r.code) || (bare && source === 'admin' && ADMIN_ROLES.has(bare) ? `ADMIN:${bare}` : bare);
+  const core = source === 'admin' && code?.startsWith('ADMIN:') ? code.slice(6) : text(r.platformRole) || code;
+  return {
+    code,
+    core,
+    kind: text(r.kind) || (source === 'admin' ? 'ADMIN_ACCESS' : bare ? 'PLATFORM_ROLE' : null),
+    label: text(r.label) || (code?.startsWith('TEAM:') ? code.slice(5) : ROLE_LABELS[core]) || '—',
+    id: text(r.id) || text(r.roleId)
+  };
+}
+export function adaptManagedUser(raw, source = 'user', _profile = false, extras = {}) {
+  const dto = record(raw),
+    identity = record(dto.identity),
+    contact = record(dto.contact),
+    company = record(dto.company),
+    security = record(dto.security),
+    login = record(security.lastLogin);
+  const id = text(dto.id) || text(identity.id),
+    r = roleData(dto.role, source),
+    prefs = record(extras.preferences),
+    permission = record(extras.permissions);
+  const permissionKeys = Array.isArray(permission.permissionKeys) && permission.permissionKeys.every(v => text(v)) ? permission.permissionKeys : null;
+  const joinedAt = text(dto.joinedAt),
+    lastActiveAt = text(dto.lastActiveAt),
+    statusCode = STATUSES.has(dto.status) ? dto.status : null;
+  return {
+    id: `${source}:${id}`,
+    backendId: id,
+    source,
+    accountType: source,
+    isAccount: statusCode !== 'PENDING_INVITATION' && !id?.startsWith('invite_'),
+    version: text(dto.version),
+    name: text(dto.name) || text(identity.name) || '—',
+    email: text(dto.email) || text(contact.email) || '—',
+    phone: text(dto.phone) || text(contact.phone) || '—',
+    role: r.label,
+    roleCode: r.core,
+    roleKind: r.kind,
+    roleId: r.id || text(dto.roleId) || text(permission.roleId) || text(permission.role?.id),
+    roleFilterCode: r.code,
+    roleTone: {
+      SUPER_ADMIN: 'purple',
+      OPS_ADMIN: 'info',
+      FINANCE_ADMIN: 'orange',
+      DRIVER: 'teal'
+    }[r.core] || 'neutral',
+    entityId: text(dto.entityId) || text(company.id),
+    entity: text(dto.entityName) || text(company.name) || '—',
+    department: text(dto.department) || '—',
+    location: text(dto.location) || '—',
+    statusCode,
+    status: label(statusCode),
+    joinedAt,
+    joinedOn: managedUserDate(joinedAt, false),
+    accountCreated: managedUserDate(joinedAt),
+    lastActive: managedUserDate(lastActiveAt),
+    online: boolean(dto.online),
+    lastLogin: managedUserDate(login.at),
+    lastLoginDetail: [text(login.ipAddress), text(login.device)].filter(Boolean).join(' · ') || '—',
+    passwordLastChanged: managedUserDate(security.passwordLastChangedAt),
+    lockedUntil: managedUserDate(security.lockedUntil),
+    lockedBy: text(security.lockedBy) || text(security.lockedBy?.name) || text(security.lockedBy?.id) || '—',
+    totalLogins: count(security.totalLogins),
+    failedLogins: count(security.failedLogins),
+    activeSessions: count(security.activeSessions),
+    emailVerified: boolean(dto.emailVerified),
+    phoneVerified: boolean(dto.phoneVerified),
+    twoFactor: boolean(security.twoFactorEnabled),
+    passwordStrengthPct: null,
+    passwordStrength: text(security.passwordStrength) || '—',
+    passwordExpires: managedUserDate(security.passwordExpiresAt),
+    emailNotifications: boolean(prefs.emailEnabled),
+    loginNotifications: boolean(prefs.loginAlertsEnabled),
+    permissionsCaption: permissionKeys ? `${permissionKeys.length} permissions` : '—',
+    permissions: extras.permissions ?? null,
+    notificationPreferences: extras.preferences ?? null
+  };
+}
+export function managedUserRoleAvailable(value, rows) {
+  return ['All Roles', 'Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Finance Manager', 'Viewer', 'Driver'].includes(value) || Boolean(rows?.some(r => r.role === value));
+}
+export function managedUserMatchesRole(user, value) {
+  if (value === 'All Roles') return true;
+  if (value === 'Super Admin' || value === 'Admin') return user.source === 'admin' && user.roleCode === 'SUPER_ADMIN';
+  if (value === 'Driver') return user.roleFilterCode === 'DRIVER';
+  return user.roleKind === 'TEAM_ROLE' && user.role.toLowerCase() === value.toLowerCase();
+}
+function collection(dto, names) {
+  if (Array.isArray(dto)) return dto;
+  for (const name of names) if (Array.isArray(dto?.[name])) return dto[name];
+  return null;
+}
+async function readPages(baseQuery, api, url, names, params = {}, all = true) {
+  const rows = [],
+    seen = new Set();
+  let page = 1,
+    total = null,
+    totalPages = 1;
+  do {
+    if (api.signal.aborted) return failure('The user request was cancelled.');
+    const result = await baseQuery({
+      url,
+      params: {
+        ...params,
+        page,
+        limit: all ? 100 : 5
+      }
+    });
+    if (result.error) return result;
+    const dto = unwrapApiResponseData(result.data),
+      list = collection(dto, names),
+      meta = record(dto?.pagination);
+    if (!list) return failure('The response is missing a confirmed collection contract.');
+    const ids = list.map(r => text(r?.id));
+    if (ids.some(id => !id) || new Set(ids).size !== ids.length) return failure('The collection contains missing or duplicate record IDs.');
+    if (!all) return {
+      data: list.slice(0, 5)
+    };
+    if (meta.page !== page || count(meta.total) == null || count(meta.totalPages) == null || meta.totalPages > 500 || meta.total > 0 && meta.totalPages === 0 || page > Math.max(1, meta.totalPages)) return failure('The response needs complete pagination before filtering or exporting.');
+    if (total != null && (total !== meta.total || totalPages !== Math.max(1, meta.totalPages))) return failure('The collection changed while loading. Refresh to load every record.');
+    total = meta.total;
+    totalPages = Math.max(1, meta.totalPages);
+    if (page < totalPages && !list.length) return failure('The collection ended before its final page.');
+    for (const row of list) {
+      if (seen.has(row.id)) return failure('A record was repeated across pages.');
+      seen.add(row.id);
+      rows.push(row);
+    }
+    page++;
+  } while (page <= totalPages);
+  return rows.length === total ? {
+    data: rows
+  } : failure('The complete collection could not be confirmed.');
+}
+async function readProfile(baseQuery, id, source, extras = true) {
+  const result = await baseQuery({
+    url: `${ROOT}/${encodeURIComponent(id)}`,
+    params: {
+      accountType: source
+    }
+  });
+  if (result.error) return result;
+  const dto = record(unwrapApiResponseData(result.data)),
+    identity = record(dto.identity);
+  if ((text(dto.id) || text(identity.id)) !== id || text(dto.accountType) && dto.accountType !== source) return failure('The profile response does not match the requested account.');
+  let permissions = null,
+    preferences = null;
+  if (extras) {
+    const results = await Promise.all(['permissions', 'notification-preferences'].map(section => baseQuery({
+      url: `${ROOT}/${encodeURIComponent(id)}/${section}`,
+      params: {
+        accountType: source
+      }
+    })));
+    permissions = results[0].error ? null : unwrapApiResponseData(results[0].data);
+    preferences = results[1].error ? null : unwrapApiResponseData(results[1].data);
+  }
+  return {
+    data: adaptManagedUser(dto, source, true, {
+      permissions,
+      preferences
+    })
+  };
+}
+function metric(v) {
+  return count(typeof v === 'number' ? v : record(v).value ?? record(v).current ?? record(v).count);
+}
+export function managedUserSummary(_rows, stats) {
+  const raw = record(stats),
+    cards = record(raw.cards || raw.metrics || raw),
+    out = {};
+  for (const [view, key] of [['total', 'total'], ['active', 'active'], ['inactive', 'inactive'], ['locked', 'locked'], ['newThisMonth', 'newThisPeriod']]) {
+    out[view] = metric(cards[key]);
+    const m = record(cards[key]),
+      percent = number(m.changePercent),
+      direction = ['UP', 'DOWN', 'FLAT'].includes(m.direction) ? m.direction : null;
+    out[`${view === 'newThisMonth' ? 'newThisMonth' : view}Caption`] = percent == null ? '— vs last month' : `${Math.abs(percent)}% vs last month`;
+    out[`${view === 'newThisMonth' ? 'newThisMonth' : view}Direction`] = direction === 'FLAT' ? null : direction?.toLowerCase() ?? (percent == null || percent === 0 ? null : percent > 0 ? 'up' : 'down');
+  }
+  return out;
+}
+function breakdown(raw) {
+  if (Array.isArray(raw)) return raw.filter(v => v && typeof v === 'object' && !Array.isArray(v));
+  return Object.entries(record(raw)).map(([code, value]) => typeof value === 'number' ? {
+    code,
+    count: value
+  } : {
+    ...record(value),
+    code: text(value?.code) || code
+  });
+}
+function share(v) {
+  const n = number(v);
+  return n != null && n >= 0 && n <= 100 ? n : null;
+}
+export function managedUserRoleChart(_rows, _adminsIncluded, stats) {
+  const labels = ['Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Driver', 'Viewer'];
+  const colors = ['var(--tk-viz-1)', 'var(--tk-blue-hover)', 'var(--tk-viz-3)', 'var(--tk-viz-5)', 'var(--tk-viz-6)', 'var(--tk-viz-2)', 'var(--tk-ink-300)'];
+  const entries = breakdown(stats?.byRole);
+  return labels.map((name, i) => {
+    const codes = name === 'Admin' ? ['ADMIN:SUPER_ADMIN'] : name === 'Driver' ? ['DRIVER'] : [`TEAM:${name}`];
+    const item = entries.find(e => codes.includes(text(e.code) || text(e.role?.code) || text(e.role)) || (text(e.label) || text(e.role?.label)) === name);
+    const value = item ? count(item.count) : null,
+      percent = item ? share(item.sharePercent ?? item.share) : null;
+    return {
+      label: name,
+      color: colors[i],
+      value,
+      display: value == null ? '—' : `${value} (${percent == null ? '—' : `${percent}%`})`
+    };
+  });
+}
+export function managedUserStatusChart(_rows, _summary, stats) {
+  const entries = breakdown(stats?.byStatus);
+  return ['Active', 'Inactive', 'Locked', 'Pending Invitation'].map(name => {
+    const code = name.toUpperCase().replaceAll(' ', '_'),
+      item = entries.find(e => (text(e.code) || text(e.status)) === code || text(e.label) === name),
+      value = item ? count(item.count) : null,
+      percent = item ? share(item.sharePercent ?? item.share) : null;
+    return {
+      label: name,
+      value: value ?? '—',
+      share: percent == null ? '—' : `${percent}%`
+    };
   });
 }
 export function managedUsersCsv(rows) {
-  return [['User ID', 'Name', 'Email', 'Phone', 'Role', 'Entity / Company', 'Status', 'Last Active', 'Joined On'],
-    ...rows.map((row) => [row.backendId, row.name, row.email, row.phone, row.role, row.entity, row.status, row.lastActive, row.joinedOn])]
-    .map((row) => row.map((value) => {
-      let cell = String(value ?? '—');
-      if (/^[\t\r\n]|^\s*[=+\-@]/.test(cell)) cell = `'${cell}`;
-      return `"${cell.replaceAll('"', '""')}"`;
-    }).join(',')).join('\n');
+  return [['User ID', 'Name', 'Email', 'Phone', 'Role', 'Entity / Company', 'Status', 'Last Active', 'Joined On'], ...rows.map(r => [r.backendId, r.name, r.email, r.phone, r.role, r.entity, r.status, r.lastActive, r.joinedOn])].map(row => row.map(v => {
+    let cell = String(v ?? '—');
+    if (/^[\t\r\n]|^\s*[=+\-@]/.test(cell)) cell = `'${cell}`;
+    return `"${cell.replaceAll('"', '""')}"`;
+  }).join(',')).join('\n');
 }
-const invalidates = ['AdminManagedUsers', 'AdminDrivers', 'AdminDriverStats', 'AdminCompanies', 'AdminForwarders', 'AdminAuditLogs'];
-export const usersApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminManagedUsers', 'AdminAuditLogs'] }).injectEndpoints({
-  endpoints: (builder) => ({
+export const canReadManagedUserActivity = (user, role) => Boolean(user?.isAccount && ADMIN_ROLES.has(role) && (user.source !== 'admin' || role === 'SUPER_ADMIN'));
+function activity(raw) {
+  const r = record(raw),
+    outcome = text(r.result) || text(r.outcome);
+  return {
+    id: text(r.id),
+    text: text(r.title) || text(r.action) || text(r.text) || '—',
+    description: text(r.description) || text(r.note) || '—',
+    ip: text(r.ipAddress) || '—',
+    location: '—',
+    time: managedUserDate(text(r.createdAt) || text(r.timestamp) || text(r.at)),
+    icon: outcome === 'SUCCESS' ? 'circle-check' : outcome === 'FAILED' ? 'circle-x' : 'history',
+    tone: outcome === 'SUCCESS' ? 'var(--tk-success)' : outcome === 'FAILED' ? 'var(--tk-danger)' : 'var(--tk-ink-400)'
+  };
+}
+function safeDocumentUrl(v) {
+  try {
+    const u = new URL(v);
+    return ['https:', 'http:'].includes(u.protocol) && !u.username && !u.password ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+export function adaptManagedUserSection(section, raw) {
+  const dto = record(raw);
+  if (section === 'notification-preferences') return {
+    values: [['Email Notifications', boolean(dto.emailEnabled)], ['Push Notifications', boolean(dto.pushEnabled)], ['SMS Notifications', boolean(dto.smsEnabled)], ['Login Notifications', boolean(dto.loginAlertsEnabled)]].map(([label, value]) => ({
+      label,
+      value: value == null ? '—' : value ? 'Enabled' : 'Disabled'
+    }))
+  };
+  if (section === 'permissions') {
+    const keys = Array.isArray(dto.permissionKeys) && dto.permissionKeys.every(v => text(v)) ? dto.permissionKeys : null;
+    const routes = Array.isArray(dto.allowedRoutes) && dto.allowedRoutes.every(v => text(v)) ? dto.allowedRoutes : null;
+    return {
+      values: [{
+        label: 'Access Level',
+        value: text(dto.accessLevel) || '—'
+      }],
+      rows: keys ? keys.map(key => ({
+        id: key,
+        permission: key
+      })) : routes ? routes.map(key => ({
+        id: key,
+        permission: key
+      })) : null
+    };
+  }
+  const list = collection(raw, [section, 'items']);
+  if (!list || list.some(v => !v || typeof v !== 'object' || Array.isArray(v))) return {
+    rows: null
+  };
+  return {
+    rows: list.map((raw, i) => {
+      const r = record(raw);
+      return section === 'sessions' ? {
+        id: text(r.id) || String(i),
+        device: text(r.device) || text(r.userAgent) || '—',
+        ip: text(r.ipAddress) || '—',
+        status: ['ACTIVE', 'REVOKED', 'EXPIRED'].includes(r.status) ? label(r.status) : '—',
+        reason: text(r.revokedReason) || '—',
+        created: managedUserDate(r.createdAt),
+        lastActive: managedUserDate(r.lastActiveAt),
+        expires: managedUserDate(r.expiresAt)
+      } : {
+        id: text(r.id) || String(i),
+        name: text(r.name) || text(r.type) || '—',
+        status: label(r.status),
+        uploaded: managedUserDate(r.uploadedAt),
+        expires: managedUserDate(r.expiresAt),
+        url: safeDocumentUrl(r.fileURL)
+      };
+    })
+  };
+}
+async function stateAfter(baseQuery, id, source) {
+  return readProfile(baseQuery, id, source, false);
+}
+function secureEndpoints(definitions) {
+  for (const definition of Object.values(definitions)) {
+    const handler = definition.queryFn;
+    if (!handler) continue;
+    definition.queryFn = async (args, api, options, baseQuery) => {
+      const account = api.getState().auth.admin;
+      const current = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken) && api.getState().auth.admin?.id === account?.id && api.getState().auth.admin?.role === account?.role && (!args?.owner || args.owner === account?.id);
+      if (!current()) return failure('The admin session changed. Sign in again.', 403);
+      const guarded = async request => {
+        if (!current()) return failure('The admin session changed.', 403);
+        const result = await baseQuery(request);
+        return current() ? result : failure('The admin session changed.', 403);
+      };
+      const result = await handler(args, api, options, guarded);
+      return current() || result.data?.authUpdated === true && api.getState().auth.accessToken && api.getState().auth.admin?.id === account?.id ? result : failure('The admin session changed.', 403);
+    };
+  }
+  return definitions;
+}
+const apiWithTags = baseApi.enhanceEndpoints({
+  addTagTypes: ['AdminManagedUsers', 'AdminAuditLogs', 'AdminRoles', 'AdminPermissions']
+});
+export const usersApi = apiWithTags.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
+  endpoints: builder => secureEndpoints({
     getUserManagementDirectory: builder.query({
-      async queryFn({ includeAdmins = false } = {}, api, _options, baseQuery) {
-        if (includeAdmins && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return failure('Only Super Admins can view admin accounts.', 403);
-        const users = await readDirectory(baseQuery, 'user');
-        if (users.error) return users;
-        if (!includeAdmins) return { data: { rows: users.data, adminsIncluded: false } };
-        const admins = await readDirectory(baseQuery, 'admin');
-        if (admins.error) return admins;
-        return { data: { rows: [...users.data, ...admins.data], adminsIncluded: true } };
-      }, providesTags: ['AdminManagedUsers'],
+      async queryFn({
+        includeAdmins = false
+      } = {}, api, _opts, baseQuery) {
+        const blocked = access(api, includeAdmins ? 'admin' : 'user');
+        if (blocked) return blocked;
+        const sources = includeAdmins ? ['user', 'admin'] : ['user'],
+          rows = [];
+        for (const source of sources) {
+          const result = await readPages(baseQuery, api, ROOT, ['users'], {
+            accountType: source,
+            sort: '-joinedAt'
+          });
+          if (result.error) return result;
+          if (result.data.some(r => text(r.accountType) && r.accountType !== source)) return failure('The directory mixed account namespaces.');
+          rows.push(...result.data.map(r => adaptManagedUser(r, source)));
+        }
+        return {
+          data: {
+            rows,
+            adminsIncluded: includeAdmins
+          }
+        };
+      },
+      providesTags: ['AdminManagedUsers']
     }),
     getUserManagementStats: builder.query({
-      query: () => '/admin/users/stats', transformResponse: (response) => record(unwrapApiResponseData(response)), providesTags: ['AdminManagedUsers'],
+      async queryFn({
+        includeAdmins = false
+      } = {}, api, _opts, baseQuery) {
+        const blocked = access(api, includeAdmins ? 'admin' : 'user');
+        if (blocked) return blocked;
+        const result = await baseQuery({
+          url: `${ROOT}/summary`,
+          params: {
+            scope: includeAdmins ? 'all' : 'users'
+          }
+        });
+        return result.error ? result : {
+          data: record(unwrapApiResponseData(result.data))
+        };
+      },
+      providesTags: ['AdminManagedUsers']
+    }),
+    getUserManagementRecentActivity: builder.query({
+      async queryFn({
+        all = false
+      } = {}, api, _opts, baseQuery) {
+        const blocked = access(api);
+        if (blocked) return blocked;
+        const result = await readPages(baseQuery, api, `${ROOT}/activity`, ['events', 'activity', 'items'], {}, all);
+        return result.error ? result : {
+          data: result.data.map(activity)
+        };
+      },
+      providesTags: ['AdminManagedUsers', 'AdminAuditLogs']
     }),
     getManagedUserProfile: builder.query({
-      async queryFn({ id, source = 'user' }, api, _options, baseQuery) {
+      async queryFn({
+        id,
+        source = 'user'
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
         if (!text(id)) return failure('A user ID is required.');
-        if (source === 'user') return readProfile(baseQuery, id);
-        if (source !== 'admin') return failure('The user source is invalid.');
-        if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return failure('Only Super Admins can view admin accounts.', 403);
-        const result = await readDirectory(baseQuery, 'admin');
+        return readProfile(baseQuery, id, source);
+      },
+      providesTags: ['AdminManagedUsers', 'AdminPermissions', 'AdminRoles']
+    }),
+    getManagedUserActivity: builder.query({
+      async queryFn({
+        id,
+        source,
+        all = false
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        if (!text(id) || id.startsWith('invite_')) return failure('This record is an invitation, not an account.');
+        const result = await readPages(baseQuery, api, `${ROOT}/${encodeURIComponent(id)}/activity`, ['events', 'activity', 'items'], {
+          accountType: source
+        }, all);
+        return result.error ? result : {
+          data: result.data.map(activity)
+        };
+      },
+      providesTags: ['AdminManagedUsers', 'AdminAuditLogs']
+    }),
+    getManagedUserSections: builder.query({
+      async queryFn({
+        id,
+        source,
+        section
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        if (!text(id) || !['permissions', 'sessions', 'documents', 'notification-preferences'].includes(section)) return failure('This account section is not supported.');
+        if (id.startsWith('invite_')) return failure('This record is an invitation, not an account.');
+        if (section === 'documents') {
+          const result = await readPages(baseQuery, api, `${ROOT}/${encodeURIComponent(id)}/documents`, ['documents', 'items'], {
+            accountType: source
+          });
+          return result.error ? result : {
+            data: adaptManagedUserSection(section, {
+              documents: result.data
+            })
+          };
+        }
+        const result = await baseQuery({
+          url: `${ROOT}/${encodeURIComponent(id)}/${section}`,
+          params: {
+            accountType: source
+          }
+        });
+        return result.error ? result : {
+          data: adaptManagedUserSection(section, unwrapApiResponseData(result.data))
+        };
+      },
+      providesTags: ['AdminManagedUsers', 'AdminPermissions', 'AdminRoles']
+    }),
+    getManagedUserRoleChoices: builder.query({
+      async queryFn({
+        source,
+        entityId
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        if (source === 'admin') return {
+          data: [...ADMIN_ROLES].map(id => ({
+            value: id,
+            label: id === 'SUPER_ADMIN' ? 'Super Admin' : ROLE_LABELS[id]
+          }))
+        };
+        if (!text(entityId)) return failure('The company ID is needed to load assignable team roles.');
+        const result = await readPages(baseQuery, api, '/admin/roles', ['roles'], {
+          companyId: entityId,
+          status: 'ACTIVE'
+        });
         if (result.error) return result;
-        const user = result.data.find((row) => row.backendId === id);
-        return user ? { data: user } : failure('Admin account not found.', 404);
-      }, providesTags: ['AdminManagedUsers'],
+        return {
+          data: result.data.filter(r => text(r.id) && text(r.name) && r.status === 'ACTIVE' && (['SYSTEM', 'SHARED'].includes(r.ownership) || r.ownership === 'COMPANY' && r.companyId === entityId)).map(r => ({
+            value: r.id,
+            label: r.name
+          }))
+        };
+      },
+      providesTags: ['AdminRoles']
+    }),
+    createManagedAdmin: builder.mutation({
+      async queryFn({
+        name,
+        email,
+        role,
+        password
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, 'admin');
+        if (blocked) return blocked;
+        if (!text(name) || !text(email) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || !ADMIN_ROLES.has(role) || typeof password !== 'string' || Array.from(password).length < 8) return failure('Enter a name, valid email, admin role and a password of at least 8 characters.');
+        const body = {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role,
+          password
+        };
+        const result = await baseQuery({
+          url: '/admin/admins',
+          method: 'POST',
+          body
+        });
+        if (result.error) return result;
+        const dto = record(unwrapApiResponseData(result.data)),
+          r = record(dto.admin);
+        if (!text(r.id) || text(r.email)?.toLowerCase() !== body.email || r.name !== body.name || r.role !== role || r.isActive !== true) return failure('The creation response could not be confirmed. Refresh before trying again.');
+        return {
+          data: {
+            id: r.id,
+            message: text(dto.message) || 'Admin created.'
+          }
+        };
+      },
+      invalidatesTags: allTags
     }),
     updateManagedAdmin: builder.mutation({
-      async queryFn({ id, name, role }, api, _options, baseQuery) {
-        if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return failure('Only Super Admins can edit admin accounts.', 403);
-        if (!text(id) || (name !== undefined && !text(name)) || (role !== undefined && !['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(role))
-          || (name === undefined && role === undefined)) return failure('Enter a valid admin name or role.');
-        const body = { ...(name !== undefined ? { name: name.trim() } : {}), ...(role !== undefined ? { role } : {}) };
-        const result = await baseQuery({ url: `/admin/admins/${encodeURIComponent(id)}`, method: 'PATCH', body });
+      async queryFn({
+        id,
+        name,
+        role
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, 'admin');
+        if (blocked) return blocked;
+        if (!text(id) || name !== undefined && !text(name) || role !== undefined && !ADMIN_ROLES.has(role) || name === undefined && role === undefined) return failure('Enter a valid admin name or role.');
+        const body = {
+            ...(name !== undefined ? {
+              name: name.trim()
+            } : {}),
+            ...(role !== undefined ? {
+              role
+            } : {})
+          },
+          result = await baseQuery({
+            url: `/admin/admins/${encodeURIComponent(id)}`,
+            method: 'PATCH',
+            body
+          });
         if (result.error) return result;
-        const dto = record(unwrapApiResponseData(result.data)), admin = record(dto.admin);
-        if (admin.id !== id || !['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(admin.role) || (name !== undefined && admin.name !== body.name) || (role !== undefined && admin.role !== role)) return failure('The admin update could not be confirmed. Refresh before trying again.');
+        const dto = record(unwrapApiResponseData(result.data)),
+          r = record(dto.admin);
+        if (r.id !== id || !ADMIN_ROLES.has(r.role) || name !== undefined && r.name !== body.name || role !== undefined && r.role !== role) return failure('The account update could not be confirmed. Refresh before trying again.');
         const current = api.getState().auth.admin;
-        if (current?.id === id) api.dispatch(setCredentials({ admin: { ...current, name: admin.name, role: admin.role } }));
-        return { data: { message: text(dto.message) || 'Admin updated.' } };
-      }, invalidatesTags: ['AdminManagedUsers', 'AdminAuditLogs'],
+        if (current?.id === id) api.dispatch(setCredentials({
+          admin: {
+            ...current,
+            name: r.name,
+            role: r.role
+          }
+        }));
+        return {
+          data: {
+            message: text(dto.message) || 'Admin updated.',
+            authUpdated: current?.id === id
+          }
+        };
+      },
+      invalidatesTags: allTags
     }),
     changeManagedUserAccess: builder.mutation({
-      async queryFn({ id, source, operation, reason }, api, _options, baseQuery) {
-        if (!['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(api.getState().auth.admin?.role)) return failure('Admin access is required.', 403);
-        if (source !== 'user' || !text(id) || !['suspend', 'activate'].includes(operation)) return failure('This account action is not supported.');
+      async queryFn({
+        id,
+        source,
+        operation,
+        reason
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        if (source !== 'user' || !text(id) || id.startsWith('invite_') || !['suspend', 'activate'].includes(operation)) return failure('This access transition needs the account lock/unlock control.');
         if (operation === 'suspend' && !text(reason)) return failure('A suspension reason is required.');
-        const profile = await readProfile(baseQuery, id);
-        if (profile.error) return profile;
-        if (!['DRIVER', 'TRUCKER', 'FORWARDER'].includes(profile.data.roleCode)
-          || profile.data.statusCode !== (operation === 'suspend' ? 'ACTIVE' : 'SUSPENDED')) return failure('The account status changed or this transition is unavailable. Refresh the user.');
-        const result = await baseQuery({ url: `/admin/users/${encodeURIComponent(id)}/${operation}`, method: 'POST', ...(operation === 'suspend' ? { body: { reason: reason.trim() } } : {}) });
+        const before = await baseQuery({
+          url: `/admin/users/${encodeURIComponent(id)}/profile`
+        });
+        if (before.error) return before;
+        const account = record(unwrapApiResponseData(before.data));
+        if (account.id !== id || account.status !== (operation === 'suspend' ? 'ACTIVE' : 'SUSPENDED')) return failure('The account status changed or this transition is unavailable. Refresh the user.');
+        const result = await baseQuery({
+          url: `/admin/users/${encodeURIComponent(id)}/${operation}`,
+          method: 'POST',
+          ...(operation === 'suspend' ? {
+            body: {
+              reason: reason.trim()
+            }
+          } : {})
+        });
         if (result.error) return result;
         const dto = record(unwrapApiResponseData(result.data));
-        if (dto.user?.id !== id || (operation === 'suspend' && dto.user.status !== 'SUSPENDED')) return failure('The account update response could not be confirmed. Refresh the user before trying again.');
-        return { data: { message: text(dto.message) || 'Account updated.' } };
-      }, invalidatesTags: invalidates,
+        if (dto.user?.id !== id || (operation === 'suspend' ? dto.user.status !== 'SUSPENDED' : timestamp(dto.user.activatedAt) == null)) return failure('The updated access could not be confirmed. Refresh before trying again.');
+        return {
+          data: {
+            message: text(dto.message) || 'Account updated.'
+          }
+        };
+      },
+      invalidatesTags: allTags
     }),
-  }),
+    runManagedUserAction: builder.mutation({
+      async queryFn({
+        id,
+        source,
+        action,
+        reason,
+        expectedVersion,
+        key
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        if (!text(id) || id.startsWith('invite_') || !['lock', 'unlock', 'force-logout', 'password-reset', 'delete'].includes(action)) return failure('This account action is not supported.');
+        const role = api.getState().auth.admin?.role;
+        if (action === 'delete' && (source === 'admin' || role !== 'SUPER_ADMIN')) return failure('Only Super Admins can delete platform users; admin accounts cannot be deleted.', 403);
+        if (source === 'admin' && ['lock', 'force-logout'].includes(action) && api.getState().auth.admin?.id === id) return failure('You cannot revoke your own access.');
+        const reset = action === 'password-reset';
+        if (!reset && (!text(reason) || !text(expectedVersion))) return failure('A reason and the current account version are required.');
+        if (['delete', 'password-reset'].includes(action) && !validKey(key)) return failure('A valid idempotency key is required.');
+        if (!reset) {
+          const before = await readProfile(baseQuery, id, source, false);
+          if (before.error) return before;
+          if (!before.data.isAccount || before.data.version !== expectedVersion) return failure('The account changed. Refresh it and review this action again.');
+          if (action === 'unlock' && before.data.statusCode !== (source === 'admin' ? 'REVOKED' : 'LOCKED')) return failure('This account is not locked. Refresh its status.');
+          if (['lock', 'delete'].includes(action) && before.data.statusCode === 'DELETED') return failure('This user has already been deleted.');
+        }
+        const body = {
+            accountType: source,
+            ...(!reset ? {
+              reason: reason.trim(),
+              expectedVersion
+            } : {})
+          },
+          result = await baseQuery({
+            url: action === 'delete' ? `${ROOT}/${encodeURIComponent(id)}` : `${ROOT}/${encodeURIComponent(id)}/${action}`,
+            method: action === 'delete' ? 'DELETE' : 'POST',
+            body,
+            ...(['delete', 'password-reset'].includes(action) ? {
+              headers: {
+                'x-idempotency-key': key
+              }
+            } : {})
+          });
+        if (result.error) return result;
+        const dto = record(unwrapApiResponseData(result.data));
+        if (reset) {
+          if (dto.deliveryStatus !== 'SENT') return failure(text(dto.error) || 'The password reset was not delivered.');
+          return {
+            data: {
+              message: text(dto.message) || 'Password reset sent.'
+            }
+          };
+        }
+        if (action === 'force-logout') {
+          if (count(dto.revokedSessions) == null) return failure('The session revocation response could not be confirmed. Refresh the account.');
+          return {
+            data: {
+              message: `${dto.revokedSessions} session${dto.revokedSessions === 1 ? '' : 's'} signed out.`
+            }
+          };
+        }
+        const updated = await stateAfter(baseQuery, id, source);
+        const status = updated.data?.statusCode;
+        const confirmed = action === 'delete' ? status === 'DELETED' || updated.error?.status === 404 : action === 'lock' ? status === (source === 'admin' ? 'REVOKED' : 'LOCKED') : source === 'admin' ? status === 'ACTIVE' : status != null && !['LOCKED', 'REVOKED'].includes(status);
+        if (!confirmed) return failure('The action was submitted but its updated state could not be confirmed. Refresh before retrying.');
+        return {
+          data: {
+            message: text(dto.message) || (action === 'delete' ? 'User data anonymised.' : action === 'lock' ? 'Account locked.' : 'Account unlocked.')
+          }
+        };
+      },
+      invalidatesTags: allTags
+    }),
+    updateManagedUserPermissions: builder.mutation({
+      async queryFn({
+        id,
+        source,
+        roleId,
+        expectedVersion
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        if (!text(id) || !text(roleId) || !text(expectedVersion) || source === 'admin' && !ADMIN_ROLES.has(roleId)) return failure('Select a role and refresh the account version before saving.');
+        if (id.startsWith('invite_')) return failure('Invitations do not have account permissions.');
+        const before = await readProfile(baseQuery, id, source, false);
+        if (before.error) return before;
+        if (before.data.version !== expectedVersion || source === 'user' && before.data.roleKind !== 'TEAM_ROLE') return failure('Only current company team seats can be reassigned. Refresh the account.');
+        const result = await baseQuery({
+          url: `${ROOT}/${encodeURIComponent(id)}/permissions`,
+          method: 'PATCH',
+          body: {
+            accountType: source,
+            roleId,
+            expectedVersion
+          }
+        });
+        if (result.error) return result;
+        const updated = await readProfile(baseQuery, id, source);
+        if (updated.error || (source === 'admin' ? updated.data.roleCode !== roleId : updated.data.roleId !== roleId)) return failure('The role update was submitted but its saved role could not be confirmed. Refresh the account.');
+        const current = api.getState().auth.admin;
+        if (source === 'admin' && current?.id === id) api.dispatch(setCredentials({
+          admin: {
+            ...current,
+            role: updated.data.roleCode
+          }
+        }));
+        return {
+          data: {
+            message: 'Role updated.',
+            authUpdated: source === 'admin' && current?.id === id
+          }
+        };
+      },
+      invalidatesTags: allTags
+    }),
+    sendManagedUserMessage: builder.mutation({
+      async queryFn({
+        id,
+        source,
+        channel,
+        subject,
+        message,
+        key
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        if (!text(id) || id.startsWith('invite_') || !['EMAIL', 'SMS'].includes(channel) || !text(message) || channel === 'EMAIL' && !text(subject) || !validKey(key)) return failure('Enter the message, email subject where applicable, and a valid request key.');
+        if (source === 'admin' && channel === 'SMS') return failure('Admin accounts have no SMS phone number.');
+        const result = await baseQuery({
+          url: `${ROOT}/${encodeURIComponent(id)}/messages`,
+          method: 'POST',
+          headers: {
+            'x-idempotency-key': key
+          },
+          body: {
+            accountType: source,
+            channel,
+            ...(channel === 'EMAIL' ? {
+              subject: subject.trim()
+            } : {}),
+            message: message.trim()
+          }
+        });
+        if (result.error) return result;
+        const dto = record(unwrapApiResponseData(result.data));
+        if (!text(dto.messageId) || dto.channel !== channel || dto.deliveryStatus !== 'SENT' || timestamp(dto.sentAt) == null) return failure(text(dto.error) || 'The message delivery could not be confirmed.');
+        return {
+          data: {
+            message: `${channel === 'EMAIL' ? 'Email' : 'SMS'} sent.`
+          }
+        };
+      },
+      invalidatesTags: ['AdminManagedUsers', 'AdminAuditLogs']
+    }),
+    importManagedUsers: builder.mutation({
+      async queryFn({
+        file
+      }, api, _opts, baseQuery) {
+        const blocked = access(api);
+        if (blocked) return blocked;
+        if (!(file instanceof File) || !file.size) return failure('Select a CSV file.');
+        const body = new FormData();
+        body.append('file', file);
+        const result = await baseQuery({
+          url: `${ROOT}/import`,
+          method: 'POST',
+          body
+        });
+        if (result.error) return result;
+        const dto = record(unwrapApiResponseData(result.data));
+        if (count(dto.processed) == null || count(dto.created) == null || count(dto.failed) == null || dto.created + dto.failed !== dto.processed || !Array.isArray(dto.rows) || dto.rows.length !== dto.processed || dto.rows.some(r => !r || typeof r !== 'object' || !Number.isSafeInteger(r.row) || r.row < 2 || !['CREATED', 'FAILED'].includes(r.status) || r.status === 'CREATED' && !text(r.id)) || dto.rows.filter(r => r.status === 'CREATED').length !== dto.created || dto.rows.filter(r => r.status === 'FAILED').length !== dto.failed) return failure('The import results could not be confirmed. Refresh before retrying.');
+        return {
+          data: {
+            processed: dto.processed,
+            created: dto.created,
+            failed: dto.failed,
+            rows: dto.rows.map(r => ({
+              row: r.row,
+              email: text(r.email) || '—',
+              status: r.status,
+              error: text(r.error) || '—'
+            }))
+          }
+        };
+      },
+      invalidatesTags: allTags
+    }),
+    getManagedUserDownload: builder.query({
+      async queryFn({
+        id,
+        source,
+        kind
+      }, api, _opts, baseQuery) {
+        const blocked = access(api, 'admin');
+        if (blocked) return blocked;
+        if (!text(id) || !['user', 'admin'].includes(source) || !['report', 'export'].includes(kind)) return failure('This account download is not supported.');
+        const result = await baseQuery({
+          url: `${ROOT}/${encodeURIComponent(id)}/${kind}`,
+          params: {
+            accountType: source,
+            format: kind === 'report' ? 'pdf' : 'json'
+          },
+          responseHandler: response => response.blob()
+        });
+        if (result.error) {
+          if (result.error.data instanceof Blob) return {
+            error: {
+              status: result.error.status,
+              data: {
+                message: 'The account download failed.'
+              }
+            }
+          };
+          return result;
+        }
+        const blob = result.data;
+        if (!(blob instanceof Blob) || !blob.size) return failure('The account download was empty.');
+        if (kind === 'report') {
+          if ((await blob.slice(0, 5).text()) !== '%PDF-') return failure('The report response was not a valid PDF.');
+        } else {
+          try {
+            const dto = JSON.parse(await blob.text()),
+              data = unwrapApiResponseData(dto);
+            if (!data || typeof data !== 'object' || Array.isArray(data) || data.error || data.statusCode >= 400) return failure('The export response was not account data.');
+            const profile = record(data.profile || data.user || data),
+              profileId = text(profile.id) || text(profile.identity?.id);
+            if (profileId !== id || text(profile.accountType) && profile.accountType !== source) return failure('The export response could not be matched to this account.');
+          } catch {
+            return failure('The export response was not valid JSON.');
+          }
+        }
+        return {
+          data: {
+            url: URL.createObjectURL(blob),
+            filename: kind === 'report' ? 'trukkas-user-report.pdf' : 'trukkas-user-data.json'
+          }
+        };
+      },
+      keepUnusedDataFor: 0
+    })
+  })
 });
-export const { useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useGetManagedUserProfileQuery, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation } = usersApi;
+export const {
+  useGetUserManagementDirectoryQuery,
+  useGetUserManagementStatsQuery,
+  useGetUserManagementRecentActivityQuery,
+  useGetManagedUserProfileQuery,
+  useLazyGetManagedUserProfileQuery,
+  useGetManagedUserActivityQuery,
+  useGetManagedUserSectionsQuery,
+  useGetManagedUserRoleChoicesQuery,
+  useCreateManagedAdminMutation,
+  useChangeManagedUserAccessMutation,
+  useUpdateManagedAdminMutation,
+  useRunManagedUserActionMutation,
+  useUpdateManagedUserPermissionsMutation,
+  useSendManagedUserMessageMutation,
+  useImportManagedUsersMutation,
+  useLazyGetManagedUserDownloadQuery
+} = usersApi;

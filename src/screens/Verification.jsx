@@ -7,6 +7,8 @@ import {
   DataTable, Pagination, Badge, CopyableId, Avatar, DropdownMenu, IconButton, Icon, Skeleton, EmptyState,
 } from '../ds.js';
 import { useGetAdminVerificationDirectoryQuery, verificationSummary, verificationDetailUrl } from '../store/features/verification/verificationApi.js';
+import { VerificationActionDialog } from './VerificationActionDialog.jsx';
+import { useVerificationOperations } from '../store/features/verification/useVerificationOperations.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
 
@@ -41,9 +43,18 @@ function FilterButton({ value, options, active, onChange }) {
 
 export function Verification() {
   const navigate = useNavigate();
-  const query = useGetAdminVerificationDirectoryQuery();
-  const verifications = query.error ? EMPTY_ROWS : query.currentData || EMPTY_ROWS;
-  const summary = verificationSummary(query.error ? null : query.currentData);
+  const operations = useVerificationOperations();
+  const query = useGetAdminVerificationDirectoryQuery({ owner: operations.owner }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
+  const [dialog, setDialog] = useState(null);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  useEffect(() => { setDialog(null); }, [operations.owner]);
+  function openDialog(action, model) {
+    setMenuFor(null);
+    if (!operations.canManage) { window.alert('Your account cannot manage verifications.'); return; }
+    setDialog({ action, model });
+  }
+  const verifications = !operations.authenticated || query.error ? EMPTY_ROWS : query.currentData || EMPTY_ROWS;
+  const summary = verificationSummary(!operations.authenticated || query.error ? null : query.currentData);
   const loading = query.isLoading || (query.isFetching && !query.currentData);
   const statValue = (value) => loading ? <Skeleton as="span" width={54} height={23} /> : value;
   const unavailable = (action) => window.alert(`${action} is not available in the documented verification API.`);
@@ -65,8 +76,23 @@ export function Verification() {
     (!q || [v.id, v.reviewId, v.entityName, v.regNo].some((s) => s && s.toLowerCase().includes(q.toLowerCase())))
   )), [verifications, tab, entityType, verType, status, riskLevel, q]);
 
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  useEffect(() => setPage((current) => Math.min(current, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)))), [filtered.length]);
+  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  useEffect(() => setPage((current) => Math.min(current, Math.max(1, Math.ceil(filtered.length / pageSize)))), [filtered.length, pageSize]);
+
+  function exportReport() {
+    const entities = { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER' };
+    const types = { 'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE' };
+    if ((entityType !== 'All Types' && !entities[entityType]) || (verType !== 'All Types' && !types[verType]) || (STATUSES.includes(tab) && status !== 'All Statuses' && status !== tab)) { unavailable('Export with these filters'); return; }
+    const params = {};
+    if (q.trim()) params.search = q.trim();
+    if (entities[entityType]) params.entityType = entities[entityType];
+    if (types[verType]) params.verificationType = types[verType];
+    const selectedStatus = STATUSES.includes(tab) ? tab : status;
+    if (STATUSES.includes(selectedStatus)) params.status = selectedStatus.toUpperCase().replaceAll(' ', '_');
+    if (riskLevel !== 'All Levels') params.riskLevel = riskLevel.toUpperCase();
+    if (tab === 'Expiring Soon') params.expiringSoon = true;
+    operations.download(null, 'report', params);
+  }
 
   function resetFilters() {
     setEntityType('All Types'); setVerType('All Types'); setStatus('All Statuses');
@@ -78,8 +104,8 @@ export function Verification() {
       <PageHeader crumbs={['Compliance', 'Verification', 'All Verifications']} title="All Verifications"
         description="Monitor and manage all verification requests across entities."
         actions={<>
-          <Button variant="outline" icon="download" onClick={() => unavailable('Export Report')}>Export Report</Button>
-          <Button icon="plus" onClick={() => unavailable('New Verification')}>New Verification</Button>
+          <Button variant="outline" icon="download" onClick={exportReport}>Export Report</Button>
+          <Button icon="plus" onClick={() => openDialog('create')}>New Verification</Button>
         </>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>
@@ -119,7 +145,7 @@ export function Verification() {
 
         <DataTable rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
           columns={[
-            { key: 'id', header: 'Verification ID', render: (r) => <CopyableId id={r.id} size="sm" onCopy={() => unavailable('Copy verification ID')} /> },
+            { key: 'id', header: 'Verification ID', render: (r) => <CopyableId id={r.id} size="sm" onCopy={() => { if (r.id !== '—') navigator.clipboard?.writeText(r.id).catch(() => unavailable('Copy verification ID')); }} /> },
             { key: 'entity', header: 'Entity / Company', render: (r) => (
               <span style={{ display: 'grid', gap: 2 }}>
                 <Link to={verificationDetailUrl(r)} style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.entityName}</Link>
@@ -159,8 +185,8 @@ export function Verification() {
                     <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
                       <DropdownMenu width={210} items={[
                         { label: 'View Verification', icon: 'eye', onClick: () => { setMenuFor(null); navigate(verificationDetailUrl(r)); } },
-                        { label: 'Reassign', icon: 'users', onClick: () => { setMenuFor(null); unavailable('Reassign'); } },
-                        { label: 'Download Documents', icon: 'download', onClick: () => { setMenuFor(null); unavailable('Download Documents'); } },
+                        { label: 'Reassign', icon: 'users', onClick: () => { openDialog('reassign', r); } },
+                        { label: 'Download Documents', icon: 'download', onClick: () => { setMenuFor(null); operations.download(r.id, 'documents'); } },
                       ]} />
                     </span>
                   )}
@@ -168,10 +194,11 @@ export function Verification() {
               </span>) },
           ]} />
         {loading ? <DriverTableLoading columns={10} label="Loading verifications" /> : query.error ? <EmptyState icon="triangle-alert" title="Could not load verifications" description={getApiErrorMessage(query.error)} action={<Button variant="outline" onClick={query.refetch}>Retry</Button>} /> : !paged.length ? <EmptyState icon="shield-check" title={['Verified', 'Rejected', 'Expiring Soon'].includes(tab) || ['Verified', 'Rejected'].includes(status) ? '—' : 'No verifications found'} description={['Verified', 'Rejected', 'Expiring Soon'].includes(tab) || ['Verified', 'Rejected'].includes(status) ? '—' : undefined} /> : null}
-        <Pagination page={page} pageSize={PAGE_SIZE} total={query.error || loading ? 0 : filtered.length}
-          pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-          onPage={(next) => setPage(Math.max(1, Math.min(next, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)))))} onPageSize={() => {}} />
+        <Pagination page={page} pageSize={pageSize} total={!operations.authenticated || query.error || loading || !query.currentData ? '—' : filtered.length}
+          pageCount={Math.max(1, Math.ceil(filtered.length / pageSize))}
+          onPage={(next) => setPage(Math.max(1, Math.min(next, Math.max(1, Math.ceil(filtered.length / pageSize)))))} onPageSize={(size) => { if (Number.isInteger(size) && size > 0) { setPageSize(size); setPage(1); } }} />
       </SectionCard>
+      {dialog && <VerificationActionDialog key={operations.owner + dialog.action + (dialog.model?.id || '')} {...dialog} canManage={operations.canManage} onClose={() => setDialog(null)} />}
     </>
   );
 }

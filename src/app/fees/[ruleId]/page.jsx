@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { FeeRuleDetail } from '../../../screens/FeeRuleDetail.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('ruleId'); }
@@ -13,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function FeeRuleDetailPage() {
-  return <FeeRuleDetail />;
+  return <Suspense fallback={null}><FeeRuleDetail /></Suspense>;
 }

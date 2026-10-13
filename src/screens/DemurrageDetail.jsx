@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "../router.js";
 import {
   PageHeader,
@@ -18,21 +19,36 @@ import {
   Skeleton,
 } from "../ds.js";
 import {
-  useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageCalculationQuery, useGetAdminDemurrageJobContextQuery,
+  useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageDetailQuery, useGetAdminDemurrageJobContextQuery,
+  useGetAdminDemurrageInvoicesQuery, useGetAdminDemurrageDisputesQuery, useLazyGetAdminDemurrageInvoiceQuery, useSaveAdminDemurrageNoteMutation,
+  useRaiseAdminDemurrageDisputeMutation, useResolveAdminDemurrageMutation, useEmailAdminDemurrageInvoiceMutation, demurrageRequestKey,
   mergeDemurrageDetail, demurrageMoney as money, demurrageDays as days, demurrageJobUrl,
 } from "../store/features/demurrage/demurrageApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 export function DemurrageDetail() {
   const navigate = useNavigate(), params = useParams(), search = useSearchParams();
-  const demurrageId = search.get("jobId") || search.get("id") || params.demurrageId || "";
-  const directoryQuery = useGetAdminDemurrageDirectoryQuery();
-  const matches = (directoryQuery.error ? [] : directoryQuery.currentData?.rows || []).filter((row) => row.jobApiId === demurrageId || (row.id !== "—" && row.id === demurrageId));
-  const entry = matches.length === 1 ? matches[0] : null;
-  const calculationQuery = useGetAdminDemurrageCalculationQuery(entry?.jobApiId, { skip: !entry });
-  const jobQuery = useGetAdminDemurrageJobContextQuery(entry?.jobApiId, { skip: !entry });
-  const r = useMemo(() => entry ? mergeDemurrageDetail(entry, calculationQuery.error ? null : calculationQuery.currentData, jobQuery.error ? null : jobQuery.currentData) : null,
-    [entry, calculationQuery.currentData, calculationQuery.error, jobQuery.currentData, jobQuery.error]);
+  const requestedId = search.get("id") || params.demurrageId || "";
+  const legacyJobId = search.get("jobId") || "";
+  const directoryQuery = useGetAdminDemurrageDirectoryQuery(undefined, { skip: Boolean(requestedId) || !legacyJobId });
+  const matches = (directoryQuery.error ? [] : directoryQuery.currentData?.rows || []).filter((row) => row.jobApiId === legacyJobId);
+  const demurrageId = requestedId || (matches.length === 1 ? matches[0].chargeApiId : "");
+  const detailQuery = useGetAdminDemurrageDetailQuery(demurrageId, { skip: !demurrageId });
+  const entry = detailQuery.error ? null : detailQuery.currentData;
+  const jobQuery = useGetAdminDemurrageJobContextQuery(entry?.jobApiId, { skip: !entry?.jobApiId });
+  const invoiceQuery = useGetAdminDemurrageInvoicesQuery(entry?.chargeApiId, { skip: !entry?.chargeApiId });
+  const disputesQuery = useGetAdminDemurrageDisputesQuery(entry?.chargeApiId, { skip: !entry?.chargeApiId });
+  const r = useMemo(() => entry ? { ...mergeDemurrageDetail(entry, jobQuery.error ? null : jobQuery.currentData, invoiceQuery.error ? null : invoiceQuery.currentData), disputeSummary: disputesQuery.error ? entry.disputeSummary : disputesQuery.currentData?.summary ?? entry.disputeSummary } : null,
+    [entry, jobQuery.currentData, jobQuery.error, invoiceQuery.currentData, invoiceQuery.error, disputesQuery.currentData, disputesQuery.error]);
+  const canResolve = useSelector((state) => ["SUPER_ADMIN", "FINANCE_ADMIN"].includes(state.auth.admin?.role));
+  const [saveChargeNote, noteState] = useSaveAdminDemurrageNoteMutation();
+  const [createDispute, disputeState] = useRaiseAdminDemurrageDisputeMutation();
+  const [resolveCharge, resolveState] = useResolveAdminDemurrageMutation();
+  const [emailInvoice, emailState] = useEmailAdminDemurrageInvoiceMutation();
+  const [readInvoice, pdfState] = useLazyGetAdminDemurrageInvoiceQuery();
+  const busy = noteState.isLoading || disputeState.isLoading || resolveState.isLoading || emailState.isLoading || pdfState.isFetching || detailQuery.isFetching;
+  const resolutionRequest = useRef(null), emailRequest = useRef(null);
+  const [resolution, setResolution] = useState(false), [resolutionMethod, setResolutionMethod] = useState(""), [waiverReason, setWaiverReason] = useState("");
   const operationPending = useRef(false), toastTimer = useRef(null), noteDirty = useRef(false);
   const [tab, setTab] = useState("Overview"),
     [menu, setMenu] = useState(false),
@@ -44,19 +60,20 @@ export function DemurrageDetail() {
   useEffect(() => {
     setTab("Overview"); setMenu(false); setDispute(false); setNote(""); setDetails(""); setToast("");
     setReason("Incorrect charge calculation"); noteDirty.current = false;
+    setResolution(false); setResolutionMethod(""); setWaiverReason(""); resolutionRequest.current = null; emailRequest.current = null;
     return () => clearTimeout(toastTimer.current);
   }, [demurrageId]);
-  useEffect(() => { if (!noteDirty.current && r) setNote(r.note); }, [r]);
+  useEffect(() => { if (!noteDirty.current && r) setNote(r.noteValue); }, [r]);
   useEffect(() => {
-    const error = calculationQuery.error || jobQuery.error;
+    const error = detailQuery.error || jobQuery.error || invoiceQuery.error || disputesQuery.error;
     if (error) notify(getApiErrorMessage(error));
-  }, [calculationQuery.error, jobQuery.error]);
+  }, [detailQuery.error, jobQuery.error, invoiceQuery.error, disputesQuery.error]);
   function notify(s) {
     clearTimeout(toastTimer.current);
     setToast(s);
     toastTimer.current = setTimeout(() => setToast(""), 1600);
   }
-  if ((!directoryQuery.currentData && directoryQuery.isFetching) || (entry && ((!calculationQuery.currentData && calculationQuery.isFetching) || (!jobQuery.currentData && jobQuery.isFetching)))) return <>
+  if ((!directoryQuery.currentData && directoryQuery.isFetching) || (!detailQuery.currentData && detailQuery.isFetching) || (entry && !jobQuery.currentData && jobQuery.isFetching)) return <>
     <Card><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
     <DriverLoadingNotice>Loading demurrage details…</DriverLoadingNotice>
     <Card><Skeleton width="40%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
@@ -64,7 +81,7 @@ export function DemurrageDetail() {
   if (!r)
     return (
       <Card>
-        <p>{directoryQuery.error ? getApiErrorMessage(directoryQuery.error) : "Demurrage record not found."}</p>
+        <p>{detailQuery.error || directoryQuery.error ? getApiErrorMessage(detailQuery.error || directoryQuery.error) : matches.length > 1 ? "This job has multiple charges. Open a charge from the Demurrage list." : "Demurrage record not found."}</p>
         <Button variant="outline" onClick={() => navigate("/demurrage")}>
           Back to Demurrage
         </Button>
@@ -72,24 +89,76 @@ export function DemurrageDetail() {
     );
   const subtotal = r.subtotal, vat = r.vat, invoiceRows = r.invoices;
   async function saveNote() {
-    notify("Saving demurrage notes is not available yet.");
+    if (operationPending.current || busy) return;
+    if (!noteDirty.current && note === "—") { notify("Load demurrage notes before saving."); return; }
+    operationPending.current = true;
+    try { await saveChargeNote({ id: r.chargeApiId, note }).unwrap(); noteDirty.current = false; notify("Demurrage note saved."); }
+    catch (error) { notify(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
   }
   async function raiseDispute() {
-    setDispute(false);
-    notify("Raising a demurrage dispute is not available yet.");
+    if (operationPending.current || busy || !reason.trim()) return;
+    operationPending.current = true;
+    try { await createDispute({ id: r.chargeApiId, reason, details }).unwrap(); setDispute(false); setDetails(""); notify("Demurrage dispute recorded."); }
+    catch (error) { notify(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
   }
-  function openInvoice(url) {
-    if (!url || !/^https?:\/\//i.test(url)) { notify("Demurrage invoice download is not available yet."); return; }
-    window.open(url, "_blank", "noopener,noreferrer");
+  async function downloadInvoice(preview = false) {
+    if (operationPending.current || busy) return;
+    operationPending.current = true;
+    const popup = preview ? window.open("about:blank", "_blank") : null;
+    if (popup) popup.opener = null;
+    try {
+      const file = await readInvoice({ id: r.chargeApiId, preview }, false).unwrap();
+      if (preview) {
+        if (popup) popup.location.replace(file.url);
+        else { URL.revokeObjectURL(file.url); notify("Allow pop-ups to preview this invoice."); return; }
+      } else {
+        const anchor = document.createElement("a"); anchor.href = file.url; anchor.download = file.name;
+        document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      }
+      if (preview) {
+        const cleanup = setInterval(() => { if (popup.closed) { clearInterval(cleanup); URL.revokeObjectURL(file.url); } }, 1000);
+      } else setTimeout(() => URL.revokeObjectURL(file.url), 1000);
+    } catch (error) { popup?.close(); notify(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
   }
   async function recalculate() {
-    if (operationPending.current || calculationQuery.isFetching || directoryQuery.isFetching) return;
+    if (operationPending.current || busy) return;
     operationPending.current = true; setMenu(false);
+    try { await detailQuery.refetch().unwrap(); notify("Demurrage calculation refreshed."); }
+    catch (error) { notify(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
+  }
+  async function openResolution() {
+    setMenu(false);
+    if (operationPending.current || busy) return;
+    if (!canResolve) { notify("Only Super Admins and Finance Admins can resolve charges."); return; }
+    operationPending.current = true;
+    try { await detailQuery.refetch().unwrap(); setResolutionMethod(""); setWaiverReason(""); resolutionRequest.current = null; setResolution(true); }
+    catch (error) { notify(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
+  }
+  async function confirmResolution() {
+    if (operationPending.current || busy || !canResolve || r.version == null || !resolutionMethod || !(r.outstanding > 0) || ["RESOLVED", "WAIVED"].includes(r.statusCode) || (resolutionMethod === "COLLECT" && r.statusCode === "UPCOMING") || (resolutionMethod === "WAIVE" && !waiverReason.trim())) return;
+    const payload = { id: r.chargeApiId, method: resolutionMethod, reason: resolutionMethod === "WAIVE" ? waiverReason.trim() : undefined, expectedVersion: r.version };
+    const signature = JSON.stringify(payload);
+    if (resolutionRequest.current?.signature !== signature) resolutionRequest.current = { signature, key: demurrageRequestKey() };
+    operationPending.current = true;
     try {
-      const result = await calculationQuery.refetch().unwrap();
-      await directoryQuery.refetch().unwrap();
-      notify(result.message || "Demurrage calculation refreshed.");
-    } catch (error) { notify(getApiErrorMessage(error)); }
+      const result = await resolveCharge({ ...payload, key: resolutionRequest.current.key }).unwrap();
+      resolutionRequest.current = null; setResolution(false); notify(`Demurrage status: ${result.status}`);
+    } catch (error) {
+      notify(getApiErrorMessage(error));
+      if (error.status === 409) { resolutionRequest.current = null; await detailQuery.refetch(); }
+    } finally { operationPending.current = false; }
+  }
+  async function emailCustomer() {
+    if (operationPending.current || busy) return;
+    operationPending.current = true; setMenu(false);
+    if (!emailRequest.current) emailRequest.current = { id: r.chargeApiId, key: demurrageRequestKey() };
+    try { const result = await emailInvoice(emailRequest.current).unwrap(); emailRequest.current = null; notify(result.message || "Demurrage invoice emailed."); }
+    catch (error) { notify(getApiErrorMessage(error)); if (typeof error.status === "number" && error.status >= 400 && error.status < 500) emailRequest.current = null; }
     finally { operationPending.current = false; }
   }
   return (
@@ -111,7 +180,7 @@ export function DemurrageDetail() {
             <Button
               variant="outline"
               icon="download"
-              onClick={() => openInvoice(r.invoiceUrl)}
+              disabled={busy} onClick={() => downloadInvoice()}
             >
               Download Invoice
             </Button>
@@ -147,7 +216,7 @@ export function DemurrageDetail() {
                         icon: "circle-check",
                         onClick: () => {
                           setMenu(false);
-                          notify("Marking demurrage as resolved is not available yet.");
+                          openResolution();
                         },
                       },
                       {
@@ -160,7 +229,7 @@ export function DemurrageDetail() {
                         icon: "mail",
                         onClick: () => {
                           setMenu(false);
-                          notify("Emailing demurrage invoices is not available yet.");
+                          emailCustomer();
                         },
                       },
                       { divider: true },
@@ -283,7 +352,7 @@ export function DemurrageDetail() {
                     style={{ border: 0, borderTop: "1px solid var(--tk-line)" }}
                   />
                   <Row label="Subtotal" value={money(subtotal)} />
-                  <Row label="VAT (7.5%)" value={money(vat)} />
+                  <Row label={`VAT (${r.vatPercent == null ? "—" : r.vatPercent}%)`} value={money(vat)} />
                   <div className="mt-2.25 -mx-tk-card-pad -mb-tk-card-pad px-tk-card-pad py-3 bg-tk-blue-soft text-tk-blue text-[11px] font-bold flex justify-between">
                     <span>Total Charge</span>
                     <b>{money(r.charge)}</b>
@@ -307,7 +376,7 @@ export function DemurrageDetail() {
                     variant="outline"
                     fullWidth
                     style={{ marginTop: 8 }}
-                    onClick={() => navigate(demurrageJobUrl(r.jobApiId))}
+                    disabled={!r.jobApiId} onClick={() => r.jobApiId && navigate(demurrageJobUrl(r.jobApiId))}
                   >
                     View Job Details
                   </Button>
@@ -354,7 +423,7 @@ export function DemurrageDetail() {
                       size="sm"
                       variant="outline"
                       icon="save"
-                      onClick={saveNote}
+                      disabled={busy} onClick={saveNote}
                     >
                       Save
                     </Button>
@@ -407,14 +476,14 @@ export function DemurrageDetail() {
                             size="sm"
                             icon="eye"
                             aria-label="Preview invoice"
-                            onClick={() => openInvoice(x.url)}
+                            disabled={busy} onClick={() => downloadInvoice(true)}
                           />
                           <Button
                             variant="outline"
                             size="sm"
                             icon="download"
                             aria-label="Download invoice"
-                            onClick={() => openInvoice(x.url)}
+                            disabled={busy} onClick={() => downloadInvoice()}
                           />
                         </span>
                       ),
@@ -436,7 +505,7 @@ export function DemurrageDetail() {
               tab={tab}
               r={r}
               invoices={invoiceRows}
-              onDownload={openInvoice}
+              onDownload={downloadInvoice}
             />
           )}
         </div>
@@ -524,7 +593,7 @@ export function DemurrageDetail() {
             <Button variant="outline" onClick={() => setDispute(false)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={raiseDispute}>
+            <Button variant="danger" disabled={busy || !reason.trim()} onClick={raiseDispute}>
               Raise Dispute
             </Button>
           </>
@@ -550,6 +619,24 @@ export function DemurrageDetail() {
           value={details}
           onChange={(e) => setDetails(e.target.value)}
         />
+      </Modal>
+      <Modal
+        open={resolution}
+        onClose={() => !resolveState.isLoading && setResolution(false)}
+        title="Resolve Demurrage Charge"
+        description="Collect the outstanding balance from the forwarder's wallet or waive this charge."
+        width={520}
+        footer={<>
+          <Button variant="outline" disabled={resolveState.isLoading} onClick={() => setResolution(false)}>Cancel</Button>
+          <Button disabled={busy || !canResolve || r.version == null || !(r.outstanding > 0) || !resolutionMethod || ["RESOLVED", "WAIVED"].includes(r.statusCode) || (resolutionMethod === "COLLECT" && r.statusCode === "UPCOMING") || (resolutionMethod === "WAIVE" && !waiverReason.trim())} onClick={confirmResolution}>Confirm Resolution</Button>
+        </>}
+      >
+        <Row label="Outstanding" value={money(r.outstanding)} />
+        <Select label="Resolution Method" value={resolutionMethod} disabled={busy}
+          options={[{ value: "COLLECT", label: "Collect outstanding payment" }, { value: "WAIVE", label: "Waive charge" }]}
+          onChange={(event) => setResolutionMethod(event.target.value)} />
+        {resolutionMethod === "WAIVE" && <Textarea label="Waiver Reason" required rows={4} style={{ marginTop: 12 }}
+          value={waiverReason} disabled={busy} onChange={(event) => setWaiverReason(event.target.value)} />}
       </Modal>
       {toast && (
         <div className="fixed right-6 bottom-6 z-100 bg-tk-ink-900 text-white rounded-[9px] px-4 py-3 shadow-tk-menu text-xs font-medium font-tk-sans">

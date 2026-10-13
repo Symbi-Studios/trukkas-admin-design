@@ -1,217 +1,196 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
-const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
-const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+const text = (v) => typeof v === 'string' && v.trim() ? v.trim() : null;
+const record = (v) => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+const count = (v) => Number.isInteger(v) && v >= 0 ? v : null;
+const display = (v) => text(v) || '—';
+const label = (v) => text(v)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—';
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
-const SOURCES = {
-  TRUCKER: { path: 'truckers', collection: 'truckers', response: 'trucker', type: 'Account Verification', status: 'Pending' },
-  DRIVER: { path: 'drivers', collection: 'drivers', response: 'driver', type: 'License Verification', status: 'Pending' },
-  KYB: { path: 'kyb', collection: 'users', response: 'user', type: 'Business Verification', status: 'In Review' },
-  EXPORTER_LICENSE: { path: 'exporter-licenses', collection: 'users', response: 'user', type: 'Export License', status: 'In Review' },
-  TRUCK: { path: 'trucks', collection: 'trucks', response: 'truck', type: 'Truck Registration', status: 'Pending' },
-};
-const ADMINS = ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'];
-export const canReviewVerification = (role, source) => source === 'COMPANY_DOCUMENT' ? ['SUPER_ADMIN', 'OPS_ADMIN'].includes(role) : ADMINS.includes(role);
-const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) || '—';
+const STATUS = { PENDING: 'Pending', IN_REVIEW: 'In Review', VERIFIED: 'Verified', REJECTED: 'Rejected', NON_COMPLIANT: 'Non-Compliant', CANCELLED: 'Cancelled' };
+const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', EXPORTER_LICENCE: 'Export License', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
+const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', EXPORTER: 'Exporter', TRUCK: 'Truck' };
+const SOURCES = { TRUCKER: 'truckers', DRIVER: 'drivers', KYB: 'kyb', EXPORTER_LICENSE: 'exporter-licenses', TRUCK: 'trucks', COMPANY_DOCUMENT: 'company-documents' };
+export const canReviewVerification = (role, source) => source === 'COMPANY_DOCUMENT' ? ['SUPER_ADMIN', 'OPS_ADMIN'].includes(role) : ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(role);
+export const canManageVerification = (role) => ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(role);
 export function verificationDocumentUrl(value) {
   try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) ? url.href : null; } catch { return null; }
 }
 export function verificationDate(value, withTime = false) {
   if (!text(value)) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
-  });
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}) });
 }
-const personName = (dto) => [text(dto.firstName), text(dto.lastName)].filter(Boolean).join(' ') || null;
-const entityType = (source, party) => source === 'EXPORTER_LICENSE' ? 'Forwarder'
-  : ['KYB', 'COMPANY_DOCUMENT'].includes(source) || (['TRUCKER', 'TRUCK'].includes(source) && party.truckerType === 'COMPANY') ? 'Truck Company'
-    : source === 'DRIVER' ? 'Driver' : ['TRUCKER', 'TRUCK'].includes(source) ? label(party.truckerType) : '—';
-function pendingStatus(source, dto) {
-  const field = source === 'KYB' ? dto.kycStatus : source === 'EXPORTER_LICENSE' ? dto.exporterLicenseStatus : dto.status;
-  return !text(field) || (['KYB', 'EXPORTER_LICENSE'].includes(source) ? field === 'IN_REVIEW' : field === 'PENDING_REVIEW');
+const person = (v) => text(v) || text(record(v).name) || '—';
+function progress(v) {
+  const p = record(v), values = ['completed', 'inReview', 'pending', 'total'].map((key) => count(p[key]));
+  return values.every((n) => n != null) && values[0] + values[1] + values[2] === values[3] ? { completed: values[0], inReview: values[1], pending: values[2], total: values[3] } : null;
 }
-export function adaptVerification(source, dto) {
-  const party = source === 'TRUCK' ? record(dto.owner) : dto;
-  const name = text(party.businessName) || personName(party) || '—';
+export function adaptVerification(dto) {
+  const name = display(dto.entityName), assessment = record(dto.assessment);
+  const requirements = Array.isArray(dto.requirements) && dto.requirements.every((r) => r && typeof r === 'object' && !Array.isArray(r)) ? dto.requirements.map((r, i) => ({
+    key: text(r.id) || String(i), name: display(r.name), sub: display(r.description), cat: label(r.category), status: label(r.status),
+    by: person(r.reviewer), on: verificationDate(r.reviewedAt, true), note: display(r.notes), url: verificationDocumentUrl(text(r.document) || record(r.document).url),
+  })) : [];
+  const contact = record(dto.contact);
   return {
-    key: `${source}:${dto.id}`, reviewId: dto.id, source, ownerId: source === 'TRUCK' ? text(dto.ownerId) || text(party.id) : dto.id,
-    // These queues identify accounts/trucks, not verification records.
-    id: '—', entityName: name, initials: name === '—' ? '—' : name.split(/\s+/).slice(0, 2).map((part) => part[0]).join(''),
-    entityType: entityType(source, party), regNo: text(party.cacNumber) || '—',
-    country: '—', joined: source === 'TRUCK' ? '—' : verificationDate(dto.createdAt),
-    submittedOn: source === 'EXPORTER_LICENSE' ? verificationDate(dto.exporterLicenseSubmittedAt, true) : '—',
-    submittedBy: '—', contactHint: [text(party.email), text(party.phone)].filter(Boolean).join(' · ') || '—',
-    type: SOURCES[source].type, status: pendingStatus(source, dto) ? SOURCES[source].status : '—',
-    assignedTo: '—', assignedRole: '—', dueDate: '—', priority: '—', riskLevel: '—', assessment: '—',
-    requirements: [], activity: [], progress: null, documentCount: null, commentCount: null,
-    canApprove: pendingStatus(source, dto),
+    key: dto.verificationId, id: dto.verificationId, reviewId: dto.verificationId, source: text(dto.sourceType), sourceId: text(dto.sourceId), entityId: text(dto.entityId),
+    entityName: name, initials: name === '—' ? '—' : name.split(/\s+/).slice(0, 2).map((p) => p[0]).join(''),
+    entityType: ENTITIES[dto.entityType] || '—', regNo: display(dto.registrationNumber), type: TYPES[dto.verificationType] || '—',
+    statusCode: text(dto.status), status: STATUS[dto.status] || '—', riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(dto.riskLevel) ? label(dto.riskLevel) : '—',
+    submittedOn: verificationDate(dto.submittedAt, true), submittedBy: person(dto.submittedBy), contactHint: [text(contact.email), text(contact.phone)].filter(Boolean).join(' · ') || '—',
+    assignedTo: display(dto.assignedAdminName), assignedRole: label(dto.assignedAdminRole), assignedAdminId: text(dto.assignedAdminId),
+    dueDate: verificationDate(dto.dueDate, true), dueDateRaw: text(dto.dueDate), priority: label(dto.priority), priorityCode: text(dto.priority),
+    country: display(dto.country), joined: verificationDate(dto.joinedAt), reviewedOn: verificationDate(dto.reviewedAt, true),
+    expiringSoon: typeof dto.expiringSoon === 'boolean' ? dto.expiringSoon : null, version: count(dto.version),
+    progress: progress(dto.progress), requirements, documentCount: count(dto.documentCount), commentCount: count(dto.commentCount),
+    assessment: display(assessment.outcome), assessmentDescription: display(assessment.description),
+    riskDescription: Array.isArray(dto.riskSignals) && dto.riskSignals.every((v) => text(v)) ? dto.riskSignals.join('; ') || '—' : '—',
+    canApprove: (!Object.hasOwn(dto, 'actions') || dto.actions != null) && ['PENDING', 'IN_REVIEW'].includes(dto.status) && Boolean(SOURCES[dto.sourceType] && text(dto.sourceId)),
+    documentIds: Array.isArray(dto.documentIds) && dto.documentIds.every((v) => text(v)) ? dto.documentIds : null,
   };
 }
-function addLicense(model, dto) {
-  const url = verificationDocumentUrl(dto.licenseUrl || dto.exporterLicenseUrl);
-  if (!url) return model;
-  model.requirements = [{ key: model.key, name: model.source === 'EXPORTER_LICENSE' ? 'Export License' : 'Driver License',
-    sub: text(dto.licenseNumber) || '—', cat: '—', status: model.status, by: '—', on: '—', note: '—', url }];
-  return model;
-}
-function documentRequirement(dto, index) {
-  return {
-    key: text(dto.id) || `${text(dto.type) || 'document'}:${index}`, name: text(dto.label) || '—',
-    sub: text(dto.fileName) || '—', cat: '—', status: dto.status === 'APPROVED' ? 'Completed' : label(dto.status),
-    by: text(dto.reviewedBy?.name) || '—', on: verificationDate(dto.reviewedAt, true), note: text(dto.rejectionReason) || '—',
-    url: verificationDocumentUrl(dto.url),
-  };
-}
-function addDocuments(model, documents) {
-  if (!Array.isArray(documents) || documents.some((document) => !document || typeof document !== 'object' || Array.isArray(document))) return model;
-  model.requirements = documents.map(documentRequirement);
-  model.documentCount = documents.filter((document) => text(document.id)).length;
-  // This is document-checklist completion, not KYC stage completion. A rejected
-  // requirement has no segment in the existing chart, so leave that chart unknown.
-  if (documents.every((document) => ['APPROVED', 'PENDING', 'MISSING'].includes(document.status))) {
-    model.progress = { total: documents.length, completed: documents.filter((document) => document.status === 'APPROVED').length,
-      inReview: 0, pending: documents.filter((document) => ['PENDING', 'MISSING'].includes(document.status)).length };
-  }
-  return model;
-}
-function adaptCompanyDocument(dto) {
-  const model = adaptVerification('KYB', { id: dto.id, businessName: dto.company?.name, email: dto.company?.email });
-  const types = { CAC_CERTIFICATE: 'Business Verification', CAC_STATUS_REPORT: 'Business Verification',
-    TIN_CERTIFICATE: 'Tax Identification (TIN)', OPERATING_LICENCE: 'License Verification',
-    GOODS_IN_TRANSIT_INSURANCE: 'Insurance Verification', PROOF_OF_ADDRESS: 'Company Address Verification' };
-  Object.assign(model, {
-    source: 'COMPANY_DOCUMENT', key: `COMPANY_DOCUMENT:${dto.id}`, ownerId: text(dto.company?.id),
-    type: types[dto.type] || '—', status: { APPROVED: 'Verified', REJECTED: 'Rejected', PENDING: 'Pending' }[dto.status] || '—',
-    submittedOn: verificationDate(dto.uploadedAt, true), submittedBy: text(dto.uploadedBy?.name) || '—',
-    joined: '—', canApprove: dto.status === 'PENDING', expiringSoon: dto.expiryStatus === 'EXPIRING_SOON',
-    documents: [verificationDocumentUrl(dto.url)].filter(Boolean), reviewedOn: verificationDate(dto.reviewedAt, true),
-  });
-  return addDocuments(model, [dto]);
-}
-function validItems(items, count) {
-  if (!Array.isArray(items) || (count != null && (!Number.isInteger(count) || count !== items.length))) return false;
-  const ids = items.map((dto) => text(dto?.id));
-  return ids.every(Boolean) && new Set(ids).size === ids.length;
-}
-export const verificationDetailUrl = (row) => `/verification/detail?id=${encodeURIComponent(row.reviewId)}&source=${encodeURIComponent(row.source)}`;
+export const verificationDetailUrl = (row) => '/verification/detail?id=' + encodeURIComponent(row.reviewId);
 export function verificationSummary(rows) {
-  return {
-    total: '—', totalCaption: 'All time requests', pending: rows ? rows.filter((row) => row.status === 'Pending').length : '—', pendingShare: '—',
-    inReview: rows ? rows.filter((row) => row.status === 'In Review').length : '—', inReviewShare: '—',
-    verified: '—', verifiedShare: '—', rejected: '—', rejectedShare: '—', expiringSoon: '—', expiringSoonCaption: 'Documents / Licenses',
-  };
+  const valid = Array.isArray(rows) && rows.every((r) => STATUS[r.statusCode]);
+  const n = (status) => valid ? rows.filter((r) => r.statusCode === status).length : '—';
+  const share = (status) => valid ? (rows.length ? (n(status) / rows.length * 100).toLocaleString('en-US', { maximumFractionDigits: 1 }) : '0') + '%' : '—';
+  return { total: valid ? rows.length : '—', totalCaption: 'All time requests', pending: n('PENDING'), pendingShare: share('PENDING'),
+    inReview: n('IN_REVIEW'), inReviewShare: share('IN_REVIEW'), verified: n('VERIFIED'), verifiedShare: share('VERIFIED'), rejected: n('REJECTED'), rejectedShare: share('REJECTED'),
+    expiringSoon: Array.isArray(rows) && rows.every((r) => typeof r.expiringSoon === 'boolean') ? rows.filter((r) => r.expiringSoon).length : '—', expiringSoonCaption: 'Documents / Licenses' };
 }
-async function readPending(baseQuery, source) {
-  const config = SOURCES[source];
-  if (!config) return failure('This verification type is not supported by the documented API.');
-  const result = await baseQuery({ url: `/admin/${config.path}/pending` });
+async function readDetail(baseQuery, id) {
+  const result = await baseQuery({ url: '/admin/verification/' + encodeURIComponent(id) });
   if (result.error) return result;
   const dto = record(unwrapApiResponseData(result.data));
-  if (!validItems(dto[config.collection], dto.count)) return failure('The API did not return a complete pending verification queue with unique entity IDs.');
-  return { data: dto[config.collection] };
+  return dto.verificationId === id ? { data: adaptVerification(dto) } : failure('The response does not identify the selected verification.');
 }
-async function readCompanyDocuments(baseQuery, params = {}) {
-  const rows = [], seen = new Set();
-  let page = 1, totalPages = 1, total = null;
-  do {
-    const result = await baseQuery({ url: '/admin/company-documents', params: { ...params, page, limit: 100 } });
+async function pages(baseQuery, api, url, select, identity) {
+  const rows = [], seen = new Set(), owner = api.getState().auth.admin?.id;
+  let total = null, totalPages = null;
+  for (let page = 1; page <= 500; page += 1) {
+    if (api.signal.aborted || api.getState().auth.admin?.id !== owner) return failure('Verification loading was cancelled.');
+    const result = await baseQuery({ url, params: { page, limit: 100 } });
     if (result.error) return result;
-    const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
-    if (!validItems(dto.documents) || pagination.page !== page || !Number.isInteger(pagination.totalPages) || pagination.totalPages < 0 || !Number.isInteger(pagination.total) || pagination.total < 0) return failure('The company document response is missing the records or pagination needed to load every review.');
-    if (total !== null && (pagination.total !== total || Math.max(1, pagination.totalPages) !== totalPages)) return failure('The company document queue changed while loading. Refresh to load it again.');
-    total = pagination.total;
-    totalPages = Math.max(1, pagination.totalPages);
-    if (page < totalPages && !dto.documents.length) return failure('The company document queue returned an incomplete page.');
-    for (const item of dto.documents) {
-      if (seen.has(item.id)) return failure('The company document queue returned a duplicate document.');
-      seen.add(item.id); rows.push(item);
-    }
-    page += 1;
-  } while (page <= totalPages);
-  if (rows.length !== total) return failure('The company document queue did not return every review.');
-  return { data: rows };
+    if (api.getState().auth.admin?.id !== owner) return failure('Verification loading was cancelled.');
+    const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination), list = select(dto);
+    const size = count(pagination.limit), nextTotal = count(pagination.total), nextPages = count(pagination.totalPages);
+    if (!Array.isArray(list) || count(pagination.page) !== page || !size || size > 100 || nextTotal == null || nextPages == null || nextPages > 500 || Math.max(1, nextPages) !== Math.max(1, Math.ceil(nextTotal / size)) || list.length > size) return failure('The response is missing verification records or valid pagination.');
+    if (total != null && (nextTotal !== total || nextPages !== totalPages)) return failure('Verifications changed while loading. Refresh and try again.');
+    total = nextTotal; totalPages = nextPages;
+    for (const row of list) { const key = identity(row); if (!key || seen.has(key)) return failure('The response has missing or duplicate verification records.'); seen.add(key); rows.push(row); }
+    if (page >= totalPages) return rows.length === total ? { data: rows } : failure('The verification response is incomplete.');
+    if (list.length !== size) return failure('The verification response contains an incomplete page.');
+  }
+  return failure('The verification collection exceeds the supported page count.');
 }
-export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminVerificationDirectory', 'AdminVerificationDetail'] }).injectEndpoints({
+function historyItems(dto) {
+  const arrays = Object.values(dto).filter(Array.isArray);
+  // The envelope is undocumented: accept only an actual, unambiguous event collection.
+  return arrays.length === 1 && arrays[0].every((v) => text(v?.timestamp) && !Number.isNaN(new Date(v.timestamp).getTime())) ? arrays[0] : null;
+}
+const EVENTS = ['APPLICATION_SUBMITTED', 'DOCUMENT_REVIEW', 'INFORMATION_VERIFICATION', 'COMPLIANCE_ASSESSMENT', 'FINAL_DECISION'];
+export function verificationTimeline(model, events) {
+  return EVENTS.map((type, i) => {
+    const event = events?.find((e) => Object.values(e).includes(type));
+    return { title: ['Application Submitted', 'Document Review', 'Information Verification', 'Compliance Assessment', 'Final Decision'][i], icon: 'check',
+      state: event ? ['REJECTED', 'NON_COMPLIANT', 'FAILED'].includes(event.outcome) ? 'danger' : ['VERIFIED', 'APPROVED', 'COMPLETED', 'SUBMITTED'].includes(event.outcome) ? 'done' : 'pending' : i === 0 && model.submittedOn !== '—' ? 'done' : 'pending',
+      time: event ? verificationDate(event.timestamp, true) : i === 0 ? model.submittedOn : i === 4 ? model.reviewedOn : '—', description: event ? label(event.outcome) : '—' };
+  });
+}
+export const verificationEntryActivity = (entries) => (entries || []).map((e) => ({ text: display(e.body), actor: person(e.author), time: verificationDate(e.createdAt, true) }));
+export const verificationActivity = (events) => (events || []).map((e) => ({ text: label(Object.values(e).find((value) => EVENTS.includes(value))), actor: person(e.actor), time: verificationDate(e.timestamp, true) }));
+async function download(baseQuery, id, kind, filters) {
+  const zip = kind === 'documents', format = zip ? 'zip' : 'pdf';
+  const url = id ? '/admin/verification/' + encodeURIComponent(id) + (zip ? '/documents/download' : '/report') : '/admin/verification/report';
+  const result = await baseQuery({ url, params: { ...filters, ...(zip ? { format } : {}) }, headers: { Accept: zip ? 'application/zip' : 'application/pdf' }, responseHandler: async (response) => {
+    if (response.ok) return response.blob();
+    try { return JSON.parse(await response.text()); } catch { return { message: 'Unable to download the verification document.' }; }
+  } });
+  if (result.error) return result;
+  if (!(result.data instanceof Blob) || !result.data.size) return failure('No verification document was returned.');
+  const bytes = new Uint8Array(await result.data.arrayBuffer());
+  if (zip ? bytes[0] !== 80 || bytes[1] !== 75 || ![[3,4],[5,6],[7,8]].some(([a,b]) => bytes[2] === a && bytes[3] === b) : String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') return failure('The backend did not return a valid ' + format.toUpperCase() + ' document.');
+  let binary = ''; for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+  return { data: { content: btoa(binary), format } };
+}
+export function saveVerificationDocument(document) {
+  const bytes = Uint8Array.from(atob(document.content), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: document.format === 'zip' ? 'application/zip' : 'application/pdf' }));
+  const link = window.document.createElement('a'); link.href = url; link.download = 'verification.' + document.format; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const tags = ['AdminVerificationDirectory', 'AdminVerificationDetail', 'AdminVerificationHistory'];
+const invalidations = [...tags, 'AdminCompanies', 'AdminDrivers', 'AdminDriverStats', 'AdminForwarders', 'AdminFleet'];
+export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).injectEndpoints({
   endpoints: (builder) => ({
     getAdminVerificationDirectory: builder.query({
-      async queryFn(_args, _api, _options, baseQuery) {
-        // The combined endpoint includes financial withdrawals and does not
-        // enumerate every group type. Use the documented native queues to keep
-        // account, KYB, licence and physical truck reviews distinct.
-        const sources = Object.keys(SOURCES);
-        const results = await Promise.all([...sources.map((source) => readPending(baseQuery, source)), readCompanyDocuments(baseQuery)]);
-        const failed = results.find((result) => result.error);
-        if (failed) return failed;
-        const rows = results.flatMap((result, index) => result.data.map((item) => index === sources.length ? adaptCompanyDocument(item) : adaptVerification(sources[index], item)));
-        return { data: rows };
-      },
-      providesTags: ['AdminVerificationDirectory', 'AdminCompanies', 'AdminDrivers', 'AdminForwarders', 'AdminFleet'],
+      async queryFn(_args, api, _options, baseQuery) {
+        const result = await pages(baseQuery, api, '/admin/verification', (dto) => dto.verifications, (dto) => text(dto?.verificationId));
+        return result.error ? result : { data: result.data.map(adaptVerification) };
+      }, providesTags: ['AdminVerificationDirectory'],
     }),
     getAdminVerificationDetail: builder.query({
-      async queryFn({ source, id }, _api, _options, baseQuery) {
-        if (!text(id)) return failure('A real entity ID is required to load a verification.');
-        const pending = source === 'COMPANY_DOCUMENT' ? await readCompanyDocuments(baseQuery) : await readPending(baseQuery, source);
-        if (pending.error) return pending;
-        const item = pending.data.find((entry) => entry.id === id);
-        if (!item) return { data: null };
-        const model = source === 'COMPANY_DOCUMENT' ? adaptCompanyDocument(item) : adaptVerification(source, item);
-        if (source === 'EXPORTER_LICENSE') addLicense(model, item);
-        if (source === 'DRIVER') addLicense(model, record(item.driverProfile));
-        const userId = model.ownerId;
-        if (!userId) return { data: model };
-        const profile = await baseQuery({ url: `/admin/users/${encodeURIComponent(userId)}/profile` });
-        if (profile.error?.status === 401 || profile.error?.status === 403) return { error: profile.error };
-        const user = record(unwrapApiResponseData(profile.data));
-        const matches = user.id === userId && (source === 'DRIVER' ? user.role === 'DRIVER' : source === 'EXPORTER_LICENSE' ? user.role === 'FORWARDER' : user.role === 'TRUCKER' && (['KYB', 'COMPANY_DOCUMENT'].includes(source) ? user.truckerType === 'COMPANY' : true));
-        if (matches) {
-          const company = record(user.details?.company);
-          model.entityName = text(company.businessName) || text(user.name) || model.entityName;
-          model.initials = model.entityName === '—' ? '—' : model.entityName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
-          model.entityType = entityType(source, user);
-          model.regNo = text(company.cacNumber) || model.regNo;
-          const joined = verificationDate(user.joinedAt || user.details?.account?.dateJoined);
-          if (joined !== '—') model.joined = joined;
-          if (user.role === 'TRUCKER' && user.truckerType === 'COMPANY' && ['KYB', 'TRUCKER'].includes(source)) {
-            const companyInfo = await baseQuery({ url: `/admin/users/${encodeURIComponent(userId)}/company-info` });
-            if (companyInfo.error?.status === 401 || companyInfo.error?.status === 403) return { error: companyInfo.error };
-            if (!companyInfo.error) addDocuments(model, record(unwrapApiResponseData(companyInfo.data)).documents);
-          }
+      async queryFn(args, api, _options, baseQuery) {
+        if (!text(args.id)) return failure('A verification ID is required.');
+        if (args.source && SOURCES[args.source]) {
+          const directory = await pages(baseQuery, api, '/admin/verification', (dto) => dto.verifications, (dto) => text(dto?.verificationId));
+          if (directory.error) return directory;
+          const row = directory.data.find((dto) => dto.verificationId === args.id || dto.sourceType === args.source && dto.sourceId === args.id);
+          return row ? readDetail(baseQuery, row.verificationId) : { data: null };
         }
-        return { data: model };
-      },
-      providesTags: (_data, _error, args) => [{ type: 'AdminVerificationDetail', id: `${args.source}:${args.id}` }],
+        return readDetail(baseQuery, args.id);
+      }, providesTags: ['AdminVerificationDetail'],
     }),
+    getAdminVerificationHistory: builder.query({
+      queryFn: ({ id }, api, _options, baseQuery) => text(id) ? pages(baseQuery, api, '/admin/verification/' + encodeURIComponent(id) + '/history', historyItems, (dto) => text(dto?.id) || [dto?.timestamp, dto?.type, dto?.outcome].filter(text).join(':')) : failure('A verification ID is required.'),
+      providesTags: ['AdminVerificationHistory'],
+    }),
+    getAdminVerificationEntries: builder.query({
+      queryFn: ({ id, kind }, api, _options, baseQuery) => text(id) && ['comments', 'notes'].includes(kind) ? pages(baseQuery, api, '/admin/verification/' + encodeURIComponent(id) + '/' + kind, (dto) => {
+        const arrays = Object.values(dto).filter(Array.isArray);
+        return arrays.length === 1 && arrays[0].every((row) => text(row?.body)) ? arrays[0] : null;
+      }, (dto) => text(dto?.id) || [dto?.body, dto?.createdAt].filter(text).join(':')) : failure('Unsupported verification entry collection.'),
+      providesTags: ['AdminVerificationHistory'],
+    }),
+    getAdminVerificationDownload: builder.query({ queryFn: ({ id, kind, filters }, _api, _options, baseQuery) => download(baseQuery, id, kind, filters) }),
     approveAdminVerificationEntity: builder.mutation({
-      async queryFn({ source, id }, api, _options, baseQuery) {
-        if (!canReviewVerification(api.getState().auth.admin?.role, source)) return failure('You do not have permission to approve verifications.');
-        if (!text(id)) return failure('A real entity ID is required to approve a verification.');
-        const pending = source === 'COMPANY_DOCUMENT' ? await readCompanyDocuments(baseQuery, { status: 'pending' }) : await readPending(baseQuery, source);
-        if (pending.error) return pending;
-        const item = pending.data.find((entry) => entry.id === id);
-        if (!item || (source === 'COMPANY_DOCUMENT' ? item.status !== 'PENDING' : !pendingStatus(source, item))) return failure('This entity is no longer pending this review. Refresh before proceeding.');
-        const config = source === 'COMPANY_DOCUMENT' ? { path: 'company-documents', response: 'document' } : SOURCES[source];
-        const result = await baseQuery({ url: `/admin/${config.path}/${encodeURIComponent(id)}/approve`, method: 'POST' });
+      async queryFn({ id, owner }, api, _options, baseQuery) {
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return failure('Your session changed. Reload before approving.');
+        if (!text(id)) return failure('A verification ID is required.');
+        const current = await readDetail(baseQuery, id); if (current.error) return current;
+        const v = current.data;
+        if (owner !== api.getState().auth.admin?.id || api.signal.aborted) return failure('Your session changed. Reload before approving.');
+        if (!canReviewVerification(api.getState().auth.admin?.role, v.source) || !v.canApprove) return failure('This verification cannot be approved by your account in its current state.');
+        const result = await baseQuery({ url: '/admin/' + SOURCES[v.source] + '/' + encodeURIComponent(v.sourceId) + '/approve', method: 'POST' });
         if (result.error) return result;
-        const dto = record(unwrapApiResponseData(result.data)), updated = record(dto[config.response]);
-        const confirmed = source === 'COMPANY_DOCUMENT' ? updated.status === 'APPROVED' : source === 'KYB' ? updated.kycStatus === 'VERIFIED' : source === 'EXPORTER_LICENSE' ? updated.exporterLicenseStatus === 'VERIFIED' : updated.status === 'ACTIVE';
-        if (updated.id !== id || !confirmed) return failure('The approval response did not confirm the expected entity and status. Refresh before attempting another approval.');
-        return { data: { message: text(dto.message) || 'Verification approved.', status: 'Verified', ...(source === 'COMPANY_DOCUMENT' ? { document: updated } : {}) } };
-      },
-      async onQueryStarted(args, { dispatch, queryFulfilled }) {
-        try {
-          const { data } = await queryFulfilled;
-          dispatch(verificationApi.util.updateQueryData('getAdminVerificationDetail', args, (draft) => {
-            if (draft) {
-              draft.status = data.status; draft.canApprove = false;
-              if (data.document) { addDocuments(draft, [data.document]); draft.reviewedOn = verificationDate(data.document.reviewedAt, true); }
-            }
-          }));
-        } catch { /* The existing action reports the server error. */ }
-      },
-      invalidatesTags: ['AdminVerificationDirectory', 'AdminCompanies', 'AdminDrivers', 'AdminDriverStats', 'AdminForwarders', 'AdminFleet'],
+        const confirmed = await readDetail(baseQuery, id);
+        if (confirmed.error || confirmed.data.statusCode !== 'VERIFIED') return failure('Approval was submitted, but its result could not be confirmed. Refresh before trying again.');
+        return { data: { message: 'Verification approved.' } };
+      }, invalidatesTags: invalidations,
+    }),
+    changeAdminVerification: builder.mutation({
+      async queryFn({ action, id, body, owner }, api, _options, baseQuery) {
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return failure('Your session changed. Reload before saving.');
+        if (!canManageVerification(api.getState().auth.admin?.role)) return failure('Your account cannot manage verifications.');
+        const config = { create: ['POST', ''], edit: ['PATCH', ''], reassign: ['POST', '/reassign'], information: ['POST', '/request-information'], noncompliant: ['POST', '/mark-non-compliant'], cancel: ['POST', '/cancel'], comment: ['POST', '/comments'], note: ['POST', '/notes'] }[action];
+        if (!config || action !== 'create' && !text(id)) return failure('Unsupported verification action.');
+        let current;
+        if (action !== 'create') {
+          current = await readDetail(baseQuery, id); if (current.error) return current;
+          if (!['comment', 'note'].includes(action) && (count(body.expectedVersion) == null || current.data.version !== body.expectedVersion)) return failure('The verification changed or has no documented version. Refresh before saving.');
+          if (action === 'noncompliant' && !canReviewVerification(api.getState().auth.admin?.role, current.data.source)) return failure('Your account cannot reject this source record.');
+        }
+        if (owner !== api.getState().auth.admin?.id || api.signal.aborted) return failure('Your session changed. Reload before saving.');
+        const result = await baseQuery({ url: '/admin/verification' + (action === 'create' ? '' : '/' + encodeURIComponent(id)) + config[1], method: config[0], body });
+        if (result.error) return result;
+        // Write response schemas are mostly absent. Never create optimistic records or statuses.
+        if (action === 'create' || ['comment', 'note'].includes(action)) return { data: { accepted: true } };
+        const confirmed = await readDetail(baseQuery, id); if (confirmed.error) return failure('The update was submitted, but could not be refreshed. Refresh before trying again.');
+        const v = confirmed.data;
+        const valid = action === 'cancel' ? v.statusCode === 'CANCELLED' : action === 'noncompliant' ? v.statusCode === 'NON_COMPLIANT' : action === 'reassign' ? v.assignedAdminId === body.assignedAdminId : action === 'information' ? (current.data.statusCode === 'PENDING' ? v.statusCode === 'IN_REVIEW' : v.statusCode === current.data.statusCode) && text(record(unwrapApiResponseData(result.data)).requestId) : (!body.priority || v.priorityCode === body.priority) && (!body.documentIds || Array.isArray(v.documentIds) && body.documentIds.length === v.documentIds.length && body.documentIds.every((documentId) => v.documentIds.includes(documentId))) && (!Object.hasOwn(body, 'dueDate') || (body.dueDate === null ? v.dueDateRaw === null : new Date(v.dueDateRaw).getTime() === new Date(body.dueDate).getTime()));
+        return valid ? { data: { accepted: true } } : failure('The update was submitted, but its requested values could not be confirmed. Refresh before trying again.');
+      }, invalidatesTags: invalidations,
     }),
   }),
 });
-export const { useGetAdminVerificationDirectoryQuery, useGetAdminVerificationDetailQuery, useApproveAdminVerificationEntityMutation } = verificationApi;
+export const { useGetAdminVerificationDirectoryQuery, useGetAdminVerificationDetailQuery, useGetAdminVerificationHistoryQuery, useGetAdminVerificationEntriesQuery, useLazyGetAdminVerificationDownloadQuery, useApproveAdminVerificationEntityMutation, useChangeAdminVerificationMutation } = verificationApi;

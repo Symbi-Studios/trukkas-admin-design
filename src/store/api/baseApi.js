@@ -12,7 +12,8 @@ const reauthExcludedPaths = new Set([
   '/admin/auth/forgot-password',
   '/admin/auth/reset-password',
 ]);
-const retryableAfterRefresh = new Set(['markAdminNotificationsRead', 'markAllAdminNotificationsRead']);
+// Report preview uses POST for read-only configuration evaluation.
+const retryableAfterRefresh = new Set(['markAdminNotificationsRead', 'markAllAdminNotificationsRead', 'previewAdminReport']);
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl,
@@ -28,7 +29,7 @@ const refreshBaseQuery = fetchBaseQuery({ baseUrl });
 let activeRefresh = null;
 
 const REDACTED = '[REDACTED]';
-const sensitiveField = /authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|route|plate|notes?|comment|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
+const sensitiveField = /entity[_-]?id|authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|route|plate|notes?|details|comment|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
 const identityCollection = new Set([
   'users', 'admins', 'drivers', 'forwarders', 'customers', 'profiles',
   'companies', 'accounts', 'recipients', 'contacts', 'verification',
@@ -120,18 +121,32 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const method = (request?.method || (typeof args === 'string' ? 'GET' : args.method || 'GET')).toUpperCase();
   const url = sanitizeUrl(request?.url || (typeof args === 'string' ? args : args.url));
   const requestBody = typeof args === 'string' ? undefined : args.body;
+  const verificationContent = /Verification/.test(api.endpoint);
+  const userManagementContent = /(?:UserManagement|ManagedUser|ManagedAdmin)/.test(api.endpoint);
+  const reportContent = /^(?:get|preview|create|download|save|schedule)AdminReport/.test(api.endpoint);
+  const roleContent = /^(?:getAdminRolesDirectory|getAdminRole|getAdminPermissions|changeAdminRole)$/.test(api.endpoint);
   const csvResponse = !result.error && (
     ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips', 'exportAdminMaintenance', 'exportAdminDriverCompliance'].includes(api.endpoint)
     || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')
   );
   // Free-text audit actions and notes can contain personal details that field-
   // name redaction cannot reliably identify. Keep the request/status log only.
-  const auditResponse = !result.error && (typeof args === 'string' ? args : args.url).split('?')[0] === '/admin/audit-logs';
+  const auditResponse = /^\/admin\/audit-logs(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const driverActivityResponse = !result.error && api.endpoint === 'getAdminDriverActivity';
   const pricingHistoryResponse = !result.error && ['getAdminPricingHistory', 'getAdminPricingRecentHistory', 'getAdminPricingExceptions'].includes(api.endpoint);
   const transactionContentResponse = !result.error && ['getAdminTransactionLedger', 'getAdminTransactionDetail', 'getAdminTransactionStats', 'reportAdminTransactionIssue'].includes(api.endpoint);
   const settlementResponse = !result.error && ['getAdminSettlements', 'getAdminSettlement', 'getAdminSettlementAlerts', 'approveAdminSettlement', 'retryAdminSettlement'].includes(api.endpoint);
-  const responseBody = csvResponse
+  const feeContentResponse = !result.error && ['getAdminFeeRules', 'getAdminFeeRule', 'getAdminFeeRuleHistory', 'updateAdminFeeRule', 'setAdminFeeRuleStatus', 'bulkUpdateAdminFeeRules'].includes(api.endpoint);
+  const demurrageResponse = /Demurrage/.test(api.endpoint);
+  const responseBody = userManagementContent
+    ? '[User management content omitted]'
+    : roleContent
+    ? '[Role and permission content omitted]'
+    : reportContent
+    ? '[Report content omitted]'
+    : verificationContent
+    ? '[Verification content omitted]'
+    : csvResponse
     ? '[CSV content omitted]'
     : auditResponse
       ? '[Audit log content omitted]'
@@ -143,6 +158,10 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
       ? '[Transaction content omitted]'
     : settlementResponse
       ? '[Settlement content omitted]'
+    : feeContentResponse
+      ? '[Fee rule and history content omitted]'
+    : demurrageResponse
+      ? '[Demurrage content omitted]'
     : result.error
       ? (result.error.data ?? { error: result.error.error ?? result.error.status })
       : result.data;
@@ -153,7 +172,7 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
     method,
     url,
     headers: sanitizeForLog(request?.headers),
-    body: sanitizeForLog(requestBody),
+    body: userManagementContent ? '[User management request content omitted]' : roleContent ? '[Role request content omitted]' : reportContent ? '[Report request content omitted]' : verificationContent ? '[Verification request content omitted]' : sanitizeForLog(requestBody),
   });
   console.info('Response body:', sanitizeForLog(responseBody));
   console.groupEnd();

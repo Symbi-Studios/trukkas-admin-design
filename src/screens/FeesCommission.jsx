@@ -27,10 +27,14 @@ import {
   Skeleton,
 } from "../ds.js";
 import {
-  useGetAdminFeeRevenueQuery, emptyFeeSummary,
-  unavailableFeeCatalog, unavailableFeeDistribution as feeDistribution,
+  useGetAdminFeeRevenueQuery, useGetAdminFeeSummaryQuery, useGetAdminFeeRulesQuery, emptyFeeSummary,
+  unavailableFeeCatalog, unavailableFeeDistribution, editableFeeRule, feeDetailUrl,
   feeMoney as formatNaira, feeMillions,
 } from '../store/features/fees/feesApi.js';
+
+import { DriverTableLoading } from './DriversLoading.jsx';
+import { useFeeOperations } from '../store/features/fees/useFeeOperations.js';
+import { FeeRuleEditDialog, FeeRulesBulkDialog } from './FeeRuleDialogs.jsx';
 
 const TABS = [
   "Fee Rules",
@@ -108,16 +112,32 @@ function FilterButton({ label, value, options, active, onChange }) {
 
 export function FeesCommission() {
   const navigate = useNavigate();
-  const revenueQuery = useGetAdminFeeRevenueQuery();
-  const feeSummary = revenueQuery.error ? emptyFeeSummary : revenueQuery.currentData || emptyFeeSummary;
-  const rules = unavailableFeeCatalog.rules || [];
+  const operations = useFeeOperations();
+  const revenueQuery = useGetAdminFeeRevenueQuery({ owner: operations.owner }, { skip: !operations.authenticated });
+  const summaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner }, { skip: !operations.authenticated });
+  const catalogQuery = useGetAdminFeeRulesQuery({ owner: operations.owner }, { skip: !operations.authenticated });
+  const catalog = operations.authenticated && !catalogQuery.error ? catalogQuery.currentData || unavailableFeeCatalog : unavailableFeeCatalog;
+  const rules = catalog.rules || [];
+  const monthly = operations.authenticated && !revenueQuery.error ? revenueQuery.currentData || emptyFeeSummary : emptyFeeSummary;
+  const feeSummary = { ...(operations.authenticated && !summaryQuery.error ? summaryQuery.currentData?.summary || emptyFeeSummary : emptyFeeSummary), totalRevenue: monthly.totalRevenue };
+  const feeDistribution = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData?.distribution || unavailableFeeDistribution : unavailableFeeDistribution;
   const revenueLoading = revenueQuery.isLoading || (revenueQuery.isFetching && !revenueQuery.currentData);
+  const metric = (value) => summaryQuery.isLoading ? <Skeleton as="span" width={96} height={23} /> : value;
+  const [editRule, setEditRule] = useState(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  function openBulk() {
+    setMenuFor(null);
+    if (!operations.canManage) { window.alert('Fee changes require Super Admin or Finance Admin access.'); return; }
+    if (catalogQuery.error || !catalog.rules || catalogQuery.isFetching || operations.busy) { window.alert('Fee rules must load before they can be edited.'); return; }
+    setBulkOpen(true);
+  }
   const [tab, setTab] = useState("Fee Rules");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("All Status");
   const [jobType, setJobType] = useState("All Job Types");
   const [cargoType, setCargoType] = useState("All Cargo Types");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [menuFor, setMenuFor] = useState(null);
 
   const filtered = useMemo(
@@ -125,8 +145,8 @@ export function FeesCommission() {
       rules.filter(
         (r) =>
           (status === "All Status" || r.status === status) &&
-          (jobType === "All Job Types" || r.jobType === jobType) &&
-          (cargoType === "All Cargo Types" || r.cargoType === cargoType) &&
+          (jobType === "All Job Types" || r.jobType === "All" || r.jobType === jobType) &&
+          (cargoType === "All Cargo Types" || r.cargoType === "All" || r.cargoType === cargoType) &&
           (!q ||
             [r.name, r.sub, r.appliesTo].some(
               (v) => v && v.toLowerCase().includes(q.toLowerCase()),
@@ -135,7 +155,13 @@ export function FeesCommission() {
     [rules, status, jobType, cargoType, q],
   );
 
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(Math.max(1, page), pageCount);
+  const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const exportRules = (format) => {
+    setMenuFor(null);
+    void operations.download('rules', format, null, { search: q, status: status === 'All Status' ? undefined : status.toUpperCase(), jobType: jobType === 'All Job Types' ? undefined : jobType, cargoType: cargoType === 'All Cargo Types' ? undefined : cargoType });
+  };
 
   return (
     <>
@@ -170,8 +196,8 @@ export function FeesCommission() {
                   <DropdownMenu
                     width={200}
                     items={[
-                      { label: "Export as CSV", icon: "file-text" },
-                      { label: "Export as PDF", icon: "file-text" },
+                      { label: "Export as CSV", icon: "file-text", onClick: () => exportRules("csv") },
+                      { label: "Export as PDF", icon: "file-text", onClick: () => exportRules("pdf") },
                     ]}
                   />
                 </span>
@@ -198,10 +224,10 @@ export function FeesCommission() {
                   <DropdownMenu
                     width={220}
                     items={[
-                      { label: "Bulk Update Fees", icon: "list-checks" },
-                      { label: "Import Fee Rules", icon: "upload" },
+                      { label: "Bulk Update Fees", icon: "list-checks", onClick: openBulk },
+                      { label: "Import Fee Rules", icon: "upload", onClick: () => { setMenuFor(null); operations.unavailable("Importing fee rules"); } },
                       { divider: true },
-                      { label: "Export Fee Report", icon: "file-text" },
+                      { label: "Export Fee Report", icon: "file-text", onClick: () => { setMenuFor(null); void operations.download("report"); } },
                     ]}
                   />
                 </span>
@@ -230,7 +256,7 @@ export function FeesCommission() {
           icon="scan-line"
           tint="purple"
           label="Total Platform Fees"
-          value={formatNaira(feeSummary.totalPlatformFees)}
+          value={metric(formatNaira(feeSummary.totalPlatformFees))}
           delta={feeSummary.totalPlatformFeesDelta}
           caption="vs last month"
         />
@@ -238,7 +264,7 @@ export function FeesCommission() {
           icon="handshake"
           tint="amber"
           label="Total Commissions"
-          value={formatNaira(feeSummary.totalCommissions)}
+          value={metric(formatNaira(feeSummary.totalCommissions))}
           delta={feeSummary.totalCommissionsDelta}
           caption="vs last month"
         />
@@ -246,7 +272,7 @@ export function FeesCommission() {
           icon="file-minus"
           tint="red"
           label="Total Deductions"
-          value={formatNaira(feeSummary.totalDeductions)}
+          value={metric(formatNaira(feeSummary.totalDeductions))}
           delta={feeSummary.totalDeductionsDelta}
           direction="down"
           caption="vs last month"
@@ -255,7 +281,7 @@ export function FeesCommission() {
           icon="chart-pie"
           tint="blue"
           label="Avg. Effective Rate"
-          value={feeSummary.avgEffectiveRate}
+          value={metric(feeSummary.avgEffectiveRate)}
           delta={feeSummary.avgEffectiveRateDelta}
           caption="vs last month"
         />
@@ -339,12 +365,12 @@ export function FeesCommission() {
                 >
                   Fee Rules{" "}
                   <span style={{ color: "var(--tk-ink-400)", fontWeight: 500 }}>
-                    ({unavailableFeeCatalog.total ?? "—"})
+                    ({catalog.total ?? "—"})
                   </span>
                 </span>
               </div>
 
-              <DataTable
+              {catalogQuery.isLoading ? <DriverTableLoading columns={9} label="Loading fee rules" /> : <DataTable
                 rows={paged}
                 rowKey={(r) => r.id}
                 columns={[
@@ -362,7 +388,7 @@ export function FeesCommission() {
                         {iconTile(r.icon, r.iconTint)}
                         <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
                           <Link
-                            to={"/fees/" + r.id}
+                            to={feeDetailUrl(r)}
                             style={{
                               font: "600 13px/18px var(--tk-font-sans)",
                               color: "var(--tk-ink-900)",
@@ -429,11 +455,11 @@ export function FeesCommission() {
                                   icon: "eye",
                                   onClick: () => {
                                     setMenuFor(null);
-                                    navigate("/fees/" + r.id);
+                                    navigate(feeDetailUrl(r));
                                   },
                                 },
-                                { label: "Edit Rule", icon: "pencil" },
-                                { label: "Duplicate Rule", icon: "copy" },
+                                { label: "Edit Rule", icon: "pencil", disabled: catalogQuery.isFetching || operations.busy || !operations.canManage || !editableFeeRule(r), onClick: () => { setMenuFor(null); setEditRule(r); } },
+                                { label: "Duplicate Rule", icon: "copy", onClick: () => { setMenuFor(null); operations.unavailable("Duplicating fee rules"); } },
                                 { divider: true },
                                 {
                                   label:
@@ -442,6 +468,8 @@ export function FeesCommission() {
                                       : "Activate Rule",
                                   icon: "circle-slash",
                                   tone: "danger",
+                                  disabled: catalogQuery.isFetching || operations.busy || !operations.canManage || !editableFeeRule(r),
+                                  onClick: () => { setMenuFor(null); void operations.toggle(r); },
                                 },
                               ]}
                             />
@@ -451,14 +479,14 @@ export function FeesCommission() {
                     ),
                   },
                 ]}
-              />
+              />}
               <Pagination
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={unavailableFeeCatalog.total ?? undefined}
-                pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-                onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))))}
-                onPageSize={() => {}}
+                page={currentPage}
+                pageSize={pageSize}
+                total={catalog.rules ? filtered.length : undefined}
+                pageCount={pageCount}
+                onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, Math.ceil(filtered.length / pageSize))))}
+                onPageSize={(size) => { if (Number.isSafeInteger(size) && size > 0) { setPageSize(size); setPage(1); } }}
               />
             </>
           ) : (
@@ -525,7 +553,7 @@ export function FeesCommission() {
               <DonutChart
                 size={160}
                 thickness={16}
-                centerValue={feeMillions(feeSummary.totalPlatformFees)}
+                centerValue={feeMillions(feeSummary.totalFeesCollected)}
                 centerLabel="Total Fees"
                 data={feeDistribution.filter((d) => Number.isFinite(d.value)).map((d) => ({
                   label: d.label,
@@ -552,31 +580,39 @@ export function FeesCommission() {
                 icon: "plus",
                 label: "Add New Fee Rule",
                 hint: "Create a fee rule",
+                onClick: () => operations.unavailable("Adding fee rules"),
               },
               {
                 icon: "handshake",
                 label: "Add Commission Rule",
                 hint: "Create a commission rule",
+                onClick: () => operations.unavailable("Adding commission rules"),
               },
               {
                 icon: "layout-template",
                 label: "Create Fee Scheme",
                 hint: "Bundle rules together",
+                onClick: () => operations.unavailable("Creating fee schemes"),
               },
               {
                 icon: "list-checks",
                 label: "Bulk Update Fees",
                 hint: "Edit multiple rules",
+                onClick: openBulk,
               },
               {
                 icon: "file-text",
                 label: "Export Fee Report",
                 hint: "Download as CSV/PDF",
+                onClick: () => void operations.download("report"),
               },
             ]}
           />
         </div>
       </div>
+
+      {editRule && <FeeRuleEditDialog key={editRule.id} rule={editRule} canManage={operations.canManage} onClose={() => setEditRule(null)} />}
+      {bulkOpen && <FeeRulesBulkDialog rules={rules} canManage={operations.canManage} onClose={() => setBulkOpen(false)} />}
 
       <Banner tone="info" title="About Fees & Commission">
         Fees are charged to users for using the platform services. Commissions

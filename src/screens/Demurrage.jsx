@@ -22,7 +22,8 @@ import {
 } from "../ds.js";
 import {
   useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageRulesQuery, useUpdateAdminDemurrageRulesMutation, useLazyGetAdminDemurrageBulkCalculationQuery,
-  demurrageMoney as money, demurrageSummary, demurrageDetailUrl,
+  useGetAdminDemurrageStatsQuery, useGetAdminDemurrageSummaryQuery, useCreateAdminDemurrageMutation,
+  demurrageMoney as money, demurrageSummary, demurrageDetailUrl, demurragePeriod,
 } from "../store/features/demurrage/demurrageApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
@@ -66,7 +67,11 @@ function exportCsv(rows) {
     ]),
   ]
     .map((x) =>
-      x.map((v) => '"' + String(v ?? "—").replaceAll('"', '""') + '"').join(","),
+      x.map((v) => {
+        const raw = String(v ?? "—");
+        const safe = typeof v === "string" && /^\s*[=+@-]/.test(raw) ? `'${raw}` : raw;
+        return '"' + safe.replaceAll('"', '""') + '"';
+      }).join(","),
     )
     .join("\n");
   const u = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -80,12 +85,16 @@ export function Demurrage() {
   const navigate = useNavigate();
   const directoryQuery = useGetAdminDemurrageDirectoryQuery();
   const rulesQuery = useGetAdminDemurrageRulesQuery();
+  const statsQuery = useGetAdminDemurrageStatsQuery();
+  const [createCharge, createState] = useCreateAdminDemurrageMutation();
+  const canCreate = useSelector((state) => ["SUPER_ADMIN", "FINANCE_ADMIN"].includes(state.auth.admin?.role));
+  const creating = useRef(false);
   const [updateRules, updateState] = useUpdateAdminDemurrageRulesMutation();
   const [calculateBulk, bulkState] = useLazyGetAdminDemurrageBulkCalculationQuery();
   const canSaveRules = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
   const directory = directoryQuery.error ? null : directoryQuery.currentData;
   const rows = directory?.rows || EMPTY_ROWS;
-  const summary = useMemo(() => demurrageSummary(directory), [directory]);
+  const summary = useMemo(() => demurrageSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.error, statsQuery.currentData]);
   const toastTimer = useRef(null), savingRules = useRef(false), rulesDirty = useRef(false), bulkPending = useRef(false);
   const [tab, setTab] = useState("All Demurrage"),
     [q, setQ] = useState(""),
@@ -108,17 +117,27 @@ export function Demurrage() {
     [ruleForm, setRuleForm] = useState({ freeDays: "", rate: "" }),
     [toast, setToast] = useState("");
 
+  const dateQuery = useGetAdminDemurrageDirectoryQuery(date ? { dateFrom: `${date}T00:00:00+01:00`, dateTo: `${date}T23:59:59.999+01:00` } : undefined, { skip: !date });
+  const visibleQuery = date ? dateQuery : directoryQuery;
+  const visibleDirectory = visibleQuery.error ? null : visibleQuery.currentData;
+  const visibleRows = visibleDirectory?.rows || EMPTY_ROWS;
+  const periodRange = useMemo(() => demurragePeriod(period), [period]);
+  const periodQuery = useGetAdminDemurrageSummaryQuery(periodRange);
+  const periodSummary = periodQuery.error ? null : periodQuery.currentData;
+  const periodItems = periodSummary?.items || DEMURRAGE_SUMMARY;
+  const periodMetric = (value) => !periodSummary && periodQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => { const error = statsQuery.error || periodQuery.error || dateQuery.error; if (error) notify(getApiErrorMessage(error)); }, [statsQuery.error, periodQuery.error, dateQuery.error]);
   useEffect(() => { if (directoryQuery.error) notify(getApiErrorMessage(directoryQuery.error)); }, [directoryQuery.error]);
   useEffect(() => {
     if (!rules || rulesDirty.current) return;
     const values = rulesQuery.error ? null : rulesQuery.currentData;
     setRuleForm({ freeDays: values?.freeDays ?? "", rate: values?.rate ?? "" });
   }, [rules, rulesQuery.currentData, rulesQuery.error]);
-  const metric = (value) => !directory && directoryQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
+  const metric = (value) => (!directory && directoryQuery.isFetching) || (!statsQuery.currentData && statsQuery.isFetching) ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
   const filtered = useMemo(
     () =>
-      rows.filter(
+      visibleRows.filter(
         (r) =>
           (tab === "All Demurrage" || r.status === (tab === "Disputes" ? "Dispute" : tab)) &&
           (status === "All" || r.status === status) &&
@@ -126,11 +145,9 @@ export function Demurrage() {
           (!q ||
             [r.jobId, r.container, r.customer, r.vessel].some((v) =>
               v?.toLowerCase().includes(q.toLowerCase()),
-            )) &&
-          (!date ||
-            r.chargeDate === date),
+            )),
       ),
-    [rows, tab, status, jobType, q, date],
+    [visibleRows, tab, status, jobType, q],
   );
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -140,9 +157,15 @@ export function Demurrage() {
     toastTimer.current = setTimeout(() => setToast(""), 1600);
   }
   async function submit() {
-    if (!form.jobId || !form.container || !form.customer) return;
-    setCreate(false);
-    notify("Creating a demurrage charge is not available yet.");
+    if (creating.current || createState.isLoading || !canCreate || !form.jobId || !form.container || !form.customer) return;
+    creating.current = true;
+    try {
+      const result = await createCharge(form).unwrap();
+      setCreate(false);
+      setForm({ jobId: "", container: "", customer: "", freeDays: "", daysOver: "", rate: "" });
+      notify(result.warning || `Demurrage charge ${result.id} created.`);
+    } catch (error) { notify(getApiErrorMessage(error)); }
+    finally { creating.current = false; }
   }
   async function saveRules() {
     if (savingRules.current || updateState.isLoading || !canSaveRules) return;
@@ -154,11 +177,11 @@ export function Demurrage() {
     finally { savingRules.current = false; }
   }
   async function bulkCalculate() {
-    if (bulkPending.current || bulkState.isFetching || directoryQuery.isFetching) return;
-    if (!directory || !paged.length) { notify("Load demurrage records before calculating."); return; }
+    if (bulkPending.current || bulkState.isFetching || visibleQuery.isFetching) return;
+    if (!visibleDirectory || !paged.length) { notify("Load demurrage records before calculating."); return; }
     bulkPending.current = true;
     try {
-      const result = await calculateBulk(paged.map((row) => row.jobApiId)).unwrap();
+      const result = await calculateBulk(paged.map((row) => row.chargeApiId), false).unwrap();
       notify(`Bulk calculation completed for ${result.count} visible records.`);
     } catch (error) { notify(getApiErrorMessage(error)); }
     finally { bulkPending.current = false; }
@@ -170,7 +193,7 @@ export function Demurrage() {
         title="Demurrage"
         description="Track and manage demurrage and detention charges across all shipments and containers."
         actions={
-          <Button icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportCsv(filtered)}>
+          <Button icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>
             Export Report
           </Button>
         }
@@ -291,7 +314,7 @@ export function Demurrage() {
                 Reset
               </Button>
             </div>
-            {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable
+            {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable
               rows={paged}
               rowKey={(r) => r.key}
               onRowClick={(r) => navigate(demurrageDetailUrl(r))}
@@ -482,13 +505,13 @@ export function Demurrage() {
               <DonutChart
                 size={180}
                 thickness={18}
-                centerValue="—"
+                centerValue={periodMetric(money(periodSummary?.totalCharges))}
                 centerLabel="Total Charges"
                 style={{ flex: "0 0 auto" }}
-                data={[]}
+                data={periodSummary?.chart || []}
               />
               <LegendList
-                items={DEMURRAGE_SUMMARY}
+                items={periodItems}
                 showShare={false}
                 style={{ flex: 1, width: "100%" }}
               />
@@ -496,19 +519,19 @@ export function Demurrage() {
             <div className="border-t border-tk-line mt-3.5 pt-1.5">
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Total Charges</span>
-                <b>—</b>
+                <b>{periodMetric(money(periodSummary?.totalCharges))}</b>
               </div>
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Total Collected</span>
-                <b>—</b>
+                <b>{periodMetric(money(periodSummary?.totalCollected))}</b>
               </div>
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Outstanding</span>
-                <b>—</b>
+                <b>{periodMetric(money(periodSummary?.outstanding))}</b>
               </div>
               <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
                 <span>Collection Rate</span>
-                <b>—</b>
+                <b>{periodMetric(periodSummary?.collectionRate == null ? "—" : `${periodSummary.collectionRate}%`)}</b>
               </div>
             </div>
           </SectionCard>
@@ -535,7 +558,7 @@ export function Demurrage() {
               icon="file-chart-column"
               title="Demurrage Reports"
               hint="View and export demurrage reports"
-              onClick={() => directory && !directoryQuery.isFetching ? exportCsv(filtered) : notify("Load demurrage records before exporting." )}
+              onClick={() => visibleDirectory && !visibleQuery.isFetching ? exportCsv(filtered) : notify("Load demurrage records before exporting." )}
             />
           </SectionCard>
           <SectionCard
@@ -582,7 +605,7 @@ export function Demurrage() {
                   <b>{money(r.charge)}</b>
                   <br />
                   <small>
-                    {r.daysOver ? r.daysOver + " days over" : r.overSince}
+                    {r.daysOver != null ? r.daysOver + " days over" : r.overSince}
                   </small>
                 </span>
               </button>
@@ -602,7 +625,7 @@ export function Demurrage() {
               Cancel
             </Button>
             <Button
-              disabled={!form.jobId || !form.container || !form.customer}
+              disabled={!canCreate || createState.isLoading || !form.jobId || !form.container || !form.customer || form.daysOver === ""}
               onClick={submit}
             >
               Create Charge

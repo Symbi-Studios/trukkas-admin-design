@@ -6,19 +6,23 @@ import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, FilterSelect,
   DataTable, Pagination, Badge, Avatar, Tag, DropdownMenu, IconButton, Modal, TextField, Select,
-  DonutChart, LegendList, StatusDot, Skeleton,
+  DonutChart, LegendList, StatusDot, Skeleton, ActivityFeed,
 } from '../ds.js';
 import {
-  useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation,
-  managedUserSummary, managedUserRoleChart, managedUserStatusChart, managedUsersCsv,
+  useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation, useCreateManagedAdminMutation,
+  managedUserSummary, managedUserRoleChart, managedUserStatusChart, managedUsersCsv, managedUserMatchesRole, useGetUserManagementRecentActivityQuery,
 } from '../store/features/users/usersApi.js';
 import { DriverTableLoading, DriverLoadingNotice } from './DriversLoading.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
+import { UserActionDialogs, useManagedUserOperations } from './UserActionDialogs.jsx';
+
 const PAGE_SIZE = 8;
 const ROLES = ['Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Finance Manager', 'Viewer', 'Driver'];
 const STATUSES = ['Active', 'Inactive', 'Locked'];
-const EMPTY_FORM = { name: '', email: '', role: '', entity: '' };
+const EMPTY_FORM = { name: '', email: '', role: '', password: '' };
+const ADMIN_ROLE_OPTIONS = ['Super Admin', 'Operations Admin', 'Finance Admin'];
+const ADMIN_ROLE_CODES = { 'Super Admin': 'SUPER_ADMIN', 'Operations Admin': 'OPS_ADMIN', 'Finance Admin': 'FINANCE_ADMIN' };
 
 function FilterButton({ value, options, active, onChange }) {
   const [open, setOpen] = useState(false);
@@ -40,19 +44,25 @@ function FilterButton({ value, options, active, onChange }) {
 export function UserManagement() {
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
-  const query = useGetUserManagementDirectoryQuery({ includeAdmins: admin?.role === 'SUPER_ADMIN' }, { refetchOnMountOrArgChange: true });
-  const statsQuery = useGetUserManagementStatsQuery();
-  const directory = query.error ? null : query.currentData;
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const includeAdmins = admin?.role === 'SUPER_ADMIN';
+  const query = useGetUserManagementDirectoryQuery({ includeAdmins, owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const statsQuery = useGetUserManagementStatsQuery({ owner: admin?.id, includeAdmins }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const directory = !authenticated || query.error ? null : query.currentData;
   const users = useMemo(() => directory?.rows || [], [directory]);
-  const usersSummary = managedUserSummary(directory?.rows, statsQuery.error ? null : statsQuery.currentData);
-  const usersByRole = managedUserRoleChart(directory?.rows, directory?.adminsIncluded);
-  const usersByStatus = managedUserStatusChart(directory?.rows, usersSummary);
+  const usersSummary = managedUserSummary(directory?.rows, !authenticated || statsQuery.error ? null : statsQuery.currentData, includeAdmins);
+  const usersByRole = managedUserRoleChart(directory?.rows, directory?.adminsIncluded, statsQuery.error ? null : statsQuery.currentData);
+  const usersByStatus = managedUserStatusChart(directory?.rows, usersSummary, statsQuery.error ? null : statsQuery.currentData);
   const [changeAccess, accessState] = useChangeManagedUserAccessMutation();
   const [editAdmin, editState] = useUpdateManagedAdminMutation();
+  const [createAdmin, createState] = useCreateManagedAdminMutation();
+  const operations = useManagedUserOperations();
+  const [activityOpen, setActivityOpen] = useState(false);
+  const recentQuery = useGetUserManagementRecentActivityQuery({ owner: admin?.id, all: activityOpen }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const submitting = useRef(false);
   const unavailable = (action) => { setMenuFor(null); window.alert(`${action} is not supported through this control by the documented API.`); };
   const profilePath = (user) => `/users/detail?id=${encodeURIComponent(user.backendId)}&source=${user.source}`;
-  const metric = (value) => query.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
+  const metric = (value) => !authenticated || statsQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
   const [q, setQ] = useState('');
   const [role, setRole] = useState('All Roles');
   const [status, setStatus] = useState('All Statuses');
@@ -64,12 +74,13 @@ export function UserManagement() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const formVersion = useRef(0);
 
   const entities = useMemo(() => Array.from(new Set(users.map((u) => u.entity).filter((value) => value !== '—'))).sort(), [users]);
-  const filterAvailable = (role === 'All Roles' || role === 'Driver' || (role === 'Super Admin' && directory?.adminsIncluded)) && status !== 'Locked';
+  const filterAvailable = Boolean(directory);
 
   const filtered = useMemo(() => users.filter((u) => (
-    (role === 'All Roles' || u.role === role) &&
+    managedUserMatchesRole(u, role) &&
     (status === 'All Statuses' || u.status === status) &&
     (entity === 'All Entities' || u.entity === entity) &&
     (!q || [u.name, u.email, u.phone, u.entity].some((s) => s !== '—' && s && s.toLowerCase().includes(q.toLowerCase())))
@@ -87,16 +98,27 @@ export function UserManagement() {
     setRole('All Roles'); setStatus('All Statuses'); setEntity('All Entities'); setQ(''); setPage(1);
   }
 
-  function resetForm() { setAddOpen(false); setForm(EMPTY_FORM); setSaving(false); }
+  function resetForm() { formVersion.current += 1; setAddOpen(false); setForm(EMPTY_FORM); setSaving(false); }
 
   async function handleSave() {
-    unavailable('Creating an admin with this form (the API requires a password and does not accept an entity)');
+    if (submitting.current || saving || createState.isLoading) return;
+    if (admin?.role !== 'SUPER_ADMIN') { unavailable('Creating an admin'); return; }
+    const version = formVersion.current;
+    submitting.current = true; setSaving(true);
+    try {
+      const result = await createAdmin({ name: form.name, email: form.email, role: ADMIN_ROLE_CODES[form.role], password: form.password }).unwrap();
+      if (formVersion.current === version) resetForm(); window.alert(result.message);
+    } catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { submitting.current = false; setSaving(false); }
   }
 
   async function updateAccess(user) {
     setMenuFor(null);
     if (submitting.current || accessState.isLoading) return;
-    if (user.source !== 'user' || !['ACTIVE', 'SUSPENDED'].includes(user.statusCode)) { unavailable('Changing access'); return; }
+    if (user.source === 'admin') { operations.open(user.statusCode === 'REVOKED' ? 'unlock' : 'lock', user); return; }
+    if (user.statusCode === 'LOCKED') { operations.open('unlock', user); return; }
+    const supported = user.isAccount && ['ACTIVE', 'SUSPENDED'].includes(user.statusCode);
+    if (!supported) { unavailable('Changing access'); return; }
     const operation = user.statusCode === 'SUSPENDED' ? 'activate' : 'suspend';
     const reason = operation === 'suspend' ? window.prompt('Reason for suspending this user:') : null;
     if (operation === 'suspend' && !reason?.trim()) return;
@@ -131,15 +153,15 @@ export function UserManagement() {
     const items = [
       { label: 'View Profile', icon: 'eye', onClick: () => { setMenuFor(null); navigate(profilePath(u)); } },
       { label: 'Edit User', icon: 'pencil', onClick: () => editUser(u) },
-      { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => unavailable('Reset Password') },
+      { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => { setMenuFor(null); operations.open('password-reset', u); } },
       { divider: true },
     ];
-    if (u.status === 'Locked') items.push({ label: 'Unlock Account', icon: 'lock-open', onClick: () => unavailable('Unlock Account') });
-    else items.push({ label: 'Lock Account', icon: 'lock', onClick: () => unavailable('Lock Account') });
-    if (['Inactive', 'Suspended'].includes(u.status)) items.push({ label: 'Activate User', icon: 'user-check', onClick: () => updateAccess(u) });
+    if (u.status === 'Locked' || u.statusCode === 'REVOKED') items.push({ label: 'Unlock Account', icon: 'lock-open', onClick: () => { setMenuFor(null); operations.open('unlock', u); } });
+    else items.push({ label: 'Lock Account', icon: 'lock', onClick: () => { setMenuFor(null); operations.open('lock', u); } });
+    if (['Inactive', 'Suspended', 'Revoked'].includes(u.status)) items.push({ label: 'Activate User', icon: 'user-check', onClick: () => updateAccess(u) });
     else items.push({ label: 'Deactivate User', icon: 'user-x', onClick: () => updateAccess(u) });
     items.push({ divider: true });
-    items.push({ label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => unavailable('Delete User') });
+    items.push({ label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => { setMenuFor(null); operations.open('delete', u); } });
     return items;
   }
 
@@ -148,7 +170,7 @@ export function UserManagement() {
       <PageHeader crumbs={['Administration', 'User Management']} title="User Management"
         description="Manage users, view their roles, permissions and account status."
         actions={<>
-          <Button variant="outline" icon="upload" onClick={() => unavailable('Import Users')}>Import Users</Button>
+          <Button variant="outline" icon="upload" onClick={() => operations.open('import')}>Import Users</Button>
           <Button variant="outline" icon="download" onClick={exportUsers}>Export Users</Button>
           <Button icon="plus" onClick={() => setAddOpen(true)}>Add New User</Button>
         </>} />
@@ -173,16 +195,16 @@ export function UserManagement() {
               onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
             filters={<>
               <FilterButton value={role} options={['All Roles', ...ROLES]} active={role !== 'All Roles'}
-                onChange={(v) => { setRole(v); setPage(1); if (!['All Roles', 'Driver'].includes(v) && !(v === 'Super Admin' && directory?.adminsIncluded)) unavailable('Filtering this role'); }} />
+                onChange={(v) => { setRole(v); setPage(1); }} />
               <FilterButton value={status} options={['All Statuses', ...STATUSES]} active={status !== 'All Statuses'}
-                onChange={(v) => { setStatus(v); setPage(1); if (v === 'Locked') unavailable('Filtering locked accounts'); }} />
+                onChange={(v) => { setStatus(v); setPage(1); }} />
               <FilterButton value={entity} options={['All Entities', ...entities]} active={entity !== 'All Entities'}
                 onChange={(v) => { setEntity(v); setPage(1); }} />
               <Button variant="outline" icon="list-filter" onClick={() => unavailable('More Filters')}>More Filters</Button>
             </>}
             onClear={resetFilters} />
 
-          {query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
+          {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
             columns={[
               { key: 'user', header: 'User', render: (r) => (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
@@ -237,18 +259,19 @@ export function UserManagement() {
               ))}
             </div>
           </SectionCard>
-          <SectionCard title="Recent User Activity" action={<a href="#" onClick={(event) => { event.preventDefault(); unavailable('View All User Activity'); }}>View All</a>}>
+          <SectionCard title="Recent User Activity" action={<a href="#" onClick={(event) => { event.preventDefault(); if (activityOpen) recentQuery.refetch(); else setActivityOpen(true); }}>View All</a>}>
             <div style={{ display: 'grid', gap: 16 }}>
-              {'—'}
+              {recentQuery.isFetching ? <DriverTableLoading columns={1} label="Loading user activity" /> : recentQuery.error ? <DriverLoadingNotice>{getApiErrorMessage(recentQuery.error)}</DriverLoadingNotice> : recentQuery.currentData ? <ActivityFeed items={recentQuery.currentData} /> : '—'}
             </div>
           </SectionCard>
         </div>
       </div>
 
+      <UserActionDialogs operations={operations} />
       <Modal open={addOpen} onClose={resetForm} title="Add New User" description="Create a new admin user and assign a role."
         footer={<>
           <Button variant="outline" onClick={resetForm}>Cancel</Button>
-          <Button disabled={saving || !form.name || !form.email || !form.role}
+          <Button disabled={saving || createState.isLoading || !form.name.trim() || !form.email.trim() || !form.role || Array.from(form.password || '').length < 8}
             onClick={handleSave}>{saving ? 'Adding…' : 'Add User'}</Button>
         </>}>
         <div style={{ display: 'grid', gap: 14 }}>
@@ -256,10 +279,10 @@ export function UserManagement() {
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           <TextField label="Email Address" required type="email" placeholder="name@company.com" value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-          <Select label="Role" required options={ROLES} value={form.role}
+          <Select label="Role" required options={ADMIN_ROLE_OPTIONS} value={form.role}
             onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} />
-          <TextField label="Entity / Company" placeholder="e.g. Oceanic Logistics" value={form.entity}
-            onChange={(e) => setForm((f) => ({ ...f, entity: e.target.value }))} />
+          <TextField label="Password" required type="password" autoComplete="new-password" placeholder="At least 8 characters" value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
         </div>
       </Modal>
     </>

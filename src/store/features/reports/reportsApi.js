@@ -1,6 +1,8 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { adaptReportPreview, adaptReportExport, reportText, reportRecord, reportInteger, validReportEmails } from './reportContracts.js';
+import { adaptReportOverview } from './reportOverviewAdapter.js';
 
-export const REPORT_CAPABILITIES = Object.freeze({ preview: false, export: false, templates: false, schedule: false });
+export const REPORT_CAPABILITIES = Object.freeze({ preview: true, export: true, templates: true, schedule: true });
 export function reportNumber(value) {
   if (typeof value !== 'number' && !(typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value.trim()))) return null;
   const number = Number(value);
@@ -67,11 +69,14 @@ function adaptReportJobStats(response) {
   return overview;
 }
 const directoryError = () => ({ error: { status: 'CUSTOM_ERROR', error: 'The entity directory response is missing valid records or complete pagination.' } });
-async function readDirectory(baseQuery, url, params = {}) {
+async function readDirectory(baseQuery, url, params = {}, api) {
+  const owner = api.getState().auth.admin?.id;
   const rows = [], seen = new Set();
   let page = 1, pageCount = 1, expectedTotal = null;
   do {
+    if (page > 500 || api.signal.aborted || api.getState().auth.admin?.id !== owner) return directoryError();
     const result = await baseQuery({ url, params: { ...params, page, limit: 100 } });
+    if (api.getState().auth.admin?.id !== owner) return directoryError();
     if (result.error) return result;
     const data = unwrapApiResponseData(result.data);
     const pagination = data?.pagination;
@@ -86,28 +91,106 @@ async function readDirectory(baseQuery, url, params = {}) {
   } while (page <= pageCount);
   return rows.length === expectedTotal ? { data: rows } : directoryError();
 }
-export const reportsApi = baseApi.injectEndpoints({
+const reportFailure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+const reportTags = ['AdminReportOverview', 'AdminReportTemplates', 'AdminReportSchedules'];
+export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).injectEndpoints({
   endpoints: (builder) => ({
+    getAdminReportOverview: builder.query({
+      query: ({ owner: _owner, ...params }) => ({ url: '/admin/reports/overview', params }),
+      transformResponse: (response, _meta, args) => adaptReportOverview(unwrapApiResponseData(response), emptyReportOverview(), args.metric),
+      providesTags: ['AdminReportOverview'],
+    }),
+    getAdminReportMeta: builder.query({ query: () => ({ url: '/admin/reports/meta' }), transformResponse: unwrapApiResponseData }),
+    previewAdminReport: builder.query({
+      async queryFn(args, api, _options, baseQuery) {
+        if (args.owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return reportFailure('Sign in to preview a report.');
+        if (args.configuration.reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
+        const result = await baseQuery({ url: '/admin/reports/preview', method: 'POST', body: { ...args.configuration, page: args.page, limit: args.limit } });
+        if (result.error) return result;
+        if (args.owner !== api.getState().auth.admin?.id || api.signal.aborted) return reportFailure('Your session changed. Reload before previewing.');
+        try { return { data: adaptReportPreview(unwrapApiResponseData(result.data), args, unavailableReportPreview) }; }
+        catch (error) { return reportFailure(error.message); }
+      },
+    }),
+    createAdminReportExport: builder.mutation({
+      async queryFn({ configuration, owner }, api, _options, baseQuery) {
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return reportFailure('Your session changed. Reload before exporting.');
+        if (configuration.reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
+        const result = await baseQuery({ url: '/admin/reports/exports', method: 'POST', body: { configuration } });
+        if (result.error) return result;
+        try { return { data: adaptReportExport(unwrapApiResponseData(result.data), configuration) }; }
+        catch (error) { return reportFailure('The export was submitted, but its result could not be confirmed. ' + error.message); }
+      },
+    }),
+    saveAdminReportTemplate: builder.mutation({
+      async queryFn({ name, configuration, owner }, api, _options, baseQuery) {
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken || !reportText(name)) return reportFailure('Sign in and enter a template name.');
+        if (configuration.reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
+        const result = await baseQuery({ url: '/admin/reports/templates', method: 'POST', body: { name: name.trim(), configuration } });
+        return result.error ? result : { data: { accepted: true } };
+      }, invalidatesTags: ['AdminReportTemplates'],
+    }),
+    scheduleAdminReport: builder.mutation({
+      async queryFn({ name, reportType, frequency, recipients, configuration, owner }, api, _options, baseQuery) {
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return reportFailure('Your session changed. Reload before scheduling.');
+        if (reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
+        if (!reportText(name) || !['DAILY', 'WEEKLY', 'MONTHLY'].includes(frequency) || !validReportEmails(recipients)) return reportFailure('Choose a supported frequency and valid email recipients.');
+        const result = await baseQuery({ url: '/admin/reports/schedules', method: 'POST', body: { name, reportType, frequency, recipients, timezone: 'Africa/Lagos', configuration } });
+        if (result.error) return result;
+        const dto = reportRecord(unwrapApiResponseData(result.data));
+        if (!reportText(dto.id) || dto.status !== 'ACTIVE' || dto.reportType !== reportType || dto.frequency !== frequency || dto.timezone !== 'Africa/Lagos' || !Array.isArray(dto.recipients) || recipients.some((email) => !dto.recipients.includes(email))) return reportFailure('The schedule was submitted, but its result could not be confirmed. Refresh before retrying.');
+        return { data: { id: dto.id, status: dto.status, nextRunAt: reportText(dto.nextRunAt), runsAt: reportText(dto.runsAt) } };
+      }, invalidatesTags: ['AdminReportSchedules'],
+    }),
+    downloadAdminReportExport: builder.query({
+      async queryFn({ file, owner }, api, _options, baseQuery) {
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken || !reportText(file?.id) || file.status !== 'COMPLETED') return reportFailure('A completed report export is required.');
+        const result = await baseQuery({ url: '/admin/reports/exports/' + encodeURIComponent(file.id) + '/download', responseHandler: async (response) => {
+          if (response.ok) return response.blob();
+          try { return JSON.parse(await response.text()); } catch { return { message: 'Unable to download the report. It may have expired.' }; }
+        } });
+        if (result.error) return result;
+        if (!(result.data instanceof Blob) || !result.data.size) return reportFailure('The backend returned no report file.');
+        const bytes = new Uint8Array(await result.data.arrayBuffer()), zip = file.contentType?.includes('zip') || file.filename?.toLowerCase().endsWith('.zip');
+        const signature = String.fromCharCode(...bytes.slice(0, 5)), isZip = bytes[0] === 80 && bytes[1] === 75 && [[3,4],[5,6],[7,8]].some(([a,b]) => bytes[2] === a && bytes[3] === b);
+        if ((zip || file.format === 'XLSX') && !isZip || !zip && file.format === 'PDF' && signature !== '%PDF-') return reportFailure('The backend returned an unexpected report file.');
+        if (!zip && ['CSV', 'JSON'].includes(file.format)) {
+          const content = new TextDecoder().decode(bytes).trimStart();
+          if (file.format === 'JSON') { try { JSON.parse(content); } catch { return reportFailure('The backend did not return valid JSON.'); } }
+          else if (!content || /^(?:[\[{]|<(?:!doctype|html))/i.test(content) || result.data.type.includes('json') || result.data.type.includes('html')) return reportFailure('The backend did not return valid CSV.');
+        }
+        let binary = ''; for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+        return { data: { content: btoa(binary), filename: reportText(file.filename), contentType: reportText(file.contentType) || result.data.type } };
+      },
+    }),
+
     getAdminReportJobStats: builder.query({
       query: ({ dateFrom, dateTo }) => ({ url: '/admin/jobs/stats', params: { dateFrom, dateTo } }),
       transformResponse: adaptReportJobStats,
       providesTags: ['AdminJobs'],
     }),
     getAdminReportEntities: builder.query({
-      async queryFn(_args, _api, _options, baseQuery) {
+      async queryFn(args, api, _options, baseQuery) {
+        if (args?.owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return directoryError();
         const [forwarders, truckers] = await Promise.all([
-          readDirectory(baseQuery, '/admin/users/forwarders'),
-          readDirectory(baseQuery, '/admin/users/truckers', { truckerType: 'COMPANY' }),
+          readDirectory(baseQuery, '/admin/users/forwarders', {}, api),
+          readDirectory(baseQuery, '/admin/users/truckers', { truckerType: 'COMPANY' }, api),
         ]);
         if (forwarders.error || truckers.error) return { error: forwarders.error || truckers.error };
         const rows = [
           ...forwarders.data.filter((user) => ['EXPORTER', 'FORWARDER'].includes(user.type)).map((user) => ({ id: user.id, name: user.name, entityType: user.type === 'EXPORTER' ? 'Exporter' : 'Forwarder' })),
           ...truckers.data.filter((user) => user.truckerType === 'COMPANY').map((user) => ({ id: user.id, name: user.name, entityType: 'Truck Company' })),
         ];
-        return { data: rows.filter((row) => typeof row.name === 'string' && row.name.trim()) };
+        return { data: rows.map((row) => ({ ...row, name: reportText(row.name) || '—' })) };
       },
       providesTags: ['AdminForwarders', 'AdminCompanies'],
     }),
   }),
 });
-export const { useGetAdminReportJobStatsQuery, useGetAdminReportEntitiesQuery } = reportsApi;
+export const { useGetAdminReportJobStatsQuery, useGetAdminReportEntitiesQuery, useGetAdminReportOverviewQuery, useGetAdminReportMetaQuery, usePreviewAdminReportQuery, useCreateAdminReportExportMutation, useSaveAdminReportTemplateMutation, useScheduleAdminReportMutation, useLazyDownloadAdminReportExportQuery } = reportsApi;
+export function saveReportFile(file) {
+  if (!reportText(file.filename)) throw new Error('The backend did not supply a report filename.');
+  const bytes = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: file.contentType || 'application/octet-stream' }));
+  const link = document.createElement('a'); link.href = url; link.download = file.filename.split(/[\\/]/).pop(); link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

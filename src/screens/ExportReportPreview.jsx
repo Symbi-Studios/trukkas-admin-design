@@ -1,14 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, Card, SectionCard, DataTable, Pagination, Icon, Switch, Radio, Tag,
-  BarChart, Sparkline, Banner,
+  BarChart, Sparkline, Banner, Skeleton,
 } from '../ds.js';
 import { useReportDraft } from '../store/features/reports/useReportDraft.js';
 import { REPORT_TYPES, EXPORT_FORMATS } from '../store/features/reports/reportsConfig.js';
-import { REPORT_CAPABILITIES, unavailableReportPreview, reportCount } from '../store/features/reports/reportsApi.js';
+import { ReportTemplateDialog } from './ReportDialogs.jsx';
+import { useReportPreview } from '../store/features/reports/useReportPreview.js';
+import { useReportOperations } from '../store/features/reports/useReportOperations.js';
+import { reportConfiguration, reportTimestamp } from '../store/features/reports/reportContracts.js';
+import { DriverTableLoading } from './DriversLoading.jsx';
+import { REPORT_CAPABILITIES, reportCount } from '../store/features/reports/reportsApi.js';
 
 const PAGE_SIZE = 10;
 
@@ -22,12 +27,22 @@ function cellValue(row, key) {
 export function ExportReportPreview() {
   const navigate = useNavigate();
   const { draft, updateReportDraft } = useReportDraft();
-  const preview = unavailableReportPreview;
+  const operations = useReportOperations(draft);
+  const configuration = reportConfiguration(draft, operations.admin);
+  const configurationKey = JSON.stringify(configuration.configuration || null);
+  const [selection, setSelection] = useState({ key: '', page: 1 });
+  const page = selection.key === configurationKey ? selection.page : 1;
+  const setPage = (next) => setSelection({ key: configurationKey, page: next });
   const [view, setView] = useState('table');
-  const [page, setPage] = useState(1);
+  const [saveOpen, setSaveOpen] = useState(false);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const busy = false;
-  const banner = null;
+  const result = useReportPreview(draft, page, pageSize);
+  const preview = result.preview;
+  const busy = operations.busy;
+  const banner = result.error || operations.error;
+  const value = (content) => result.loading ? <Skeleton as="span" width={72} height={20} /> : content;
+  useEffect(() => { setSaveOpen(false); }, [operations.owner]);
+  useEffect(() => { if (preview.available && page > preview.pageCount) setPage(preview.pageCount); }, [preview.available, preview.pageCount, page, configurationKey]);
   const reportType = REPORT_TYPES.find((r) => r.id === draft?.reportType) || REPORT_TYPES[0];
   const filteredRows = preview.rows;
 
@@ -37,10 +52,10 @@ export function ExportReportPreview() {
   }, [draft]);
 
   const totalRecords = preview.totalRecords;
-  const paged = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+  const paged = result.loading ? [] : filteredRows;
   if (!draft) return null;
-  const reportId = preview.reportId ?? '—';
-  const generatedOn = preview.generatedOn ?? '—';
+  const reportId = operations.generated?.reportId || preview.reportId || '—';
+  const generatedOn = operations.generated?.createdAt ? reportTimestamp(operations.generated.createdAt) : preview.generatedOn ?? '—';
   const estFileSizeMb = preview.estimatedFileSizeMb ?? '—';
   function goToStep() { navigate('/reports/export'); }
 
@@ -50,10 +65,10 @@ export function ExportReportPreview() {
         description="Review your report before exporting. You can go back to edit any selection."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={goToStep}>Back to Edit</Button>
-          <Button variant="outline" icon="bookmark" disabled={!REPORT_CAPABILITIES.templates || busy}>{busy ? 'Saving…' : 'Save Template'}</Button>
+          <Button variant="outline" icon="bookmark" disabled={!REPORT_CAPABILITIES.templates || busy || !operations.authenticated} onClick={() => setSaveOpen(true)}>{busy ? 'Saving…' : 'Save Template'}</Button>
         </>} />
 
-      {banner && <Banner tone="success" title={banner} />}
+      {banner && <Banner tone="error" title={banner} />}
 
       <Card className="tk-mobile-scroll" style={{ display: 'flex', alignItems: 'center', padding: '14px 20px' }}>
         {STEP_LABELS.map((label, i) => {
@@ -107,31 +122,32 @@ export function ExportReportPreview() {
                   <Icon name={f.icon} size={15} color="var(--tk-ink-300)" />
                   <span style={{ display: 'grid', gap: 1 }}>
                     <span className="tk-meta">{f.label}</span>
-                    <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{f.value}</span>
+                    <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(f.value)}</span>
                   </span>
                 </div>
               ))}
             </div>
 
             {view === 'table' ? (
-              preview.available && filteredRows.length === 0 ? (
+              preview.available && preview.paginationTotal === 0 ? (
                 <div className="tk-meta" style={{ padding: 24, textAlign: 'center' }}>No records match the selected filters.</div>
               ) : (
                 <>
-                  <DataTable rows={paged} rowKey={(r) => r.recordId}
+                  <DataTable rows={paged} rowKey={(r) => r._rowKey}
                     columns={selectedColumns.map((c) => ({
                       key: c.key, header: c.label, align: /rate|%|amount|revenue|payout/i.test(c.label) ? 'right' : 'left',
                       render: (r) => cellValue(r, c.key),
                     }))} />
-                  <Pagination page={page} pageSize={pageSize} total={totalRecords}
-                    pageCount={preview.available ? Math.max(1, Math.ceil(totalRecords / pageSize)) : null} onPage={(next) => { if (preview.available) setPage(Math.max(1, Math.min(next, Math.max(1, Math.ceil(totalRecords / pageSize))))); }} onPageSize={(size) => { setPageSize(size); setPage(1); }} />
+                  {result.loading && <DriverTableLoading columns={Math.max(1, selectedColumns.length)} label="Loading report preview" />}
+                  <Pagination page={page} pageSize={pageSize} total={preview.paginationTotal ?? '—'}
+                    pageCount={preview.available ? preview.pageCount : null} onPage={(next) => { if (preview.available) setPage(Math.max(1, Math.min(next, preview.pageCount))); }} onPageSize={(size) => { setPageSize(size); setPage(1); }} />
                 </>
               )
             ) : (
               <div style={{ paddingTop: 4 }}>
                 <div className="tk-meta" style={{ marginBottom: 8 }}>Total Verifications by Entity (Top 10)</div>
-                <BarChart height={240} format={() => '—'} labels={filteredRows.slice(0, 10).map((r) => r.entityName)}
-                  series={[{ name: 'Total Verifications', color: 'var(--tk-viz-1)', points: filteredRows.slice(0, 10).map((r) => r.totalVerifications) }]} />
+                <BarChart height={240} format={reportCount} labels={(preview.entityChart || []).map((r) => r.entityName)}
+                  series={[{ name: 'Total Verifications', color: 'var(--tk-viz-1)', points: (preview.entityChart || []).map((r) => r.totalVerifications) }]} />
               </div>
             )}
           </Card>
@@ -141,7 +157,7 @@ export function ExportReportPreview() {
               {preview.summary.map((c) => (
                 <div key={c.key} style={{ border: '1px solid var(--tk-line)', borderRadius: 'var(--tk-r-lg)', padding: 14, display: 'grid', gap: 4 }}>
                   <span className="tk-meta">{c.label}</span>
-                  <span style={{ font: '700 20px/26px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{c.value}</span>
+                  <span style={{ font: '700 20px/26px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(c.value)}</span>
                   <span style={{ font: '600 11px/16px var(--tk-font-sans)', color: c.direction === 'up' ? 'var(--tk-success)' : 'var(--tk-danger)' }}>
                     {c.direction === 'up' ? '▲' : c.direction === 'down' ? '▼' : ''} {c.delta} vs {preview.comparisonLabel}
                   </span>
@@ -204,10 +220,11 @@ export function ExportReportPreview() {
 
           <div style={{ display: 'flex', gap: 10 }}>
             <Button variant="outline" fullWidth onClick={() => navigate('/reports/export')}>Cancel</Button>
-            <Button fullWidth icon="download" disabled={!REPORT_CAPABILITIES.export || !preview.available}>Export Report</Button>
+            <Button fullWidth icon="download" disabled={!REPORT_CAPABILITIES.export || busy || result.loading || !preview.available || !preview.canExport || !operations.authenticated} onClick={() => operations.exportReport(preview)}>Export Report</Button>
           </div>
         </div>
       </div>
+      {saveOpen && <ReportTemplateDialog key={operations.owner} operations={operations} onClose={() => setSaveOpen(false)} />}
     </>
   );
 }

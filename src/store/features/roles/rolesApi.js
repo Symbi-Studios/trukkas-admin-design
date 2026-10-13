@@ -1,100 +1,182 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
-import { ROLE_MODULE_MATRIX } from './rolesConfig.js';
+import { adaptRole, adaptPermissionCatalog, roleInteger, roleText, roleFailure, buildRoleConfiguration, permissionsForConfiguration } from './roleContracts.js';
+export { roleSummary, emptyRoleDetail, roleCount } from './roleContracts.js';
 
-const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
-const count = (value) => {
-  if (typeof value !== 'number' && !(typeof value === 'string' && /^\d+$/.test(value.trim()))) return null;
-  const number = Number(value);
-  return Number.isSafeInteger(number) && number >= 0 ? number : null;
-};
-export const roleCount = (value) => { const number = count(value); return number == null ? '—' : number.toLocaleString('en-NG'); };
-const failure = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
-function date(value, withTime = false) {
-  if (!text(value) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return '—';
-  const [year, month, day, hour, minute, second] = value.slice(0, 19).split(/[-T:]/).map(Number);
-  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate() || hour > 23 || minute > 59 || second > 59) return '—';
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric', year: 'numeric', ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}) }).format(new Date(parsed)) : '—';
+export const ROLE_CAPABILITIES = Object.freeze({ create: true, edit: true, duplicate: true, delete: true, matrix: true, preview: true });
+const admins = ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'];
+const owned = (api, owner, account) => Boolean(owner && api.getState().auth.admin?.id === owner && api.getState().auth.accessToken && admins.includes(api.getState().auth.admin?.role) && !api.signal.aborted && api.getState().auth.admin === account);
+const sessionError = () => roleFailure('An active admin session is required. Sign in again.');
+const path = (id) => '/admin/roles/' + encodeURIComponent(id);
+const signature = (catalog) => JSON.stringify(catalog.modules.map((m) => [m.key, m.actions.map((a) => a.key)]));
+async function readCatalog(baseQuery) {
+  const result = await baseQuery({ url: '/admin/permissions' });
+  if (result.error) return result;
+  const catalog = adaptPermissionCatalog(unwrapApiResponseData(result.data));
+  return catalog ? { data: catalog } : roleFailure('The permission catalogue response is missing valid modules or actions.');
 }
-export const ROLE_CAPABILITIES = Object.freeze({ create: false, edit: false, duplicate: false, delete: false, matrix: false, preview: false });
-export const emptyRoleDetail = {
-  id: '—', name: '—', description: '—', type: '—', users: '—', status: '—', statusCode: null,
-  lastUpdated: '—', createdOn: '—', createdBy: '—', updatedBy: '—', color: '#0241E8', icon: 'shield',
-  permissionsCount: '—', permissionSummary: '—', modules: [],
-};
-// Presentation for the action keys explicitly illustrated in the current docs.
-const ACTIONS = {
-  'jobs.view': { name: 'View Jobs', description: 'Allows viewing all jobs' },
-  'jobs.create': { name: 'Create Jobs', description: 'Allows creating new jobs' },
-  'trips.view': { name: 'View Trips', description: 'Allows viewing trips' },
-};
-function modulesFromPermissions(keys) {
-  if (!keys) return [];
-  const groups = new Map();
-  keys.forEach((key) => {
-    const prefix = key.split('.')[0], moduleKey = prefix === 'trips' ? 'jobs' : prefix;
-    const presentation = ROLE_MODULE_MATRIX.find((module) => module.key === moduleKey);
-    if (!presentation) return;
-    if (!groups.has(moduleKey)) groups.set(moduleKey, { icon: presentation.icon, name: presentation.label, granted: 0, total: '—', fullAccess: null, actions: [] });
-    const group = groups.get(moduleKey); group.granted += 1;
-    if (ACTIONS[key]) group.actions.push({ ...ACTIONS[key], granted: true });
+async function readRole(id, baseQuery) {
+  if (!roleText(id) || id === '—') return roleFailure('Select a valid role.');
+  const result = await baseQuery({ url: path(id) });
+  if (result.error) return result;
+  const role = adaptRole(unwrapApiResponseData(result.data), true);
+  return role?.id === id ? { data: role } : roleFailure('The role detail response is missing the requested role.');
+}
+export function grantedRoleKeys(role, catalog) {
+  const modules = role?.source?.modules;
+  if (!Array.isArray(modules) || modules.length !== catalog.modules.length) return null;
+  const keys = [], seen = new Set();
+  for (const module of catalog.modules) {
+    const actual = modules.filter((m) => m.key === module.key);
+    if (actual.length !== 1 || !Array.isArray(actual[0].actions) || actual[0].actions.length !== module.actions.length) return null;
+    for (const action of module.actions) {
+      const entries = actual[0].actions.filter((a) => a.key === action.key);
+      if (entries.length !== 1 || typeof entries[0].granted !== 'boolean' || seen.has(action.key)) return null;
+      seen.add(action.key); if (entries[0].granted) keys.push(action.key);
+    }
+  }
+  return keys;
+}
+function confirmsFields(role, body) {
+  const source = role?.source;
+  return Object.entries(body).every(([key, value]) => {
+    if (['expectedVersion', 'permissionKeys', 'moduleAccess'].includes(key)) return true;
+    // The API only supports organization-wide scope; SHARED ownership means companyId null.
+    if (key === 'scope') return value === 'organization-wide';
+    if (key === 'companyId' && value === null) return role?.ownership === 'SHARED';
+    if (key === 'description' && value === '' && Object.hasOwn(source, key) && source[key] === null) return true;
+    if (key === 'color') return typeof source?.color === 'string' && source.color.toLowerCase() === value.toLowerCase();
+    if (key === 'isActive') return role?.statusCode === (value ? 'ACTIVE' : 'INACTIVE');
+    return source?.[key] === value;
   });
-  return [...groups.values()].map((module) => ({ ...module, actions: module.actions.length ? module.actions : null }));
 }
-function adaptRole(dto) {
-  const permissions = Array.isArray(dto.permissions) && dto.permissions.every((key) => text(key) && key.includes('.') && key === key.trim()) && new Set(dto.permissions).size === dto.permissions.length ? dto.permissions : null;
-  const statusCode = ['ACTIVE', 'INACTIVE'].includes(text(dto.status)?.toUpperCase()) ? text(dto.status).toUpperCase()
-    : typeof dto.isActive === 'boolean' ? (dto.isActive ? 'ACTIVE' : 'INACTIVE') : null;
-  return {
-    id: dto.id, name: text(dto.name) || '—', description: text(dto.description) || '—',
-    isSystem: typeof dto.isSystem === 'boolean' ? dto.isSystem : null,
-    type: dto.isSystem === true ? 'System' : dto.isSystem === false ? 'Custom' : '—',
-    users: roleCount(dto.memberCount), permissionsCount: roleCount(permissions?.length),
-    statusCode, status: statusCode === 'ACTIVE' ? 'Active' : statusCode === 'INACTIVE' ? 'Inactive' : '—',
-    createdOn: date(dto.createdAt), lastUpdated: date(dto.updatedAt, true),
-    createdBy: text(dto.createdBy?.name) || text(dto.createdBy) || '—',
-    updatedBy: text(dto.updatedBy?.name) || text(dto.updatedBy) || '—',
-    permissionSummary: text(dto.permissionSummary) || '—',
-    color: typeof dto.color === 'string' && /^#[0-9a-f]{6}$/i.test(dto.color) ? dto.color : '#0241E8',
-    icon: ['shield', 'shield-check', 'users-round', 'key-round', 'eye', 'wallet', 'user', 'radio-tower'].includes(dto.icon) ? dto.icon : 'shield',
-    modules: modulesFromPermissions(permissions),
-  };
-}
-export function roleSummary(rows) {
-  const classificationsKnown = rows?.every((role) => typeof role.isSystem === 'boolean');
-  return {
-    totalRoles: roleCount(rows?.length), totalCaption: 'Across all modules',
-    systemRoles: classificationsKnown ? roleCount(rows.filter((role) => role.isSystem).length) : '—', systemCaption: 'Predefined roles',
-    customRoles: classificationsKnown ? roleCount(rows.filter((role) => !role.isSystem).length) : '—', customCaption: 'Organization specific',
-    // The union of permissions granted to roles is not the full permission catalog.
-    permissions: '—', permissionsCaption: 'Across — modules',
-  };
-}
-export const rolesApi = baseApi.injectEndpoints({
+const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminRoles', 'AdminPermissions'] });
+export const rolesApi = taggedApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminRolesDirectory: builder.query({
-      async queryFn(_args, _api, _options, baseQuery) {
-        const rows = [], seen = new Set();
-        let page = 1, totalPages = 1, total = null;
+      async queryFn({ owner }, api, _options, baseQuery) {
+        const account = api.getState().auth.admin;
+        if (!owned(api, owner, account)) return sessionError();
+        const rows = [], seen = new Set(); let page = 1, totalPages = 1, total = null;
         do {
+          if (!owned(api, owner, account)) return sessionError();
           const result = await baseQuery({ url: '/admin/roles', params: { page, limit: 100 } });
+          if (!owned(api, owner, account)) return sessionError();
           if (result.error) return result;
           const dto = unwrapApiResponseData(result.data), pagination = dto?.pagination;
-          if (!Array.isArray(dto?.roles) || pagination?.page !== page || count(pagination.total) == null || count(pagination.totalPages) == null
-            || (pagination.total > 0 && pagination.totalPages === 0) || page > Math.max(1, pagination.totalPages)) return failure('The roles response is missing valid records or pagination.');
-          if (total != null && (total !== pagination.total || totalPages !== Math.max(1, pagination.totalPages))) return failure('The role directory changed while loading. Refresh to load all roles.');
-          total = pagination.total; totalPages = Math.max(1, pagination.totalPages);
-          if (page < totalPages && dto.roles.length === 0) return failure('The roles response returned an incomplete collection.');
-          for (const role of dto.roles) {
-            if (!text(role?.id) || seen.has(role.id)) return failure('The roles response returned missing or duplicate role IDs.');
-            seen.add(role.id); rows.push(adaptRole(role));
+          const currentTotal = roleInteger(pagination?.total), pages = roleInteger(pagination?.totalPages);
+          if (!Array.isArray(dto?.roles) || roleInteger(pagination?.page) !== page || currentTotal == null || pages == null || pages > 500
+            || (currentTotal > 0 && pages === 0) || page > Math.max(1, pages)) return roleFailure('The roles response is missing valid records or pagination.');
+          if (total != null && (total !== currentTotal || totalPages !== Math.max(1, pages))) return roleFailure('The role directory changed while loading. Refresh to load all roles.');
+          total = currentTotal; totalPages = Math.max(1, pages);
+          if (page < totalPages && dto.roles.length === 0) return roleFailure('The roles response returned an incomplete collection.');
+          for (const dtoRole of dto.roles) {
+            const role = adaptRole(dtoRole);
+            if (!role || seen.has(role.id)) return roleFailure('The roles response returned missing or duplicate role IDs.');
+            seen.add(role.id); rows.push(role);
           }
           page += 1;
         } while (page <= totalPages);
-        return rows.length === total ? { data: rows } : failure('The roles response did not return the complete directory.');
-      },
+        return rows.length === total ? { data: rows } : roleFailure('The roles response did not return the complete directory.');
+      }, providesTags: ['AdminRoles'],
+    }),
+    getAdminPermissions: builder.query({
+      async queryFn({ owner }, api, _options, baseQuery) {
+        const account = api.getState().auth.admin;
+        if (!owned(api, owner, account)) return sessionError();
+        const result = await readCatalog(baseQuery);
+        return owned(api, owner, account) ? result : sessionError();
+      }, providesTags: ['AdminPermissions'],
+    }),
+    getAdminRole: builder.query({
+      async queryFn({ owner, id }, api, _options, baseQuery) {
+        const account = api.getState().auth.admin;
+        if (!owned(api, owner, account)) return sessionError();
+        const result = await readRole(id, baseQuery);
+        return owned(api, owner, account) ? result : sessionError();
+      }, providesTags: ['AdminRoles'],
+    }),
+    changeAdminRole: builder.mutation({
+      async queryFn(args, api, _options, baseQuery) {
+        const { action, owner, id } = args;
+        const account = api.getState().auth.admin;
+        if (!owned(api, owner, account)) return sessionError();
+        if (!['create', 'edit', 'duplicate', 'delete'].includes(action)) return roleFailure('This role operation is not supported.');
+        let request, body, current, catalog, expectedKeys;
+        if (action === 'create' || action === 'edit' || action === 'duplicate') {
+          const result = await readCatalog(baseQuery);
+          if (!owned(api, owner, account)) return sessionError();
+          if (result.error) return result;
+          catalog = result.data;
+          if (action !== 'duplicate' && (!args.catalog || signature(catalog) !== signature(args.catalog))) return roleFailure('The permission catalogue changed. Refresh and review permissions before saving.');
+        }
+        if (action !== 'create') {
+          const result = await readRole(id, baseQuery);
+          if (!owned(api, owner, account)) return sessionError();
+          if (result.error) return result;
+          current = result.data;
+        }
+        if (action === 'create') {
+          try { body = buildRoleConfiguration(args.values, catalog); } catch (error) { return roleFailure(error.message); }
+          expectedKeys = permissionsForConfiguration(body, catalog).flatMap((m) => m.actions.filter((a) => a.granted).map((a) => a.key));
+          request = { url: '/admin/roles', method: 'POST', body };
+        } else if (action === 'edit') {
+          if (!current.version || current.version !== args.expectedVersion) return roleFailure('The role version is unavailable or changed. Refresh the role before saving.');
+          const allowed = ['name', 'description', 'isActive', 'color', 'icon', 'permissionKeys'];
+          body = { expectedVersion: current.version };
+          for (const [key, value] of Object.entries(args.changes || {})) {
+            if (!allowed.includes(key)) return roleFailure('This role field is not supported.');
+            if (key === 'name' && (!roleText(value) || current.isSystem !== false)) return roleFailure('System roles cannot be renamed.');
+            if (key === 'description' && typeof value !== 'string' || key === 'isActive' && typeof value !== 'boolean'
+              || key === 'color' && (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) || key === 'icon' && !roleText(value)) return roleFailure('The role contains an invalid field.');
+            if (key === 'isActive' && !value && current.memberCount == null) return roleFailure('The current member count is unavailable. Refresh before deactivating this role.');
+            if (key === 'isActive' && !value && current.memberCount > 0) return roleFailure('Roles with members cannot be deactivated.');
+            if (key === 'permissionKeys') {
+              const valid = new Set(catalog.modules.flatMap((m) => m.actions.map((a) => a.key)));
+              if (!Array.isArray(value) || new Set(value).size !== value.length || value.some((key) => !valid.has(key))) return roleFailure('The selected permissions do not match the catalogue.');
+              if (!grantedRoleKeys(current, catalog)) return roleFailure('The current permission matrix is incomplete. Refresh before changing permissions.');
+              expectedKeys = value;
+            }
+            body[key] = value;
+          }
+          if (Object.keys(body).length === 1) return roleFailure('There are no changes to save.');
+          request = { url: path(id), method: 'PATCH', body };
+        } else if (action === 'duplicate') {
+          if (!roleText(current.source?.name)) return roleFailure('The role name is unavailable.');
+          if (!current.ownership || current.ownership === 'COMPANY' && !roleText(current.source.companyId)) return roleFailure('The current role ownership is unavailable. Refresh before duplicating.');
+          expectedKeys = grantedRoleKeys(current, catalog);
+          if (!expectedKeys) return roleFailure('The full permission matrix is required before duplicating the role.');
+          body = { name: current.source.name + ' (copy)' };
+          request = { url: path(id) + '/duplicate', method: 'POST', body };
+        } else {
+          if (current.isSystem !== false || current.memberCount !== 0 || current.pendingInvites !== 0) return roleFailure('Only non-system roles without members or pending invites can be deleted.');
+          request = { url: path(id), method: 'DELETE' };
+        }
+        if (!owned(api, owner, account)) return sessionError();
+        const result = await baseQuery(request);
+        if (!owned(api, owner, account)) return sessionError();
+        if (result.error) return result;
+        if (action === 'delete') {
+          const check = await baseQuery({ url: path(id) });
+          if (!owned(api, owner, account)) return sessionError();
+          return check.error?.status === 404 ? { data: { deleted: true, id } } : roleFailure('The delete request completed, but removal could not be confirmed. Refresh before trying again.');
+        }
+        const saved = adaptRole(unwrapApiResponseData(result.data), true);
+        if (!saved || action === 'edit' && saved.id !== id || action !== 'edit' && saved.id === id) return roleFailure('The save request completed, but the returned role could not be confirmed. Refresh before trying again.');
+        const check = await readRole(saved.id, baseQuery);
+        if (!owned(api, owner, account)) return sessionError();
+        if (check.error) return roleFailure('The save request completed, but the role could not be reloaded. Refresh before trying again.');
+        const updated = check.data;
+        if (!confirmsFields(updated, body) || action !== 'edit' && updated.isSystem !== false) return roleFailure('The save request completed, but its fields could not be confirmed. Refresh before trying again.');
+        if (action === 'duplicate' && (updated.ownership !== (current.ownership === 'COMPANY' ? 'COMPANY' : 'SHARED')
+          || current.ownership === 'COMPANY' && updated.source.companyId !== current.source.companyId)) return roleFailure('The duplicate was created, but its ownership could not be confirmed. Refresh before trying again.');
+        if (expectedKeys) {
+          const actualKeys = grantedRoleKeys(updated, catalog);
+          if (!actualKeys || actualKeys.length !== expectedKeys.length || expectedKeys.some((key) => !actualKeys.includes(key))) return roleFailure('The save request completed, but its permissions could not be confirmed. Refresh before trying again.');
+        }
+        return { data: updated };
+      }, invalidatesTags: ['AdminRoles'],
     }),
   }),
 });
-export const { useGetAdminRolesDirectoryQuery } = rolesApi;
+export const { useGetAdminRolesDirectoryQuery, useGetAdminPermissionsQuery, useGetAdminRoleQuery, useChangeAdminRoleMutation } = rolesApi;

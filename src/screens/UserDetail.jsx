@@ -8,9 +8,12 @@ import {
   PageHeader, Button, Card, SectionCard, Badge, Tag, Tabs, LabelValue, DataTable, DropdownMenu,
   Avatar, Icon, ProgressBar, StatusDot,
 } from '../ds.js';
-import { useGetManagedUserProfileQuery, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
+import { useGetManagedUserProfileQuery, useGetManagedUserActivityQuery, canReadManagedUserActivity, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
-import { DriverDetailLoading } from './DriversLoading.jsx';
+import { DriverDetailLoading, DriverTableLoading } from './DriversLoading.jsx';
+
+import { UserActionDialogs, useManagedUserOperations } from './UserActionDialogs.jsx';
+import { ManagedUserSection } from './UserProfileSections.jsx';
 
 const CONTACT_ROWS = [
   { key: 'email', icon: 'mail' },
@@ -33,23 +36,33 @@ export function UserDetail() {
   const search = useSearchParams();
   const id = search.get('id') || userId;
   const source = search.get('source') || 'user';
-  const role = useSelector((state) => state.auth.admin?.role);
+  const admin = useSelector((state) => state.auth.admin);
+  const role = admin?.role;
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const navigate = useNavigate();
   const permitted = source !== 'admin' || role === 'SUPER_ADMIN';
-  const query = useGetManagedUserProfileQuery({ id, source }, { skip: !id || !permitted, refetchOnMountOrArgChange: true });
-  const u = permitted && !query.error ? query.currentData : null;
+  const query = useGetManagedUserProfileQuery({ id, source, owner: admin?.id }, { skip: !authenticated || !id || !permitted, refetchOnMountOrArgChange: true });
+  const u = authenticated && permitted && !query.error ? query.currentData : null;
   const [changeAccess, accessState] = useChangeManagedUserAccessMutation();
   const [editAdmin, editState] = useUpdateManagedAdminMutation();
   const submitting = useRef(false);
+  const operations = useManagedUserOperations();
   const [tab, setTab] = useState('Overview');
   const [menu, setMenu] = useState(false);
+  const activityAvailable = authenticated && permitted && canReadManagedUserActivity(u, role);
+  const activityQuery = useGetManagedUserActivityQuery({ id, source, owner: admin?.id, roleCode: u?.roleCode, truckerType: u?.truckerType, all: tab === 'Activity Log' }, { skip: !activityAvailable, refetchOnMountOrArgChange: true });
+  const activityLoading = activityAvailable && (activityQuery.isLoading || (activityQuery.isFetching && !activityQuery.currentData));
+  useEffect(() => { if (activityAvailable && activityQuery.error) window.alert(getApiErrorMessage(activityQuery.error)); }, [activityAvailable, activityQuery.error]);
   const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available for this user through this control in the documented API.`); };
-  useEffect(() => { setTab('Overview'); setMenu(false); }, [id, source]);
+  useEffect(() => { setTab('Overview'); setMenu(false); operations.close(); }, [id, source]);
 
   async function updateAccess(operation) {
     setMenu(false);
     if (submitting.current || accessState.isLoading) return;
-    if (!u || u.source !== 'user' || u.statusCode !== (operation === 'suspend' ? 'ACTIVE' : 'SUSPENDED')) { unavailable('Changing access'); return; }
+    if (u?.source === 'admin') { operations.open(operation === 'activate' ? 'unlock' : 'lock', u); return; }
+    if (u?.statusCode === 'LOCKED' && operation === 'activate') { operations.open('unlock', u); return; }
+    const supported = u?.isAccount && u.source === 'user' && u.statusCode === (operation === 'suspend' ? 'ACTIVE' : 'SUSPENDED');
+    if (!supported) { unavailable('Changing access'); return; }
     const reason = operation === 'suspend' ? window.prompt('Reason for suspending this user:') : null;
     if (operation === 'suspend' && !reason?.trim()) return;
     submitting.current = true;
@@ -61,12 +74,12 @@ export function UserDetail() {
   async function editUser(transferRole = false) {
     setMenu(false);
     if (submitting.current || editState.isLoading) return;
-    if (u?.source !== 'admin' || role !== 'SUPER_ADMIN') { unavailable(transferRole ? 'Transfer Role' : 'Edit User'); return; }
-    const value = transferRole ? window.prompt('Role: SUPER_ADMIN, OPS_ADMIN or FINANCE_ADMIN', u.roleCode)
-      : window.prompt('Full Name', u.name === '—' ? '' : u.name);
+    if (transferRole) { operations.open('permissions', u); return; }
+    if (u?.source !== 'admin' || role !== 'SUPER_ADMIN') { unavailable('Edit User'); return; }
+    const value = window.prompt('Full Name', u.name === '—' ? '' : u.name);
     if (!value?.trim()) return;
-    const body = transferRole ? { role: value.trim() } : { name: value.trim() };
-    if ((!transferRole && body.name === u.name) || (transferRole && body.role === u.roleCode)) return;
+    const body = { name: value.trim() };
+    if (body.name === u.name) return;
     submitting.current = true;
     try { const result = await editAdmin({ id: u.backendId, ...body }).unwrap(); window.alert(result.message); }
     catch (error) { window.alert(getApiErrorMessage(error)); }
@@ -74,11 +87,11 @@ export function UserDetail() {
   }
 
   const changeStatus = () => updateAccess(u?.statusCode === 'ACTIVE' ? 'suspend' : 'activate');
-  const viewActivity = () => { setMenu(false); setTab('Activity Log'); unavailable('View Activity Log'); };
+  const viewActivity = () => { setMenu(false); setTab('Activity Log'); if (!activityAvailable) unavailable('View Activity Log'); else if (tab === 'Activity Log' && activityQuery.error) activityQuery.refetch(); };
   const booleanLabel = (value) => value == null ? '—' : value ? 'Enabled' : 'Disabled';
   const amountLabel = (value, unit) => value == null ? '—' : `${value} ${unit}`;
 
-  if (permitted && (query.isLoading || (query.isFetching && !query.currentData))) return <DriverDetailLoading />;
+  if (!authenticated || (permitted && (query.isLoading || (query.isFetching && !query.currentData)))) return <DriverDetailLoading />;
 
   if (!u) {
     return (
@@ -91,7 +104,7 @@ export function UserDetail() {
     );
   }
 
-  const activity = [];
+  const activity = activityAvailable && !activityQuery.error ? activityQuery.currentData || [] : [];
 
   return (
     <>
@@ -105,23 +118,23 @@ export function UserDetail() {
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={260} items={[
-                  { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => unavailable('Reset Password') },
-                  { label: 'Force Logout', icon: 'log-out', onClick: () => unavailable('Force Logout') },
+                  { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => { setMenu(false); operations.open('password-reset', u); } },
+                  { label: 'Force Logout', icon: 'log-out', onClick: () => { setMenu(false); operations.open('force-logout', u); } },
                   { label: 'Impersonate User', icon: 'user-round-cog', onClick: () => unavailable('Impersonate User') },
                   { divider: true },
                   { label: u.status === 'Active' ? 'Deactivate User' : 'Activate User', icon: 'user-x',
                     onClick: changeStatus },
-                  { label: 'Lock User Account', icon: 'lock', onClick: () => unavailable('Lock User Account') },
-                  { label: 'Update Permissions', icon: 'shield', onClick: () => unavailable('Update Permissions') },
+                  { label: 'Lock User Account', icon: 'lock', onClick: () => { setMenu(false); operations.open('lock', u); } },
+                  { label: 'Update Permissions', icon: 'shield', onClick: () => { setMenu(false); operations.open('permissions', u); } },
                   { label: 'Transfer Role', icon: 'repeat', onClick: () => editUser(true) },
                   { divider: true },
                   { label: 'View Activity Log', icon: 'history', onClick: viewActivity },
-                  { label: 'Download User Report', icon: 'file-down', onClick: () => unavailable('Download User Report') },
-                  { label: 'Send Email', icon: 'mail', onClick: () => unavailable('Send Email') },
-                  { label: 'Send SMS', icon: 'message-square', onClick: () => unavailable('Send SMS') },
-                  { label: 'Export User Data', icon: 'download', onClick: () => unavailable('Export User Data') },
+                  { label: 'Download User Report', icon: 'file-down', onClick: () => { setMenu(false); operations.download('report', u); } },
+                  { label: 'Send Email', icon: 'mail', onClick: () => { setMenu(false); operations.open('EMAIL', u); } },
+                  { label: 'Send SMS', icon: 'message-square', onClick: () => { setMenu(false); operations.open('SMS', u); } },
+                  { label: 'Export User Data', icon: 'download', onClick: () => { setMenu(false); operations.download('export', u); } },
                   { divider: true },
-                  { label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => unavailable('Delete User') },
+                  { label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => { setMenu(false); operations.open('delete', u); } },
                 ]} />
               </span>
             )}
@@ -164,11 +177,11 @@ export function UserDetail() {
       </div>
 
       <Card pad="none">
-        <Tabs value={tab} onChange={(value) => { setTab(value); if (value !== 'Overview') unavailable(value); }} style={{ padding: '0 var(--tk-card-pad)' }}
+        <Tabs value={tab} onChange={(value) => { setTab(value); }} style={{ padding: '0 var(--tk-card-pad)' }}
           items={['Overview', 'Roles & Permissions', 'Activity Log', 'Sessions', 'Documents', 'Security', 'Notifications']} />
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--tk-grid-gap)' }}>
+      {tab === 'Overview' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--tk-grid-gap)' }}>
         <SectionCard title="About This User">
           <LabelValue label="Full Name" value={u.name} />
           <LabelValue label="Email Address" value={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{u.email}{u.emailVerified && <Badge tone="success">Verified</Badge>}</span>} />
@@ -190,7 +203,7 @@ export function UserDetail() {
           <LabelValue label="Failed Login Attempts" value={amountLabel(u.failedLogins, 'times')} />
           <LabelValue label="Active Sessions" value={amountLabel(u.activeSessions, `session${u.activeSessions === 1 ? '' : 's'}`)} />
           <LabelValue label="Last Login" value={<span style={{ display: 'grid', gap: 2, textAlign: 'right' }}>
-            <span>{u.lastActive}</span><span className="tk-meta">{u.lastLoginDetail}</span>
+            <span>{u.lastLogin}</span><span className="tk-meta">{u.lastLoginDetail}</span>
           </span>} />
           <LabelValue label="Account Created" value={u.accountCreated} />
           <LabelValue label="Email Notifications" value={<Badge dot tone={u.emailNotifications ? 'success' : 'neutral'}>{booleanLabel(u.emailNotifications)}</Badge>} />
@@ -208,9 +221,11 @@ export function UserDetail() {
         </SectionCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+      }
+      {!['Overview', 'Activity Log'].includes(tab) && <ManagedUserSection tab={tab} user={u} owner={admin?.id} />}
+      {(tab === 'Overview' || tab === 'Activity Log') && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="Recent Activity" pad="none" footer={<a href="#" onClick={(event) => { event.preventDefault(); viewActivity(); }}>View All Activity →</a>}>
-          <DataTable rows={activity} rowKey={(r, i) => i}
+          {activityLoading ? <DriverTableLoading columns={5} label="Loading user activity" /> : <DataTable rows={activity} rowKey={(r, i) => i}
             columns={[
               { key: 'text', header: 'Activity', render: (r) => (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -221,21 +236,21 @@ export function UserDetail() {
               { key: 'ip', header: 'IP Address', render: (r) => <span className="tk-mono">{r.ip}</span> },
               { key: 'location', header: 'Location' },
               { key: 'time', header: 'Date & Time' },
-            ]} />
-          {'—'}
+            ]} />}
+          {activityAvailable && !activityQuery.error && activityQuery.currentData ? null : '—'}
         </SectionCard>
 
         <SectionCard title="Quick Actions">
           <div style={{ display: 'grid', gap: 4 }}>
             {[
-              { icon: 'rotate-ccw', label: 'Reset Password', hint: 'Send password reset link to user', onClick: () => unavailable('Reset Password') },
+              { icon: 'rotate-ccw', label: 'Reset Password', hint: 'Send password reset instructions', onClick: () => { setMenu(false); operations.open('password-reset', u); } },
               { icon: 'log-out', label: 'Force Logout', hint: 'Sign out user from all active sessions' },
               { icon: 'shield', label: 'Update Permissions', hint: 'Modify user roles and permissions' },
               { icon: 'history', label: 'View Activity Log', hint: 'See all user actions and events' },
               { icon: 'user-x', label: 'Deactivate User', hint: 'Temporarily disable user access',
                 onClick: () => updateAccess('suspend'), danger: true },
             ].map((a) => (
-              <button key={a.label} type="button" onClick={a.onClick || (a.label === 'View Activity Log' ? viewActivity : () => unavailable(a.label))}
+              <button key={a.label} type="button" onClick={a.onClick || (a.label === 'View Activity Log' ? viewActivity : a.label === 'Force Logout' ? () => operations.open('force-logout', u) : a.label === 'Update Permissions' ? () => operations.open('permissions', u) : () => unavailable(a.label))}
                 style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 8px', border: 0,
                          background: 'transparent', cursor: 'pointer', textAlign: 'left', borderRadius: 'var(--tk-r-sm)' }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--tk-surface-sunk)'}
@@ -249,7 +264,8 @@ export function UserDetail() {
             ))}
           </div>
         </SectionCard>
-      </div>
+      </div>}
+      <UserActionDialogs operations={operations} onDeleted={() => navigate('/users')} />
     </>
   );
 }
