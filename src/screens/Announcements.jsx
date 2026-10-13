@@ -17,7 +17,9 @@ import {
   DropdownMenu,
   Skeleton,
 } from "../ds.js";
-import { useGetAdminAnnouncementDirectoryQuery, useGetAdminAnnouncementStatusCountsQuery, usePublishAdminAnnouncementMutation, announcementCount, announcementDetailUrl, announcementEditUrl, announcementCopyUrl, announcementUnavailable, ANNOUNCEMENT_STATUSES } from "../store/features/announcements/announcementsApi.js";
+import { useGetAdminAnnouncementDirectoryQuery, useGetAdminAnnouncementStatsQuery, announcementCount, announcementDetailUrl, announcementEditUrl, announcementCopyUrl, ANNOUNCEMENT_STATUSES } from "../store/features/announcements/announcementsApi.js";
+import { useAnnouncementOperations } from '../store/features/announcements/useAnnouncementOperations.js';
+import { AnnouncementReasonDialog } from './AnnouncementDialogs.jsx';
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading, DriverLoadingNotice } from "./DriversLoading.jsx";
 import "./Engagement.css";
@@ -66,8 +68,11 @@ export function Announcements() {
     [page, setPage] = useState(1),
     [menu, setMenu] = useState(null),
     [toast, setToast] = useState("");
+  const operations = useAnnouncementOperations();
+  const [reasonDialog, setReasonDialog] = useState(null);
+  const period = useMemo(() => { const now = Date.now(); return { dateFrom: new Date(now - 30 * 86400000).toISOString(), dateTo: new Date(now).toISOString() }; }, []);
   const directory = useGetAdminAnnouncementDirectoryQuery({ owner }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const countsQuery = useGetAdminAnnouncementStatusCountsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const countsQuery = useGetAdminAnnouncementStatsQuery({ owner, ...period }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const tabStatus = tab === 'All Announcements' ? null : ANNOUNCEMENT_STATUSES[tab === 'Drafts' ? 'Draft' : tab];
   const chosenStatus = status === 'All' ? null : ANNOUNCEMENT_STATUSES[status];
   const conflict = Boolean(tabStatus && chosenStatus && tabStatus !== chosenStatus);
@@ -80,9 +85,9 @@ export function Announcements() {
   const available = Boolean(rows) && (type === 'All' || rows.every((row) => row.typeKnown))
     && (audience === 'All' || rows.every((row) => row.audienceKnown)) && (!q.trim() || rows.every((row) => row.searchKnown));
   const counts = authenticated && !countsQuery.error ? countsQuery.currentData : undefined;
-  const totalViews = allRows?.every((row) => row.v != null) ? allRows.reduce((sum, row) => sum + row.v, 0) : null;
+  const totalViews = counts?.totalViews?.value;
   const recent = allRows?.every((row) => row.createdAt != null) ? [...allRows].sort((a, b) => b.createdAt - a.createdAt).slice(0, 4) : [];
-  const [publishAnnouncement, publication] = usePublishAdminAnnouncementMutation();
+  const publication = { isLoading: operations.saving };
   const publishing = useRef(false), toastTimer = useRef(null);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
   const filtered = useMemo(
@@ -111,9 +116,14 @@ export function Announcements() {
     setMenu(null);
     if (publishing.current || publication.isLoading) return;
     publishing.current = true;
-    try { const response = await publishAnnouncement({ id, owner }).unwrap(); notify(response.message); }
-    catch (error) { notify(getApiErrorMessage(error)); }
+    try { const response = await operations.perform({ action: 'publish', id }); if (response) notify(response.message); }
+    catch (error) { notify(error instanceof Error ? error.message : getApiErrorMessage(error)); }
     finally { publishing.current = false; }
+  }
+  async function duplicate(id) {
+    setMenu(null);
+    try { const result = await operations.perform({ action: 'duplicate', id }); if (result) navigate(announcementCopyUrl(result.announcement.id)); }
+    catch (error) { notify(error instanceof Error ? error.message : getApiErrorMessage(error)); }
   }
   const metric = (value, pending) => pending ? <Skeleton as="span" width={54} height={23} /> : announcementCount(value);
   return (
@@ -141,35 +151,35 @@ export function Announcements() {
         <StatCard
           icon="megaphone"
           label="Total Announcements"
-          value={metric(allRows?.length, directory.isFetching)}
-          delta="—"
-          direction={null}
+          value={metric(counts?.totalAnnouncements?.value, countsQuery.isFetching)}
+          delta={counts?.totalAnnouncements?.delta ?? '—'}
+          direction={counts?.totalAnnouncements?.direction ?? null}
           caption="from last 30 days"
         />
         <StatCard
           icon="send"
           tint="green"
           label="Published"
-          value={metric(counts?.PUBLISHED, countsQuery.isFetching)}
-          delta="—"
-          direction={null}
+          value={metric(counts?.publishedCount?.value, countsQuery.isFetching)}
+          delta={counts?.publishedCount?.delta ?? '—'}
+          direction={counts?.publishedCount?.direction ?? null}
           caption="from last 30 days"
         />
         <StatCard
           icon="calendar"
           label="Scheduled"
-          value={metric(counts?.SCHEDULED, countsQuery.isFetching)}
-          delta="—"
-          direction={null}
+          value={metric(counts?.scheduledCount?.value, countsQuery.isFetching)}
+          delta={counts?.scheduledCount?.delta ?? '—'}
+          direction={counts?.scheduledCount?.direction ?? null}
           caption="from last 30 days"
         />
         <StatCard
           icon="eye"
           tint="purple"
           label="Total Views"
-          value={metric(totalViews, directory.isFetching)}
-          delta="—"
-          direction={null}
+          value={metric(totalViews, countsQuery.isFetching)}
+          delta={counts?.totalViews?.delta ?? '—'}
+          direction={counts?.totalViews?.direction ?? null}
           caption="from last 30 days"
         />
       </div>
@@ -356,7 +366,7 @@ export function Announcements() {
                                   icon: "archive",
                                   onClick: () => {
                                     setMenu(null);
-                                    announcementUnavailable('Unpublish');
+                                    setReasonDialog({ action: 'unpublish', announcement: r, admin: operations.admin });
                                   },
                                 },
                             { divider: true },
@@ -364,7 +374,7 @@ export function Announcements() {
                               label: "Duplicate",
                               icon: "copy",
                               onClick: () =>
-                                navigate(announcementCopyUrl(r.id)),
+                                duplicate(r.id),
                             },
                           ]}
                         />
@@ -493,6 +503,7 @@ export function Announcements() {
           </Card>
         </div>
       </div>
+      {reasonDialog && reasonDialog.admin === operations.admin && <AnnouncementReasonDialog action={reasonDialog.action} announcement={reasonDialog.announcement} operations={operations} onClose={() => setReasonDialog(null)} onSaved={(result) => notify(result.message)} />}
       {toast && <div className="eng-toast">{toast}</div>}
     </div>
   );
