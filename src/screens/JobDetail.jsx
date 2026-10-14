@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "../router.js";
 import {
   Badge,
@@ -24,20 +25,12 @@ import {
   SearchField,
   FilterSelect,
   SplitButton,
+  Skeleton,
+  TextField,
 } from "../ds.js";
-import { useCollection } from "../mock/useCollection.js";
-import { normalizePayouts } from "../domain/payouts.js";
-import {
-  approveJob,
-  rejectJob,
-  acceptJobBid,
-  markJobInTransit,
-  markJobDelivered,
-  cancelJob,
-  reviewJobDocument,
-  updateJobTripStatus,
-} from "../mock/api.js";
-import { getJobTripCounts, getJobTrips } from "../domain/jobTrips.js";
+import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import "./JobDetail.css";
 
 const STAGES = [
@@ -73,11 +66,10 @@ const STATUS_TONE = {
   Delayed: "danger",
 };
 export const statusTone = (s) => STATUS_TONE[s] || "neutral";
-const naira = (n) => `₦${Math.round(n || 0).toLocaleString("en-NG")}`;
-const nairaShort = (n) =>
-  Math.abs(n) >= 1000000
-    ? `₦${(n / 1000000).toFixed(1)}M`
-    : `₦${Math.round(n / 1000)}K`;
+const naira = (n) => typeof n === "number" && Number.isFinite(n) ? "₦" + Math.round(n).toLocaleString("en-NG") : "—";
+const nairaShort = (n) => typeof n !== "number" || !Number.isFinite(n) ? "—" : Math.abs(n) >= 1000000 ? "₦" + (n / 1000000).toFixed(1) + "M" : "₦" + Math.round(n / 1000) + "K";
+const displayCount = (n) => n == null ? "—" : n;
+const percentage = (n) => n == null ? "—" : n + "%";
 const TINT = {
   blue: ["var(--tk-blue-soft)", "var(--tk-blue)"],
   green: ["var(--tk-success-soft)", "var(--tk-success)"],
@@ -85,204 +77,6 @@ const TINT = {
   amber: ["var(--tk-warning-soft)", "var(--tk-warning)"],
   neutral: ["var(--tk-surface-sunk)", "var(--tk-ink-400)"],
 };
-
-function seedNum(s = "") {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-
-const BID_POOL = [
-  "Prime Container Services",
-  "Transglobal Logistics",
-  "Westafrica Forwarders",
-  "Oceanic Transport",
-  "SpeedLine Logistics",
-  "D-Line Logistics",
-];
-
-function fallbackBids(job) {
-  const h = seedNum(job.id);
-  const n = 2 + (h % 3);
-  const base = (job.jobValue || 1000000) * 0.68;
-  return Array.from({ length: n }).map((_, i) => ({
-    company: BID_POOL[(h + i * 7) % BID_POOL.length],
-    rating: Number((4 + ((h + i * 13) % 9) / 10).toFixed(1)),
-    trips: 30 + ((h + i * 23) % 160),
-    amount: Math.round((base + ((h + i * 4177) % 300000)) / 1000) * 1000,
-    estDeliveryDate: job.deliveryDate || "—",
-    services: i % 2 ? ["Truck", "Driver", "Fuel"] : ["Truck", "Driver"],
-    submittedAt: job.createdAt || job.published || "—",
-    status: i === 0 ? "Best Offer" : i === 1 ? "Competitive" : "Standard",
-  }));
-}
-
-function fallbackDocuments(job) {
-  const staged = ["Bidding", "Assigned", "In Transit", "Delivered"].includes(
-    job.status,
-  );
-  const base = [
-    {
-      id: "auto-1",
-      name: "Bill of Lading.pdf",
-      type: "B/L",
-      submittedBy: job.forwarder,
-      date: job.createdAt || job.published,
-      status: "Approved",
-      size: "2.1 MB",
-    },
-    {
-      id: "auto-2",
-      name: "Packing List.xlsx",
-      type: "Packing List",
-      submittedBy: job.forwarder,
-      date: job.createdAt || job.published,
-      status: "Approved",
-      size: "280 KB",
-    },
-    {
-      id: "auto-3",
-      name: "Commercial Invoice.pdf",
-      type: "Invoice",
-      submittedBy: job.forwarder,
-      date: job.createdAt || job.published,
-      status: staged ? "Approved" : "Pending",
-      size: "900 KB",
-    },
-  ];
-  if (job.truckingCompany)
-    base.push({
-      id: "auto-4",
-      name: "Insurance Certificate.pdf",
-      type: "Insurance",
-      submittedBy: job.truckingCompany,
-      date: job.updatedAt,
-      status: "Approved",
-      size: "310 KB",
-    });
-  return base;
-}
-
-function fallbackTracking(job) {
-  const items = [
-    {
-      time: job.createdAt || job.published,
-      location: "—",
-      status: "Created",
-      details: "Job created by forwarder.",
-      source: "System",
-    },
-  ];
-  if (job.status !== "Pending Approval")
-    items.push({
-      time: job.updatedAt,
-      location: "—",
-      status: "Approved",
-      details: "Job approved by Super Admin.",
-      source: "System",
-    });
-  if (job.truckingCompany)
-    items.push({
-      time: job.updatedAt,
-      location: job.origin || "—",
-      status: "Assigned",
-      details: `Truck and driver assigned by ${job.truckingCompany}.`,
-      source: "System",
-    });
-  if (["In Transit", "Delivered"].includes(job.status))
-    items.push({
-      time: job.updatedAt,
-      location: job.origin || "—",
-      status: "Departed",
-      details: "Left origin terminal.",
-      source: "Driver App",
-    });
-  if (job.status === "In Transit")
-    items.push({
-      time: job.updatedAt,
-      location: "En route",
-      status: "In Transit",
-      details: "Truck moving towards destination.",
-      source: "GPS",
-    });
-  if (job.status === "Delivered")
-    items.push({
-      time: job.updatedAt,
-      location: job.destination || "—",
-      status: "Delivered",
-      details: "Cargo delivered to destination.",
-      source: "Driver App",
-    });
-  return items.slice().reverse();
-}
-
-function fallbackTransactions(job) {
-  const fee = Math.round(
-    (job.jobValue || 0) * ((job.platformFeePct || 8) / 100),
-  );
-  const payout = (job.jobValue || 0) - fee;
-  const rows = [
-    {
-      date: job.createdAt || job.published,
-      description: `Forwarder payment received (${job.forwarder})`,
-      amount: job.jobValue || 0,
-      status: "Completed",
-      reference: `TRX-${seedNum(job.id) % 900000}`,
-    },
-    {
-      date: job.createdAt || job.published,
-      description: `Platform fee (${job.platformFeePct || 8}%)`,
-      amount: -fee,
-      status: "Allocated",
-      reference: `FEE-${(job.id || "").replace(/\D/g, "")}`,
-    },
-  ];
-  if (job.truckingCompany)
-    rows.push({
-      date: job.updatedAt,
-      description: `Trucking company payout (${job.truckingCompany})`,
-      amount: -payout,
-      status: job.status === "Delivered" ? "Completed" : "Processing",
-      reference: `PAYOUT-${seedNum(job.truckingCompany) % 90000}`,
-    });
-  rows.push({
-    date: null,
-    description: "Demurrage charges",
-    amount: 0,
-    status: "Not incurred",
-    reference: "—",
-  });
-  return rows;
-}
-
-function fallbackActivity(job) {
-  const items = [
-    {
-      time: job.createdAt || job.published,
-      user: job.forwarder,
-      role: "Forwarder",
-      action: "Job Created",
-      details: `Job created with route ${job.route || `${job.origin} → ${job.destination}`}.`,
-    },
-  ];
-  if (job.status !== "Pending Approval")
-    items.unshift({
-      time: job.updatedAt,
-      user: "Super Admin",
-      role: "Trukkas",
-      action: "Job Approved",
-      details: "Job approved and released for bidding.",
-    });
-  if (job.truckingCompany)
-    items.unshift({
-      time: job.updatedAt,
-      user: job.truckingCompany,
-      role: "Trucking Company",
-      action: "Assignment Confirmed",
-      details: `${getJobTripCounts(job).assigned} of ${getJobTripCounts(job).required} truck and driver pairs assigned.`,
-    });
-  return items;
-}
 
 function InfoStrip({ items }) {
   return (
@@ -518,13 +312,65 @@ function ExternalLink({ children, onClick }) {
   );
 }
 
-export function JobDetail() {
+function TripActionMenu({ anchor, items, onClose }) {
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState(null);
+  useEffect(() => {
+    const update = () => {
+      if (!anchor?.isConnected || !menuRef.current) { onClose(null); return; }
+      const rect = anchor.getBoundingClientRect(), menu = menuRef.current.getBoundingClientRect();
+      const left = Math.max(8, Math.min(rect.right - menu.width, window.innerWidth - menu.width - 8));
+      const below = rect.bottom + 6;
+      setPosition({ left, top: below + menu.height <= window.innerHeight - 8 ? below : Math.max(8, rect.top - menu.height - 6) });
+    };
+    const outside = (event) => { if (!anchor?.contains(event.target) && !menuRef.current?.contains(event.target)) onClose(null); };
+    const escape = (event) => { if (event.key === "Escape") onClose(null); };
+    update();
+    window.addEventListener("scroll", update, true); window.addEventListener("resize", update);
+    document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("scroll", update, true); window.removeEventListener("resize", update);
+      document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape);
+    };
+  }, [anchor, items.length, onClose]);
+  return <div ref={menuRef} onClick={(event) => event.stopPropagation()} style={{ position: "fixed", zIndex: 95, width: "max-content", top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}><DropdownMenu width={205} items={items} /></div>;
+}
+
+function LoadingDetail() {
+  return (
+    <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }} aria-busy="true">
+      <Card><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
+      <div role="status" className="tk-meta">Loading job details…</div>
+      <div className="jd-layout">
+        <Card><Skeleton width="40%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
+        <Card><Skeleton width="50%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
+      </div>
+    </div>
+  );
+}
+
+export function JobDetail({ jobId: requestedId }) {
+  const params = useParams();
+  const owner = useSelector((state) => state.auth.admin?.id);
+  const role = useSelector((state) => state.auth.admin?.role);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const jobId = typeof (requestedId ?? params.jobId) === "string" ? (requestedId ?? params.jobId).trim() : "";
+  return <JobDetailContent key={[owner, role, jobId, authenticated].join(":")} jobId={jobId} owner={owner} role={role} authenticated={authenticated} />;
+}
+
+function JobDetailContent({ jobId, owner, role, authenticated }) {
   const navigate = useNavigate();
-  const { jobId } = useParams();
-  const jobs = useCollection("jobs") || [];
-  const payoutRows = useCollection("payoutRequests") || [];
-  const payoutRequests = useMemo(() => normalizePayouts(payoutRows, jobs), [payoutRows, jobs]);
-  const job = jobs.find((j) => j.id === decodeURIComponent(jobId || ""));
+  const jobQuery = useGetAdminJobScreenQuery({ id: jobId, owner, role }, { skip: !authenticated || !jobId, refetchOnMountOrArgChange: true });
+  const job = jobQuery.error ? undefined : jobQuery.currentData;
+  const [changeJob, { isLoading: actionBusy }] = useChangeAdminJobScreenMutation();
+  const actionLock = useRef(false), active = useRef(true);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [delayReason, setDelayReason] = useState("");
+  const [delayOpen, setDelayOpen] = useState(null);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  useEffect(() => {
+    if (job?.errors.length) setToast({ tone: "warning", title: "Unable to load: " + job.errors.join(", ") + ". Refresh to try again." });
+  }, [job]);
 
   const [tab, setTab] = useState("Overview");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -541,7 +387,7 @@ export function JobDetail() {
   const [logPage, setLogPage] = useState(1);
   const [activityFilter, setActivityFilter] = useState("All Activities");
   const [activityOpenFilter, setActivityOpenFilter] = useState(false);
-  const [currency, setCurrency] = useState("NGN");
+  const [currency] = useState("NGN");
   const [tripMenu, setTripMenu] = useState(null);
   const [selectedTripId, setSelectedTripId] = useState(null);
 
@@ -551,27 +397,22 @@ export function JobDetail() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const bids = useMemo(() => (job ? job.bids || fallbackBids(job) : []), [job]);
-  const documents = useMemo(
-    () => (job ? job.documents || fallbackDocuments(job) : []),
-    [job],
-  );
-  const trackingUpdates = useMemo(
-    () => (job ? job.trackingUpdates || fallbackTracking(job) : []),
-    [job],
-  );
-  const transactions = useMemo(
-    () => (job ? job.transactions || fallbackTransactions(job) : []),
-    [job],
-  );
-  const activityLog = useMemo(
-    () => (job ? job.activityLog || fallbackActivity(job) : []),
-    [job],
-  );
-  const photos = useMemo(() => (job ? job.photos || [] : []), [job]);
-  const jobTrips = useMemo(() => getJobTrips(job), [job]);
-  const tripCounts = useMemo(() => getJobTripCounts(job), [job]);
-  const selectedTrip = jobTrips.find((trip) => trip.id === selectedTripId) || jobTrips[0] || null;
+  const bids = useMemo(() => job?.bids || [], [job]);
+  const documents = useMemo(() => job?.documents || [], [job]);
+  const transactions = useMemo(() => job?.transactions || [], [job]);
+  const activityLog = useMemo(() => job?.activityLog || [], [job]);
+  const jobTrips = useMemo(() => job?.trips || [], [job]);
+  const tripCounts = job?.tripCounts || {};
+  const selectedTripBase = jobTrips.find((trip) => trip.id === selectedTripId) || jobTrips[0] || null;
+  const tripQuery = useGetAdminJobScreenTripQuery({ id: selectedTripBase?.id, jobId: job?.apiId, owner, role }, {
+    skip: !authenticated || !selectedTripBase || tab !== "Tracking & Updates",
+    refetchOnMountOrArgChange: true,
+    pollingInterval: tab === "Tracking & Updates" ? 30000 : 0,
+  });
+  const selectedTrip = tripQuery.error ? null : tripQuery.currentData || selectedTripBase;
+  const trackingUpdates = useMemo(() => !tripQuery.error && tripQuery.currentData ? tripQuery.currentData.trackingUpdates : job?.trackingUpdates || [], [job, tripQuery.currentData, tripQuery.error]);
+  const photos = useMemo(() => tripQuery.error ? [] : tripQuery.currentData?.photos || [], [tripQuery.currentData, tripQuery.error]);
+  useEffect(() => { if (tripQuery.error) setToast({ tone: "danger", title: getApiErrorMessage(tripQuery.error) }); }, [tripQuery.error]);
 
   useEffect(() => {
     const tripId = new URLSearchParams(window.location.search).get("tripId");
@@ -589,18 +430,14 @@ export function JobDetail() {
     );
   }, [documents]);
 
+  if (authenticated && (jobQuery.isLoading || jobQuery.isFetching && !job)) return <LoadingDetail />;
   if (!job) {
     return (
       <Card>
-        <span className="tk-body">No job found with ID {jobId}.</span>
-        <div style={{ marginTop: 12 }}>
-          <Button
-            variant="outline"
-            icon="arrow-left"
-            onClick={() => navigate("/jobs")}
-          >
-            Back to Jobs
-          </Button>
+        <EmptyState icon="package" title={!jobId ? "Job ID missing" : "Unable to load job details"} description={jobQuery.error ? getApiErrorMessage(jobQuery.error) : "Open a job from the Jobs page to view its details."} />
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <Button variant="outline" icon="arrow-left" onClick={() => navigate("/jobs")}>Back to Jobs</Button>
+          {authenticated && jobId && <Button variant="outline" onClick={jobQuery.refetch}>Retry</Button>}
         </div>
       </Card>
     );
@@ -618,75 +455,84 @@ export function JobDetail() {
       : job.status;
   const stageIndex = terminal
     ? STAGES.indexOf("Pending Approval")
-    : Math.max(0, STAGES.indexOf(workflowStatus));
-  const stageDates = [
-    job.createdAt || job.published,
-    job.status !== "Pending Approval" ? job.updatedAt : undefined,
+    : STAGES.indexOf(workflowStatus);
+  const stageDates = job.stageDates;
+
+  const fee = job.fee, driverPayment = job.driverPayment, demurrage = job.demurrage;
+  const otherCosts = job.otherCosts, netEarnings = job.netEarnings;
+  const tripFinancials = jobTrips, relatedPayouts = job.relatedPayouts;
+  const tripActionTarget = jobTrips.find((trip) => trip.id === tripMenu?.id);
+  const bidAmountsKnown = job.bidsKnown && bids.every((bid) => bid.amount != null);
+  const funding = transactions.find((t) => t.type === "ESCROW_LOCK" && t.rawStatus === "COMPLETED");
+  const payoutCompleted = ["Paid", "Completed"].includes(job.finalPayoutStatus);
+  const financialTimeline = [
+    { title: "Forwarder Payment Received", description: funding ? naira(funding.amount) + " · " + funding.date : "—", state: funding ? "done" : "pending", icon: "check" },
+    { title: "Platform Fee Allocated", description: naira(fee), state: "pending", icon: "check" },
+    { title: "Trucking Company Payout", description: job.finalPayoutStatus ? naira(driverPayment) + " · " + job.finalPayoutStatus : "—", state: payoutCompleted ? "done" : "pending", icon: "truck" },
+    { title: "Demurrage (if any)", description: naira(demurrage), state: "pending" },
+    { title: "Job Closed", description: job.statusCode === "COMPLETED" ? "Delivery confirmed" : "—", state: job.statusCode === "COMPLETED" ? "done" : "pending", icon: "flag" },
   ];
-
-  const fee = Math.round(
-    (job.jobValue || 0) * ((job.platformFeePct || 8) / 100),
-  );
-  const acceptedBid = bids.find((b) => b.company === job.truckingCompany);
-  const driverPayment = job.truckingCompany
-    ? acceptedBid?.amount || job.jobValue - fee
-    : null;
-  const demurrage = job.demurrage || 0;
-  const otherCosts =
-    job.status === "In Transit" || job.status === "Delivered"
-      ? Math.round((job.jobValue || 0) * 0.05)
-      : 0;
-  const netEarnings = fee;
-  const tripFinancials = jobTrips.map((trip) => ({
-    ...trip,
-    cost: trip.cost || Math.round((driverPayment || 0) / Math.max(1, jobTrips.length)),
-    driverPayment: trip.driverPayment || 0,
-    expenses: trip.expenses || 0,
-  }));
-  const relatedPayouts = payoutRequests.filter((payout) =>
-    payout.jobId === job.id || payout.jobIds?.includes(job.id),
-  );
-
-  async function doApprove() {
-    await approveJob(job.id);
-    setApproveOpen(false);
-    notify("success", `${job.id} approved and released for bidding.`);
+  function unavailable(action) { notify("info", action + " is unavailable: no supported admin operation or required data is available."); }
+  function openReject(target = true) { setRejectionReason(""); setRejectOpen(target); }
+  async function perform(action, details = {}) {
+    if (actionLock.current || !authenticated) return;
+    actionLock.current = true;
+    try {
+      await changeJob({ id: job.apiId, owner, role, expectedStatus: job.statusCode, action, ...details }).unwrap();
+      if (!active.current) return;
+      setApproveOpen(false); setRejectOpen(false); setDelayOpen(null); setTripMenu(null); setMoreOpen(false);
+      const messages = { approve: "Job documents approved and released for bidding.", reject: "Job documents rejected.", approveDocument: "Document approved.", rejectDocument: "Document rejected.", deliver: "Job marked delivered.", cancel: "Job cancelled.", atDelivery: "Job and its trips marked at delivery.", delay: "Job and its trips marked delayed." };
+      notify("success", messages[action]);
+    } catch (error) {
+      if (active.current) notify("danger", getApiErrorMessage(error));
+    } finally { actionLock.current = false; }
   }
-  async function doReject() {
-    await rejectJob(job.id);
-    setRejectOpen(false);
-    notify("danger", `${job.id} was rejected.`);
+  function doApprove() { return perform("approve"); }
+  function doReject() {
+    if (!rejectionReason.trim()) return;
+    const doc = typeof rejectOpen === "object" ? rejectOpen : null;
+    return perform(doc ? "rejectDocument" : "reject", { reason: rejectionReason, ...(doc ? { documentId: doc.apiId, version: doc.version, documentUrl: doc.url } : {}) });
   }
-  async function doAcceptBid(bid) {
-    await acceptJobBid(job.id, bid.company);
-    setAcceptBidFor(null);
-    notify("success", `${bid.company} assigned to ${job.id}.`);
-  }
-  async function doMarkInTransit() {
-    await markJobInTransit(job.id);
-    notify("info", `${job.id} marked as In Transit.`);
-  }
-  async function doMarkDelivered() {
-    await markJobDelivered(job.id);
-    notify("success", `${job.id} marked as Delivered.`);
-  }
-  async function doTripStatus(tripId, status) {
-    await updateJobTripStatus(job.id, tripId, status);
+  function doAcceptBid() { unavailable("Accept Bid"); }
+  function doMarkInTransit() { unavailable("Mark In Transit"); }
+  function doMarkDelivered() { return perform("deliver"); }
+  function doTripStatus(tripId, status) {
     setTripMenu(null);
-    notify(status === "Delayed" ? "warning" : "success", `${tripId} marked as ${status}.`);
+    const trip = jobTrips.find((item) => item.id === tripId);
+    if (!trip || !["SUPER_ADMIN", "OPS_ADMIN"].includes(role)) { unavailable("Update trip status"); return; }
+    if (status === "At Delivery" && trip.canMarkAtDelivery) { void perform("atDelivery", { tripId }); return; }
+    if (status === "Delayed" && trip.canMarkDelayed) { setDelayReason(""); setDelayOpen(trip); return; }
+    unavailable("Mark " + status);
   }
-  async function doCancel() {
-    await cancelJob(job.id);
-    setMoreOpen(false);
-    notify("danger", `${job.id} cancelled.`);
+  function doCancel() { return perform("cancel"); }
+  function doReviewDoc(doc, approve) {
+    if (!job.canApprove || !doc.canReview || !doc.apiId) { unavailable("Review document"); return; }
+    if (!approve) { openReject(doc); return; }
+    return perform("approveDocument", { documentId: doc.apiId, version: doc.version, documentUrl: doc.url });
   }
-  async function doReviewDoc(doc, approve) {
-    await reviewJobDocument(job.id, doc.id, approve);
-    notify(
-      approve ? "success" : "danger",
-      `${doc.name} marked as ${approve ? "approved" : "rejected"}.`,
-    );
+  async function shareJob() {
+    try {
+      await navigator.clipboard.writeText(new URL(jobScreenUrl(job.apiId), window.location.origin).href);
+      if (active.current) notify("info", "Share link copied to clipboard.");
+    } catch { if (active.current) notify("danger", "Unable to copy the share link."); }
   }
+  async function refreshTracking() {
+    try {
+      await Promise.all([jobQuery.refetch().unwrap(), ...(selectedTripBase ? [tripQuery.refetch().unwrap()] : [])]);
+      if (active.current) notify("info", "Tracking data refreshed.");
+    } catch (error) { if (active.current) notify("danger", getApiErrorMessage(error)); }
+  }
+  function exportActivity() {
+    if (!job.activityKnown) { unavailable("Export Log"); return; }
+    const rows = [["Date & Time", "User", "Role", "Action", "Details"], ...activityLog.map((a) => [a.time, a.user, a.role, a.action, a.details])];
+    const safeCell = (value) => { const s = String(value ?? ""); return '"' + (/^[=+\-@\t\r]/.test(s) ? "'" : "") + s.replaceAll('"', '""') + '"'; };
+    const csv = rows.map((row) => row.map(safeCell).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = job.id + "-activity.csv";
+    document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    notify("info", "Activity log exported.");
+  }
+
   const headerActions = (
     <>
       <span style={{ position: "relative" }}>
@@ -705,7 +551,7 @@ export function JobDetail() {
                 //   icon: "pencil",
                 //   onClick: () => {
                 //     setMoreOpen(false);
-                //     notify("info", "Editing is not available in this preview.");
+                //     unavailable("Edit Job");
                 //   },
                 // },
                 {
@@ -713,7 +559,7 @@ export function JobDetail() {
                   icon: "copy",
                   onClick: () => {
                     setMoreOpen(false);
-                    notify("success", "Job duplicated as a draft.");
+                    unavailable("Duplicate Job");
                   },
                 },
                 {
@@ -730,10 +576,7 @@ export function JobDetail() {
                   icon: "flag",
                   onClick: () => {
                     setMoreOpen(false);
-                    notify(
-                      "warning",
-                      `${job.id} flagged for operations review.`,
-                    );
+                    unavailable("Flag for Review");
                   },
                 },
                 ...(job.status === "In Transit"
@@ -778,7 +621,7 @@ export function JobDetail() {
       <Button
         variant="outline"
         icon="share-2"
-        onClick={() => notify("info", "Share link copied to clipboard.")}
+        onClick={shareJob}
       >
         Share
       </Button>
@@ -788,7 +631,7 @@ export function JobDetail() {
             variant="outline"
             icon="pencil"
             onClick={() =>
-              notify("info", "Editing is not available in this preview.")
+              unavailable("Edit Job")
             }
           >
             Edit Job
@@ -796,7 +639,7 @@ export function JobDetail() {
           <SplitButton
             icon="check"
             onAction={() => setApproveOpen(true)}
-            onToggle={() => setRejectOpen(true)}
+            onToggle={() => openReject()}
           >
             Approve Job
           </SplitButton>
@@ -813,7 +656,7 @@ export function JobDetail() {
           {/* <Button
             icon="pencil"
             onClick={() =>
-              notify("info", "Editing is not available in this preview.")
+              unavailable("Edit Job")
             }
           >
             Edit Job
@@ -823,12 +666,7 @@ export function JobDetail() {
     </>
   );
 
-  const documentStatusCounts = {
-    total: documents.length,
-    approved: documents.filter((d) => d.status === "Approved").length,
-    pending: documents.filter((d) => d.status === "Pending").length,
-    rejected: documents.filter((d) => d.status === "Rejected").length,
-  };
+  const documentStatusCounts = job.documentStatusCounts;
   const filteredDocuments = documents.filter(
     (d) =>
       (docStatusFilter === "All Statuses" || d.status === docStatusFilter) &&
@@ -845,7 +683,11 @@ export function JobDetail() {
     logPage * LOG_PAGE_SIZE,
   );
   const activityActions = [...new Set(activityLog.map((a) => a.action))];
-  const uniqueActivityUsers = new Set(activityLog.map((a) => a.user)).size;
+  const uniqueActivityUsers = job.uniqueActivityUsers;
+  const bidsCount = job.bidsKnown ? bids.length : "—";
+  const docsCount = job.documentsKnown ? job.documentStatusCounts.total ?? documents.filter((document) => document.apiId).length : "—";
+  const tripsCount = job.tripsKnown ? jobTrips.length : "—";
+  const activityCount = job.activityKnown ? activityLog.length : "—";
 
   return (
     <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
@@ -889,11 +731,11 @@ export function JobDetail() {
           {
             value: "Bids & Responses",
             label: "Bids & Responses",
-            count: bids.length,
+            count: bidsCount,
           },
-          { value: "Associated Trips", label: "Associated Trips", count: jobTrips.length },
+          { value: "Associated Trips", label: "Associated Trips", count: tripsCount },
           { value: "Tracking & Updates", label: "Tracking & Updates" },
-          { value: "Documents", label: "Documents", count: documents.length },
+          { value: "Documents", label: "Documents", count: docsCount },
           { value: "Financials", label: "Financials" },
           { value: "Activity Log", label: "Activity Log" },
         ]}
@@ -910,7 +752,7 @@ export function JobDetail() {
                   variant="outline"
                   icon="pencil"
                   onClick={() =>
-                    notify("info", "Editing is not available in this preview.")
+                    unavailable("Edit Job")
                   }
                 >
                   Edit
@@ -952,7 +794,7 @@ export function JobDetail() {
                 </div>
                 <div className="jd-fact">
                   <span className="tk-meta">Total Weight</span>
-                  <strong>{job.totalWeight || "—"}</strong>
+                  <strong>{job.totalWeight ?? "—"}</strong>
                 </div>
                 <div className="jd-fact">
                   <span className="tk-meta">Pickup Location</span>
@@ -1046,7 +888,7 @@ export function JobDetail() {
                 <span>
                   <span className="tk-meta">Distance</span>
                   <strong>
-                    {job.distanceKm ? `${job.distanceKm} km` : "—"}
+                    {job.distanceKm != null ? `${job.distanceKm} km` : "—"}
                   </strong>
                 </span>
                 <span>
@@ -1076,12 +918,12 @@ export function JobDetail() {
                 <span>
                   <span className="tk-meta">Assignment Status</span>
                   <Badge tone={job.truckingCompany ? "info" : "neutral"} dot>
-                    {job.truckingCompany ? "Assigned" : "Not Assigned"}
+                    {job.assignmentStatus}
                   </Badge>
                 </span>
                 <span>
                   <span className="tk-meta">Total Bids</span>
-                  <strong>{bids.length}</strong>
+                  <strong>{bidsCount}</strong>
                 </span>
                 <span>
                   <span className="tk-meta">Bidding Closes</span>
@@ -1093,10 +935,10 @@ export function JobDetail() {
                   </strong>
                 </span>
               </div>
-              {bids.length > 0 ? (
+              {!job.bidsKnown ? <DriverLoadingNotice>Bid data is unavailable. Refresh to try again.</DriverLoadingNotice> : bids.length > 0 ? (
                 <DataTable
                   rows={bids.slice(0, 4)}
-                  rowKey={(r) => r.company}
+                  rowKey={(r) => r.id}
                   columns={[
                     {
                       key: "i",
@@ -1194,7 +1036,7 @@ export function JobDetail() {
                 <FilterSelect
                   label={currency}
                   onClick={() =>
-                    setCurrency((c) => (c === "NGN" ? "USD" : "NGN"))
+                    unavailable("Currency conversion")
                   }
                 />
               }
@@ -1205,20 +1047,20 @@ export function JobDetail() {
                   <strong>{naira(job.jobValue)}</strong>
                 </div>
                 <div>
-                  <span>Platform Fee ({job.platformFeePct}%)</span>
+                  <span>Platform Fee ({percentage(job.platformFeePct)})</span>
                   <strong>{naira(fee)}</strong>
                 </div>
                 <div>
                   <span>Driver/Company Payment</span>
-                  <strong>{driverPayment ? naira(driverPayment) : "—"}</strong>
+                  <strong>{naira(driverPayment)}</strong>
                 </div>
                 <div>
                   <span>Demurrage (Est.)</span>
-                  <strong>{demurrage ? naira(demurrage) : "—"}</strong>
+                  <strong>{naira(demurrage)}</strong>
                 </div>
                 <div>
                   <span>Other Costs (Est.)</span>
-                  <strong>{otherCosts ? naira(otherCosts) : "—"}</strong>
+                  <strong>{naira(otherCosts)}</strong>
                 </div>
               </div>
               <div className="jd-finance-total">
@@ -1236,7 +1078,7 @@ export function JobDetail() {
                 label="Forwarder"
                 value={job.contactPerson || "—"}
                 action={
-                  <ExternalLink onClick={() => navigate("/forwarders")}>
+                  <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
                     View Profile
                   </ExternalLink>
                 }
@@ -1246,17 +1088,17 @@ export function JobDetail() {
                 icon="route"
                 tint="purple"
                 label="Associated Trips"
-                value={`${tripCounts.assigned} of ${tripCounts.required} assigned`}
+                value={`${displayCount(job.assignedTrips)} of ${displayCount(tripCounts.total)} assigned`}
                 action={<a style={{ cursor: "pointer" }} onClick={() => setTab("Associated Trips")}>View Trips →</a>}
               />
               <EntityRow
                 icon="truck"
                 tint="amber"
                 label="Trucking Company"
-                value={job.truckingCompany || "Not yet assigned"}
+                value={job.truckingCompany || "—"}
                 action={
                   job.truckingCompany ? (
-                    <ExternalLink onClick={() => navigate("/companies")}>
+                    <ExternalLink onClick={() => job.truckerId ? navigate("/users/detail?id=" + encodeURIComponent(job.truckerId) + "&source=user") : unavailable("Trucking company profile")}>
                       View Profile
                     </ExternalLink>
                   ) : (
@@ -1272,7 +1114,7 @@ export function JobDetail() {
             </SectionCard>
 
             <SectionCard
-              title={`Documents (${documents.length})`}
+              title={`Documents (${docsCount})`}
               action={
                 <a
                   style={{ cursor: "pointer" }}
@@ -1369,7 +1211,7 @@ export function JobDetail() {
               {
                 icon: "truck",
                 label: "Required Trucks",
-                value: `${job.requiredTrucks || 1} Truck${(job.requiredTrucks || 1) > 1 ? "s" : ""}`,
+                value: job.requiredTrucks == null ? "—" : `${job.requiredTrucks} Truck${job.requiredTrucks === 1 ? "" : "s"}`,
                 tint: "amber",
               },
               {
@@ -1389,7 +1231,7 @@ export function JobDetail() {
           <div className="jd-layout">
             <div className="jd-main">
               <SectionCard
-                title={`Bids Received (${bids.length})`}
+                title={`Bids Received (${bidsCount})`}
                 description="Bids from trucking companies for this job. Assignment is handled by the selected trucking company."
                 action={
                   <Badge
@@ -1406,10 +1248,10 @@ export function JobDetail() {
                   The Super Admin can view all bids for oversight. Trucking
                   companies manage their own truck and driver assignment.
                 </Banner>
-                {bids.length ? (
+                {!job.bidsKnown ? <DriverLoadingNotice>Bid data is unavailable. Refresh to try again.</DriverLoadingNotice> : bids.length ? (
                   <DataTable
                     rows={bids}
-                    rowKey={(r) => r.company}
+                    rowKey={(r) => r.id}
                     columns={[
                       {
                         key: "i",
@@ -1439,7 +1281,7 @@ export function JobDetail() {
                                 }}
                               >
                                 {r.company}
-                                {job.truckingCompany === r.company && (
+                                {r.accepted && (
                                   <Badge
                                     tone="success"
                                     style={{ marginLeft: 6 }}
@@ -1461,8 +1303,8 @@ export function JobDetail() {
                                   size={11}
                                   color="var(--tk-warning)"
                                 />
-                                {r.rating} ({r.trips} trips) ·{" "}
-                                {r.services.join(", ")}
+                                {displayCount(r.rating)} ({displayCount(r.trips)} trips) ·{" "}
+                                {r.services?.join(", ") || "—"}
                               </span>
                             </span>
                           </span>
@@ -1508,7 +1350,7 @@ export function JobDetail() {
                         key: "x",
                         header: "Actions",
                         render: (r) =>
-                          job.truckingCompany === r.company ? (
+                          r.accepted ? (
                             <Badge tone="success">Assigned</Badge>
                           ) : (
                             <Button
@@ -1536,12 +1378,12 @@ export function JobDetail() {
                 <SectionCard title="Bid Comparison">
                   <BarChart
                     height={200}
-                    labels={bids.map((b) => b.company.split(" ")[0])}
+                    labels={bids.filter((b) => b.amount != null).map((b) => b.company.split(" ")[0])}
                     series={[
                       {
                         name: "Amount",
                         color: "var(--tk-blue)",
-                        points: bids.map((b) => b.amount),
+                        points: bids.filter((b) => b.amount != null).map((b) => b.amount),
                       },
                     ]}
                     format={nairaShort}
@@ -1549,7 +1391,7 @@ export function JobDetail() {
                 </SectionCard>
                 <SectionCard title="Company Insights">
                   {bids.map((b) => (
-                    <div key={b.company} className="jd-insight-row">
+                    <div key={b.id} className="jd-insight-row">
                       <Avatar name={b.company} size={30} />
                       <span
                         style={{
@@ -1568,7 +1410,7 @@ export function JobDetail() {
                           {b.company}
                         </strong>
                         <span className="tk-meta">
-                          {b.trips} completed trips
+                          {displayCount(b.trips)} completed trips
                         </span>
                       </span>
                       <span
@@ -1581,7 +1423,7 @@ export function JobDetail() {
                         }}
                       >
                         <Icon name="star" size={13} color="var(--tk-warning)" />
-                        {b.rating}
+                        {displayCount(b.rating)}
                       </span>
                     </div>
                   ))}
@@ -1601,12 +1443,12 @@ export function JobDetail() {
                 <div className="jd-finance-rows">
                   <div>
                     <span>Total Bids</span>
-                    <strong>{bids.length}</strong>
+                    <strong>{bidsCount}</strong>
                   </div>
                   <div>
                     <span>Lowest Bid</span>
                     <strong>
-                      {bids.length
+                      {bids.length && bidAmountsKnown
                         ? naira(Math.min(...bids.map((b) => b.amount)))
                         : "—"}
                     </strong>
@@ -1614,7 +1456,7 @@ export function JobDetail() {
                   <div>
                     <span>Highest Bid</span>
                     <strong>
-                      {bids.length
+                      {bids.length && bidAmountsKnown
                         ? naira(Math.max(...bids.map((b) => b.amount)))
                         : "—"}
                     </strong>
@@ -1622,7 +1464,7 @@ export function JobDetail() {
                   <div>
                     <span>Average Bid</span>
                     <strong>
-                      {bids.length
+                      {bids.length && bidAmountsKnown
                         ? naira(
                             bids.reduce((s, b) => s + b.amount, 0) /
                               bids.length,
@@ -1633,7 +1475,7 @@ export function JobDetail() {
                   <div>
                     <span>Bid Spread</span>
                     <strong>
-                      {bids.length > 1
+                      {bids.length > 1 && bidAmountsKnown
                         ? naira(
                             Math.max(...bids.map((b) => b.amount)) -
                               Math.min(...bids.map((b) => b.amount)),
@@ -1650,7 +1492,7 @@ export function JobDetail() {
                   label="Forwarder"
                   value={job.forwarder}
                   action={
-                    <ExternalLink onClick={() => navigate("/forwarders")}>
+                    <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
                       View Profile
                     </ExternalLink>
                   }
@@ -1681,24 +1523,24 @@ export function JobDetail() {
         <>
           <InfoStrip
             items={[
-              { icon: "truck", label: "Trucks Requested", value: tripCounts.required, tint: "amber" },
-              { icon: "route", label: "Trips Created", value: `${tripCounts.assigned} of ${tripCounts.required}` },
-              { icon: "navigation", label: "Active Trips", value: tripCounts.active, tint: "purple" },
-              { icon: "circle-check", label: "Trips Delivered", value: tripCounts.completed, tint: "green" },
+              { icon: "truck", label: "Trucks Requested", value: displayCount(tripCounts.required), tint: "amber" },
+              { icon: "route", label: "Trips Created", value: `${displayCount(job.assignedTrips)} of ${displayCount(tripCounts.total)}` },
+              { icon: "navigation", label: "Active Trips", value: displayCount(tripCounts.active), tint: "purple" },
+              { icon: "circle-check", label: "Trips Delivered", value: displayCount(tripCounts.completed), tint: "green" },
             ]}
           />
-          {tripCounts.assigned < tripCounts.required && (
+          {tripCounts.assigned != null && tripCounts.required != null && tripCounts.assigned < tripCounts.required && (
             <Banner tone="warning" title={`${tripCounts.required - tripCounts.assigned} assignment${tripCounts.required - tripCounts.assigned === 1 ? "" : "s"} remaining`}>
               Every requested truck needs its own eligible driver from {job.truckingCompany || "the same trucking company"} before dispatch is complete.
             </Banner>
           )}
           <SectionCard
-            title={`Associated Trips (${jobTrips.length})`}
+            title={`Associated Trips (${tripsCount})`}
             description="Each trip represents one truck and one driver fulfilling this job."
             pad="none"
             action={<Button size="sm" icon="truck" onClick={() => navigate("/dispatch")}>Manage Assignments</Button>}
           >
-            {jobTrips.length ? (
+            {!job.tripsKnown ? <DriverLoadingNotice>Trip data is unavailable. Refresh to try again.</DriverLoadingNotice> : jobTrips.length ? (
               <DataTable
                 rows={jobTrips}
                 rowKey={(trip) => trip.id}
@@ -1706,13 +1548,13 @@ export function JobDetail() {
                 coloredHeader
                 columns={[
                   { key: "id", header: "Trip ID", render: (trip) => <strong className="jd-trip-id">{trip.id}</strong> },
-                  { key: "truck", header: "Truck", render: (trip) => trip.truckPlate ? <a className="jd-trip-link" onClick={(event) => { event.stopPropagation(); navigate(`/fleet/${encodeURIComponent(trip.truckPlate)}`); }}>{trip.truckPlate}</a> : "—" },
+                  { key: "truck", header: "Truck", render: (trip) => trip.truckPlate ? <a className="jd-trip-link" onClick={(event) => { event.stopPropagation(); trip.truckId ? navigate("/fleet/detail?id=" + encodeURIComponent(trip.truckId)) : unavailable("Truck profile"); }}>{trip.truckPlate}</a> : "—" },
                   { key: "driver", header: "Driver", render: (trip) => <span className="jd-trip-person"><Avatar name={trip.driverName || "Unassigned"} size={26}/><span><strong>{trip.driverName || "Unassigned"}</strong><small>{trip.driverPhone || trip.driverId || "—"}</small></span></span> },
                   { key: "company", header: "Trucking Company", render: (trip) => trip.truckingCompany || job.truckingCompany || "—" },
                   { key: "status", header: "Trip Status", render: (trip) => <Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge> },
-                  { key: "progress", header: "Progress", render: (trip) => <span className="jd-trip-progress"><span><i style={{ width: `${Math.min(100, trip.progress || 0)}%` }}/></span><strong>{trip.progress || 0}%</strong></span> },
+                  { key: "progress", header: "Progress", render: (trip) => <span className="jd-trip-progress"><span><i style={{ width: `${Math.min(100, trip.progress || 0)}%` }}/></span><strong>{trip.progress == null ? "—" : `${trip.progress}%`}</strong></span> },
                   { key: "eta", header: "ETA", render: (trip) => trip.eta || trip.deliveryDate || "—" },
-                  { key: "actions", header: "", width: 54, render: (trip) => <span className="jd-trip-menu" onClick={(event) => event.stopPropagation()}><Button size="sm" variant="outline" icon="ellipsis" onClick={() => setTripMenu(tripMenu === trip.id ? null : trip.id)}/>{tripMenu === trip.id && <span><DropdownMenu width={205} items={["Assigned", "At Pickup", "In Transit", "At Delivery", "Delivered", "Delayed"].filter((status) => status !== trip.status).map((status) => ({ label: `Mark ${status}`, icon: status === "Delivered" ? "circle-check" : status === "Delayed" ? "triangle-alert" : "route", tone: status === "Delayed" ? "danger" : undefined, onClick: () => doTripStatus(trip.id, status) }))}/></span>}</span> },
+                  { key: "actions", header: "", width: 54, render: (trip) => <span className="jd-trip-menu" onClick={(event) => event.stopPropagation()}><Button size="sm" variant="outline" icon="ellipsis" onClick={(event) => { const anchor = event.currentTarget; setTripMenu((current) => current?.id === trip.id ? null : { id: trip.id, anchor }); }}/></span> },
                 ]}
               />
             ) : (
@@ -1740,13 +1582,13 @@ export function JobDetail() {
               {
                 icon: "truck",
                 label: "Assigned Trucks",
-                value: tripCounts.assigned ? `${tripCounts.assigned} of ${tripCounts.required}` : "Not assigned",
+                value: displayCount(job.assignedTruckCount),
                 tint: "amber",
               },
               {
                 icon: "user",
                 label: "Assigned Drivers",
-                value: tripCounts.assigned ? `${tripCounts.assigned} driver${tripCounts.assigned === 1 ? "" : "s"}` : "Not assigned",
+                value: job.assignedDriverCount == null ? "—" : `${job.assignedDriverCount} driver${job.assignedDriverCount === 1 ? "" : "s"}`,
                 caption: job.truckingCompany,
                 tint: "purple",
               },
@@ -1774,16 +1616,16 @@ export function JobDetail() {
               <SectionCard
                 title="Live Tracking"
                 description={
-                  job.status === "In Transit"
-                    ? `Live Location · Last updated ${job.updatedAt}`
-                    : "Live tracking is available once this job is in transit."
+                  selectedTrip?.livePosition
+                    ? `Live Location · Last updated ${selectedTrip?.locationUpdatedAt || "—"}`
+                    : "—"
                 }
                 action={
                   <Button
                     size="sm"
                     variant="outline"
                     icon="refresh-cw"
-                    onClick={() => notify("info", "Tracking data refreshed.")}
+                    onClick={refreshTracking}
                   >
                     Refresh
                   </Button>
@@ -1794,8 +1636,8 @@ export function JobDetail() {
                     name={job.status === "In Transit" ? "navigation" : "map"}
                     size={28}
                   />
-                  {job.status === "In Transit" ? (
-                    <span className="tk-meta">{selectedTrip?.truckPlate} · {selectedTrip?.driverName} · Moving towards {job.destination}</span>
+                  {selectedTrip?.livePosition ? (
+                    <span className="tk-meta">{selectedTrip?.currentLocation || "—"}</span>
                   ) : (
                     <span className="tk-meta">
                       No live position to display for this job's current status.
@@ -1806,15 +1648,13 @@ export function JobDetail() {
                   <span>
                     <span className="tk-meta">Distance Covered</span>
                     <strong>
-                      {selectedTrip && ["In Transit", "Delivered", "Completed"].includes(selectedTrip.status)
-                        ? `${Math.round((selectedTrip.distanceKm || job.distanceKm || 0) * ((selectedTrip.progress || 0) / 100))} km / ${selectedTrip.distanceKm || job.distanceKm} km`
-                        : "—"}
+                      {selectedTrip?.coveredKm != null && selectedTrip?.distanceKm != null ? `${selectedTrip.coveredKm} km / ${selectedTrip.distanceKm} km` : "—"}
                     </strong>
                   </span>
                   <span>
                     <span className="tk-meta">Current Speed</span>
                     <strong>
-                      {selectedTrip?.status === "In Transit" ? "72 km/h" : "—"}
+                      {selectedTrip?.speedKmH == null ? "—" : `${selectedTrip.speedKmH} km/h`}
                     </strong>
                   </span>
                   <span>
@@ -1907,10 +1747,7 @@ export function JobDetail() {
                       title: u.status,
                       description: `${u.location !== "—" ? u.location + " — " : ""}${u.details}`,
                       time: u.time,
-                      state:
-                        i === arr.length - 1 && job.status === "In Transit"
-                          ? "current"
-                          : "done",
+                      state: u.completed === true ? "done" : "pending",
                       icon:
                         u.status === "Delivered"
                           ? "check"
@@ -1934,11 +1771,7 @@ export function JobDetail() {
                   >
                     {photos.map((p, i) => (
                       <div key={i} className="jd-photo-tile">
-                        <Icon
-                          name="image"
-                          size={20}
-                          color="var(--tk-ink-300)"
-                        />
+                        <img src={p.url} alt={p.label} referrerPolicy="no-referrer" style={{ width: "100%", height: 72, objectFit: "cover" }} />
                         <span
                           className="tk-meta"
                           style={{ fontSize: 10, textAlign: "center" }}
@@ -1955,10 +1788,10 @@ export function JobDetail() {
                   icon="truck"
                   tint="blue"
                   label="Trucking Company"
-                  value={job.truckingCompany || "Not yet assigned"}
+                  value={job.truckingCompany || "—"}
                   action={
                     job.truckingCompany && (
-                      <ExternalLink onClick={() => navigate("/companies")}>
+                      <ExternalLink onClick={() => job.truckerId ? navigate("/users/detail?id=" + encodeURIComponent(job.truckerId) + "&source=user") : unavailable("Trucking company profile")}>
                         View Profile
                       </ExternalLink>
                     )
@@ -1968,7 +1801,7 @@ export function JobDetail() {
                   icon="user"
                   tint="purple"
                   label="Drivers"
-                  value={tripCounts.assigned ? `${tripCounts.assigned} assigned` : "Not yet assigned"}
+                  value={job.assignedDriverCount == null ? "—" : `${job.assignedDriverCount} assigned`}
                   action={<a style={{ cursor: "pointer" }} onClick={() => setTab("Associated Trips")}>View Trips →</a>}
                 />
                 <EntityRow
@@ -1977,7 +1810,7 @@ export function JobDetail() {
                   label="Forwarder"
                   value={job.forwarder}
                   action={
-                    <ExternalLink onClick={() => navigate("/forwarders")}>
+                    <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
                       View Profile
                     </ExternalLink>
                   }
@@ -2000,31 +1833,31 @@ export function JobDetail() {
             <StatCard
               icon="file-text"
               label="Total Documents"
-              value={documentStatusCounts.total}
+              value={displayCount(documentStatusCounts.total)}
             />
             <StatCard
               icon="circle-check"
               tint="green"
               label="Approved"
-              value={documentStatusCounts.approved}
+              value={displayCount(documentStatusCounts.approved)}
             />
             <StatCard
               icon="clock"
               tint="amber"
               label="Pending Review"
-              value={documentStatusCounts.pending}
+              value={displayCount(documentStatusCounts.pending)}
             />
             <StatCard
               icon="circle-x"
               tint="red"
               label="Rejected"
-              value={documentStatusCounts.rejected}
+              value={displayCount(documentStatusCounts.rejected)}
             />
           </div>
           <div className="jd-layout">
             <div className="jd-main">
               <SectionCard
-                title={`Documents (${filteredDocuments.length})`}
+                title={`Documents (${job.documentsKnown ? filteredDocuments.length : "—"})`}
                 description="Review and approve or reject documents submitted for this job."
                 pad="none"
               >
@@ -2079,7 +1912,7 @@ export function JobDetail() {
                     Reset
                   </Button>
                 </div>
-                {filteredDocuments.length ? (
+                {!job.documentsKnown ? <DriverLoadingNotice>Document data is unavailable. Refresh to try again.</DriverLoadingNotice> : filteredDocuments.length ? (
                   <DataTable
                     rows={filteredDocuments}
                     rowKey={(r) => r.id}
@@ -2172,6 +2005,7 @@ export function JobDetail() {
               <SectionCard title="Document Preview">
                 {reviewDoc ? (
                   <>
+                    {reviewDoc.url ? <div className="jd-doc-preview"><iframe src={reviewDoc.url} title={reviewDoc.name + " preview"} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", minHeight: 220, border: 0 }} /></div> : (
                     <div className="jd-doc-preview">
                       <strong
                         style={{
@@ -2205,6 +2039,7 @@ export function JobDetail() {
                         Preview rendered by the consuming app's document viewer.
                       </span>
                     </div>
+                    )}
                     <div
                       style={{
                         marginTop: 12,
@@ -2287,14 +2122,14 @@ export function JobDetail() {
                       <Button
                         variant="outline"
                         icon="circle-x"
-                        disabled={reviewDoc.status === "Rejected"}
+                        disabled={actionBusy || !job.canApprove || !reviewDoc.canReview || reviewDoc.status === "Rejected"}
                         onClick={() => doReviewDoc(reviewDoc, false)}
                       >
                         Reject
                       </Button>
                       <Button
                         icon="circle-check"
-                        disabled={reviewDoc.status === "Approved"}
+                        disabled={actionBusy || !job.canApprove || !reviewDoc.canReview || reviewDoc.status === "Approved"}
                         onClick={() => doReviewDoc(reviewDoc, true)}
                       >
                         Approve
@@ -2326,20 +2161,20 @@ export function JobDetail() {
               {
                 icon: "shield-check",
                 label: "Platform Fee",
-                value: `${job.platformFeePct}%`,
+                value: `${percentage(job.platformFeePct)}`,
                 caption: naira(fee),
                 tint: "green",
               },
               {
                 icon: "wallet-cards",
                 label: "Driver/Company Payout",
-                value: driverPayment ? naira(driverPayment) : "—",
+                value: naira(driverPayment),
                 tint: "amber",
               },
               {
                 icon: "clock",
                 label: "Demurrage (Est.)",
-                value: demurrage ? naira(demurrage) : "₦0",
+                value: naira(demurrage),
                 tint: "purple",
               },
               {
@@ -2381,7 +2216,7 @@ export function JobDetail() {
                     <div className="jd-flow-box">
                       <Icon name="truck" size={16} color="var(--tk-success)" />
                       <strong>
-                        {driverPayment ? naira(driverPayment) : "—"}
+                        {naira(driverPayment)}
                       </strong>
                       <span className="tk-meta">
                         Paid to {job.truckingCompany || "Trucking Company"}
@@ -2389,7 +2224,7 @@ export function JobDetail() {
                     </div>
                     <div className="jd-flow-box">
                       <Icon name="clock" size={16} color="var(--tk-warning)" />
-                      <strong>{demurrage ? naira(demurrage) : "₦0"}</strong>
+                      <strong>{naira(demurrage)}</strong>
                       <span className="tk-meta">Demurrage (if any)</span>
                     </div>
                   </div>
@@ -2410,7 +2245,7 @@ export function JobDetail() {
                 </SectionCard>
               )}
 
-              <SectionCard title={`Related Payouts (${relatedPayouts.length})`} description="Company payouts are reconciled to the individual trips included in this job." pad="none">
+              <SectionCard title={`Related Payouts (${job.relatedPayoutsKnown ? relatedPayouts.length : "—"})`} description="Company payouts are reconciled to the individual trips included in this job." pad="none">
                 {relatedPayouts.length ? <DataTable rows={relatedPayouts} rowKey={(payout) => payout.id} coloredHeader onRowClick={(payout) => navigate(`/payouts/${payout.id}`)} columns={[
                   { key: "id", header: "Payout ID", render: (payout) => <strong className="jd-trip-id">{payout.id}</strong> },
                   { key: "party", header: "Beneficiary" },
@@ -2419,7 +2254,7 @@ export function JobDetail() {
                   { key: "net", header: "Net", render: (payout) => naira(payout.netAmount ?? payout.amount) },
                   { key: "status", header: "Status", render: (payout) => <Badge dot tone={statusTone(payout.status)}>{payout.status}</Badge> },
                   { key: "eligibility", header: "Eligibility", render: (payout) => <Badge tone={payout.approvalReady ? "success" : "warning"}>{payout.eligibility || "Legacy"}</Badge> },
-                ]} /> : <EmptyState icon="wallet" title="No payout created" description="A company payout can be reconciled after eligible trips are delivered." />}
+                ]} /> : !job.relatedPayoutsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <EmptyState icon="wallet" title="No payout created" description="A company payout can be reconciled after eligible trips are delivered." />}
               </SectionCard>
 
               <div className="jd-row2">
@@ -2438,10 +2273,10 @@ export function JobDetail() {
                       thickness={18}
                       centerValue={naira(job.jobValue).replace("₦", "₦")}
                       centerLabel="Total Job Value"
-                      data={[
+                      data={[driverPayment, fee, demurrage, otherCosts].every((value) => value != null) ? [
                         {
                           label: "Trucking Payout",
-                          value: driverPayment || 0,
+                          value: driverPayment,
                           color: "var(--tk-blue)",
                         },
                         {
@@ -2459,7 +2294,7 @@ export function JobDetail() {
                           value: otherCosts,
                           color: "var(--tk-neutral)",
                         },
-                      ]}
+                      ] : []}
                     />
                     <div
                       style={{
@@ -2472,7 +2307,7 @@ export function JobDetail() {
                       {[
                         [
                           "Trucking Payout",
-                          driverPayment || 0,
+                          driverPayment,
                           "var(--tk-blue)",
                         ],
                         ["Platform Fee", fee, "var(--tk-success)"],
@@ -2524,13 +2359,13 @@ export function JobDetail() {
                       <strong>{naira(job.jobValue)}</strong>
                     </div>
                     <div>
-                      <span>Platform Fee ({job.platformFeePct}%)</span>
+                      <span>Platform Fee ({percentage(job.platformFeePct)})</span>
                       <strong>{naira(fee)}</strong>
                     </div>
                     <div>
                       <span>Driver/Company Payout</span>
                       <strong>
-                        {driverPayment ? naira(driverPayment) : "—"}
+                        {naira(driverPayment)}
                       </strong>
                     </div>
                     <div>
@@ -2552,7 +2387,7 @@ export function JobDetail() {
               </div>
 
               <SectionCard title="Transactions" pad="none">
-                <DataTable
+                {!job.transactionsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <DataTable
                   rows={transactions}
                   rowKey={(r, i) => i}
                   columns={[
@@ -2611,56 +2446,13 @@ export function JobDetail() {
                       ),
                     },
                   ]}
-                />
+                />}
               </SectionCard>
             </div>
 
             <div className="jd-rail">
               <SectionCard title="Financial Status">
-                <Timeline
-                  items={[
-                    {
-                      title: "Forwarder Payment Received",
-                      description: `${naira(job.jobValue)} · Paid on ${job.createdAt || job.published}`,
-                      state: "done",
-                      icon: "check",
-                    },
-                    {
-                      title: "Platform Fee Allocated",
-                      description: naira(fee),
-                      state: "done",
-                      icon: "check",
-                    },
-                    {
-                      title: "Trucking Company Payout",
-                      description: driverPayment
-                        ? `${naira(driverPayment)} · ${job.status === "Delivered" ? "Completed" : "Processing"}`
-                        : "Awaiting assignment",
-                      state: job.truckingCompany
-                        ? job.status === "Delivered"
-                          ? "done"
-                          : "current"
-                        : "pending",
-                      icon: "truck",
-                    },
-                    {
-                      title: "Demurrage (if any)",
-                      description: demurrage
-                        ? naira(demurrage)
-                        : "Not incurred",
-                      state: demurrage ? "current" : "pending",
-                    },
-                    {
-                      title: "Job Closed",
-                      description:
-                        job.status === "Delivered"
-                          ? "Delivery confirmed"
-                          : "Pending delivery confirmation",
-                      state: job.status === "Delivered" ? "done" : "pending",
-                      icon: "flag",
-                    },
-                  ]}
-                />
+                <Timeline items={financialTimeline} />
               </SectionCard>
               <SectionCard
                 title="Related Documents"
@@ -2699,7 +2491,7 @@ export function JobDetail() {
                   label="Forwarder"
                   value={job.forwarder}
                   action={
-                    <ExternalLink onClick={() => navigate("/forwarders")}>
+                    <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
                       View Profile
                     </ExternalLink>
                   }
@@ -2708,10 +2500,10 @@ export function JobDetail() {
                   icon="truck"
                   tint="amber"
                   label="Trucking Company"
-                  value={job.truckingCompany || "Not yet assigned"}
+                  value={job.truckingCompany || "—"}
                   action={
                     job.truckingCompany && (
-                      <ExternalLink onClick={() => navigate("/companies")}>
+                      <ExternalLink onClick={() => job.truckerId ? navigate("/users/detail?id=" + encodeURIComponent(job.truckerId) + "&source=user") : unavailable("Trucking company profile")}>
                         View Profile
                       </ExternalLink>
                     )
@@ -2744,7 +2536,7 @@ export function JobDetail() {
               {
                 icon: "truck",
                 label: "Trucking Company",
-                value: job.truckingCompany || "Not yet assigned",
+                value: job.truckingCompany || "—",
                 tint: "amber",
               },
               {
@@ -2805,7 +2597,7 @@ export function JobDetail() {
                     <Button
                       variant="outline"
                       icon="download"
-                      onClick={() => notify("info", "Activity log exported.")}
+                      onClick={exportActivity}
                     >
                       Export Log
                     </Button>
@@ -2828,7 +2620,7 @@ export function JobDetail() {
                   )
                 }
               >
-                <DataTable
+                {!job.activityKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <DataTable
                   rows={pagedActivity}
                   rowKey={(r, i) => i}
                   columns={[
@@ -2885,7 +2677,7 @@ export function JobDetail() {
                     },
                     { key: "details", header: "Details" },
                   ]}
-                />
+                />}
               </SectionCard>
             </div>
 
@@ -2898,10 +2690,7 @@ export function JobDetail() {
                     variant="outline"
                     icon="pencil"
                     onClick={() =>
-                      notify(
-                        "info",
-                        "Editing is not available in this preview.",
-                      )
+                      unavailable("Edit Job")
                     }
                   >
                     Edit Job
@@ -2951,12 +2740,12 @@ export function JobDetail() {
                 >
                   <div className="jd-insight-tile">
                     <Icon name="list" size={16} color="var(--tk-blue)" />
-                    <strong>{activityLog.length}</strong>
+                    <strong>{activityCount}</strong>
                     <span className="tk-meta">Total Activities</span>
                   </div>
                   <div className="jd-insight-tile">
                     <Icon name="users" size={16} color="var(--tk-purple)" />
-                    <strong>{uniqueActivityUsers}</strong>
+                    <strong>{displayCount(uniqueActivityUsers)}</strong>
                     <span className="tk-meta">Unique Users</span>
                   </div>
                   <div className="jd-insight-tile">
@@ -2975,7 +2764,7 @@ export function JobDetail() {
                       color="var(--tk-success)"
                     />
                     <strong style={{ fontSize: 13 }}>
-                      {activityLog[0]?.user?.split(" ")[0] || "—"}
+                      {job.mostActiveUser}
                     </strong>
                     <span className="tk-meta">Most Active</span>
                   </div>
@@ -2990,9 +2779,11 @@ export function JobDetail() {
         </>
       )}
 
+      {tripActionTarget && <TripActionMenu anchor={tripMenu.anchor} onClose={setTripMenu} items={["Assigned", "At Pickup", "In Transit", "At Delivery", "Delivered", "Delayed"].filter((status) => status !== tripActionTarget.status).map((status) => ({ label: "Mark " + status, icon: status === "Delivered" ? "circle-check" : status === "Delayed" ? "triangle-alert" : "route", tone: status === "Delayed" ? "danger" : undefined, onClick: () => doTripStatus(tripActionTarget.id, status) }))} />}
+
       <Modal
         open={approveOpen}
-        onClose={() => setApproveOpen(false)}
+        onClose={() => { if (!actionBusy) setApproveOpen(false); }}
         title="Approve Job"
         description={`Approve ${job.id} and publish it for carrier bidding?`}
         footer={
@@ -3000,7 +2791,7 @@ export function JobDetail() {
             <Button variant="outline" onClick={() => setApproveOpen(false)}>
               Cancel
             </Button>
-            <Button icon="check" onClick={doApprove}>
+            <Button icon="check" disabled={actionBusy || !job.canApprove} onClick={doApprove}>
               Approve & Publish
             </Button>
           </>
@@ -3014,24 +2805,26 @@ export function JobDetail() {
 
       <Modal
         open={rejectOpen}
-        onClose={() => setRejectOpen(false)}
-        title="Reject Job"
-        description={`Reject ${job.id}?`}
+        onClose={() => { if (!actionBusy) setRejectOpen(false); }}
+        title={typeof rejectOpen === "object" ? "Reject Document" : "Reject Job"}
+        description={typeof rejectOpen === "object" ? rejectOpen.name : `Reject ${job.id}?`}
         footer={
           <>
             <Button variant="outline" onClick={() => setRejectOpen(false)}>
               Cancel
             </Button>
-            <Button variant="danger" icon="circle-x" onClick={doReject}>
-              Reject Job
+            <Button variant="danger" icon="circle-x" disabled={actionBusy || !job.canApprove || !rejectionReason.trim()} onClick={doReject}>
+              {typeof rejectOpen === "object" ? "Reject Document" : "Reject Job"}
             </Button>
           </>
         }
       >
         <span className="tk-meta">
-          This job will be marked as rejected and the forwarder will be
-          notified. This action cannot be undone from this screen.
+          {typeof rejectOpen === "object"
+            ? "The selected document will be rejected and the forwarder notified to re-upload it."
+            : "This job will be marked as rejected and the forwarder will be notified. This action cannot be undone from this screen."}
         </span>
+        <TextField label="Reason" required value={rejectionReason} disabled={actionBusy} onChange={(event) => setRejectionReason(event.target.value)} />
       </Modal>
 
       <Modal
@@ -3061,6 +2854,12 @@ export function JobDetail() {
             the job to Assigned.
           </span>
         )}
+      </Modal>
+
+      <Modal open={Boolean(delayOpen)} onClose={() => { if (!actionBusy) setDelayOpen(null); }} title="Mark Delayed" description={delayOpen?.id}
+        footer={<><Button variant="outline" disabled={actionBusy} onClick={() => setDelayOpen(null)}>Cancel</Button><Button disabled={actionBusy || !delayReason.trim()} onClick={() => void perform("delay", { tripId: delayOpen.id, reason: delayReason })}>{actionBusy ? "Saving…" : "Mark Delayed"}</Button></>}>
+        <span className="tk-meta">The delay applies to this job and all its trips. The forwarder and trucking company will be notified.</span>
+        <TextField label="Reason" value={delayReason} maxLength={500} required disabled={actionBusy} onChange={(event) => setDelayReason(event.target.value)} />
       </Modal>
 
       <Modal

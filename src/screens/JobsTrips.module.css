@@ -149,18 +149,26 @@
 }
 .filterBar {
   padding: 13px 14px;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(105px, 1fr)) auto auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   border-bottom: 1px solid var(--tk-line);
 }
 .filterWrap {
   position: relative;
+  flex: 1 1 140px;
   min-width: 0;
+}
+.filterBar > button {
+  flex: 0 0 auto;
+}
+.filterBar > button:first-of-type {
+  margin-left: auto;
 }
 .filterControl {
   width: 100%;
-  height: 46px;
+  height: 52px;
   position: relative;
   padding: 7px 30px 7px 10px;
   display: grid;
@@ -188,7 +196,8 @@
 .filterControl > span:last-child {
   position: absolute;
   right: 9px;
-  top: 17px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--tk-ink-400);
 }
 .menuPopover {
@@ -314,12 +323,7 @@
   position: relative;
   display: block;
 }
-.rowMenu {
-  position: absolute;
-  right: 0;
-  top: 30px;
-  z-index: 60;
-}
+
 .bulkBar {
   min-height: 38px;
   padding: 6px 14px;
@@ -506,9 +510,6 @@
   .loadingFilters {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .filterBar {
-    grid-template-columns: repeat(4, minmax(130px, 1fr));
-  }
 }
 @media (max-width: 1023px) {
   .loadingHeader { flex-wrap: wrap; }
@@ -516,7 +517,7 @@
   .headerActions { width: 100%; flex-wrap: wrap; }
   .dateButton { min-width: min(318px, 100%); flex: 1 1 260px; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filterBar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filterWrap, .filterBar > button { flex-basis: calc(50% - 5px); }
   .mainGrid { grid-template-columns: minmax(0, 1fr); }
   .tableArea { border-right: 0; }
   .inspector { border-top: 1px solid var(--tk-line); }
@@ -525,7 +526,8 @@
 @media (max-width: 639px) {
   .loadingFilters { grid-template-columns: minmax(0, 1fr); }
   .headerActions > button, .dateButton { width: 100%; flex-basis: 100%; }
-  .metrics, .filterBar, .tableTools, .createForm { grid-template-columns: minmax(0, 1fr); }
+  .metrics, .tableTools, .createForm { grid-template-columns: minmax(0, 1fr); }
+  .filterWrap, .filterBar > button { flex-basis: 100%; }
   .tabs { padding-inline: var(--tk-space-3); gap: var(--tk-space-6); }
   .filterBar, .tableTools, .inspector { padding: var(--tk-space-3); }
   .tableShell table { min-width: 0; }

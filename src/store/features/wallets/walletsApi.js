@@ -62,13 +62,14 @@ export function adaptEscrowOverview(response) {
   // A pie needs a complete partition. These balances may overlap (available
   // to settle can be part of pending release); keep the legend's real values
   // without plotting a misleading distribution.
-  const categoryValues = balanceFields.map(([, field]) => summary[field]);
-  const canPlot = summary.totalEscrowBalance != null && categoryValues.every((value) => value != null && value >= 0) && Math.abs(categoryValues.reduce((sum, value) => sum + value, 0) - summary.totalEscrowBalance) < 0.01;
+  // Numeric equality alone cannot establish that overlapping balances are disjoint.
+  // The documented chart categories differ from these four existing UI rows.
+  const canPlot = false;
   return {
     summary, weeklyActivity,
     breakdown: balanceFields.map(([label, field, color]) => {
       const value = summary[field];
-      return { label, value, chartValue: canPlot ? value : null, color, pct: value != null && summary.totalEscrowBalance > 0 ? (value / summary.totalEscrowBalance * 100).toFixed(1) + '%' : '—' };
+      return { label, value, chartValue: canPlot ? value : null, color, pct: canPlot && value != null && summary.totalEscrowBalance > 0 ? (value / summary.totalEscrowBalance * 100).toFixed(1) + '%' : '—' };
     }),
   };
 }
@@ -133,6 +134,8 @@ export function adaptEscrowHold(value) {
     amount: naira(dto.currentHeldAmount, dto.currency),
     heldOn: datePart(dto.heldAt), heldTime: datePart(dto.heldAt, true), releaseBy: datePart(dto.releaseBy),
     heldAt: text(dto.heldAt), statusCode: text(dto.status), status: status(dto.status),
+    canRelease: ['LOCKED', 'MOBILIZATION_RELEASED'].includes(dto.status) && dto.freeze === null && number(dto.currentHeldAmount) > 0 && Boolean(text(dto.trucker?.id)),
+    canOpenDispute: ['LOCKED', 'MOBILIZATION_RELEASED', 'HELD'].includes(dto.status) && Boolean(text(dto.trucker?.id)),
   };
 }
 export function adaptEscrowRelease(value) {
@@ -183,7 +186,7 @@ function adaptDispute(row, detail) {
   const source = record(detail), escrow = record(source.job?.escrow);
   return {
     id: display(row.id), jobId: text(row.job?.jobNumber) ?? display(row.jobId), jobApiId: text(row.jobId),
-    holdId: display(escrow.id), amount: number(escrow.totalAmount),
+    holdId: display(escrow.id), escrowApiId: text(escrow.id), canResolve: ['OPEN', 'UNDER_REVIEW'].includes(row.status), amount: number(escrow.totalAmount),
     customer: partyName([source.raisedBy, source.against, row.raisedBy, row.against].find((party) => party?.role === 'FORWARDER')) ?? '—', reason: display(row.reason),
     opened: datePart(row.createdAt), statusCode: text(row.status), status: status(row.status),
   };

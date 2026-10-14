@@ -85,12 +85,14 @@ function mapTrackingTrip(trip) {
     to: trip.destination || '—',
     status: trip.status,
     statusColor: colors[trip.status] || '#0241e8',
-    speed: null,
+    speed: trip.telemetryLive === true ? trip.speedKmH : null,
+    stopDurationSeconds: trip.telemetryLive === true ? trip.stopDurationSeconds : null,
+    truckId: trip.truck.id,
     driver: trip.driverName || '—',
     driverPhone: trip.driverPhone || '—',
     driverId: trip.driverId,
     truck: trip.truck.plateNumber || '—',
-    truckPhone: '—',
+    truckPhone: trip.truck.phone || '—',
     company: trip.truckingCompanyName || '—',
     companyPhone: trip.truckingCompanyPhone || '—',
     container: text(trip.container.size) || trip.containerNumber || '—',
@@ -98,15 +100,15 @@ function mapTrackingTrip(trip) {
     location: trip.currentLocation.description
       ? `${trip.currentLocation.description}${trip.currentLocation.source === 'TRIP_STATUS' ? ' (status based)' : ''}`
       : position ? `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}` : '—',
-    // Recorded route mileage and straight-line distance remaining do not measure distance travelled.
-    distanceCovered: '—',
+    // Covered distance comes from recorded GPS history, never total minus remaining.
+    distanceCovered: trip.distance.coveredKm == null ? '—' : `${trip.distance.coveredKm} km`,
     totalDistance: trip.distance.totalKm == null ? '—' : `${trip.distance.totalKm} km`,
     eta: trip.displayEta || '—',
     nextStop: (['assigned', 'atPickup'].includes(trip.segment) ? trip.origin
       : trip.segment === 'returningContainer' ? trip.containerReturnAddress
         : ['inTransit', 'atDelivery'].includes(trip.segment) ? trip.destination : null) || '—',
     lastUpdate: trip.truck.displayLastLocationUpdate || '—',
-    engine: '—',
+    engine: trip.telemetryLive === true ? trip.engineStatus || '—' : '—',
     progress: trip.progressPercent,
     stops: trip.milestones.map((milestone) => ({
       time: milestone.at ? new Date(milestone.at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }) : '—',
@@ -133,13 +135,14 @@ function mapTrip(trip) {
   const truck = record(trip.truck);
   const truckGps = gpsPosition(truck.lastLatitude, truck.lastLongitude);
   const gps = truckGps
-    || (currentLocation.source === 'GPS' ? gpsPosition(currentLocation.latitude, currentLocation.longitude) : null);
+    || (['LIVE_GPS', 'GPS'].includes(currentLocation.source) ? gpsPosition(currentLocation.latitude, currentLocation.longitude) : null);
   const gpsUpdatedAt = gps ? timestamp(truckGps ? truck.lastLocationUpdate : currentLocation.updatedAt) : null;
   const latitude = gps?.latitude ?? null, longitude = gps?.longitude ?? null;
   const isDelayed = typeof trip.isDelayed === 'boolean' ? trip.isDelayed : null;
   const status = isDelayed === true ? 'Delayed' : isDelayed === false ? segment === 'completed' ? 'Delivered' : segmentLabel : '—';
   const segmentIndex = count(currentSegment.index), segmentTotal = count(currentSegment.total);
   const progress = nonNegative(trip.progressPercent);
+  const speed = nonNegative(trip.speedKmH);
   const financials = record(trip.financials);
   const mapped = {
     id: identifier(trip.tripId),
@@ -174,11 +177,16 @@ function mapTrip(trip) {
     isDelayed,
     delayReason: text(trip.delayReason),
     hasGpsPosition: Boolean(gps),
+    telemetryLive: typeof trip.telemetryLive === 'boolean' ? trip.telemetryLive : null,
+    speedKmH: speed != null && speed <= 250 ? speed : null,
+    engineStatus: ['ON', 'OFF', 'IDLE'].includes(trip.engineStatus) ? trip.engineStatus : null,
+    stopDurationSeconds: nonNegative(trip.stopDurationSeconds),
     canMarkAtDelivery: ARRIVAL_STATUSES.has(statusCode),
     canMarkDelayed: Boolean(statusCode) && isDelayed != null && !['COMPLETED', 'CANCELLED'].includes(statusCode),
     truck: {
       id: identifier(truck.id),
       plateNumber: text(truck.plateNumber),
+      phone: text(truck.phone),
       latitude,
       longitude,
       lastLocationUpdate: gpsUpdatedAt,
@@ -194,6 +202,8 @@ function mapTrip(trip) {
     distance: {
       totalKm: nonNegative(distance.totalKm),
       remainingKm: nonNegative(distance.remainingKm),
+      coveredKm: nonNegative(distance.coveredKm),
+      coveredSource: text(distance.coveredSource),
       source: text(distance.source),
     },
     eta: timestamp(trip.eta),
@@ -242,6 +252,10 @@ function mapResponse(response, args = {}) {
 
   return {
     rows,
+    thresholds: {
+      speedLimitKmh: nonNegative(data.thresholds?.speedLimitKmh),
+      longStopMinutes: nonNegative(data.thresholds?.longStopMinutes),
+    },
     pagination: {
       page: count(pagination.page) > 0 ? count(pagination.page) : args.page || 1,
       limit,
@@ -267,8 +281,11 @@ function mapStats(response) {
   };
 }
 
-function tripFilters({ statusFilter, search, origin, destination, driverId, truckerId, tripType, dateFrom, dateTo } = {}) {
-  return Object.fromEntries(Object.entries({ statusFilter, search, origin, destination, driverId, truckerId, tripType, dateFrom, dateTo })
+function tripFilters({ statusFilter, search, origin, destination, driverId, truckerId, tripType, dateFrom, dateTo, speeding, longStopped } = {}) {
+  return Object.fromEntries(Object.entries({ statusFilter, search, origin, destination, driverId, truckerId, tripType, dateFrom, dateTo,
+    speeding: speeding === true || speeding === 'true' ? 'true' : undefined,
+    longStopped: longStopped === true || longStopped === 'true' ? 'true' : undefined,
+  })
     .filter(([, value]) => value !== undefined && value !== null && value !== ''));
 }
 
@@ -291,7 +308,7 @@ export const tripsApi = baseApi.injectEndpoints({
     getAdminTrackingTrips: builder.query({
       async queryFn({ page = 1, limit = 100, ...filters } = {}, api, _options, baseQuery) {
         const rows = new Map();
-        let pagination;
+        let pagination, thresholds;
         // Refresh every loaded page together; polling only the last page leaves earlier markers stale.
         for (let nextPage = 1; nextPage <= page; nextPage += 1) {
           if (api.signal.aborted) return { error: { status: 'CUSTOM_ERROR', error: 'Tracking request cancelled.' } };
@@ -301,12 +318,13 @@ export const tripsApi = baseApi.injectEndpoints({
             const mapped = mapResponse(response.data, { page: nextPage, limit });
             mapped.rows.forEach((trip) => rows.set(trip.id, trip.tracking));
             pagination = mapped.pagination;
+            thresholds = mapped.thresholds;
           } catch {
             return { error: { status: 'CUSTOM_ERROR', error: 'The tracking trips response is invalid.' } };
           }
           if (pagination.totalPages == null || nextPage >= pagination.totalPages) break;
         }
-        return { data: { rows: [...rows.values()], pagination } };
+        return { data: { rows: [...rows.values()], pagination, thresholds } };
       },
       providesTags: ['AdminTrips'],
     }),
@@ -317,7 +335,7 @@ export const tripsApi = baseApi.injectEndpoints({
     }),
     exportAdminTrips: builder.query({
       query: (filters = {}) => ({
-        url: '/admin/trips/export', params: tripFilters(filters),
+        url: '/admin/trips/export', params: tripFilters({ ...filters, speeding: undefined, longStopped: undefined }),
         responseHandler: 'text', headers: { Accept: 'text/csv' },
       }),
       transformResponse: (response) => {
@@ -361,3 +379,5 @@ export const {
   useMarkAdminTripAtDeliveryMutation,
   useMessageAdminTripDriverMutation,
 } = tripsApi;
+
+export { mapTrip as mapAdminTripDto, mapStats as mapAdminTripStatsDto };

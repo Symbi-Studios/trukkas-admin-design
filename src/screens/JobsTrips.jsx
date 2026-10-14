@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link, useNavigate } from "../router.js";
 import {
@@ -166,6 +166,46 @@ function FilterControl({ name, value, options, menu, setMenu, onChange }) {
         }}
       />
     </span>
+  );
+}
+
+function JobActionMenu({ anchor, items, onClose }) {
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState(null);
+  useLayoutEffect(() => {
+    if (!anchor || !menuRef.current) return undefined;
+    const updatePosition = () => {
+      if (!menuRef.current || !anchor.isConnected) { onClose(null); return; }
+      const anchorRect = anchor.getBoundingClientRect();
+      const menuRect = menuRef.current.getBoundingClientRect();
+      const left = Math.min(Math.max(8, anchorRect.right - menuRect.width), Math.max(8, window.innerWidth - menuRect.width - 8));
+      const below = anchorRect.bottom + 6;
+      const top = below + menuRect.height <= window.innerHeight - 8 ? below : Math.max(8, anchorRect.top - menuRect.height - 6);
+      setPosition({ top, left });
+    };
+    const closeOnOutsidePointer = (event) => {
+      if (!menuRef.current?.contains(event.target) && !anchor.contains(event.target)) onClose(null);
+    };
+    const closeOnEscape = (event) => { if (event.key === "Escape") onClose(null); };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [anchor, items.length, onClose]);
+  return (
+    <div ref={menuRef} onClick={(event) => event.stopPropagation()} style={{
+      position: "fixed", top: position?.top ?? -10000, left: position?.left ?? 0,
+      zIndex: 120, width: "max-content", visibility: position ? "visible" : "hidden",
+    }}>
+      <DropdownMenu width={210} items={items} />
+    </div>
   );
 }
 
@@ -782,71 +822,27 @@ export function JobsTrips() {
       header: "Actions",
       width: 54,
       render: (job) => (
-        <span className={styles.rowMenuWrap}>
+        <div className={styles.rowMenuWrap}>
           <IconButton
             icon="ellipsis"
             label={`Actions for ${job.displayId || job.id}`}
             onClick={(event) => {
               event.stopPropagation();
-              setRowMenu(rowMenu === job.id ? null : job.id);
+              const anchor = event.currentTarget;
+              setRowMenu((current) => current?.id === job.id ? null : { id: job.id, anchor });
             }}
           />
-          {rowMenu === job.id && (
-            <span
-              className={styles.rowMenu}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <DropdownMenu
-                width={210}
-                items={[
-                  {
-                    label: "View Job Details",
-                    icon: "eye",
-                    onClick: () => handleAction("view", job),
-                  },
-                  ...(job.canValidateDocs
-                    ? [
-                        {
-                          label: "Approve Job",
-                          icon: "circle-check",
-                          onClick: () => handleAction("approve", job),
-                        },
-                      ]
-                    : []),
-                  ...(job.canRejectDocs ? [{
-                    label: "Reject Documents", icon: "circle-x", tone: "danger",
-                    onClick: () => handleAction("reject", job),
-                  }] : []),
-                  ...(job.canMarkDelivered && canDeliver
-                    ? [
-                        {
-                          label: "Mark Delivered",
-                          icon: "circle-check",
-                          onClick: () => handleAction("deliver", job),
-                        },
-                      ]
-                    : []),
-                  {
-                    label: "Export Job Sheet",
-                    icon: "download",
-                    onClick: () => handleAction("export", job),
-                  },
-                  ...(job.canCancel
-                    ? [
-                        { divider: true },
-                        {
-                          label: "Cancel Job",
-                          icon: "ban",
-                          tone: "danger",
-                          onClick: () => handleAction("cancel", job),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </span>
+          {rowMenu?.id === job.id && (
+            <JobActionMenu anchor={rowMenu.anchor} onClose={setRowMenu} items={[
+              { label: "View Job Details", icon: "eye", onClick: () => handleAction("view", job) },
+              ...(job.canValidateDocs ? [{ label: "Approve Job", icon: "circle-check", onClick: () => handleAction("approve", job) }] : []),
+              ...(job.canRejectDocs ? [{ label: "Reject Documents", icon: "circle-x", tone: "danger", onClick: () => handleAction("reject", job) }] : []),
+              ...(job.canMarkDelivered && canDeliver ? [{ label: "Mark Delivered", icon: "circle-check", onClick: () => handleAction("deliver", job) }] : []),
+              { label: "Export Job Sheet", icon: "download", onClick: () => handleAction("export", job) },
+              ...(job.canCancel ? [{ divider: true }, { label: "Cancel Job", icon: "ban", tone: "danger", onClick: () => handleAction("cancel", job) }] : []),
+            ]} />
           )}
-        </span>
+        </div>
       ),
     },
   ];

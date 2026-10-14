@@ -26,6 +26,13 @@ function textOrNull(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function documentFileSize(value) {
+  // The detail contract returns a formatted size; legacy uploads may be null.
+  const size = textOrNull(value);
+  const match = size?.match(/^(\d+(?:\.\d+)?)\s*(?:B|bytes?|[KMGTPE]B|[KMGTPE]iB)$/i);
+  return match && Number.isFinite(Number(match[1])) ? size : null;
+}
+
 function personName(value) {
   return textOrNull(value) || textOrNull(value?.name);
 }
@@ -148,7 +155,7 @@ function mapDocument(raw, key, job) {
     reviewAuthority: ['tdo', 'exit_note', 'customs_gate_pass'].includes(requirement) ? 'trukkas_admin' : null,
     canReview: job.job.lifecycleStatusCode === 'DOC_REVIEW' && ['tdo', 'exit_note', 'customs_gate_pass'].includes(requirement) && ['PENDING', 'REJECTED'].includes(code) && Boolean(id),
     fileType: ({ 'application/pdf': 'PDF', 'image/jpeg': 'JPEG', 'image/png': 'PNG', 'image/webp': 'WebP' })[source.mimeType] || textOrNull(source.mimeType) || textOrNull(source.fileType),
-    fileSize: textOrNull(source.fileSize) ?? numberOrNull(source.fileSize),
+    fileSize: documentFileSize(source.fileSize),
     version: numberOrNull(source.version),
     uploadedBy: personName(source.uploadedBy),
     uploadedByRole: textOrNull(source.uploadedByRole) || (uploaderType ? statusLabel(uploaderType) : null),

@@ -106,6 +106,49 @@ async function pricingCollection(entity, baseQuery, signal, params = {}, complet
     return { data: { rows: [...rows.values()], total } };
   } catch (error) { return { error: { status: 'CUSTOM_ERROR', error: error.message } }; }
 }
+
+const pricingReviewerRoles = new Set(['SUPER_ADMIN', 'FINANCE_ADMIN']);
+const pricingEntities = new Set(['services', 'price-lists', 'surcharges', 'exceptions']);
+export function canChangePricing(row, action, admin) {
+  if (!row?.id || !pricingEntities.has(row.entity) || !admin?.id) return false;
+  const rates = row.entity === 'services' ? [row.basePrice] : row.entity === 'surcharges' ? [row.value] : row.entity === 'exceptions' ? [row.standardPrice, row.exceptionPrice] : [];
+  if (!rates.every((value) => Number.isFinite(value) && value >= 0)) return false;
+  if (action === 'duplicate') return row.entity !== 'exceptions' && ['DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'INACTIVE'].includes(row.statusCode);
+  if (!pricingReviewerRoles.has(admin.role)) return false;
+  if (action === 'deactivate') return row.entity !== 'exceptions' && row.statusCode === 'ACTIVE';
+  if (action === 'activate') return row.entity !== 'exceptions' && row.statusCode === 'PENDING_APPROVAL';
+  return action === 'approve' && row.entity === 'exceptions' && row.statusCode === 'PENDING' && row.requesterId && row.requesterId !== admin.id;
+}
+function pricingRecord(response, entity) {
+  const dto = record(unwrapApiResponseData(response));
+  return text(dto.id) ? dto : record(dto[({ services: 'service', 'price-lists': 'priceList', surcharges: 'surcharge', exceptions: 'exception' })[entity]]);
+}
+async function changePricingRecord({ row, action }, api, baseQuery) {
+  const admin = api.getState().auth.admin;
+  if (!canChangePricing(row, action, admin)) return { error: { status: 'CUSTOM_ERROR', error: 'Your role or this pricing status does not allow this action.' } };
+  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  if (!sameSession()) return { error: { status: 'CUSTOM_ERROR', error: 'The session changed. Refresh before continuing.' } };
+  const path = '/admin/pricing/' + row.entity + '/' + encodeURIComponent(row.id);
+  const before = await baseQuery(path);
+  if (before.error) return before;
+  const dto = pricingRecord(before.data, row.entity), current = adapters[row.entity](dto);
+  if (!sameSession() || current.id !== row.id || current.statusCode !== row.statusCode || !canChangePricing(current, action, admin)) return { error: { status: 'CUSTOM_ERROR', error: 'This pricing record changed. Refresh before continuing.' } };
+  // Approve the same displayed rate the admin reviewed.
+  const comparable = row.entity === 'services' ? ['basePrice'] : row.entity === 'surcharges' ? ['value'] : row.entity === 'exceptions' ? ['standardPrice', 'exceptionPrice'] : [];
+  if (comparable.some((key) => row[key] == null || current[key] !== row[key])) return { error: { status: 'CUSTOM_ERROR', error: 'The rate changed. Refresh before continuing.' } };
+  const result = await baseQuery({ url: path + '/' + action, method: 'POST', ...(action !== 'duplicate' ? { body: {} } : {}) });
+  if (result.error) return result;
+  const savedDto = pricingRecord(result.data, row.entity), id = action === 'duplicate' ? text(savedDto.id) : row.id;
+  const unconfirmed = () => ({ error: { status: 'CUSTOM_ERROR', error: 'The pricing change was sent but could not be confirmed. Refresh before trying again.' } });
+  if (!sameSession() || !id || action === 'duplicate' && id === row.id) return unconfirmed();
+  const confirmation = await baseQuery('/admin/pricing/' + row.entity + '/' + encodeURIComponent(id));
+  if (confirmation.error || !sameSession()) return unconfirmed();
+  const saved = adapters[row.entity](pricingRecord(confirmation.data, row.entity));
+  const status = { duplicate: 'DRAFT', activate: 'ACTIVE', deactivate: 'INACTIVE', approve: 'APPROVED' }[action];
+  if (saved.id !== id || saved.statusCode !== status || comparable.some((key) => saved[key] !== current[key])) return unconfirmed();
+  return { data: saved };
+}
+
 export function downloadPricingCsv(name, headers, rows) {
   const cell = (value) => {
     const raw = value == null ? '—' : String(value);
@@ -181,12 +224,15 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
     getAdminPricingRecentHistory: builder.query({ async queryFn(_args, api, _options, baseQuery) { return pricingCollection('history', baseQuery, api.signal, {}, false, 5); }, providesTags: ['AdminPricing'] }),
     getAdminPricingService: builder.query({
       query: (id) => ({ url: `/admin/pricing/services/${encodeURIComponent(id)}` }),
-      transformResponse: (response) => {
-        const data = record(unwrapApiResponseData(response));
-        const dto = text(data.id) ? data : record(data.service);
-        if (!text(dto.id)) throw new Error('The service detail response is missing its pricing ID.');
+      transformResponse: (response, _meta, id) => {
+        const dto = pricingRecord(response, 'services');
+        if (dto.id !== id) throw new Error('The service detail response did not identify this pricing record.');
         return adaptAdminPricingService(dto);
       }, providesTags: ['AdminPricing'],
+    }),
+    changeAdminPricingRecord: builder.mutation({
+      queryFn: (args, api, _options, baseQuery) => changePricingRecord(args, api, baseQuery),
+      invalidatesTags: ['AdminPricing'],
     }),
     getAdminPricingConfig: builder.query({ query: () => ({ url: '/admin/config' }), transformResponse: adaptAdminPricingConfig, providesTags: ['AdminPricingConfig'] }),
     getAdminPricingTerminalRates: builder.query({
@@ -231,4 +277,4 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
 });
 export const { useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useUpdateAdminPricingConfigMutation, useUpdateAdminPricingTerminalRateMutation, useUpdateAdminPricingSurchargeMutation,
   useGetAdminPricingSummaryQuery, useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
-  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery, useGetAdminPricingServiceQuery } = pricingApi;
+  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery, useGetAdminPricingServiceQuery, useChangeAdminPricingRecordMutation } = pricingApi;

@@ -24,10 +24,16 @@ const historyPagination = (data, args) => ({
   totalPages: count(data.pagination?.totalPages),
 });
 
-const driverFilters = ({ status, registrationType, companyId, licenseStatus, onTrip, search } = {}) => Object.fromEntries(
-  Object.entries({ status, registrationType, companyId, licenseStatus, onTrip, search: cleanText(search) })
-    .filter(([, value]) => value !== undefined && value !== null && value !== '')
-);
+const driverFilters = ({ status, registrationType, companyId, licenseStatus, onTrip, search } = {}) => {
+  const licenseVerificationStatus = ['PENDING_REVIEW', 'REJECTED'].includes(licenseStatus) ? licenseStatus : undefined;
+  return Object.fromEntries(Object.entries({
+    status: status === 'INACTIVE' ? undefined : status,
+    statuses: status === 'INACTIVE' ? 'INACTIVE,SUSPENDED,BANNED' : undefined,
+    registrationType, companyId,
+    licenseStatus: licenseVerificationStatus ? undefined : licenseStatus,
+    licenseVerificationStatus, onTrip, search: cleanText(search),
+  }).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+};
 
 async function allUsers(baseQuery, path, params = {}, signal) {
   const users = new Map();
@@ -83,6 +89,10 @@ export function adaptAdminDriverProfile(response) {
   if (!dto || typeof dto !== 'object' || Array.isArray(dto)) return null;
   const account = record(record(dto.details).account);
   const stats = record(dto.stats);
+  // DRIVER profiles return one assigned truck; company profiles return trucks[].
+  const trucks = Object.hasOwn(dto, 'truck')
+    ? dto.truck === null ? [] : dto.truck && typeof dto.truck === 'object' && !Array.isArray(dto.truck) ? [dto.truck] : null
+    : Array.isArray(dto.trucks) ? dto.trucks : null;
   const driver = adaptAdminDriver({
     ...dto,
     status: dto.status || account.accountStatus,
@@ -101,11 +111,32 @@ export function adaptAdminDriverProfile(response) {
     jobsChangeThisWeek: finiteNumber(stats.totalJobs?.changeThisWeek),
     earningsChangeThisWeek: finiteNumber(stats.totalEarned?.changeThisWeek),
     kycStatus: formatEnum(dto.verification?.kycStatus),
-    trucks: Array.isArray(dto.trucks) ? records(dto.trucks).map((truck) => ({
+    trucks: trucks ? records(trucks).map((truck) => ({
       id: cleanText(truck.id), plate: cleanText(truck.plateNumber),
       type: cleanText(truck.containerType), size: cleanText(truck.containerSize),
       year: cleanText(truck.year) || (count(truck.year) != null ? String(truck.year) : null), status: formatEnum(truck.status),
     })) : null,
+  };
+}
+
+function adaptDriverEarnings(response, months) {
+  const dto = record(unwrapApiResponseData(response));
+  if (!Array.isArray(dto.months) || dto.months.length !== months) throw new Error('The driver earnings response is missing its monthly series.');
+  const rows = dto.months.map((item) => ({
+    month: cleanText(item?.month), completedTrips: count(item?.completedTrips),
+    completedTripValue: finiteNumber(item?.completedTripValue), currency: cleanText(item?.currency),
+  })).sort((left, right) => (left.month || '').localeCompare(right.month || ''));
+  let previous = null;
+  for (const row of rows) {
+    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(row.month || '') || row.completedTrips == null
+      || row.completedTripValue == null || row.completedTripValue < 0 || row.currency !== 'NGN') throw new Error('The driver earnings response contains invalid monthly values.');
+    const index = Number(row.month.slice(0, 4)) * 12 + Number(row.month.slice(5)) - 1;
+    if (previous != null && index !== previous + 1) throw new Error('The driver earnings response has missing or duplicate months.');
+    previous = index;
+  }
+  return {
+    months: rows,
+    chart: rows.map((row) => ({ label: new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', month: 'short' }).format(new Date(row.month + '-01T00:00:00Z')), value: row.completedTripValue })),
   };
 }
 
@@ -150,7 +181,7 @@ export function adminDriverError(error) {
   if (error?.status === 403) return 'You do not have permission to view or manage this driver.';
   if (error?.status === 404) return 'Driver not found.';
   const message = unwrapApiResponseData(error?.data)?.message;
-  return (Array.isArray(message) ? message.join(' ') : cleanText(message)) || 'Unable to load driver data. Please try again.';
+  return (Array.isArray(message) ? message.join(' ') : cleanText(message)) || cleanText(error?.error) || 'Unable to load driver data. Please try again.';
 }
 
 export const driversApi = baseApi.injectEndpoints({
@@ -161,19 +192,7 @@ export const driversApi = baseApi.injectEndpoints({
         if (filters.tabStatus && filters.tabStatus !== 'ON_TRIP' && filters.status !== filters.tabStatus) {
           return { data: { drivers: [], pagination: { page, limit, total: 0, totalPages: 0 } } };
         }
-        const verificationFilter = ['PENDING_REVIEW', 'REJECTED'].includes(filters.licenseStatus) ? filters.licenseStatus : null;
-        const params = driverFilters({ ...filters, licenseStatus: verificationFilter ? undefined : filters.licenseStatus });
-        if (verificationFilter || filters.status === 'INACTIVE') {
-          const users = new Map();
-          for (const status of filters.status === 'INACTIVE' ? ['INACTIVE', 'SUSPENDED', 'BANNED'] : [filters.status]) {
-            const result = await allUsers(baseQuery, '/admin/users/drivers', driverFilters({ ...params, status }), api.signal);
-            if (result.error) return result;
-            for (const user of result.data) users.set(user.id, user);
-          }
-          const drivers = [...users.values()].map(adaptAdminDriver).filter((driver) => !verificationFilter || (verificationFilter === 'PENDING_REVIEW'
-            ? ['PENDING', 'PENDING_REVIEW'].includes(driver.licenseVerificationStatus) : driver.licenseVerificationStatus === 'REJECTED'));
-          return { data: { drivers: drivers.slice((page - 1) * limit, page * limit), pagination: { page, limit, total: drivers.length, totalPages: Math.ceil(drivers.length / limit) } } };
-        }
+        const params = driverFilters(filters);
         const result = await baseQuery({ url: '/admin/users/drivers', params: { ...params, page, limit } });
         if (result.error) return result;
         const data = unwrapApiResponseData(result.data);
@@ -211,9 +230,25 @@ export const driversApi = baseApi.injectEndpoints({
       },
       providesTags: [{ type: 'AdminDriverStats', id: 'SUMMARY' }],
     }),
+    getAdminDriverEarnings: builder.query({
+      async queryFn(months = 6, _api, _options, baseQuery) {
+        if (!Number.isSafeInteger(months) || months < 1 || months > 24) return { error: { status: 'CUSTOM_ERROR', error: 'Choose between 1 and 24 months.' } };
+        const result = await baseQuery({ url: '/admin/users/drivers/earnings', params: { months } });
+        if (result.error) return result;
+        try { return { data: adaptDriverEarnings(result.data, months) }; }
+        catch (error) { return { error: { status: 'CUSTOM_ERROR', error: error.message } }; }
+      },
+      providesTags: [{ type: 'AdminDriverStats', id: 'EARNINGS' }],
+    }),
     getAdminDriverProfile: builder.query({
-      query: (id) => ({ url: `/admin/users/${encodeURIComponent(id)}/profile` }),
-      transformResponse: adaptAdminDriverProfile,
+      async queryFn(id, _api, _options, baseQuery) {
+        if (!cleanText(id)) return { error: { status: 'CUSTOM_ERROR', error: 'A driver ID is required.' } };
+        const result = await baseQuery({ url: '/admin/users/' + encodeURIComponent(id) + '/profile' });
+        if (result.error) return result;
+        const profile = adaptAdminDriverProfile(result.data);
+        return profile?.id === id && profile.role === 'DRIVER' ? { data: profile }
+          : { error: { status: 'CUSTOM_ERROR', error: 'The profile response does not identify the requested driver.' } };
+      },
       providesTags: (_result, _error, id) => [{ type: 'AdminDrivers', id }],
     }),
     getAdminDriverCompanies: builder.query({
@@ -348,7 +383,7 @@ export const driversApi = baseApi.injectEndpoints({
 });
 
 export const {
-  useGetAdminDriversQuery, useGetAdminPendingDriversQuery, useGetAdminDriverStatsQuery,
+  useGetAdminDriversQuery, useGetAdminPendingDriversQuery, useGetAdminDriverStatsQuery, useGetAdminDriverEarningsQuery,
   useGetAdminDriverProfileQuery, useGetAdminDriverLicenseQuery, useReviewAdminDriverMutation,
   useGetAdminDriverJobsQuery, useGetAdminDriverTransactionsQuery,
   useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery, useGetAdminDriverRankingsQuery, useGetAdminDriverActivityQuery,

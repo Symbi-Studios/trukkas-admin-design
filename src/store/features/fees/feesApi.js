@@ -62,22 +62,47 @@ const ruleFields = [
 export const unavailableFeeRule = {
   ...Object.fromEntries(ruleFields.map((field) => [field,'—'])),
   // Keep the existing default rule glyph; it carries no financial information.
-  icon:'target', systemRule:null, auditHistory:null,
+  icon:'target', systemRule:null, auditHistory:null, exampleInputLabel:'—',
 };
 
 export function adaptAdminFeeRevenue(response) {
   return { ...emptyFeeSummary, totalRevenue: feeNumber(unwrapApiResponseData(response)?.jobs?.platformRevenueMonth) };
 }
 export function adaptFeeSummary(response) {
-  const dto = record(unwrapApiResponseData(response));
-  // This name is documented, but no summary DTO/example is published. Missing
-  // or object-valued metrics cannot be read as amounts or guessed from config.
-  return { summary: { ...emptyFeeSummary, netPlatformRevenue: feeNumber(dto.netPlatformRevenue) }, distribution: unavailableFeeDistribution };
+  const dto = record(unwrapApiResponseData(response)), ngn = dto.currency === 'NGN';
+  const amount = (key) => ngn && feeNumber(record(dto[key]).amount) != null && feeNumber(record(dto[key]).amount) >= 0 ? feeNumber(record(dto[key]).amount) : null;
+  const delta = (value) => feeNumber(value) == null ? '—' : (feeNumber(value) > 0 ? '+' : '') + feeNumber(value).toLocaleString('en-NG', { maximumFractionDigits: 2 }) + '%';
+  const percent = (value) => feeNumber(value) != null && feeNumber(value) >= 0 && feeNumber(value) <= 100 ? feeNumber(value) : null;
+  const currentRate = percent(record(dto.effectiveRate).percent), previousRate = percent(record(dto.effectiveRate).previous);
+  const rateLabel = currentRate == null ? '—' : currentRate.toLocaleString('en-NG', { maximumFractionDigits: 2 }) + '%';
+  const distribution = Array.isArray(dto.distribution) ? dto.distribution : [];
+  const keys = ['PLATFORM', 'SERVICE', 'PROCESSING', 'OTHER'];
+  return {
+    summary: { ...emptyFeeSummary,
+      totalRevenue: amount('revenue'), totalRevenueDelta: delta(record(dto.revenue).deltaPercent),
+      totalPlatformFees: amount('platformFees'), totalPlatformFeesDelta: delta(record(dto.platformFees).deltaPercent),
+      totalCommissions: amount('commissionsPaid'), totalCommissionsDelta: delta(record(dto.commissionsPaid).deltaPercent),
+      totalDeductions: amount('deductions'), totalDeductionsDelta: delta(record(dto.deductions).deltaPercent),
+      avgEffectiveRate: rateLabel, avgEffectiveRateLabel: rateLabel,
+      avgEffectiveRateDelta: currentRate != null && previousRate > 0 ? delta((currentRate - previousRate) / previousRate * 100) : '—',
+      totalFeesCollected: amount('feesCollected'), totalCommissionsPaid: amount('commissionsPaid'),
+      totalDeductionsCollected: amount('deductions'), netPlatformRevenue: amount('netPlatformRevenue'),
+    },
+    distribution: unavailableFeeDistribution.map((slot, index) => {
+      const matches = distribution.filter((entry) => record(entry).key === keys[index]);
+      const entry = matches.length === 1 ? record(matches[0]) : {};
+      return { ...slot, value: percent(entry.percent), amount: ngn && feeNumber(entry.amount) != null && feeNumber(entry.amount) >= 0 ? feeNumber(entry.amount) : null };
+    }),
+  };
 }
 export function adaptFeeRule(value) {
   const dto = record(value), id = text(dto.id);
   if (!id) return null;
   const calculationType = text(dto.calculationType);
+  const example = record(dto.example), inputs = record(example.inputs);
+  const exampleLabels = { JOB_VALUE: 'Job Value', WITHDRAWAL_AMOUNT: 'Withdrawal Amount', DEPOSIT_AMOUNT: 'Deposit Amount', DEMURRAGE_AMOUNT: 'Demurrage Amount', LATE_DELIVERY_DEDUCTION: 'Late Delivery Deduction', SUBTOTAL: 'Subtotal', NONE: 'Input' };
+  const exampleInput = example.inputKind === 'JOB_VALUE' && example.jobValueApplicable === true ? inputs.jobValue ?? inputs.amount
+    : ['WITHDRAWAL_AMOUNT', 'DEPOSIT_AMOUNT', 'DEMURRAGE_AMOUNT', 'LATE_DELIVERY_DEDUCTION', 'SUBTOTAL'].includes(example.inputKind) ? inputs.amount : null;
   const numericValue = calculationType === 'FLAT' ? dto.currency === 'NGN' ? feeNumber(dto.amount) : null : calculationType === 'PERCENTAGE' ? feeNumber(dto.rate) : null;
   return {
     ...unavailableFeeRule, id, name: display(dto.name), sub: display(dto.subtitle), description: display(dto.description),
@@ -93,7 +118,7 @@ export function adaptFeeRule(value) {
     applicableOn: display(dto.applicableOn), rounding: display(dto.rounding), taxInclusive: typeof dto.taxInclusive === 'boolean' ? dto.taxInclusive ? 'Yes' : 'No' : '—',
     createdBy: person(dto.createdBy), createdOn: date(dto.createdAt), lastUpdated: date(dto.updatedAt),
     userTypes: labels(dto.userTypes), jobTypes: labels(dto.jobTypes), cargoTypes: labels(dto.cargoTypes), locations: labels(dto.locations), otherConditions: labels(dto.conditions),
-    formula: display(dto.formula), exampleJobValue: dto.currency === 'NGN' ? feeMoney(dto.example?.inputs?.jobValue) : '—',
+    formula: display(dto.formula), exampleInputLabel: exampleLabels[example.inputKind] || '—', exampleJobValue: dto.currency === 'NGN' ? feeMoney(exampleInput) : '—',
     exampleFee: dto.currency === 'NGN' ? feeMoney(dto.example?.result) : '—', exampleNote: display(dto.example?.note),
   };
 }
@@ -122,10 +147,7 @@ async function allPages(baseQuery, api, url, select, identity) {
   return failure('The fee collection exceeds the supported page count.');
 }
 function historyRows(dto) {
-  // The envelope key is undocumented. Accept only one actual event array;
-  // do not assume an empty collection when the envelope cannot be identified.
-  const arrays = Object.values(dto).filter(Array.isArray);
-  return arrays.length === 1 && arrays[0].every((row) => row && typeof row === 'object' && 'timestamp' in row && 'action' in row && 'changes' in row) ? arrays[0] : null;
+  return Array.isArray(dto.events) ? dto.events : null;
 }
 function adaptHistory(row) {
   const changes = Array.isArray(row.changes) ? row.changes.map((entry) => {
@@ -135,11 +157,17 @@ function adaptHistory(row) {
     const pct = feeNumber(change.changePercent);
     return display(change.field) + ': ' + before + ' → ' + after + (pct == null ? '' : ' (' + pct + '%)');
   }).join('; ') : '—';
-  return { date: date(row.timestamp, true), action: label(row.action), by: person(row.performedBy), changes: changes || '—' };
+  return { id: text(row.id), date: date(row.timestamp, true), action: label(row.action), by: person(row.performedBy), changes: changes || '—' };
 }
-export const editableFeeRule = (rule) => Boolean(rule?.id && rule.editable === true && rule.numericValue != null && (rule.calculationType === 'PERCENTAGE' || rule.calculationType === 'FLAT' && rule.currency === 'NGN'));
-const canManage = (api) => ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(api.getState().auth.admin?.role);
+export function validFeeValue(rule, value) {
+  const parsed = feeNumber(value), maximum = rule?.calculationType === 'PERCENTAGE' ? 100 : rule?.calculationType === 'FLAT' ? 10000000 : null;
+  return parsed != null && parsed >= 0 && maximum != null && parsed <= maximum && /^\d+(?:\.\d{1,2})?$/.test(String(parsed));
+}
+export const editableFeeRule = (rule) => Boolean(rule?.id && rule.editable === true && ['ACTIVE', 'INACTIVE'].includes(rule.statusCode) && validFeeValue(rule, rule.numericValue) && (rule.calculationType === 'PERCENTAGE' || rule.calculationType === 'FLAT' && rule.currency === 'NGN'));
+const canManage = (api) => Boolean(api.getState().auth.accessToken && api.getState().auth.admin?.id && ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(api.getState().auth.admin?.role));
+const ruleMatches = (fresh, original) => fresh?.id === original?.id && fresh?.calculationType === original?.calculationType && fresh?.currency === original?.currency && fresh?.numericValue === original?.numericValue && fresh?.statusCode === original?.statusCode;
 async function readRule(baseQuery, id) {
+  if (!text(id)) return failure('Select a valid fee rule.');
   const result = await baseQuery({ url: '/admin/fees/rules/' + encodeURIComponent(id) });
   if (result.error) return result;
   const dto = record(unwrapApiResponseData(result.data));
@@ -149,31 +177,56 @@ async function updateRule({ rule, value, status }, api, baseQuery) {
   if (!canManage(api)) return { error: { status: 403, data: { message: 'Fee changes require Super Admin or Finance Admin access.' } } };
   if (!editableFeeRule(rule)) return failure('This fee rule is read-only or has an unavailable value.');
   const isStatus = status != null, parsed = feeNumber(value);
-  if (isStatus ? !['ACTIVE', 'INACTIVE'].includes(status) : parsed == null || parsed < 0) return failure('Enter a valid fee amount or rate.');
+  if (isStatus ? !['ACTIVE', 'INACTIVE'].includes(status) : !validFeeValue(rule, parsed)) return failure('Enter a valid fee amount or rate.');
+  const admin = api.getState().auth.admin;
+  const sameSession = () => !api.signal.aborted && canManage(api) && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  const fresh = await readRule(baseQuery, rule.id);
+  if (fresh.error) return fresh;
+  if (!sameSession()) return failure('The session changed. Refresh before continuing.');
+  if (!editableFeeRule(fresh.data) || !ruleMatches(fresh.data, rule)) return failure('This fee rule changed. Refresh its details before saving.');
   const field = rule.calculationType === 'FLAT' ? 'amount' : 'rate';
   const body = isStatus ? { status } : { [field]: parsed };
   const result = await baseQuery({ url: '/admin/fees/rules/' + encodeURIComponent(rule.id) + (isStatus ? '/status' : ''), method: 'PATCH', body });
   if (result.error) return result;
   const confirmed = await readRule(baseQuery, rule.id);
   if (confirmed.error) return confirmed;
-  if (confirmed.data.calculationType !== rule.calculationType || confirmed.data.currency !== rule.currency) return failure('The fee rule changed while saving. Refresh its details.');
+  if (!sameSession() || confirmed.data.calculationType !== rule.calculationType || confirmed.data.currency !== rule.currency) return failure('The fee rule changed while saving. Refresh its details.');
   if (isStatus ? confirmed.data.statusCode !== status || status === 'INACTIVE' && confirmed.data.numericValue !== 0 || status === 'ACTIVE' && !(confirmed.data.numericValue > 0) : confirmed.data.numericValue !== parsed) return failure('The requested fee change could not be confirmed. Refresh its details.');
   return confirmed;
 }
 async function bulkUpdate({ updates }, api, baseQuery) {
   if (!canManage(api)) return { error: { status: 403, data: { message: 'Fee changes require Super Admin or Finance Admin access.' } } };
-  if (!Array.isArray(updates) || !updates.length || new Set(updates.map((entry) => entry.rule?.id)).size !== updates.length || updates.some((entry) => !editableFeeRule(entry.rule) || feeNumber(entry.value) == null || feeNumber(entry.value) < 0)) return failure('Select valid, editable fee changes.');
+  if (!Array.isArray(updates) || !updates.length || new Set(updates.map((entry) => entry?.rule?.id)).size !== updates.length || updates.some((entry) => !editableFeeRule(entry?.rule) || !validFeeValue(entry.rule, entry.value))) return failure('Select valid, editable fee changes.');
+  const admin = api.getState().auth.admin;
+  const sameSession = () => !api.signal.aborted && canManage(api) && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  for (const entry of updates) {
+    if (!sameSession()) return failure('The session changed. Refresh before continuing.');
+    const fresh = await readRule(baseQuery, entry.rule.id);
+    if (fresh.error) return fresh;
+    if (!editableFeeRule(fresh.data) || !ruleMatches(fresh.data, entry.rule)) return failure('A selected fee rule changed. Refresh the rules before saving.');
+  }
+  if (!sameSession()) return failure('The session changed. Refresh before continuing.');
   const result = await baseQuery({ url: '/admin/fees/rules/bulk', method: 'PATCH', body: { updates: updates.map(({ rule, value }) => ({ id: rule.id, [rule.calculationType === 'FLAT' ? 'amount' : 'rate']: feeNumber(value) })) } });
   if (result.error) return result;
+  const dto = record(unwrapApiResponseData(result.data)), requestedIds = new Set(updates.map((entry) => entry.rule.id));
+  if (!sameSession() || !Array.isArray(dto.updated) || !Array.isArray(dto.failures)) return failure('The bulk update was submitted but its result could not be confirmed. Refresh and review the rules before retrying.');
+  const reported = [...dto.updated, ...dto.failures];
+  if (reported.length !== updates.length || reported.some((entry) => !requestedIds.has(entry?.id)) || new Set(reported.map((entry) => entry.id)).size !== reported.length) return failure('The bulk update response did not identify every requested result. Refresh and review the rules.');
+  const saved = new Map(dto.updated.map((entry) => [entry.id, adaptFeeRule(entry)])), rejected = new Map(dto.failures.map((entry) => [entry.id, entry]));
   const verified = [], failures = [];
   for (const entry of updates) {
-    if (api.signal.aborted) return failure('Bulk updates may have partly applied. Refresh and review their values.');
-    const confirmed = await readRule(baseQuery, entry.rule.id);
-    if (!confirmed.error && confirmed.data.calculationType === entry.rule.calculationType && confirmed.data.currency === entry.rule.currency && confirmed.data.numericValue === feeNumber(entry.value)) verified.push(confirmed.data);
+    if (!sameSession()) return failure('Bulk updates may have partly applied. Refresh and review their values.');
+    const rejection = rejected.get(entry.rule.id);
+    if (rejection) {
+      failures.push({ id: entry.rule.id, message: text(rejection.reason) || text(rejection.error) || 'The backend rejected this fee change.', errorCode: text(rejection.errorCode) });
+      continue;
+    }
+    const returned = saved.get(entry.rule.id), confirmed = await readRule(baseQuery, entry.rule.id);
+    if (!confirmed.error && sameSession() && returned?.numericValue === feeNumber(entry.value) && returned.calculationType === entry.rule.calculationType && returned.currency === entry.rule.currency
+      && confirmed.data.calculationType === entry.rule.calculationType && confirmed.data.currency === entry.rule.currency && confirmed.data.numericValue === feeNumber(entry.value)) verified.push(confirmed.data);
     else failures.push({ id: entry.rule.id, message: 'The requested value could not be confirmed.' });
   }
-  const dto = record(unwrapApiResponseData(result.data));
-  return { data: { verified, failures, reportedFailureCount: Array.isArray(dto.failures) ? dto.failures.length : null } };
+  return { data: { verified, failures, reportedFailureCount: dto.failures.length } };
 }
 async function download(baseQuery, url, format, filters = {}) {
   if (!['csv', 'pdf'].includes(format)) return failure('Unsupported fee export format.');
@@ -204,6 +257,7 @@ export function saveFeeDocument(document, name) {
 const feeTags = ['AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
 const changedTags = [...feeTags, 'AdminPricingConfig', 'AdminTerminalRates', 'AdminEscrowOverview'];
 export const feesApi = baseApi.enhanceEndpoints({ addTagTypes: changedTags }).injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminFeeRevenue: builder.query({ query: () => ({ url: '/admin/overview' }), transformResponse: adaptAdminFeeRevenue, providesTags: ['AdminFeeRevenue'] }),
     getAdminFeeSummary: builder.query({ query: () => ({ url: '/admin/fees/summary', params: { period: 'month' } }), transformResponse: adaptFeeSummary, providesTags: ['AdminFeeSummary'] }),
@@ -216,7 +270,7 @@ export const feesApi = baseApi.enhanceEndpoints({ addTagTypes: changedTags }).in
     getAdminFeeRule: builder.query({ queryFn: ({ id }, _api, _options, baseQuery) => readRule(baseQuery, id), providesTags: ['AdminFeeRules'] }),
     getAdminFeeRuleHistory: builder.query({
       async queryFn({ id }, api, _options, baseQuery) {
-        const result = await allPages(baseQuery, api, '/admin/fees/rules/' + encodeURIComponent(id) + '/history', historyRows, (row) => row && typeof row === 'object' ? JSON.stringify(row) : null);
+        const result = await allPages(baseQuery, api, '/admin/fees/rules/' + encodeURIComponent(id) + '/history', historyRows, (row) => text(row?.id));
         return result.error ? result : { data: result.data.map(adaptHistory) };
       }, providesTags: ['AdminFeeHistory'],
     }),

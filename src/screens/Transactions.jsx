@@ -239,8 +239,8 @@ export function Transactions() {
   const [menuFor, setMenuFor] = useState(null);
   const [selected, setSelected] = useState([]);
 
-  const statsQuery = useGetAdminTransactionStatsQuery({ from: applied.from, to: applied.to }, { skip: !applied.from || !applied.to });
-  const stats = statsQuery.error || !applied.from || !applied.to ? null : statsQuery.currentData;
+  const statsQuery = useGetAdminTransactionStatsQuery({ from: applied.from, to: applied.to });
+  const stats = statsQuery.error ? null : statsQuery.currentData;
   const insights = useMemo(() => transactionInsights(ledger?.rows, applied.from, applied.to, stats), [ledger, applied.from, applied.to, stats]);
   const transactionSummary = insights.summary;
   const transactionVolumeBreakdown = insights.volume;
@@ -296,7 +296,7 @@ export function Transactions() {
       case "Wallet Transfers":
         return all.filter((r) => r.type === "Wallet Funding");
       case "Settlements":
-        return all.filter((r) => r.type === "Payout");
+        return all.filter((r) => r.isSettlement);
       case "Refunds":
         return all.filter((r) => r.type === "Refund");
       case "Fees & Charges":
@@ -761,7 +761,7 @@ export function Transactions() {
                 href="#"
                 onClick={(e) => {
                   e.preventDefault();
-                  resetToAll();
+                  window.alert("Transaction reports are not available yet.");
                 }}
               >
                 View Report →

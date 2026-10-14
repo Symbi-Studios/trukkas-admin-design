@@ -12,6 +12,9 @@ import {
   escrowMoney as formatNaira,
 } from '../store/features/wallets/walletsApi.js';
 
+import { escrowCanRelease, escrowMoneyRoles } from '../store/features/wallets/walletActionsApi.js';
+import { WalletActionDialog } from './WalletActionDialog.jsx';
+
 function Fact({ icon, iconTint = 'blue', label, value }) {
   const TINT = {
     blue: ['var(--tk-blue-soft)', 'var(--tk-blue)'],
@@ -35,15 +38,24 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 export function EscrowHoldDetail() {
   const params = useParams(), search = useSearchParams();
   const holdId = search.get('id') || params.holdId || '';
+  const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  return <EscrowDetailScreen key={holdId+':'+String(owner)+':'+String(role)+':'+authenticated} />;
+}
+function EscrowDetailScreen() {
+  const role = useSelector(state => state.auth.admin?.role);
+  const [action, setAction] = useState(null);
+  const params = useParams(), search = useSearchParams();
+  const holdId = search.get('id') || params.holdId || '';
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
   const busy = false;
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
-  const selectedQuery = useGetAdminEscrowHoldQuery({ holdId, owner }, { skip: !authenticated || !holdId });
+  const selectedQuery = useGetAdminEscrowHoldQuery({ holdId, owner, role }, { skip: !authenticated || !holdId });
   const hold = authenticated && !selectedQuery.error ? selectedQuery.currentData : null;
   const r = hold || { holdId: holdId || '—', jobId: '—', customer: '—', route: '—', amount: null, heldOn: '—', heldTime: '—', releaseBy: '—', status: '—' };
-  const releasesQuery = useGetAdminEscrowReleasesQuery({ escrowId: holdId, owner }, { skip: !hold });
+  const releasesQuery = useGetAdminEscrowReleasesQuery({ escrowId: holdId, owner, role }, { skip: !hold });
   const releases = hold && !releasesQuery.error ? releasesQuery.currentData || [] : [];
   const release = releases.filter((row) => row.statusCode === 'COMPLETED').sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))[0];
   const released = ['RELEASED', 'COMPLETED'].includes(r.statusCode);
@@ -82,14 +94,14 @@ export function EscrowHoldDetail() {
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/wallets')}>Back</Button>
           {!released && (
-            <Button icon="lock-open" disabled>{busy ? 'Releasing…' : 'Release Funds'}</Button>
+            <Button icon="lock-open" disabled={!escrowMoneyRoles.includes(role) || !escrowCanRelease(hold) || selectedQuery.isFetching} onClick={() => setAction({ kind:'release',record:hold })}>{busy ? 'Releasing…' : 'Release Funds'}</Button>
           )}
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Open a Dispute', icon: 'triangle-alert', tone: 'danger' },
+                  { label: 'Open a Dispute', icon: 'triangle-alert', tone: 'danger', disabled: !hold?.canOpenDispute || selectedQuery.isFetching || !hold?.jobApiId, onClick: () => { setMenu(false); setAction({ kind:'open',record:hold }); } },
                   { divider: true },
                   { label: 'Export Details', icon: 'file-text', onClick: exportDetails },
                 ]} />
@@ -155,6 +167,7 @@ export function EscrowHoldDetail() {
           )}
         </div>
       </div>
+      {action && <WalletActionDialog key={holdId+':'+action.kind} kind={action.kind} record={action.record} owner={owner} role={role} onClose={() => setAction(null)} />}
     </>
   );
 }

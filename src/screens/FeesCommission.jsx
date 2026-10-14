@@ -27,7 +27,7 @@ import {
   Skeleton,
 } from "../ds.js";
 import {
-  useGetAdminFeeRevenueQuery, useGetAdminFeeSummaryQuery, useGetAdminFeeRulesQuery, emptyFeeSummary,
+  useGetAdminFeeSummaryQuery, useGetAdminFeeRulesQuery, emptyFeeSummary,
   unavailableFeeCatalog, unavailableFeeDistribution, editableFeeRule, feeDetailUrl,
   feeMoney as formatNaira, feeMillions,
 } from '../store/features/fees/feesApi.js';
@@ -113,15 +113,13 @@ function FilterButton({ label, value, options, active, onChange }) {
 export function FeesCommission() {
   const navigate = useNavigate();
   const operations = useFeeOperations();
-  const revenueQuery = useGetAdminFeeRevenueQuery({ owner: operations.owner }, { skip: !operations.authenticated });
   const summaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner }, { skip: !operations.authenticated });
   const catalogQuery = useGetAdminFeeRulesQuery({ owner: operations.owner }, { skip: !operations.authenticated });
   const catalog = operations.authenticated && !catalogQuery.error ? catalogQuery.currentData || unavailableFeeCatalog : unavailableFeeCatalog;
   const rules = catalog.rules || [];
-  const monthly = operations.authenticated && !revenueQuery.error ? revenueQuery.currentData || emptyFeeSummary : emptyFeeSummary;
-  const feeSummary = { ...(operations.authenticated && !summaryQuery.error ? summaryQuery.currentData?.summary || emptyFeeSummary : emptyFeeSummary), totalRevenue: monthly.totalRevenue };
+  const feeSummary = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData?.summary || emptyFeeSummary : emptyFeeSummary;
   const feeDistribution = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData?.distribution || unavailableFeeDistribution : unavailableFeeDistribution;
-  const revenueLoading = revenueQuery.isLoading || (revenueQuery.isFetching && !revenueQuery.currentData);
+  const revenueLoading = summaryQuery.isLoading || (summaryQuery.isFetching && !summaryQuery.currentData);
   const metric = (value) => summaryQuery.isLoading ? <Skeleton as="span" width={96} height={23} /> : value;
   const [editRule, setEditRule] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -250,7 +248,7 @@ export function FeesCommission() {
           label="Total Revenue (This Month)"
           value={revenueLoading ? <Skeleton as="span" width={96} height={23} /> : formatNaira(feeSummary.totalRevenue)}
           delta={feeSummary.totalRevenueDelta}
-          caption="vs last month"
+          caption="vs previous period"
         />
         <StatCard
           icon="scan-line"
@@ -258,7 +256,7 @@ export function FeesCommission() {
           label="Total Platform Fees"
           value={metric(formatNaira(feeSummary.totalPlatformFees))}
           delta={feeSummary.totalPlatformFeesDelta}
-          caption="vs last month"
+          caption="vs previous period"
         />
         <StatCard
           icon="handshake"
@@ -266,7 +264,7 @@ export function FeesCommission() {
           label="Total Commissions"
           value={metric(formatNaira(feeSummary.totalCommissions))}
           delta={feeSummary.totalCommissionsDelta}
-          caption="vs last month"
+          caption="vs previous period"
         />
         <StatCard
           icon="file-minus"
@@ -275,7 +273,7 @@ export function FeesCommission() {
           value={metric(formatNaira(feeSummary.totalDeductions))}
           delta={feeSummary.totalDeductionsDelta}
           direction="down"
-          caption="vs last month"
+          caption="vs previous period"
         />
         <StatCard
           icon="chart-pie"
@@ -283,7 +281,7 @@ export function FeesCommission() {
           label="Avg. Effective Rate"
           value={metric(feeSummary.avgEffectiveRate)}
           delta={feeSummary.avgEffectiveRateDelta}
-          caption="vs last month"
+          caption="vs previous period"
         />
       </div>
 

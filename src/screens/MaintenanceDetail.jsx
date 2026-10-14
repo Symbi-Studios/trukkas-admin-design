@@ -23,7 +23,7 @@ import {
 import { useSelector } from "react-redux";
 import { useSearchParams } from "next/navigation";
 import { DriverLoadingNotice, DriverTableLoading } from "./DriversLoading.jsx";
-import { maintenanceError, maintenanceHref, useGetAdminMaintenanceAssetQuery, useGetAdminMaintenanceDetailQuery, useGetAdminMaintenanceTruckRecordsQuery, useUpdateAdminMaintenanceStatusMutation, useRestrictAdminMaintenanceTruckMutation } from "../store/features/maintenance/maintenanceApi.js";
+import { maintenanceError, maintenanceHref, useGetAdminMaintenanceAssetQuery, useGetAdminMaintenanceDetailQuery, useGetAdminMaintenanceTruckRecordsQuery, useUpdateAdminMaintenanceStatusMutation, useRestrictAdminMaintenanceTruckMutation, useGetAdminMaintenanceUsageQuery, useGetAdminMaintenanceDocumentsQuery, useFlagAdminMaintenanceMutation } from "../store/features/maintenance/maintenanceApi.js";
 import "./Maintenance.css";
 import "./MaintenanceDetail.css";
 
@@ -87,6 +87,11 @@ export function MaintenanceDetail() {
     [flagReason, setFlagReason] = useState(""),
     [suspendOpen, setSuspendOpen] = useState(false),
     [toast, setToast] = useState(null);
+  const usageQuery = useGetAdminMaintenanceUsageQuery({ truckId: record?.truckId, owner }, { skip: !authenticated || !record?.truckId || tab !== "KM & Usage" });
+  const documentsQuery = useGetAdminMaintenanceDocumentsQuery({ id: maintenanceId, owner }, { skip: !authenticated || !maintenanceId || tab !== "Documents" });
+  const usage = usageQuery.error ? null : usageQuery.currentData;
+  const documents = documentsQuery.error ? null : documentsQuery.currentData;
+  const [flagRecord] = useFlagAdminMaintenanceMutation();
   const busy = useRef(false);
   const [updateStatus] = useUpdateAdminMaintenanceStatusMutation();
   const [restrictTruck] = useRestrictAdminMaintenanceTruckMutation();
@@ -98,6 +103,8 @@ export function MaintenanceDetail() {
   }, [toast]);
 
   useEffect(() => { if (truckRecordsQuery.error) setToast({ tone: "danger", title: maintenanceError(truckRecordsQuery.error) }); }, [truckRecordsQuery.error]);
+  useEffect(() => { if (usageQuery.error) setToast({ tone: "danger", title: maintenanceError(usageQuery.error) }); }, [usageQuery.error]);
+  useEffect(() => { if (documentsQuery.error) setToast({ tone: "danger", title: maintenanceError(documentsQuery.error) }); }, [documentsQuery.error]);
   useEffect(() => { setTab("Overview"); setMenuOpen(false); setFlagOpen(false); setSuspendOpen(false); setFlagReason(""); setToast(null); }, [maintenanceId]);
 
   function notify(tone, title) {
@@ -143,9 +150,9 @@ export function MaintenanceDetail() {
   const historyRows = (records?.history || []).map(row => ({ ...row, self: row.id === r.id }));
   const lastMaintenance = records?.last || { date: "—", odometer: null, serviceType: "—" };
   const upcoming = records?.upcoming || [];
-  const monthly = [];
-  const monthLabels = [];
-  const avgMonthlyKm = null;
+  const monthly = usage?.monthly || [];
+  const monthLabels = usage?.labels || [];
+  const avgMonthlyKm = usage?.averageMonthlyDistanceKm ?? null;
 
   async function changeStatus(action) {
     if (busy.current) return;
@@ -157,8 +164,14 @@ export function MaintenanceDetail() {
   }
   const markCompleted = () => changeStatus("complete");
   const startMaintenance = () => changeStatus("start");
-  function submitFlag() {
-    notify("warning", "Flag for Review is unavailable in the documented maintenance API.");
+  async function submitFlag() {
+    if (busy.current) return;
+    if (!canWrite) return notify("danger", "Your account cannot perform this maintenance operation.");
+    if (!flagReason.trim()) return;
+    busy.current = true;
+    try { await flagRecord({ id: r.id, reason: flagReason.trim() }).unwrap(); setFlagOpen(false); setFlagReason(""); notify("success", "Maintenance record flagged for review."); }
+    catch (error) { notify("danger", maintenanceError(error)); }
+    finally { busy.current = false; }
   }
   async function confirmSuspend() {
     if (busy.current) return;
@@ -629,21 +642,19 @@ export function MaintenanceDetail() {
                 <div>
                   <span className="tk-meta">Service Items Performed</span>
                   {checklist == null ? "—" : checklist.map((c) => (
-                    <div className="mdet-checklist-row" key={c}>
+                    <div className="mdet-checklist-row" key={c.id}>
                       <Icon
                         name={
-                          r.status === "Completed" || r.status === "In Progress"
-                            ? "circle-check"
-                            : "circle"
+                          c.completed == null ? "minus" : c.completed ? "circle-check" : "circle"
                         }
                         size={14}
                         color={
-                          r.status === "Completed"
+                          c.completed === true
                             ? "var(--tk-success)"
                             : "var(--tk-ink-300)"
                         }
                       />
-                      {c}
+                      {c.label}
                     </div>
                   ))}
                 </div>
@@ -838,7 +849,7 @@ export function MaintenanceDetail() {
             <StatBox
               icon="trending-up"
               label="Avg. Monthly Distance"
-              value={km(avgMonthlyKm)}
+              value={usageQuery.isFetching ? <Skeleton as="span" width={80} height={20} /> : km(avgMonthlyKm)}
             />
           </div>
           <SectionCard title="KM-Based Maintenance Schedule">
@@ -873,27 +884,27 @@ export function MaintenanceDetail() {
             </div>
           </SectionCard>
           <SectionCard title="Monthly Distance Covered">
-            <BarChart
+            {usageQuery.isFetching ? <Skeleton height={180} /> : usageQuery.error ? <EmptyState icon="gauge" title={maintenanceError(usageQuery.error)} /> : !monthly.length || monthly.some(value => value == null) ? "—" : <BarChart
               series={[
                 { name: "Distance", color: "var(--tk-blue)", points: monthly },
               ]}
               labels={monthLabels}
               format={(v) => monthly.length ? Math.round(v / 1000) + "k" : "—"}
-            />
+            />}
           </SectionCard>
         </div>
       )}
 
       {tab === "Documents" && (
-        <SectionCard title={`Documents (${r.attachments?.length ?? "—"})`}>
-          {r.attachments == null ? "—" : r.attachments.length === 0 ? (
+        <SectionCard title={`Documents (${documents?.total ?? "—"})`}>
+          {documentsQuery.isFetching ? <Skeleton height={180} /> : documentsQuery.error ? <EmptyState icon="file-text" title={maintenanceError(documentsQuery.error)} /> : documents?.attachments == null ? "—" : documents.attachments.length === 0 ? (
             <EmptyState
               icon="file-text"
               title="No documents"
               description="No documents have been attached to this maintenance record."
             />
           ) : (
-            r.attachments.map((x) => (
+            documents.attachments.map((x) => (
               <button
                 className="maint-attachment"
                 style={{
@@ -903,8 +914,8 @@ export function MaintenanceDetail() {
                   textAlign: "left",
                   cursor: "pointer",
                 }}
-                key={x[0]}
-                onClick={() => dl({ ...r, id: x[0] })}
+                key={x[2]}
+                onClick={() => x[3] ? window.open(x[3], "_blank", "noopener,noreferrer") : notify("warning", "This document has no available download link.")}
               >
                 <span className="ico">
                   <Icon name="file-text" size={13} />
@@ -932,7 +943,7 @@ export function MaintenanceDetail() {
             <Button variant="outline" onClick={() => setFlagOpen(false)}>
               Cancel
             </Button>
-            <Button variant="danger" icon="flag" onClick={submitFlag}>
+            <Button variant="danger" icon="flag" disabled={!flagReason.trim()} onClick={submitFlag}>
               Flag Record
             </Button>
           </>

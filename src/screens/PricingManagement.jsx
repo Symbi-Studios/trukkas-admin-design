@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSelector } from 'react-redux';
 import { Link, useNavigate } from "../router.js";
 import {
@@ -25,7 +25,7 @@ import {
   Select,
   EmptyState, Banner,
 } from "../ds.js";
-import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv,
+import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation,
   useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useGetAdminPricingSummaryQuery,
   useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
   useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery,
@@ -225,6 +225,8 @@ export function PricingManagement() {
     surcharge: "",
   });
   const busy = false;
+  const [changeRecord, { isLoading: pricingChanging }] = useChangeAdminPricingRecordMutation();
+  const changeLock = useRef(false);
 
   const serviceOptions = useMemo(
     () => ["All Services", ...new Set(services.map((s) => s.service).filter((value) => value !== '—'))],
@@ -277,8 +279,17 @@ export function PricingManagement() {
   function submitAdd() {
     unavailable('The existing form uses unsupported pricing units, free-text routes and an inline surcharge. Add Pricing is unavailable with this form.');
   }
-  function changePricing() {
-    unavailable('Live pricing updates are currently unavailable.');
+  async function changePricing(row, action) {
+    setMenuFor(null);
+    if (changeLock.current) return;
+    if (!canChangePricing(row, action, admin)) { unavailable('Your role or this pricing status does not allow this action.'); return; }
+    changeLock.current = true; setActionError(null);
+    try {
+      const saved = await changeRecord({ row, action }).unwrap();
+      setNotice(action === 'duplicate' ? 'Draft pricing version created.' : action === 'deactivate' ? 'Pricing deactivated.' : 'Pricing approved and activated.');
+      if (action === 'duplicate' && saved.entity === 'services') navigate(pricingDetailUrl(saved.id));
+    } catch (error) { setActionError(error); }
+    finally { changeLock.current = false; }
   }
   function exportServices() {
     setExportOpen(false);
@@ -936,8 +947,7 @@ export function PricingManagement() {
                     <span style={{ display: "flex", gap: 8 }}>
                       <Button
                         size="sm"
-                        disabled
-                        title="Live pricing updates are currently unavailable."
+                        disabled={pricingChanging || !canChangePricing(r, r.entity === 'exceptions' ? 'approve' : 'activate', admin)}
                         onClick={() => void changePricing(r, r.entity === 'exceptions' ? 'approve' : 'activate')}
                       >
                         Approve

@@ -5,12 +5,12 @@ import { Link } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, FilterSelect,
   DataTable, Pagination, Badge, QuickActionsCard, Card, DropdownMenu, IconButton,
-  Avatar, Icon, Tabs, Banner, EmptyState, Modal, Textarea, Skeleton, TextField, Select,
+  Avatar, Icon, Tabs, Banner, EmptyState, Modal, Textarea, Skeleton, TextField, Select, LineChart,
 } from '../ds.js';
 import { DriverLicenseLoading, DriverLoadingNotice, DriverTableLoading, DriversLoading } from './DriversLoading.jsx';
 import {
   adminDriverError, useActivateAdminDriverMutation, useGetAdminDriversQuery,
-  useGetAdminDriverLicenseQuery, useGetAdminDriverStatsQuery,
+  useGetAdminDriverLicenseQuery, useGetAdminDriverStatsQuery, useGetAdminDriverEarningsQuery,
   useGetAdminPendingDriversQuery, useReviewAdminDriverMutation,
   useSuspendAdminDriverMutation, useVerifyAdminDriverLicenseMutation,
   useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery, useGetAdminDriverRankingsQuery,
@@ -106,6 +106,7 @@ export function Drivers() {
   );
   const pendingQuery = useGetAdminPendingDriversQuery();
   const statsQuery = useGetAdminDriverStatsQuery();
+  const earningsQuery = useGetAdminDriverEarningsQuery(6);
   const companyTrucksQuery = useGetAdminDriverCompanyTrucksQuery(driverForm.companyId, { skip: !addOpen || !driverForm.companyId });
   const [createDriver, createState] = useCreateAdminDriverMutation();
   const [importDrivers, importState] = useImportAdminDriversMutation();
@@ -222,18 +223,6 @@ export function Drivers() {
     if (exportState.isFetching) return;
     if (filters.tabStatus && filters.tabStatus !== 'ON_TRIP' && filters.status !== filters.tabStatus) {
       setToast('The selected tab and account status do not overlap.');
-      return;
-    }
-    if (filters.onTrip === false || (filters.onTrip === true && filters.status !== 'ON_TRIP')) {
-      setToast('The compliance export does not document the on-trip filter for this selection.');
-      return;
-    }
-    if (['PENDING_REVIEW', 'REJECTED'].includes(filters.licenseStatus)) {
-      setToast('The compliance export does not support license verification filters.');
-      return;
-    }
-    if (filters.status === 'INACTIVE') {
-      setToast('The compliance export supports a single account status, while Inactive includes suspended and banned accounts.');
       return;
     }
     try { download('driver-compliance.csv', await exportCompliance(filters, false).unwrap()); }
@@ -374,7 +363,12 @@ export function Drivers() {
           </div>
         </SectionCard>
         <SectionCard title="Earnings Overview" description="Last 6 months">
-          <EmptyState icon="wallet" title="Earnings data unavailable" description="Monthly driver trip-value history is not provided by the API." style={{ padding: '24px 8px' }} />
+          {earningsQuery.isFetching ? <Skeleton height={180} />
+            : !earningsQuery.error && earningsQuery.currentData ? <LineChart height={180} area
+              labels={earningsQuery.currentData.chart.map((month) => month.label)}
+              series={[{ name: 'Completed trip value', color: 'var(--tk-blue)', points: earningsQuery.currentData.chart.map((month) => month.value) }]}
+              format={(value) => value >= 1000000 ? `₦${Number((value / 1000000).toFixed(1))}M` : value >= 1000 ? `₦${Number((value / 1000).toFixed(1))}k` : naira(value)} />
+              : <EmptyState icon="wallet" title="Earnings data unavailable" description={earningsQuery.error ? adminDriverError(earningsQuery.error) : '—'} style={{ padding: '24px 8px' }} />}
         </SectionCard>
         <SectionCard title="Top Rated Drivers">
           {rankingQuery.isFetching ? <DriverTableLoading columns={3} /> : rankingQuery.error ? <EmptyState icon="star" title="Ratings data unavailable" description={adminDriverError(rankingQuery.error)} style={{ padding: '24px 8px' }} />

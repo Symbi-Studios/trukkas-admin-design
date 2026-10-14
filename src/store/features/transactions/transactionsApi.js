@@ -25,6 +25,7 @@ function timestamp(value) {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+const money = (value) => number(value) != null && number(value) >= 0 ? number(value) : null;
 const count = (value) => Number.isSafeInteger(number(value)) && number(value) >= 0 ? number(value) : null;
 const percentLabel = (value) => number(value) == null ? '—' : `${number(value) > 0 ? '+' : ''}${number(value).toLocaleString('en-NG', { maximumFractionDigits: 2 })}%`;
 const dateTime = (value) => timestamp(value) == null ? '—' : new Date(timestamp(value)).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -45,7 +46,9 @@ export function adaptAdminTransaction(dto) {
   const isReversal = reversal.isReversal === true || dto.relatedKind === 'REVERSAL';
   const legacyDemurrage = dto.type === 'WITHDRAWAL' && text(dto.description)?.startsWith('Demurrage payment');
   const type = isReversal ? 'Reversal' : legacyDemurrage ? 'Fee' : TYPES[dto.type] || text(dto.typeLabel) || label(dto.type);
-  const jobInfo = record(dto.jobInfo), jobId = text(jobInfo.jobId) || text(dto.jobId);
+  const jobInfo = record(dto.jobInfo), jobId = text(jobInfo.jobId) || text(dto.jobUuid) || (dto.relatedKind === 'JOB' ? text(related.id) : null);
+  const route = record(jobInfo.route), origin = text(record(route.origin).address), destination = text(record(route.destination).address);
+  const routeLabel = text(jobInfo.route) || (origin && destination ? `${origin} → ${destination}` : null);
   return {
     id: text(dto.id), displayId: text(dto.reference) || text(dto.id),
     date: created == null ? '—' : new Date(created).toLocaleDateString('en-US', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric', year: 'numeric' }),
@@ -57,24 +60,24 @@ export function adaptAdminTransaction(dto) {
     relatedTo: text(related.label) || text(related.id) || text(dto.relatedTo) || '—',
     relatedKind: dto.relatedKind === 'JOB' ? 'Job' : dto.relatedKind === 'REVERSAL' ? 'Transaction' : label(dto.relatedKind),
     party: text(party.name) || text(dto.party) || '—',
-    amount: rawAmount == null ? null : Math.abs(rawAmount),
+    amount: money(rawAmount),
     pos: direction === 'inflow' ? true : direction === 'outflow' ? false : null,
     statusCode: text(dto.status), status: label(dto.status), balanceAfter: number(dto.balanceAfter),
     parties: Array.isArray(dto.parties) ? records(dto.parties).map((entry) => ({
-      role: text(entry.role) || '—', name: text(entry.name) || '—', id: text(entry.id) || '—',
+      role: label(entry.role), name: text(entry.name) || '—', id: text(entry.id) || '—',
       email: text(entry.email) || '—', phone: text(entry.phone) || '—', tint: entry.tint,
     })) : party.name || party.id ? [{
       role: label(party.role), name: text(party.name) || '—', id: text(party.id) || '—',
       email: text(party.email) || '—', phone: text(party.phone) || '—',
     }] : [],
-    jobInfo: jobId ? { jobId, route: text(jobInfo.route) || '—', cargoType: text(jobInfo.cargoType) || '—', truck: text(jobInfo.truck) || '—', tripId: text(jobInfo.tripId) || '—' } : null,
+    jobInfo: jobId ? { jobId, route: routeLabel || '—', cargoType: label(jobInfo.cargoType), truck: text(jobInfo.truck) || text(record(jobInfo.truck).plateNumber) || '—', tripId: text(jobInfo.tripId) || '—' } : null,
     showBreakdown: BREAKDOWN_TYPES.has(type) || Array.isArray(dto.breakdown),
     breakdown: Array.isArray(dto.breakdown) ? records(dto.breakdown).map((entry) => ({ label: text(entry.label) || '—', value: number(entry.value) }))
       : BREAKDOWN_TYPES.has(type) ? BREAKDOWN_LABELS.map((name) => ({ label: name, value: null })) : null,
     paymentMethod: Object.fromEntries(['method', 'bank', 'accountNumber', 'accountName'].map((key) => [key, text(paymentMethod[key]) || '—'])),
     reference: { customerRef: text(reference.customerRef) || text(dto.customerReference) || '—', internalNote: text(reference.internalNote) || text(dto.internalNote) || '—' },
     timeline: records(dto.timeline).map((entry) => ({
-      title: text(entry.title) || '—', time: text(entry.time) || dateTime(entry.createdAt), description: text(entry.description) || '—',
+      title: text(entry.title) || '—', time: dateTime(entry.time || entry.createdAt), description: text(entry.description) || '—',
       state: ['pending', 'done', 'current', 'danger', 'warning'].includes(entry.state) ? entry.state : 'pending', icon: text(entry.icon),
     })),
     documents: records(dto.documents).map((entry) => ({
@@ -83,9 +86,10 @@ export function adaptAdminTransaction(dto) {
     issueNotes: records(dto.issueNotes).map((entry) => ({ note: text(entry.note) || '—', time: text(entry.time) || dateTime(entry.createdAt) })),
     actions: {
       canRefund: typeof actions.canRefund === 'boolean' ? actions.canRefund : null,
-      refundReason: text(actions.refundReason),
+      refundableAmount: actions.currency === 'NGN' ? money(actions.refundableAmount) : null,
+      refundReason: text(actions.refundBlockedReason) || text(actions.refundReason),
       canReverse: typeof actions.canReverse === 'boolean' ? actions.canReverse : null,
-      reverseReason: text(actions.reverseReason),
+      reverseReason: text(actions.reverseBlockedReason) || text(actions.reverseReason),
     },
   };
 }
@@ -93,12 +97,12 @@ export function adaptAdminTransaction(dto) {
 // Party and related-entity filters require the complete ledger.
 // Load the complete ledger before filtering or exporting; never treat one page
 // as the platform's transaction list or use it to calculate platform counts.
-async function readLedger(baseQuery, api) {
+async function readLedger(baseQuery, api, tab) {
   const rows = [], seen = new Set();
   let page = 1, expectedTotal = null, expectedPages = null;
   do {
     if (api.signal.aborted) return { error: { status: 'CUSTOM_ERROR', error: 'Transaction loading was cancelled.' } };
-    const result = await baseQuery({ url: '/admin/payments/transactions', params: { page, limit: 100 } });
+    const result = await baseQuery({ url: '/admin/payments/transactions', params: { page, limit: 100, ...(tab ? { tab } : {}) } });
     if (result.error) return { error: result.error };
     const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
     if (!Array.isArray(dto.rows) || pagination.page !== page || !Number.isInteger(pagination.total)
@@ -124,6 +128,20 @@ async function readLedger(baseQuery, api) {
   return { data: { rows, total: expectedTotal } };
 }
 
+async function readTransactionLedger(baseQuery, api) {
+  const ledger = await readLedger(baseQuery, api);
+  if (ledger.error) return ledger;
+  // Use the documented payout filter to classify current escrow settlements.
+  const payouts = await readLedger(baseQuery, api, 'payout');
+  if (payouts.error) return payouts;
+  const payoutIds = new Set(payouts.data.rows.map((row) => row.id)), ledgerIds = new Set(ledger.data.rows.map((row) => row.id));
+  if (payouts.data.rows.some((row) => !ledgerIds.has(row.id))) {
+    return { error: { status: 'CUSTOM_ERROR', error: 'The transaction ledger changed while loading. Please refresh it.' } };
+  }
+  return { data: { ...ledger.data, rows: ledger.data.rows.map((row) => ({ ...row, isSettlement: payoutIds.has(row.id),
+    filterTypes: payoutIds.has(row.id) ? [...new Set([...row.filterTypes, 'Payout'])] : row.filterTypes })) } };
+}
+
 const VOLUME_LABELS = ['Payments In', 'Payments Out', 'Fees & Charges', 'Refunds', 'Reversals', 'Others'];
 const STATUS_ITEMS = [
   { label: 'Completed', tone: 'success', icon: 'circle-check' },
@@ -142,7 +160,9 @@ export function transactionInsights(rows, from, to, stats) {
   const knownStatuses = scoped != null && scoped.every((row) => ['COMPLETED', 'PENDING', 'PROCESSING', 'FAILED', 'REVERSED'].includes(row.statusCode));
   const count = (statuses) => knownStatuses ? scoped.filter((row) => statuses.includes(row.status)).length : null;
   const percent = (value) => value == null || !scoped?.length ? '—' : `${(value / scoped.length * 100).toFixed(1)}%`;
-  const successfulCount = count(['Completed']), failedReversedCount = count(['Failed', 'Reversed']);
+  const successfulCount = stats?.successfulCount ?? count(['Completed']), failedReversedCount = stats?.failedReversedCount ?? count(['Failed', 'Reversed']);
+  const summaryPercent = (value) => value == null || !(stats?.totalTransactions ?? scoped?.length) ? '0%' : `${(value / (stats?.totalTransactions ?? scoped.length) * 100).toFixed(1)}%`;
+  const comparisonPercent = (value) => value == null || value === '—' ? '0%' : value;
   const completed = knownStatuses ? scoped.filter((row) => row.statusCode === 'COMPLETED') : null;
   const knownVolume = completed != null && completed.every((row) => row.amount != null && row.typeCode != null && row.pos != null);
   // Keep the six existing chart categories. Reversal entries retain their
@@ -157,11 +177,11 @@ export function transactionInsights(rows, from, to, stats) {
   if (volumeTotal != null && !Number.isFinite(volumeTotal)) { amounts = null; volumeTotal = null; }
   return {
     summary: {
-      totalTransactions: stats?.totalTransactions ?? scoped?.length ?? null, successfulCount, successfulPct: percent(successfulCount),
-      failedReversedCount, failedReversedPct: percent(failedReversedCount),
+      totalTransactions: stats?.totalTransactions ?? scoped?.length ?? null, successfulCount, successfulPct: summaryPercent(successfulCount),
+      failedReversedCount, failedReversedPct: summaryPercent(failedReversedCount),
       totalInflow: stats?.totalInflow ?? null, totalOutflow: stats?.totalOutflow ?? null, netMovement: stats?.netMovement ?? null,
-      totalTransactionsDelta: stats?.totalTransactionsDelta ?? '—', totalInflowDelta: stats?.totalInflowDelta ?? '—', totalOutflowDelta: stats?.totalOutflowDelta ?? '—', netMovementDelta: stats?.netMovementDelta ?? '—',
-      successfulDelta: '—', failedReversedDelta: '—',
+      totalTransactionsDelta: comparisonPercent(stats?.totalTransactionsDelta), totalInflowDelta: comparisonPercent(stats?.totalInflowDelta), totalOutflowDelta: comparisonPercent(stats?.totalOutflowDelta), netMovementDelta: comparisonPercent(stats?.netMovementDelta),
+      successfulDelta: comparisonPercent(stats?.successfulDelta), failedReversedDelta: comparisonPercent(stats?.failedReversedDelta),
     },
     volumeTotal,
     volume: VOLUME_LABELS.map((name, index) => ({ label: name, amount: amounts?.[index] ?? null, pct: amounts == null ? null : volumeTotal === 0 ? 0 : Math.round(amounts[index] / volumeTotal * 1000) / 10, color: index === 5 ? 'var(--tk-ink-300)' : `var(--tk-viz-${index + 1})` })),
@@ -177,10 +197,13 @@ export function adaptAdminTransactionStats(response) {
   const comparison = record(dto.comparisonPeriod);
   const comparisonDate = (value) => timestamp(value) == null ? null : new Date(timestamp(value) + 3600000).toISOString().slice(0, 10);
   const matchesCaption = comparisonDate(comparison.from) === '2026-05-17' && comparisonDate(comparison.to) === '2026-05-23';
-  const delta = (value) => matchesCaption ? percentLabel(value) : '—';
+  // The user requested 0% when comparison data is unavailable or does not match the caption.
+  const delta = (value) => matchesCaption && number(value) != null ? percentLabel(value) : '0%';
   const alertStyle = { TRANSACTION_FAILED: ['circle-x', 'danger'], TRANSACTION_STUCK: ['hourglass', 'warning'], TRANSACTION_ISSUE: ['flag', 'warning'] };
   return {
-    totalTransactions: count(card('transactionCount').value), totalInflow: number(card('totalInflow').value),
+    totalTransactions: count(card('transactionCount').value), successfulCount: count(card('successful').count), failedReversedCount: count(card('failedReversed').count),
+    successfulDelta: delta(card('successful').vsPreviousPct), failedReversedDelta: delta(card('failedReversed').vsPreviousPct),
+    totalInflow: number(card('totalInflow').value),
     totalOutflow: number(card('totalOutflow').value), netMovement: number(card('netMovement').value),
     totalTransactionsDelta: delta(card('transactionCount').vsPreviousPct), totalInflowDelta: delta(card('totalInflow').vsPreviousPct),
     totalOutflowDelta: delta(card('totalOutflow').vsPreviousPct), netMovementDelta: delta(card('netMovement').vsPreviousPct),
@@ -194,7 +217,7 @@ export function adaptAdminTransactionStats(response) {
 function statsRange({ from, to } = {}) {
   const dateFrom = from ? `${from}T00:00:00+01:00` : undefined, dateTo = to ? `${to}T23:59:59.999+01:00` : undefined;
   if ((dateFrom && timestamp(dateFrom) == null) || (dateTo && timestamp(dateTo) == null) || (dateFrom && dateTo && timestamp(dateFrom) > timestamp(dateTo))) throw new Error('Select a valid transaction date range.');
-  return { dateFrom, dateTo };
+  return { dateFrom, dateTo, ...(!dateFrom && !dateTo ? { period: 'all' } : {}) };
 }
 
 async function transactionPdf(baseQuery, id, kind) {
@@ -215,19 +238,44 @@ export function downloadTransactionPdf(file) {
   setTimeout(() => URL.revokeObjectURL(file.url), 1000);
 }
 
-async function performPaymentAction(baseQuery, id, action) {
-  const result = await baseQuery({ url: `/admin/payments/${encodeURIComponent(id)}/${action}`, method: 'POST' });
+const actionError = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+
+async function paymentActionContext(baseQuery, api, id, action, amount) {
+  const admin = api.getState().auth.admin;
+  if (!text(id) || !text(admin?.id) || !api.getState().auth.accessToken) return actionError('Sign in and select a transaction before continuing.');
+  if (action === 'reverse' && admin.role !== 'SUPER_ADMIN') return actionError('Reversing transactions requires Super Admin access.');
+  if (action === 'refund' && !['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(admin.role)) return actionError('Refunding transactions requires Finance or Super Admin access.');
+  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  const result = await baseQuery({ url: '/admin/payments/transactions/' + encodeURIComponent(id) });
+  if (result.error) return { error: result.error };
+  const row = adaptAdminTransaction(unwrapApiResponseData(result.data));
+  if (row.id !== id) return actionError('The response did not include the requested transaction.');
+  if (!sameSession()) return actionError('The session changed. Refresh before continuing.');
+  if (action === 'retry' && row.statusCode !== 'FAILED') return actionError('Only failed transactions can be retried. Refresh this transaction.');
+  if (action === 'reverse' && (row.statusCode !== 'COMPLETED' || row.actions.canReverse !== true)) return actionError(row.actions.reverseReason || 'This transaction is not eligible for reversal.');
+  if (action === 'refund' && (row.actions.canRefund !== true || row.actions.refundableAmount == null || amount > row.actions.refundableAmount)) return actionError(row.actions.refundReason || 'The refund amount exceeds the available escrow balance. Refresh this transaction.');
+  return { sameSession };
+}
+
+async function performPaymentAction(baseQuery, api, id, action) {
+  const context = await paymentActionContext(baseQuery, api, id, action);
+  if (context.error) return context;
+  const result = await baseQuery({ url: '/admin/payments/' + encodeURIComponent(id) + '/' + action, method: 'POST' });
   if (result.error) return { error: result.error };
   const dto = record(unwrapApiResponseData(result.data));
-  if (dto.transactionId !== id || !text(dto.status)) return { error: { status: 'CUSTOM_ERROR', error: 'The server response did not confirm this transaction action. Refresh before trying again.' } };
+  const expectedStatus = action === 'reverse' ? 'REVERSED' : 'PENDING';
+  if (!context.sameSession() || dto.transactionId !== id || dto.status !== expectedStatus) return actionError('The server response did not confirm this transaction action. Refresh before trying again.');
   return { data: { transactionId: dto.transactionId, status: dto.status, message: text(dto.message) } };
 }
 
-async function createTransactionRecord(baseQuery, id, action, body) {
-  const result = await baseQuery({ url: `/admin/payments/${encodeURIComponent(id)}/${action}`, method: 'POST', body });
+async function createTransactionRecord(baseQuery, api, id, action, body) {
+  const context = await paymentActionContext(baseQuery, api, id, action, body.amount);
+  if (context.error) return context;
+  const result = await baseQuery({ url: '/admin/payments/' + encodeURIComponent(id) + '/' + action, method: 'POST', body });
   if (result.error) return { error: result.error };
   const dto = record(unwrapApiResponseData(result.data));
-  if (dto.transactionId !== id || !text(dto.id) || !text(dto.status)) return { error: { status: 'CUSTOM_ERROR', error: 'The server did not confirm this transaction action. Refresh before trying again.' } };
+  const matchesAction = action === 'refund' ? dto.status === 'COMPLETED' && money(dto.amount) === body.amount : dto.status === 'OPEN' && text(dto.note) === body.note;
+  if (!context.sameSession() || dto.transactionId !== id || !text(dto.id) || !matchesAction) return actionError('The server did not confirm this transaction action. Refresh before trying again.');
   return { data: { id: dto.id, transactionId: dto.transactionId, status: dto.status, reference: text(dto.reference) } };
 }
 
@@ -236,7 +284,7 @@ export const transactionsApi = baseApi.enhanceEndpoints({ addTagTypes: financial
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminTransactionLedger: builder.query({
-      queryFn: (_args, api, _options, baseQuery) => readLedger(baseQuery, api),
+      queryFn: (_args, api, _options, baseQuery) => readTransactionLedger(baseQuery, api),
       providesTags: ['AdminTransactions'],
     }),
     getAdminTransactionStats: builder.query({
@@ -258,24 +306,24 @@ export const transactionsApi = baseApi.enhanceEndpoints({ addTagTypes: financial
     getAdminTransactionReceipt: builder.query({ queryFn: (id, _api, _options, baseQuery) => transactionPdf(baseQuery, id, 'receipt') }),
     getAdminTransactionStatement: builder.query({ queryFn: (id, _api, _options, baseQuery) => transactionPdf(baseQuery, id, 'statement') }),
     retryAdminTransaction: builder.mutation({
-      queryFn: (id, _api, _options, baseQuery) => performPaymentAction(baseQuery, id, 'retry'),
+      queryFn: (id, api, _options, baseQuery) => performPaymentAction(baseQuery, api, id, 'retry'),
       invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? financialTags : [],
     }),
     reverseAdminTransaction: builder.mutation({
-      queryFn: (id, _api, _options, baseQuery) => performPaymentAction(baseQuery, id, 'reverse'),
+      queryFn: (id, api, _options, baseQuery) => performPaymentAction(baseQuery, api, id, 'reverse'),
       invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? financialTags : [],
     }),
     refundAdminTransaction: builder.mutation({
-      queryFn: ({ id, amount }, _api, _options, baseQuery) => {
+      queryFn: ({ id, amount }, api, _options, baseQuery) => {
         const value = number(amount);
         if (!text(id) || value == null || value <= 0) return { error: { status: 'CUSTOM_ERROR', error: 'Enter a valid refund amount.' } };
-        return createTransactionRecord(baseQuery, id, 'refund', { amount: value });
+        return createTransactionRecord(baseQuery, api, id, 'refund', { amount: value });
       }, invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? financialTags : [],
     }),
     reportAdminTransactionIssue: builder.mutation({
-      queryFn: ({ id, note }, _api, _options, baseQuery) => {
+      queryFn: ({ id, note }, api, _options, baseQuery) => {
         if (!text(id) || !text(note)) return { error: { status: 'CUSTOM_ERROR', error: 'Describe the transaction issue.' } };
-        return createTransactionRecord(baseQuery, id, 'issues', { note: text(note) });
+        return createTransactionRecord(baseQuery, api, id, 'issues', { note: text(note) });
       }, invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? ['AdminTransactions'] : [],
     }),
   }),

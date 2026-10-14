@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -21,7 +21,7 @@ import {
   Skeleton,
 } from "../ds.js";
 import {
-  useGetAdminPayoutDirectoryQuery, useGetAdminPayoutWithdrawalStatsQuery,
+  useGetAdminPayoutDirectoryQuery, useGetAdminPayoutSummaryQuery, useLazyGetAdminPayoutDocumentsQuery, useLazyGetAdminPayoutDocumentQuery, downloadPayoutFile, payoutMatchesStatus,
   payoutSummary, payoutMoney as formatNaira, payoutDetailUrl, payoutCompanyUrl, payoutJobUrl,
 } from "../store/features/payouts/payoutsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
@@ -93,7 +93,11 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
 function exportPayouts(rows) {
   const headers = ["Payout ID", "Company / Driver", "Type", "Job IDs", "Trip IDs", "Gross", "Deductions", "Net", "Status", "Eligibility"];
   const values = rows.map((payout) => [payout.id, payout.party, payout.type, payout.jobIds?.join(" | ") ?? "—", payout.tripIds?.join(" | ") ?? "—", payout.grossAmount, payout.deductions, payout.netAmount, payout.status, payout.eligibility]);
-  const csv = [headers, ...values].map((row) => row.map((value) => `"${String(value ?? "—").replaceAll('"', '""')}"`).join(",")).join("\n");
+  const csv = [headers, ...values].map((row) => row.map((value) => {
+    const raw = String(value ?? "—");
+    const safe = typeof value === "string" && /^\s*[=+@-]/.test(raw) ? "'" + raw : raw;
+    return '"' + safe.replaceAll('"', '""') + '"';
+  }).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -105,7 +109,10 @@ function exportPayouts(rows) {
 export function RequestedPayouts() {
   const navigate = useNavigate();
   const directoryQuery = useGetAdminPayoutDirectoryQuery();
-  const statsQuery = useGetAdminPayoutWithdrawalStatsQuery();
+  const statsQuery = useGetAdminPayoutSummaryQuery();
+  const [readDocuments, documentsState] = useLazyGetAdminPayoutDocumentsQuery();
+  const [readDocument, documentState] = useLazyGetAdminPayoutDocumentQuery();
+  const downloading = useRef(false);
   const directory = directoryQuery.error ? null : directoryQuery.currentData;
   const all = directory?.rows || EMPTY_ROWS;
 
@@ -134,15 +141,15 @@ export function RequestedPayouts() {
 
   const summary = useMemo(() => payoutSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.currentData, statsQuery.error]);
   const counts = summary.counts;
-  const metric = (value, loading = !directory && directoryQuery.isFetching) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
+  const metric = (value, loading = (!directory && directoryQuery.isFetching) || (!statsQuery.currentData && statsQuery.isFetching)) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
 
   const tabFiltered = useMemo(() => {
     if (tab === "Pending")
-      return all.filter((p) => p.status === "Pending Review");
-    if (tab === "Approved") return all.filter((p) => p.status === "Approved");
-    if (tab === "Rejected") return all.filter((p) => p.status === "Rejected");
+      return all.filter((p) => payoutMatchesStatus(p, "Pending"));
+    if (tab === "Approved") return all.filter((p) => payoutMatchesStatus(p, "Approved"));
+    if (tab === "Rejected") return all.filter((p) => payoutMatchesStatus(p, "Rejected"));
     if (tab === "Processing")
-      return all.filter((p) => p.status === "Processing");
+      return all.filter((p) => payoutMatchesStatus(p, "Processing"));
     return all;
   }, [all, tab]);
 
@@ -151,7 +158,7 @@ export function RequestedPayouts() {
       tabFiltered.filter(
         (p) =>
           (type === "All Payout Types" || p.type === type) &&
-          (status === "All Statuses" || p.status === status) &&
+          (status === "All Statuses" || payoutMatchesStatus(p, status)) &&
           (party === "All Parties" || p.partyType === party) &&
           (date === "All Request Dates" || p.dateRequested === date) &&
           (!q ||
@@ -161,6 +168,17 @@ export function RequestedPayouts() {
       ),
     [tabFiltered, type, status, party, date, q],
   );
+
+  async function downloadDocuments(row) {
+    if (downloading.current || documentsState.isFetching || documentState.isFetching) return;
+    setMenuFor(null); downloading.current = true;
+    try {
+      const docs = await readDocuments({ id: row.id, source: row.source }, false).unwrap();
+      if (!docs.length) { window.alert('No payout documents are available.'); return; }
+      for (const doc of docs) downloadPayoutFile(await readDocument({ id: row.id, source: row.source, url: doc.url }, false).unwrap());
+    } catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { downloading.current = false; }
+  }
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -447,7 +465,7 @@ export function RequestedPayouts() {
                           },
                         },
                         { divider: true },
-                        { label: "Download Documents", icon: "file-text", onClick: () => { setMenuFor(null); window.alert("Downloading payout documents is not available yet."); } },
+                        { label: "Download Documents", icon: "file-text", onClick: () => downloadDocuments(r) },
                       ]}
                     />
                   ),

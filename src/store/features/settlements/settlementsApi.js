@@ -1,3 +1,4 @@
+import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -7,6 +8,17 @@ const count = (value) => Number.isSafeInteger(number(value)) && number(value) >=
 const display = (value) => text(value) ?? '—';
 const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) ?? '—';
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+function sessionIdentity(api) { const auth = api.getState().auth; return auth.accessToken && auth.admin?.id ? JSON.stringify([auth.admin.id, auth.admin.role]) : null; }
+function guardedQuery(baseQuery, api, args = {}) {
+  const expected = sessionIdentity(api);
+  return async request => {
+    const current = api.getState().auth.admin;
+    if (!expected || api.signal.aborted || sessionIdentity(api) !== expected || args.owner != null && current?.id !== args.owner || args.role != null && current?.role !== args.role) return failure('Your session changed. Reopen Settlements before continuing.');
+    const result = await baseQuery(request);
+    if (api.signal.aborted || sessionIdentity(api) !== expected) return failure('Your session changed. Reopen Settlements before continuing.');
+    return result;
+  };
+}
 export const settlementNumber = (value) => number(value)?.toLocaleString('en-NG') ?? '—';
 export const settlementMoney = (value) => number(value) == null ? '—' : (number(value) < 0 ? '-' : '') + '₦' + Math.abs(number(value)).toLocaleString('en-NG');
 export const settlementMillions = (value) => number(value) == null ? '—' : '₦' + (number(value) / 1000000).toFixed(2) + 'M';
@@ -37,7 +49,7 @@ export function adaptAdminSettlement(value) {
     key: JSON.stringify([id, text(dto.tripId)]), id, kind: text(dto.kind), version: text(dto.version),
     jobId: text(dto.jobId), tripId: text(dto.tripId), allocated: typeof dto.allocated === 'boolean' ? dto.allocated : null,
     relatedTo: dto.allocated === true ? display(dto.tripNumber) : display(dto.jobNumber), route: routeLabel(dto.route),
-    payer: display(dto.payer?.name), payerType: label(dto.payer?.type),
+    payer: display(dto.payer?.name), payerType: ({ IMPORTER:'Importer', CUSTOMER:'Customer', INTERNAL:'Internal' })[dto.payer?.businessType] ?? '—', payerFinancialType: label(dto.payer?.type),
     payee: display(dto.payee?.name), payeeType: dto.payee?.type === 'TRUCKER' ? 'Transporter' : dto.payee?.type === 'FORWARDER' ? 'Customer' : label(dto.payee?.type),
     amount: dto.currency === 'NGN' ? number(dto.amount) : null, currency: text(dto.currency),
     type: label(dto.category), status: label(dto.status), statusCode: text(dto.status), method: label(dto.method),
@@ -80,18 +92,59 @@ async function allPages(baseQuery, api, url, key, params = {}, identity = (row) 
 }
 
 export function settlementInsights(response) {
-  const dto = record(unwrapApiResponseData(response));
-  const fields = ['totalSettlements', 'completedSettlements', 'pendingSettlements', 'onHold', 'failedSettlements', 'avgSettlementTime'];
-  const summary = Object.fromEntries(fields.flatMap((field) => [[field, null], [field + 'Delta', '—']]));
-  // Swagger names the duration and its unit, but does not publish the card or
-  // category/count DTOs. Do not infer their nesting from the old mock contracts.
-  const duration = number(dto.averageSettlementDuration);
-  if (duration != null && duration >= 0) summary.avgSettlementTime = duration.toLocaleString('en-NG') + ' hours';
-  return {
-    summary,
-    payouts: ['Drivers', 'Transporters', 'Vendors', 'Customers (Refunds)', 'Others'].map((name, index) => ({ label: name, pct: null, amount: null, color: ['var(--tk-viz-1)', 'var(--tk-viz-2)', 'var(--tk-viz-3)', 'var(--tk-viz-5)', 'var(--tk-ink-300)'][index] })),
-    statuses: [['Completed', 'success', 'circle-check'], ['Pending', 'warning', 'hourglass'], ['On Hold', 'info', 'circle-pause'], ['Failed', 'danger', 'circle-x']].map(([name, tone, icon]) => ({ label: name, tone, icon, count: null, pct: '—' })),
+  const dto = record(unwrapApiResponseData(response)), cards = record(dto.cards);
+  const comparison = record(dto.comparisonPeriod);
+  const comparisonFrom = datePart(comparison.from), comparisonTo = datePart(comparison.to);
+  const comparisonKnown = comparisonFrom !== '—' && comparisonTo !== '—' && Date.parse(comparison.from) <= Date.parse(comparison.to);
+  const summary = { comparisonCaption:comparisonKnown ? 'vs '+comparisonFrom+' – '+comparisonTo : '—' };
+  const cardFields = { totalSettlements:'total', completedSettlements:'completed', pendingSettlements:'pending', onHold:'onHold', failedSettlements:'failed' };
+  const nonnegative = value => number(value) != null && number(value) >= 0 ? number(value) : null;
+  const percent = value => number(value) != null && number(value) >= 0 && number(value) <= 100 ? number(value) : null;
+  const setDelta = (field, value) => {
+    const delta = number(value);
+    summary[field+'Delta'] = delta == null ? '—' : delta+'%';
+    summary[field+'Direction'] = delta == null || delta === 0 ? null : delta < 0 ? 'down' : 'up';
   };
+  for (const [field,key] of Object.entries(cardFields)) {
+    summary[field] = nonnegative(cards[key]?.amount);
+    setDelta(field,cards[key]?.vsPreviousPct);
+  }
+  const duration = record(cards.averageSettlementDuration);
+  summary.avgSettlementTime = duration.unit === 'hours' && nonnegative(duration.value) != null ? settlementNumber(duration.value)+' hours' : null;
+  setDelta('avgSettlementTime',duration.vsPreviousPct);
+  const categoryRows = Array.isArray(dto.payoutCategories) ? dto.payoutCategories : null;
+  const category = key => {
+    const matches = categoryRows?.filter(row => row?.category === key);
+    return matches?.length === 1 ? matches[0] : null;
+  };
+  const categories = [
+    ['Drivers','DRIVER_PAYOUT','var(--tk-viz-1)'],
+    ['Transporters','TRANSPORTER_PAYMENT','var(--tk-viz-2)'],
+    ['Vendors','VENDOR_PAYMENT','var(--tk-viz-3)'],
+    ['Customers (Refunds)','CUSTOMER_REFUND','var(--tk-viz-5)'],
+    ['Others','BANK_PAYOUT','var(--tk-ink-300)'],
+  ];
+  const payouts = categories.map(([name,key,color]) => {
+    const row = category(key), known = typeof row?.supported === 'boolean';
+    return { label:name, category:key, color, supported:known ? row.supported : null,
+      amount:known ? nonnegative(row.amount) : null, pct:known ? percent(row.share) : null };
+  });
+  // Plot a complete partition only; unsupported categories retain documented 0.
+  const knownKeys = new Set(categories.map(([,key]) => key));
+  const complete = categoryRows && categoryRows.length === categories.length && categoryRows.every(row => knownKeys.has(row?.category))
+    && payouts.every(row => row.amount != null && row.pct != null) && summary.completedSettlements != null
+    && Math.abs(payouts.reduce((sum,row) => sum+row.amount,0)-summary.completedSettlements) < 0.01
+    && (summary.completedSettlements === 0 ? payouts.every(row => row.pct === 0) : Math.abs(payouts.reduce((sum,row) => sum+row.pct,0)-100) <= 0.3);
+  payouts.forEach(row => { row.chartValue = complete ? row.amount : null; });
+  const statusRows = Array.isArray(dto.statusBreakdown) ? dto.statusBreakdown : null;
+  const statuses = [['Completed',['COMPLETED'],'success','circle-check'],['Pending',['PENDING','PROCESSING'],'warning','hourglass'],['On Hold',['ON_HOLD'],'info','circle-pause'],['Failed',['FAILED'],'danger','circle-x']].map(([name,keys,tone,icon]) => {
+    const rows = keys.map(key => { const matches = statusRows?.filter(row => row?.status === key); return matches?.length === 1 ? matches[0] : null; });
+    const totalCount = rows.every(row => count(row?.count) != null) ? rows.reduce((sum,row) => sum+count(row.count),0) : null;
+    const share = rows.every(row => percent(row?.share) != null) ? Math.round(rows.reduce((sum,row) => sum+percent(row.share),0)*10)/10 : null;
+    const totalAmount = rows.every(row => nonnegative(row?.amount) != null) ? rows.reduce((sum,row) => sum+nonnegative(row.amount),0) : null;
+    return { label:name,tone,icon,count:totalCount,pct:share == null ? '—' : share+'%',amount:totalAmount };
+  });
+  return { summary,payouts,statuses,period:record(dto.period),comparisonPeriod:record(dto.comparisonPeriod) };
 }
 export const emptySettlementInsights = settlementInsights(null);
 
@@ -103,6 +156,7 @@ export function canRetrySettlement(row) {
 }
 async function actOnSettlement(args, api, baseQuery, action) {
   const { row, idempotencyKey } = args;
+  baseQuery = guardedQuery(baseQuery,api,args);
   if (!['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(api.getState().auth.admin?.role)) return { error: { status: 403, data: { message: 'Settlement approval and retry require Super Admin or Finance Admin access.' } } };
   if (!(action === 'approve' ? canApproveSettlement(row) : canRetrySettlement(row)) || !/^[A-Za-z0-9_-]{8,128}$/.test(idempotencyKey ?? '')) return failure('This settlement cannot perform the selected action. Refresh its details.');
   const result = await baseQuery({ url: '/admin/settlements/' + encodeURIComponent(row.id) + '/' + action, method: 'POST', headers: { 'x-idempotency-key': idempotencyKey }, body: { expectedVersion: row.version } });
@@ -143,17 +197,26 @@ export function exportSettlementRows(rows) {
 }
 
 const settlementTags = ['AdminSettlements', 'AdminSettlementSummary', 'AdminSettlementAlerts'];
-const movementTags = [...settlementTags, 'AdminTransactions', 'AdminPayoutDirectory', 'AdminPayoutWithdrawalStats', 'AdminEscrowOverview', 'AdminEscrowHolds', 'AdminEscrowReleases', 'AdminEscrowAccounts', 'AdminEscrowAlerts', 'AdminEscrowLedger', 'AdminEscrowActivity', 'AdminEscrowDisputes', 'AdminJobs', 'AdminTrips'];
+const movementTags = [...settlementTags, 'AdminTransactions', 'AdminPayoutDirectory', 'AdminPayoutWithdrawalStats', 'AdminEscrowOverview', 'AdminEscrowHolds', 'AdminEscrowReleases', 'AdminEscrowAccounts', 'AdminEscrowAlerts', 'AdminEscrowLedger', 'AdminEscrowActivity', 'AdminEscrowDisputes', 'AdminJobs', 'AdminTrips', 'AdminCompanies', 'AdminDrivers', 'AdminForwarders'];
+// API boundary view models changed; do not reuse data adapted by the previous definition.
+const serializeSettlementQuery = args => defaultSerializeQueryArgs(args)+':v2';
 export const settlementsApi = baseApi.enhanceEndpoints({ addTagTypes: movementTags }).injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminSettlements: builder.query({
-      async queryFn({ groupBy = 'job' } = {}, api, _options, baseQuery) {
-        const result = await allPages(baseQuery, api, '/admin/settlements', 'settlements', { groupBy, sort: '-date' }, (row) => text(row?.id) ? JSON.stringify([row.id, text(row.tripId)]) : null);
+      serializeQueryArgs: serializeSettlementQuery,
+      async queryFn(args = {}, api, _options, baseQuery) {
+        const { groupBy = 'job', payerBusinessType, dateFrom, dateTo } = args;
+        baseQuery = guardedQuery(baseQuery,api,args);
+        const result = await allPages(baseQuery, api, '/admin/settlements', 'settlements', { groupBy, payerBusinessType, dateFrom, dateTo, sort: '-date' }, (row) => text(row?.id) ? JSON.stringify([row.id, text(row.tripId)]) : null);
         return result.error ? result : { data: result.data.map(adaptAdminSettlement) };
       }, providesTags: ['AdminSettlements'],
     }),
     getAdminSettlement: builder.query({
-      async queryFn({ id }, _api, _options, baseQuery) {
+      serializeQueryArgs: serializeSettlementQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        const { id } = args;
+        baseQuery = guardedQuery(baseQuery,api,args);
         const result = await baseQuery({ url: '/admin/settlements/' + encodeURIComponent(id) });
         if (result.error) return result;
         const dto = record(unwrapApiResponseData(result.data));
@@ -161,10 +224,12 @@ export const settlementsApi = baseApi.enhanceEndpoints({ addTagTypes: movementTa
       }, providesTags: ['AdminSettlements'],
     }),
     getAdminSettlementSummary: builder.query({
-      query: () => ({ url: '/admin/settlements/summary' }), transformResponse: settlementInsights, providesTags: ['AdminSettlementSummary'],
+      serializeQueryArgs: serializeSettlementQuery,
+      query: ({ dateFrom, dateTo } = {}) => ({ url: '/admin/settlements/summary', params:{ dateFrom,dateTo } }), transformResponse: settlementInsights, providesTags: ['AdminSettlementSummary'],
     }),
     getAdminSettlementAlerts: builder.query({
-      async queryFn(_args, api, _options, baseQuery) {
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = guardedQuery(baseQuery,api,args);
         const result = await allPages(baseQuery, api, '/admin/settlements/alerts', 'alerts');
         return result.error ? result : { data: result.data.map((row) => ({
           id: row.id, title: display(row.title), description: display(row.description), time: dateTime(row.timestamp),
@@ -179,10 +244,10 @@ export const settlementsApi = baseApi.enhanceEndpoints({ addTagTypes: movementTa
       queryFn: (args, api, _options, baseQuery) => actOnSettlement(args, api, baseQuery, 'retry'), invalidatesTags: movementTags,
     }),
     getAdminSettlementReceipt: builder.query({
-      queryFn: ({ id }, _api, _options, baseQuery) => getPdf(baseQuery, '/admin/settlements/' + encodeURIComponent(id) + '/receipt'), keepUnusedDataFor: 0,
+      queryFn: (args, api, _options, baseQuery) => getPdf(guardedQuery(baseQuery,api,args), '/admin/settlements/' + encodeURIComponent(args.id) + '/receipt'), keepUnusedDataFor: 0,
     }),
     getAdminSettlementReport: builder.query({
-      queryFn: (_args, _api, _options, baseQuery) => getPdf(baseQuery, '/admin/settlements/report', { format: 'pdf' }), keepUnusedDataFor: 0,
+      queryFn: (args, api, _options, baseQuery) => getPdf(guardedQuery(baseQuery,api,args), '/admin/settlements/report', { format: 'pdf', dateFrom:args?.dateFrom, dateTo:args?.dateTo }), keepUnusedDataFor: 0,
     }),
   }),
 });

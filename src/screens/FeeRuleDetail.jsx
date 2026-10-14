@@ -153,7 +153,7 @@ export function FeeRuleDetail() {
               <div style={{ display: 'grid', gap: 6 }}>
                 <span className="tk-meta" style={{ textTransform: 'uppercase', letterSpacing: '.4px' }}>Example Calculation</span>
                 <span style={{ font: '400 13px/20px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>
-                  Job Value: {value(r.exampleJobValue)}<br />Fee: {value(r.exampleFee)}
+                  {r.exampleInputLabel}: {value(r.exampleJobValue)}<br />Fee: {value(r.exampleFee)}
                 </span>
               </div>
             </div>
@@ -169,7 +169,7 @@ export function FeeRuleDetail() {
         <span style={{ position: 'relative' }}>
           <Button variant="outline" iconRight="chevron-down" size="sm" disabled={!operations.authenticated || !query.currentData || Boolean(query.error) || historyQuery.isFetching} onClick={() => { if (!historyQuery.isUninitialized) void historyQuery.refetch(); }}>View Full Audit Log</Button>
         </span>}>
-        {historyQuery.isLoading ? <DriverTableLoading columns={4} label="Loading fee rule history" /> : <DataTable rows={auditHistory} rowKey={(row, i) => row.date + i}
+        {historyQuery.isLoading ? <DriverTableLoading columns={4} label="Loading fee rule history" /> : <DataTable rows={auditHistory} rowKey={(row) => row.id}
           columns={[
             { key: 'date', header: 'Date & Time' },
             { key: 'action', header: 'Action', render: (row) => <Badge tone={row.action === 'Created' ? 'info' : 'warning'}>{row.action}</Badge> },

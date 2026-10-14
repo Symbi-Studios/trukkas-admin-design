@@ -35,7 +35,7 @@ export function adaptAdminCompany(dto = {}) {
     statusCode: text(dto.status), displayStatusCode: text(dto.displayStatus) || text(dto.status), status: label(dto.displayStatus || dto.status), verification: verification(dto.verificationStatus ?? dto.kycStatus),
     kycStatusCode: text(dto.verificationStatus ?? dto.kycStatus), isRejected: boolean(dto.isRejected), isVerified: boolean(dto.isVerified),
     joined: companyDate(dto.createdAt || dto.joinedAt), joinedAt: text(dto.createdAt || dto.joinedAt),
-    performance: number(dto.completedJobValue), completedJobs: count(dto.completedJobs), taxId: text(dto.taxId), website: text(dto.website), businessType: text(dto.businessType), updated: companyDate(dto.updatedAt),
+    performance: null, completedJobs: count(dto.completedJobs), taxId: text(dto.taxId), website: text(dto.website), businessType: text(dto.businessType), updated: companyDate(dto.updatedAt),
   };
 }
 
@@ -55,12 +55,18 @@ function adaptCompanyDocuments(documents) {
   });
 }
 
+function companyPosition(location) {
+  if (location?.source !== 'LIVE_GPS') return null;
+  const lat=truckNumber(location.latitude),lng=truckNumber(location.longitude);
+  return lat!=null&&lng!=null&&lat>=-90&&lat<=90&&lng>=-180&&lng<=180 ? lat.toFixed(5)+', '+lng.toFixed(5) : null;
+}
 export function adaptCompanyTruck(truck = {}) {
   return { id: text(truck.id), ref: text(truck.id), plate: text(truck.plateNumber), type: named(truck.containerType), tag: named(truck.containerSize),
-    year: count(truckNumber(truck.year)) == null ? null : String(truckNumber(truck.year)), status: label(truck.status), statusCode: text(truck.status), availability: text(truck.availability),
-    weight: truckNumber(truck.containerWeight) == null ? null : String(truckNumber(truck.containerWeight)), containerWeight: truckNumber(truck.containerWeight) == null ? null : String(truckNumber(truck.containerWeight)),
+    year: count(truckNumber(truck.year)) == null ? null : String(truckNumber(truck.year)), status: truck.availability === 'UNDER_MAINTENANCE' || truck.status === 'MAINTENANCE' ? 'In Maintenance' : truck.status === 'ACTIVE' && truck.availability === 'ON_TRIP' ? 'On Trip' : truck.status === 'ACTIVE' && truck.availability === 'AVAILABLE' ? 'Available' : label(truck.status), statusCode: text(truck.status), availability: text(truck.availability),
+    weight: truckNumber(truck.containerWeight) == null ? null : (truckNumber(truck.containerWeight)*1000).toLocaleString('en-NG')+' kg', containerWeight: truckNumber(truck.containerWeight) == null ? null : String(truckNumber(truck.containerWeight)),
     make: text(truck.make), model: text(truck.model), vin: text(truck.vin), engineNumber: text(truck.engineNumber), fuelType: label(truck.fuelType),
-    date: null, loc: null, driver: text(truck.assignedDriver?.name), ownerId: text(truck.ownerId) };
+    date: companyDate(truck.lastActiveAt), loc: companyPosition(truck.currentLocation), driver: text(truck.assignedDriver?.name), ownerId: text(truck.ownerId),
+    maintenanceRecordId: Array.isArray(truck.maintenance?.records) ? text(truck.maintenance.records.find(row => text(row?.id))?.id) : null };
 }
 
 export function adaptAdminCompanyProfile(response) {
@@ -69,7 +75,7 @@ export function adaptAdminCompanyProfile(response) {
   const account = dto.details?.account || {}, company = dto.details?.company || {}, stats = dto.stats || {};
   const fleet = Array.isArray(dto.trucks) ? dto.trucks.map(adaptCompanyTruck) : null;
   if (fleet && (fleet.some(truck => !truck.id) || new Set(fleet.map(truck => truck.id)).size !== fleet.length)) throw new Error('The company fleet contains missing or duplicate IDs.');
-  const fleetKnown = fleet && fleet.every(truck => truck.statusCode);
+  const fleetKnown = fleet && fleet.every(truck => ['Available', 'On Trip', 'Active', 'Inactive', 'Suspended', 'Rejected', 'Banned', 'In Maintenance'].includes(truck.status));
   return {
     ...adaptAdminCompany({ ...dto, ...company, status: dto.status || account.accountStatus, joinedAt: dto.joinedAt || account.dateJoined, kycStatus: dto.verification?.kycStatus }),
     role: text(dto.role), accountType: text(account.accountType), registrationStatus: label(account.registrationStatus),
@@ -77,7 +83,7 @@ export function adaptAdminCompanyProfile(response) {
     totalJobs: count(stats.totalJobs?.count), failedJobs: count(stats.failedJobs?.count),
     totalEarned: number(stats.totalEarned?.amount), walletBalance: number(stats.walletBalance?.amount), updated: companyDate(account.lastUpdated), documentCount: count(dto.verification?.documents?.total),
     fleet,
-    fleetCounts: { active: fleetKnown ? fleet.filter(truck => truck.statusCode === 'ACTIVE').length : null, inactive: fleetKnown ? fleet.filter(truck => truck.statusCode === 'INACTIVE').length : null, maintenance: fleet?.every(truck => truck.availability) ? fleet.filter(truck => truck.availability === 'UNDER_MAINTENANCE').length : null },
+    fleetCounts: { active: fleetKnown ? fleet.filter(truck => ['Available','On Trip','Active'].includes(truck.status)).length : null, inactive: fleetKnown ? fleet.filter(truck => ['Inactive','Suspended','Rejected','Banned'].includes(truck.status)).length : null, maintenance: fleetKnown ? fleet.filter(truck => truck.status === 'In Maintenance').length : null },
   };
 }
 
@@ -177,7 +183,7 @@ export const companiesApi = baseApi.injectEndpoints({
         const result = await readAllPages(baseQuery, '/admin/users/drivers', 'users', { companyId: id });
         if (result.error) return result;
         if (result.data.some(dto => dto.linkedCompany?.id !== id)) return failure('The driver response included a different company.');
-        return { data: result.data.map(adaptAdminDriver) };
+        return { data: result.data.map(dto => ({ ...adaptAdminDriver(dto), licenseClass: text(dto.license?.class) || text(dto.licenseClass) })) };
       },
       providesTags: ['AdminCompanies', 'AdminDrivers'],
     }),
@@ -193,17 +199,19 @@ export const companiesApi = baseApi.injectEndpoints({
     }),
     getAdminCompanyPayouts: builder.query({
       async queryFn({ id }, _api, _options, baseQuery) {
-        const result = await readAllPages(baseQuery, `/admin/users/${encodeURIComponent(id)}/settlements`, 'settlements');
+        const result = await readAllPages(baseQuery, '/admin/payout-requests', 'requests', { userId: id });
         if (result.error) return result;
-        return { data: result.data.map(dto => ({
-          id: text(dto.jobId), payoutId: null, companyId: id, reference: '—', jobId: text(dto.jobNumber), jobDatabaseId: text(dto.jobId),
-          tripCount: count(dto.tripCount), tripIds: null, grossAmount: dto.currency === 'NGN' ? number(dto.gross) : null,
-          deductions: dto.currency === 'NGN' ? number(dto.deductions?.driverLateDeliveryDemurrage) : null, netAmount: dto.currency === 'NGN' ? number(dto.netPayable) : null,
-          amount: dto.currency === 'NGN' ? number(dto.netPayable) : null, paid: dto.currency === 'NGN' ? number(dto.paid?.total) : null,
-          fee: null, source: null, requestedBy: null, dateRequested: '—',
-          statusCode: text(dto.state), status: ({ AWAITING_MOBILIZATION: 'Pending', IN_PROGRESS: 'Processing', PAID: 'Completed', HELD: 'On Hold', CANCELLED: 'Cancelled' })[dto.state] || label(dto.state),
-          eligibility: label(dto.finalPayoutEligibility), reconciled: boolean(dto.reconciled),
-        })) };
+        if (result.data.some(row => row.beneficiary?.id !== id)) return failure('The payout response included another beneficiary.');
+        return { data: result.data.map(dto => {
+          const valid= dto.currency === 'NGN';
+          const deductions=Array.isArray(dto.deductions)&&dto.deductions.every(d=>number(d?.amount)!=null)?dto.deductions.reduce((sum,d)=>sum+d.amount,0):null;
+          const status=dto.payoutStatus==='PAID'?'Completed':dto.payoutStatus==='PROCESSING'?'Processing':dto.payoutStatus==='FAILED'?'Failed':dto.payoutStatus==='REVERSED'?'Reversed':dto.reviewStatus==='REJECTED'?'Rejected':dto.reviewStatus==='APPROVED'?'Approved':dto.reviewStatus==='PENDING_REVIEW'?'Pending Review':null;
+          return { id:text(dto.id),source:text(dto.source),payoutId:text(dto.id),companyId:id,reference:text(dto.reference),jobId:'—',jobDatabaseId:null,tripIds:null,tripCount:null,
+            grossAmount:valid?number(dto.grossAmount):null,deductions:valid?deductions:null,netAmount:valid?number(dto.netAmount):null,amount:valid?number(dto.netAmount):null,
+            paid:valid&&dto.payoutStatus==='PAID'?number(dto.netAmount):dto.payoutStatus==='PAID'?null:['AWAITING_APPROVAL','PROCESSING','FAILED','REJECTED','REVERSED'].includes(dto.payoutStatus)?0:null,status:status||'—',statusCode:text(dto.payoutStatus),
+            eligibility:typeof dto.eligibility?.eligible==='boolean'?dto.eligibility.eligible?'Eligible':'Needs Review':'—',approvalReady:boolean(dto.approvalReady),
+            reconciliation:{ok:null},dateRequested:companyDate(dto.requestedAt) };
+        }) };
       },
       providesTags: ['AdminCompanies'],
     }),

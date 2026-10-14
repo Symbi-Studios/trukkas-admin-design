@@ -15,6 +15,8 @@ import {
   useMessageAdminTripDriverMutation,
 } from '../store/features/trips/tripsApi.js';
 import { TriangulationGoogleMap } from './TriangulationGoogleMap.jsx';
+import { TrackingGeofenceDialog } from './TrackingGeofenceDialog.jsx';
+import { useGetAdminTrackingOverviewQuery, useShareAdminTripLocationMutation } from '../store/features/tracking/trackingApi.js';
 
 const STATUSES = ['Assigned', 'In Transit', 'At Pickup', 'At Delivery', 'Delivered', 'Delayed'];
 const STATUS_FILTERS = {
@@ -66,6 +68,9 @@ export function LiveTracking() {
   const filterVersion = useRef(0);
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [q, setQ] = useState('');
+  const [quickFilter, setQuickFilter] = useState(null);
+  const [showHeatMap, setShowHeatMap] = useState(false);
+  const shareLock = useRef(false);
   const {
     currentData: tripsResponse,
     isLoading: tripsLoading,
@@ -74,7 +79,12 @@ export function LiveTracking() {
     refetch: refetchTrackingTrips,
   } = useGetAdminTrackingTripsQuery({
     page, limit: 100, statusFilter: STATUS_FILTERS[statusFilter], search: q.trim() || undefined,
+    speeding: quickFilter === 'speeding', longStopped: quickFilter === 'longStopped',
   }, { pollingInterval: 30000 });
+  const { currentData: trackingOverview, refetch: refetchOverview } = useGetAdminTrackingOverviewQuery({
+    statusFilter: STATUS_FILTERS[statusFilter], search: q.trim() || undefined,
+  }, { pollingInterval: 30000 });
+  const [shareLocation, { isLoading: sharingLocation }] = useShareAdminTripLocationMutation();
   const { currentData: statsResponse, refetch: refetchStats } = useGetAdminTripStatsQuery(undefined, { pollingInterval: 30000 });
   const { currentData: assignedCountResponse, refetch: refetchAssignedCount } = useGetAdminTripsQuery({ page: 1, limit: 1, statusFilter: 'assigned' }, { pollingInterval: 30000 });
   const { currentData: completedCountResponse, refetch: refetchCompletedCount } = useGetAdminTripsQuery({ page: 1, limit: 1, statusFilter: 'completed' }, { pollingInterval: 30000 });
@@ -90,6 +100,7 @@ export function LiveTracking() {
   const [messageOpen, setMessageOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [geofenceOpen, setGeofenceOpen] = useState(false);
+  const [geofenceTarget, setGeofenceTarget] = useState(null);
   const [toast, setToast] = useState(null);
   const { currentData: selectedDetail, refetch: refetchSelectedDetail } = useGetAdminTripDetailQuery(selectedId, {
     skip: !selectedId,
@@ -106,7 +117,7 @@ export function LiveTracking() {
     setPage(1);
     setVisibleCount(6);
     setLoadedTrips([]);
-  }, [statusFilter, q]);
+  }, [statusFilter, q, quickFilter]);
   useEffect(() => {
     if (tripsResponse) setLoadedTrips(tripsResponse.rows);
   }, [tripsResponse]);
@@ -142,6 +153,10 @@ export function LiveTracking() {
     });
     return points;
   }, [filtered, selectedLiveTrip]);
+  const clusterPoints = useMemo(() => (trackingOverview?.clusters || []).filter((cluster) => cluster.position && cluster.count != null).map((cluster) => ({
+    ...cluster.position, title: String(cluster.count), label: String(cluster.count),
+    opportunityId: cluster.tripIds?.[0], color: '#2563eb',
+  })), [trackingOverview?.clusters]);
   const count = (key) => statsResponse?.cards[key]?.value;
   const assignedCount = assignedCountResponse?.pagination.total;
   const activeCount = [assignedCount, count('inTransit'), count('atPickup'), count('atDelivery'), count('returningContainer')]
@@ -165,7 +180,7 @@ export function LiveTracking() {
     setRefreshingTrips(true);
     try {
       await Promise.all([
-        refetchTrackingTrips().unwrap(), refetchStats().unwrap(), refetchAssignedCount().unwrap(), refetchCompletedCount().unwrap(),
+        refetchTrackingTrips().unwrap(), refetchOverview().unwrap(), refetchStats().unwrap(), refetchAssignedCount().unwrap(), refetchCompletedCount().unwrap(),
         ...(selectedId ? [refetchSelectedDetail().unwrap()] : []),
       ]);
       if (currentFilterVersion === filterVersion.current) notify('success', 'Trip locations refreshed.');
@@ -180,17 +195,38 @@ export function LiveTracking() {
   async function runQuickAction(label) {
     if (label === 'Zoom to Fit') { setFitVersion((version) => version + 1); notify(mapPoints.length ? 'success' : 'warning', mapPoints.length ? 'Map zoomed to fit available truck positions.' : 'No truck GPS positions are available.'); }
     else if (label === 'Refresh') await refreshTracking();
-    else if (label === 'Create Geofence') setGeofenceOpen(true);
+    else if (label === 'Create Geofence') {
+      if (!selected?.truckId) { notify('warning', 'Select a trip with an assigned truck first.'); return; }
+      setGeofenceTarget({ tripId: selected.id, truckId: selected.truckId, truck: selected.truck, position: selected.position });
+      setGeofenceOpen(true);
+    }
     else if (label === 'Send Message') { if (selected?.driverId) setMessageOpen(true); else notify('warning', 'Select a trip with an assigned driver first.'); }
     else if (label === 'Export Tracking') {
+      if (quickFilter) { notify('warning', 'Trips export does not support Speeding or Long Stops filters.'); return; }
       try {
         downloadCsv(await exportTripsCsv({ statusFilter: STATUS_FILTERS[statusFilter], search: q.trim() || undefined }).unwrap());
         notify('success', 'Trips CSV exported.');
       } catch (error) { notify('danger', apiErrorMessage(error, 'Unable to export trips.')); }
     }
-    else if (label === 'Share Location') notify('warning', 'A shareable live location link is not available from the Trips API.');
+    else if (label === 'Share Location') {
+      if (!selected?.id) { notify('warning', 'Select a trip first.'); return; }
+      if (shareLock.current) return;
+      shareLock.current = true;
+      try {
+        const link = await shareLocation(selected.id).unwrap();
+        try {
+          await navigator.clipboard.writeText(link.url);
+          notify('success', selected.id + ' location link copied. Expires ' + link.expiryLabel + '.');
+        } catch { notify('info', link.url + ' · Expires ' + link.expiryLabel); }
+      } catch (error) { notify('danger', apiErrorMessage(error, 'Unable to share this trip location.')); }
+      finally { shareLock.current = false; }
+    }
     else if (label === 'Traffic View') { setShowTraffic((s) => !s); notify('info', `Traffic view ${showTraffic ? 'hidden' : 'shown'}.`); }
-    else if (label === 'Heat Map') notify('warning', 'Heat map data is not available from the Trips API.');
+    else if (label === 'Heat Map') {
+      if (quickFilter) { notify('warning', 'Reset the quick filter to display fleet heat map data.'); return; }
+      if (!trackingOverview?.heatmap) { notify('warning', 'Heat map data is unavailable.'); return; }
+      setShowHeatMap((value) => !value);
+    }
   }
 
   async function sendDriverMessage() {
@@ -210,17 +246,22 @@ export function LiveTracking() {
 
   const mapContent = (big) => (
     <div className="lt-map-wrap" style={big ? { height: 560 } : undefined}>
-      <TriangulationGoogleMap points={mapPoints} selectedId={selectedId} onSelect={setSelectedId}
+      <TriangulationGoogleMap points={layer === 'Clusters' ? clusterPoints : mapPoints} selectedId={selectedId} onSelect={setSelectedId}
         ariaLabel="Live truck tracking map"
         emptyMessage={tripsLoading ? 'Loading truck locations…' : 'The trips response has no truck coordinates to plot.'}
-        mapType={mapStyle} showTraffic={showTraffic} zoom={zoom} fitVersion={fitVersion} fitOnDataChange={false} />
+        mapType={mapStyle} showTraffic={showTraffic} zoom={zoom} fitVersion={fitVersion} fitOnDataChange={false}
+        routes={layer === 'Trips' ? trackingOverview?.routes : undefined}
+        geofences={layer === 'Geofences' ? trackingOverview?.geofences : undefined}
+        heatmap={showHeatMap ? trackingOverview?.heatmap : undefined} />
 
       <div className="lt-layer-rail">
         {LAYERS.map((l) => (
           <button key={l} className={'lt-layer-btn' + (layer === l ? ' active' : '')} onClick={() => {
             if (['Trips', 'Clusters', 'Geofences'].includes(l)) {
-              notify('warning', `${l} map data is not available from the Trips API.`);
-              return;
+              if (quickFilter) { notify('warning', 'Reset the quick filter to display fleet map layers.'); return; }
+              if (!trackingOverview?.[l === 'Trips' ? 'routes' : l.toLowerCase()]) {
+                notify('warning', l + ' map data is unavailable.'); return;
+              }
             }
             setLayer(l);
             if (l === 'Traffic') setShowTraffic(true);
@@ -283,9 +324,9 @@ export function LiveTracking() {
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
                 <DropdownMenu width={200} items={[
                   { section: 'QUICK FILTERS' },
-                  { label: 'Speeding Trucks', icon: 'gauge', onClick: () => { setOpenFilter(null); notify('warning', 'Truck speed is not available from the Trips API.'); } },
-                  { label: 'Long Stops', icon: 'clock', onClick: () => { setOpenFilter(null); notify('warning', 'Stop duration is not available from the Trips API.'); } },
-                  { label: 'Reset Filters', icon: 'rotate-cw', onClick: () => { setStatusFilter('All Status'); setQ(''); setOpenFilter(null); } },
+                  { label: 'Speeding Trucks', icon: 'gauge', onClick: () => { setQuickFilter('speeding'); setLayer('Trucks'); setShowHeatMap(false); setOpenFilter(null); } },
+                  { label: 'Long Stops', icon: 'clock', onClick: () => { setQuickFilter('longStopped'); setLayer('Trucks'); setShowHeatMap(false); setOpenFilter(null); } },
+                  { label: 'Reset Filters', icon: 'rotate-cw', onClick: () => { setStatusFilter('All Status'); setQ(''); setQuickFilter(null); setOpenFilter(null); } },
                 ]} />
               </span>
             )}
@@ -339,8 +380,8 @@ export function LiveTracking() {
               <span className="tk-meta">Select a trip from the list or map to view its details.</span>
             </div>
           ) : (
-            <div style={{ display: 'grid', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="lt-trip-details" style={{ display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <strong style={{ font: '700 16px/22px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{selected.id}</strong>
                 <Badge tone={STATUS_BADGE[selected.status] || 'neutral'}>{selected.status}</Badge>
               </div>
@@ -359,7 +400,7 @@ export function LiveTracking() {
                 ))}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', borderTop: '1px solid var(--tk-line)', paddingTop: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 14px', borderTop: '1px solid var(--tk-line)', paddingTop: 10 }}>
                 {[['Current Location', selected.location], ['Speed', selected.speed == null ? '—' : `${selected.speed} km/h`], ['Distance Covered', selected.distanceCovered], ['Total Distance', selected.totalDistance],
                   ['ETA', selected.eta, 'var(--tk-warning)'], ['Next Stop', selected.nextStop], ['Last Update', selected.lastUpdate], ['Engine Status', selected.engine, selected.engine === 'ON' ? 'var(--tk-success)' : 'var(--tk-ink-400)']].map(([label, value, tone]) => (
                   <div key={label}><span className="tk-meta" style={{ display: 'block' }}>{label}</span><strong style={{ font: '600 13px/18px var(--tk-font-sans)', color: tone || 'var(--tk-ink-900)' }}>{value}</strong></div>
@@ -393,7 +434,7 @@ export function LiveTracking() {
           <div className="lt-quick-grid">
             {QUICK_ACTIONS.map((a) => (
               <button key={a.label} className="lt-quick-item"
-                disabled={(a.label === 'Refresh' && refreshingTrips) || (a.label === 'Export Tracking' && exportingTrips)}
+                disabled={(a.label === 'Refresh' && refreshingTrips) || (a.label === 'Export Tracking' && exportingTrips) || (a.label === 'Share Location' && sharingLocation)}
                 onClick={() => void runQuickAction(a.label)}>
                 <Icon name={a.icon} size={18} color="var(--tk-blue)" /><span>{a.label}</span>
               </button>
@@ -420,11 +461,11 @@ export function LiveTracking() {
         </SectionCard>
 
         <SectionCard title="Alerts">
-          <span className="tk-meta">Tracking alerts are unavailable from the current Trips API.</span>
+          <span className="tk-meta">{trackingOverview?.alertsText ?? '—'}</span>
         </SectionCard>
 
         <SectionCard title="Top Delays">
-          <span className="tk-meta">Route delay rankings are unavailable from the current Trips API.</span>
+          <span className="tk-meta">{trackingOverview?.topDelaysText ?? '—'}</span>
         </SectionCard>
       </div>
 
@@ -438,13 +479,8 @@ export function LiveTracking() {
         <Textarea label="Message" rows={5} maxLength={2000} placeholder="Write a message to the driver..." value={message} onChange={(e) => setMessage(e.target.value)} />
       </Modal>
 
-      <Modal open={geofenceOpen} onClose={() => setGeofenceOpen(false)} title="Create Geofence" description="Draw a boundary around a location to get alerts when trucks enter or exit."
-        footer={<><Button variant="outline" onClick={() => setGeofenceOpen(false)}>Close</Button><Button icon="shield" disabled>Create Geofence</Button></>}>
-        <div style={{ height: 200, borderRadius: 10, border: '1.5px dashed var(--tk-line-strong)', background: 'var(--tk-surface-sunk)', display: 'grid', placeItems: 'center', gap: 8, textAlign: 'center', color: 'var(--tk-ink-300)' }}>
-          <Icon name="shield" size={28} />
-          <span className="tk-meta">The Trips API has no geofence create endpoint yet.</span>
-        </div>
-      </Modal>
+      <TrackingGeofenceDialog open={geofenceOpen} target={geofenceTarget} onClose={() => setGeofenceOpen(false)}
+        onCreated={() => notify('success', 'Geofence created for ' + geofenceTarget.truck + '.')} />
     </>
   );
 }

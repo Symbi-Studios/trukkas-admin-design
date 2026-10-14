@@ -244,3 +244,38 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Keep long API identifiers from widening the tracking columns. */
+.lt-main,
+.lt-main > *,
+.lt-trip-list,
+.lt-trip-row,
+.lt-trip-details,
+.lt-trip-details > *,
+.lt-trip-details .lt-contact-row > div {
+  min-width: 0;
+}
+.lt-trip-details {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+.lt-trip-details > div > div {
+  min-width: 0;
+}
+.lt-trip-top > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lt-trip-top > span:last-child {
+  flex-shrink: 0;
+}
+.lt-trip-bottom {
+  gap: 4px 8px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.lt-trip-bottom > span {
+  min-width: 0;
+}

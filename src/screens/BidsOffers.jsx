@@ -1,108 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
-import {
-  Avatar,
-  Badge,
-  Banner,
-  Button,
-  Card,
-  DataTable,
-  DonutChart,
-  DropdownMenu,
-  EmptyState,
-  Icon,
-  Modal,
-  PageHeader,
-  Pagination,
-  SearchField,
-  Skeleton,
-  Tabs,
-} from "../ds.js";
-import {
-  useGetAdminBidAnalyticsQuery,
-  useGetAdminBidDetailQuery,
-  useGetAdminBidsQuery,
-} from "../store/features/bids/bidsApi.js";
+import { Badge, Banner, Button, Card, DataTable, DonutChart, DropdownMenu, Icon, Modal, PageHeader, Pagination, SearchField, Skeleton, Sparkline, Tabs } from "../ds.js";
+import { DriverLoadingNotice } from "./DriversLoading.jsx";
+import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenTopCompaniesQuery, useGetAdminBidScreenOfferQuery } from "../store/features/bids/bidScreenApi.js";
 import "./Operations.css";
 
-const PAGE_SIZE = 8;
-const STATUS_OPTIONS = [
-  ["All Status", null],
-  ["Pending", "PENDING"],
-  ["Accepted", "ACCEPTED"],
-  ["Rejected", "REJECTED"],
-  ["Withdrawn", "WITHDRAWN"],
-  ["Expired", "EXPIRED"],
-];
-const TAB_STATUS = {
-  "Awarded / Won": "ACCEPTED",
-  Expired: "EXPIRED",
-  Cancelled: "WITHDRAWN",
-};
-const STATUS_TONES = {
-  Pending: "warning",
-  Accepted: "success",
-  Rejected: "danger",
-  Withdrawn: "neutral",
-  Expired: "danger",
-};
-const DATE_RANGES = ["All Dates", "Last 7 Days", "Last 30 Days", "This Month"];
-
-function isoStart(date) {
-  const value = new Date(date);
-  value.setHours(0, 0, 0, 0);
-  return value.toISOString();
+const tones = { "Pending Evaluation":"warning", "Bid Accepted":"success", "In Transit":"info", "At Delivery":"orange", "Returning Container":"teal", Bidding:"purple", Completed:"success", Expired:"danger", Cancelled:"neutral" };
+const STATUSES = ["Pending Evaluation","Bid Accepted","In Transit","At Delivery","Returning Container","Bidding","Completed","Expired","Cancelled"];
+function Metric({ label, metric, comparison, icon, color = "#4c16ac" }) {
+  return <Card className="metric-card">
+    <label>{label}</label><strong>{metric?.value ?? "—"}</strong>
+    <span className={"delta " + (metric?.direction === "DOWN" ? "down" : "")}>
+      {metric?.direction ? (metric.direction === "DOWN" ? "↓ " : metric.direction === "UP" ? "↑ " : "") + metric.delta : "—"}
+    </span>
+    <small>{comparison && comparison !== "—" ? "vs " + comparison : "—"}</small>
+    <i className="metric-icon" style={{ color, background: color + "12" }}><Icon name={icon} size={20} /></i>
+    <Sparkline points={metric?.sparkline || []} color={color} />
+  </Card>;
 }
-
-function isoEnd(date) {
-  const value = new Date(date);
-  value.setHours(23, 59, 59, 999);
-  return value.toISOString();
-}
-
-function dateParams(label) {
-  if (label === "All Dates") return {};
-  const now = new Date();
-  const start = new Date(now);
-  if (label === "Last 7 Days") start.setDate(now.getDate() - 6);
-  if (label === "Last 30 Days") start.setDate(now.getDate() - 29);
-  if (label === "This Month") start.setDate(1);
-  return { dateFrom: isoStart(start), dateTo: isoEnd(now) };
-}
-
-function dateTime(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-NG", {
-    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-  }).format(date);
-}
-
-function money(value, currency = "NGN") {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  try {
-    return new Intl.NumberFormat("en-NG", {
-      style: "currency", currency: currency || "NGN", maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return "—";
-  }
-}
-
-function Metric({ label, value, icon, color = "#4c16ac", caption = "Rolling 7 days" }) {
-  return (
-    <Card className="metric-card">
-      <label>{label}</label>
-      <strong>{value}</strong>
-      <small>{caption}</small>
-      <i className="metric-icon" style={{ color, background: color + "12" }}>
-        <Icon name={icon} size={20} />
-      </i>
-    </Card>
-  );
+function BidScreenMenu({ anchor, items, onClose }) {
+  const ref = useRef(null), [position,setPosition] = useState(null);
+  useEffect(() => {
+    const update = () => {
+      if (!anchor?.isConnected || !ref.current) { onClose(null); return; }
+      const a=anchor.getBoundingClientRect(),m=ref.current.getBoundingClientRect();
+      setPosition({ left:Math.max(8,Math.min(a.right-m.width,window.innerWidth-m.width-8)),
+        top:a.bottom+6+m.height<=window.innerHeight-8?a.bottom+6:Math.max(8,a.top-m.height-6) });
+    };
+    const outside=(e)=>{if(!anchor?.contains(e.target)&&!ref.current?.contains(e.target))onClose(null);};
+    const escape=(e)=>{if(e.key==="Escape")onClose(null);};
+    update(); window.addEventListener("scroll",update,true); window.addEventListener("resize",update);
+    document.addEventListener("pointerdown",outside); document.addEventListener("keydown",escape);
+    return ()=>{window.removeEventListener("scroll",update,true);window.removeEventListener("resize",update);document.removeEventListener("pointerdown",outside);document.removeEventListener("keydown",escape);};
+  },[anchor,items.length,onClose]);
+  return <div ref={ref} style={{position:"fixed",zIndex:95,top:position?.top??-10000,left:position?.left??0,visibility:position?"visible":"hidden"}}>
+    <DropdownMenu width={210} items={items} style={{maxHeight:"calc(100vh - 16px)",overflowY:"auto"}} />
+  </div>;
 }
 
 function BidsLoading() {
@@ -132,136 +69,129 @@ function BidsTableLoading({ columns }) {
   );
 }
 
-function csvCell(value) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
-}
 
 export function BidsOffers() {
-  const navigate = useNavigate();
-  const [tab, setTab] = useState("Bid Overview");
-  const [page, setPage] = useState(1);
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All Status");
-  const [dateRange, setDateRange] = useState("All Dates");
-  const [openFilter, setOpenFilter] = useState(null);
-  const [selectedBidId, setSelectedBidId] = useState(null);
-  const [toast, setToast] = useState(null);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setSearch(query.trim()), 300);
-    return () => clearTimeout(timeout);
-  }, [query]);
-  useEffect(() => {
-    setPage(1);
-  }, [tab, search, statusFilter, dateRange]);
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timeout = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timeout);
-  }, [toast]);
-
-  const selectedStatus = STATUS_OPTIONS.find(([label]) => label === statusFilter)?.[1] || null;
-  const status = TAB_STATUS[tab] || selectedStatus;
-  const isCounterTab = tab === "Counter Offers";
-  const dates = dateParams(dateRange);
-  const {
-    currentData: bidsResponse,
-    isLoading,
-    isFetching,
-    error,
-    refetch,
-  } = useGetAdminBidsQuery({ status, isCounterOffer: isCounterTab ? true : undefined, search, ...dates, page, limit: PAGE_SIZE }, {
-    refetchOnMountOrArgChange: true,
-  });
-  const {
-    currentData: analytics,
-    isFetching: analyticsFetching,
-    error: analyticsError,
-    refetch: refetchAnalytics,
-  } = useGetAdminBidAnalyticsQuery(dateRange === "All Dates" ? { allTime: true } : dates, { refetchOnMountOrArgChange: true });
-  // Keep the existing company's rolling-seven-day section on its documented window.
-  const {
-    currentData: rollingAnalytics,
-    error: rollingAnalyticsError,
-    refetch: refetchRollingAnalytics,
-  } = useGetAdminBidAnalyticsQuery(undefined, { refetchOnMountOrArgChange: true });
-  const analyticsLoading = analyticsFetching && !analytics;
-  const {
-    currentData: selectedBid,
-    isLoading: detailLoading,
-    isFetching: detailFetching,
-    error: detailError,
-    refetch: refetchDetail,
-  } = useGetAdminBidDetailQuery(selectedBidId, { skip: !selectedBidId });
-
-  const rows = bidsResponse?.rows || [];
-  const visibleRows = rows;
-  const counterOffers = rows.filter((bid) => bid.isCounterOffer);
-
-  const funnelData = [
-    ["Jobs Published", analytics?.funnel.jobsPublished, "#8d58e8"],
-    ["Jobs with Bids", analytics?.funnel.jobsWithBids, "#5b79e5"],
-    ["Bids Received", analytics?.funnel.bidsReceived, "#74d1b1"],
-    ["Bids Accepted", analytics?.funnel.bidsAccepted, "#ffa11e"],
-    ["Jobs Completed", analytics?.funnel.jobsCompleted, "#ff676d"],
-  ];
-  const funnelMax = Math.max(1, ...funnelData.map((item) => item[1] ?? 0));
-  const breakdown = analytics?.statusBreakdown;
-  const donutData = [
-    { value: breakdown?.pending, color: "#f27602" },
-    { value: breakdown?.accepted, color: "#12a150" },
-    { value: breakdown?.expired, color: "#e02b22" },
-    { value: breakdown?.other, color: "#8d58e8" },
-  ];
-  const winningMargin = analytics?.averageWinningMargin;
-
-  function exportRows() {
-    if (!visibleRows.length) return;
-    const data = [
-      ["Bid ID", "Job", "Route", "Trucking Company", "Amount", "Counter Offer", "Status", "Submitted", "Expires", "Responded"],
-      ...visibleRows.map((bid) => [
-        bid.id, bid.jobNumber, bid.route, bid.truckerName, bid.amount,
-        bid.isCounterOffer == null ? "—" : bid.isCounterOffer ? "Yes" : "No", bid.status, bid.createdAt, bid.expiresAt, bid.respondedAt,
-      ]),
-    ];
-    const csv = data.map((row) => row.map(csvCell).join(",")).join("\n");
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    link.download = `trukkas-bids-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    setToast({ tone: "success", title: `${visibleRows.length} bid${visibleRows.length === 1 ? "" : "s"} exported.` });
+  const owner=useSelector((s)=>s.auth.admin?.id),role=useSelector((s)=>s.auth.admin?.role);
+  const authenticated=useSelector((s)=>Boolean(s.auth.accessToken&&s.auth.admin?.id));
+  return <BidsOffersContent key={[owner,role,authenticated].join(":")} owner={owner} role={role} authenticated={authenticated}/>;
+}
+function BidsOffersContent({owner,role,authenticated}) {
+  const navigate=useNavigate();
+  const [tab,setTab]=useState("Bid Overview"),[page,setPage]=useState(1),[q,setQ]=useState("");
+  const [statusFilter,setStatusFilter]=useState("All Status"),[dateKey,setDateKey]=useState("week");
+  const [menu,setMenu]=useState(null),[offerModal,setOfferModal]=useState(null),[toast,setToast]=useState(null),[offerError,setOfferError]=useState("");
+  const dateOptions=useMemo(()=>bidScreenDateOptions(),[]);
+  const selectedDate=dateOptions.find((d)=>d.key===dateKey)||dateOptions[0],dateRange=selectedDate.label;
+  const session={owner,role},dates={dateFrom:selectedDate.dateFrom,dateTo:selectedDate.dateTo};
+  const directoryQuery=useGetAdminBidScreenDirectoryQuery(session,{skip:!authenticated,refetchOnMountOrArgChange:true});
+  const analyticsQuery=useGetAdminBidScreenAnalyticsQuery({...session,...dates},{skip:!authenticated,refetchOnMountOrArgChange:true});
+  const topQuery=useGetAdminBidScreenTopCompaniesQuery({...session,dateFrom:dateOptions[0].dateFrom,dateTo:dateOptions[0].dateTo},{skip:!authenticated,refetchOnMountOrArgChange:true});
+  const offerQuery=useGetAdminBidScreenOfferQuery({...session,id:offerModal?.bidId},{skip:!authenticated||!offerModal?.bidId,refetchOnMountOrArgChange:true});
+  const data=directoryQuery.error?null:directoryQuery.currentData;
+  const analytics=analyticsQuery.error?null:analyticsQuery.currentData;
+  const topCompanies=topQuery.error?null:topQuery.currentData?.rows;
+  const selectedOffer=offerQuery.error?null:offerQuery.currentData;
+  const selection=useMemo(()=>selectBidScreenRows(data,{tab,query:q,statusFilter,...dates}),[data,tab,q,statusFilter,dates.dateFrom,dates.dateTo]);
+  const pageRows=selection.rows,offers=selection.offers,isCounterTab=tab==="Counter Offers";
+  const pageCount=Math.max(1,Math.ceil(pageRows.length/8));
+  const overviewKnown=Boolean(data?.overviewKnown),rowsKnown=Boolean(data&&(isCounterTab?data.offersKnown:overviewKnown));
+  const emptyFunnel=[["Jobs Published",null,"#8d58e8"],["Jobs with Bids",null,"#5b79e5"],["Bids Received",null,"#74d1b1"],["Bids Accepted",null,"#ffa11e"],["Jobs Completed",null,"#ff676d"]];
+  const funnelData=analytics?.funnel||emptyFunnel,funnelMax=Math.max(1,...funnelData.map((x)=>x[1]??0));
+  const breakdown=analytics?.breakdown||[{label:"Lowest Bids",color:"#4c16ac",value:null,display:"—"},{label:"Competing Bids",color:"#2469e8",value:null,display:"—"},{label:"Counter Offers",color:"#12a150",value:null,display:"—"},{label:"Expired Offers",color:"#f27602",value:null,display:"—"}];
+  useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(null),2600);return()=>clearTimeout(timer);},[toast]);
+  useEffect(()=>{setPage(1);},[tab,q,statusFilter,dateKey]);
+  useEffect(()=>{if(page>pageCount)setPage(pageCount);},[page,pageCount]);
+  function openMenu(event,key){const anchor=event.currentTarget;setMenu((previous)=>previous?.key===key?null:{key,anchor});}
+  const menuItems=menu?.key==="date"?dateOptions.map((d)=>({label:d.label,icon:d.key===dateKey?"check":undefined,onClick:()=>{setDateKey(d.key);setPage(1);setMenu(null);}}))
+    :["All Status",...STATUSES].map((s)=>({label:s,icon:s===statusFilter?"check":undefined,onClick:()=>{setStatusFilter(s);setPage(1);setMenu(null);}}));
+  function viewJob(row){if(row.jobId)navigate("/jobs/detail?id="+encodeURIComponent(row.jobId));else setToast({tone:"info",title:"Job details are unavailable."});}
+  function resolveOffer(_offer,accept){
+    const title=(accept?"Accepting":"Declining")+" counteroffers is unavailable: there is no documented admin API.";
+    setOfferError(title);setToast({tone:"info",title});
   }
-
-  const columns = [
+  function openOffer(row){setOfferError("");setOfferModal(row);setMenu(null);}
+  function exportRows(){
+    if(!rowsKnown)return;
+    const header=isCounterTab?["Job ID","Bidding Company","Offer Amount (₦)","Δ vs Lowest"]:["Job ID","Route","Customer","Bids","Lowest Bid (₦)","Winning Bid (₦)","Status","Created At","Time"];
+    const rows=pageRows.map((r)=>isCounterTab?[r.id,r.company,r.amountValue??"—",r.deltaValue??"—"]:[r.id,r.route,r.customer,r.bids,r.lowValue??"—",r.winValue??"—",r.status,r.date,r.time]);
+    const cell=(v)=>{const s=String(v??"");return '"'+(/^[=+\-@\t\r]/.test(s)?"'":"")+s.replaceAll('"','""')+'"';};
+    const csv=[header,...rows].map((r)=>r.map(cell).join(",")).join("\r\n");
+    const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})),link=document.createElement("a");
+    link.href=url;link.download="trukkas-bids-"+dateKey+".csv";document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),0);
+    setToast({tone:"success",title:pageRows.length+" record(s) exported."});
+  }
+  const cols = [
     {
-      key: "id", header: "Bid ID", width: 120,
-      render: (bid) => <a style={{ cursor: "pointer" }} onClick={() => setSelectedBidId(bid.id)}>{bid.id}</a>,
+      key: "id",
+      header: "Job ID",
+      render: (r) => <a onClick={() => viewJob(r)}>{r.id}</a>,
+    },
+    { key: "route", header: "Route" },
+    { key: "customer", header: "Customer" },
+    { key: "bids", header: "Bids" },
+    { key: "low", header: "Lowest Bid (₦)" },
+    { key: "win", header: "Winning Bid (₦)" },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <Badge tone={tones[r.status]} dot>
+          {r.status}
+        </Badge>
+      ),
     },
     {
-      key: "job", header: "Job", width: 130,
-      render: (bid) => bid.jobId ? (
-        <a onClick={(event) => { event.stopPropagation(); navigate(`/jobs/detail?id=${encodeURIComponent(bid.jobId)}`); }}>{bid.jobNumber || bid.jobId}</a>
-      ) : bid.jobNumber || "—",
-    },
-    { key: "route", header: "Route", render: (bid) => bid.route || "—", width: 180 },
+      key: "date",
+      header: "Created At",
+      render: (r) => (
+        <span className="cell-two">
+          <strong>{r.date}</strong>
+          <small>{r.time}</small>
+        </span>
+      ),
+    }
+  ];
+  const offerCols = [
     {
-      key: "company", header: "Trucking Company",
-      render: (bid) => (
-        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Avatar name={bid.truckerName} size={30} />
-          <span className="cell-two"><strong>{bid.truckerName}</strong><small>{bid.truckerRating == null ? "—" : `${bid.truckerRating} rating`}{bid.truckerTrips == null ? " · —" : ` · ${bid.truckerTrips} trips`}</small></span>
+      key: "id",
+      header: "Job ID",
+      width: "120px",
+      render: (r) => <a onClick={() => viewJob(r)}>{r.id}</a>,
+    },
+    { key: "company", header: "Bidding Company" },
+    { key: "amount", header: "Offer Amount (₦)" },
+    {
+      key: "delta",
+      header: "Δ vs Lowest",
+      render: (r) => (
+        <span style={{ color: "var(--tk-success)" }}>{r.delta}</span>
+      ),
+    },
+    {
+      key: "a",
+      header: "Actions",
+      render: (r) => (
+        <span style={{ display: "flex", gap: 6 }}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => resolveOffer(r, true)}
+          >
+            Accept
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => resolveOffer(r, false)}
+          >
+            Decline
+          </Button>
         </span>
       ),
     },
-    { key: "amount", header: "Bid Amount", render: (bid) => <strong>{money(bid.amount, bid.currency)}</strong> },
-    { key: "offer", header: "Offer Type", render: (bid) => bid.isCounterOffer == null ? "—" : bid.isCounterOffer ? <Badge tone="info">Counter Offer</Badge> : "Initial Bid" },
-    { key: "status", header: "Status", render: (bid) => <Badge tone={STATUS_TONES[bid.status] || "neutral"} dot>{bid.status}</Badge> },
-    { key: "created", header: "Submitted", render: (bid) => dateTime(bid.createdAt), width: 145 },
   ];
 
-  if (!bidsResponse && isLoading && !analytics) return <BidsLoading />;
+  if (authenticated && directoryQuery.isFetching && !data) return <BidsLoading />;
 
   return (
     <div className="operations-screen">
@@ -269,117 +199,181 @@ export function BidsOffers() {
         crumbs={["Jobs & Trips", "Bids & Offers"]}
         title="Bids & Offers"
         description="Manage all bid submissions and counter offers across Trukkas."
-        actions={(
-          <>
-            <span style={{ position: "relative" }}>
-              <button className="date-button" onClick={() => setOpenFilter(openFilter === "date" ? null : "date")}>
-                <Icon name="calendar" size={15} />{dateRange}⌄
-              </button>
-              {openFilter === "date" && (
-                <span style={{ position: "absolute", left: 0, top: 44, zIndex: 30 }}>
-                  <DropdownMenu width={210} items={DATE_RANGES.map((range) => ({ label: range, icon: range === dateRange ? "check" : undefined, onClick: () => { setDateRange(range); setOpenFilter(null); } }))} />
-                </span>
-              )}
-            </span>
-            <Button icon="download" disabled={!visibleRows.length} onClick={exportRows}>Export</Button>
-          </>
-        )}
+        actions={<>
+          <span style={{ position: "relative" }}>
+            <button
+              className="date-button"
+              onClick={(event) => openMenu(event, "date")}
+            >
+              <Icon name="calendar" size={15} />
+              {dateRange}⌄
+            </button>
+          </span>
+          <span style={{ position: "relative" }}>
+            <Button
+              variant="outline"
+              icon="list-filter"
+              onClick={(event) => openMenu(event, "head")}
+            >
+              Filters
+            </Button>
+          </span>
+          <Button icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button>
+        </>}
       />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
-      {isFetching && bidsResponse && <Banner tone="info" title="Refreshing bids…" />}
-      {error && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Banner tone="danger" title="Unable to load bids from the API." />
-          <Button variant="outline" icon="rotate-cw" onClick={refetch}>Retry</Button>
-        </div>
-      )}
-      {(analyticsError || rollingAnalyticsError) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Banner tone="warning" title="Bid analytics are temporarily unavailable." />
-          <Button variant="outline" icon="rotate-cw" onClick={() => { refetchAnalytics(); refetchRollingAnalytics(); }}>Retry analytics</Button>
-        </div>
-      )}
+      {directoryQuery.error && <Banner tone="danger" title={getApiErrorMessage(directoryQuery.error)} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
+      {data?.errors.length > 0 && <Banner tone="warning" title={"Unable to load: " + data.errors.join(", ") + "."} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
+      {(analyticsQuery.error || topQuery.error) && <Banner tone="warning" title="Bid analytics are temporarily unavailable." action={<Button size="sm" variant="outline" onClick={() => { analyticsQuery.refetch(); topQuery.refetch(); }}>Retry analytics</Button>} />}
 
       <div className="kpi-grid">
-        <Metric label="Total Bids" value={analyticsLoading ? "…" : analytics?.totalBids?.toLocaleString() ?? "—"} caption={dateRange} icon="briefcase-business" />
-        <Metric label="Pending Evaluation" value={analyticsLoading ? "…" : analytics?.pendingBids?.toLocaleString() ?? "—"} caption={dateRange} icon="hand-coins" color="#f27602" />
-        <Metric label="Counter Offers" value={analyticsLoading ? "…" : analytics?.counterOffers?.toLocaleString() ?? "—"} caption={dateRange} icon="users-round" color="#2469e8" />
-        <Metric label="Accepted Bids" value={analyticsLoading ? "…" : analytics?.acceptedBids?.toLocaleString() ?? "—"} caption={dateRange} icon="badge-check" color="#12a150" />
-        <Metric label="Expired Offers" value={analyticsLoading ? "…" : analytics?.expiredBids?.toLocaleString() ?? "—"} caption={dateRange} icon="clock" color="#e02b22" />
-        <Metric label="Avg. Winning Margin" value={analyticsLoading ? "…" : winningMargin?.currency ? money(winningMargin.amount, winningMargin.currency) : "—"} caption={winningMargin?.percent == null ? "—" : `${winningMargin.percent}%`} icon="badge-percent" />
+        <Metric
+          label="Total Bids" metric={analytics?.metrics.totalBids} comparison={analytics?.comparison}
+          icon="briefcase-business"
+        />
+        <Metric
+          label="Pending Evaluation" metric={analytics?.metrics.pendingBids} comparison={analytics?.comparison}
+          icon="hand-coins"
+          color="#f27602"
+        />
+        <Metric
+          label="Counter Offers" metric={analytics?.metrics.counterOffers} comparison={analytics?.comparison}
+          icon="users-round"
+          color="#2469e8"
+        />
+        <Metric
+          label="Accepted Bids" metric={analytics?.metrics.acceptedBids} comparison={analytics?.comparison}
+          icon="badge-check"
+          color="#12a150"
+        />
+        <Metric
+          label="Expired Offers" metric={analytics?.metrics.expiredBids} comparison={analytics?.comparison}
+          icon="trophy"
+          color="#e02b22"
+        />
+        <Metric
+          label="Avg. Winning Margin" metric={analytics?.metrics.margin} comparison={analytics?.comparison}
+          icon="badge-percent"
+        />
       </div>
 
       <Tabs
-        items={["Bid Overview", "Counter Offers", "Awarded / Won", "Expired", "Cancelled"]}
+        items={[
+          "Bid Overview",
+          "Counter Offers",
+          "Awarded / Won",
+          "Expired",
+          "Cancelled",
+        ]}
         value={tab}
-        onChange={(value) => {
-          setTab(value);
-          setStatusFilter("All Status");
-        }}
+        onChange={setTab}
       />
 
       <div className="bids-layout">
         <div className="ops-panel">
           <div className="ops-panel-head">
-            <div><h3>{tab}</h3></div>
+            <div>
+              <h3>{tab}</h3>
+            </div>
             <span style={{ position: "relative" }}>
-              <button className="date-button" onClick={() => setOpenFilter(openFilter === "status" ? null : "status")}>{statusFilter}⌄</button>
-              {openFilter === "status" && (
-                <span style={{ position: "absolute", left: 0, top: 40, zIndex: 30 }}>
-                  <DropdownMenu width={190} items={STATUS_OPTIONS.map(([label]) => ({ label, icon: label === statusFilter ? "check" : undefined, onClick: () => { setStatusFilter(label); setOpenFilter(null); } }))} />
-                </span>
-              )}
+              <button
+                className="date-button"
+                onClick={(event) => openMenu(event, "panel")}
+              >
+                {statusFilter}⌄
+              </button>
             </span>
-            <SearchField placeholder="Search job number or trucking company..." style={{ width: 280 }} value={query} onChange={(event) => setQuery(event.target.value)} />
+            <SearchField
+              placeholder="Search by Job ID, Company, Truck, Driver..."
+              style={{ width: 260 }}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
           </div>
-          {isFetching ? (
-            <BidsTableLoading columns={columns} />
-          ) : !error && visibleRows.length === 0 ? (
-            <EmptyState icon="gavel" title="No bids match these filters" description="Try another status, date range, or search term." />
+          {directoryQuery.isFetching ? <BidsTableLoading columns={isCounterTab ? offerCols : cols} /> : !rowsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : isCounterTab ? (
+            <DataTable
+              rows={pageRows.slice((page - 1) * 8, page * 8)}
+              rowKey={(r) => r.bidId}
+              columns={offerCols}
+            />
+          ) : pageRows.length === 0 ? (
+            <div
+              style={{ padding: "40px 18px", textAlign: "center" }}
+              className="tk-meta"
+            >
+              No bids match the current filters.
+            </div>
           ) : (
-            <DataTable rows={visibleRows} rowKey={(bid) => bid.id} columns={columns} onRowClick={(bid) => setSelectedBidId(bid.id)} />
+            <DataTable
+              rows={pageRows.slice((page - 1) * 8, page * 8)}
+              columns={cols}
+            />
           )}
           <Pagination
-            page={bidsResponse?.pagination.page || page}
-            pageCount={Math.max(1, bidsResponse?.pagination.totalPages || 1)}
-            pageSize={bidsResponse?.pagination.limit || PAGE_SIZE}
-            total={bidsResponse?.pagination.total}
-            onPage={(next) => setPage(Math.min(Math.max(1, next), Math.max(1, bidsResponse?.pagination.totalPages || 1)))}
+            page={page}
+            pageCount={pageCount}
+            pageSize={8}
+            total={rowsKnown ? pageRows.length : "—"}
+            onPage={(next) => { if (Number.isInteger(next) && next >= 1 && next <= pageCount) setPage(next); }}
+            onPageSize={() => {}}
           />
         </div>
 
         <div className="bid-rail">
           <div className="ops-panel">
-            <div className="ops-panel-head"><div><h3>Bid Analytics</h3></div></div>
+            <div className="ops-panel-head">
+              <div>
+                <h3>Bid Analytics</h3>
+              </div>
+              <a onClick={() => setTab("Bid Overview")}>View Report</a>
+            </div>
             <div className="bid-analytics">
               <DonutChart
                 size={130}
                 thickness={20}
-                centerValue={analytics?.totalBids ?? "—"}
+                centerValue={analytics?.total ?? "—"}
                 centerLabel="Total Bids"
-                data={donutData.every((item) => item.value != null) ? donutData : []}
+                data={breakdown.every((item) => item.value != null) ? breakdown.map((item) => ({ label: item.label, value: item.value, color: item.color })) : []}
               />
               <div>
-                {[
-                  ["#f27602", "Pending", breakdown?.pending],
-                  ["#12a150", "Accepted", breakdown?.accepted],
-                  ["#e02b22", "Expired", breakdown?.expired],
-                  ["#8d58e8", "Other", breakdown?.other],
-                ].map(([color, label, value]) => (
-                  <div className="bid-legend" key={label}><span><i style={{ background: color }} />{label}</span><b>{value ?? "—"}</b></div>
-                ))}
+                {breakdown.map((item) => <div className="bid-legend" key={item.label}><span><i style={{ background: item.color }} />{item.label}</span><b>{item.display}</b></div>)}
               </div>
             </div>
           </div>
           <div className="ops-panel">
-            <div className="ops-panel-head"><div><h3>Counter Offers on This Page</h3></div><a onClick={() => setTab("Counter Offers")}>View All</a></div>
-            {counterOffers.length === 0 && <div style={{ padding: "20px 14px" }} className="tk-meta">No counter offers on the loaded page.</div>}
-            {counterOffers.slice(0, 5).map((bid) => (
-              <div className="offer-row" key={bid.id} onClick={() => setSelectedBidId(bid.id)}>
-                <i><Icon name="gavel" size={16} /></i>
-                <span><strong>{bid.jobNumber || bid.id}</strong><small>{bid.truckerName}</small></span>
-                <span className="amount"><b>{money(bid.amount, bid.currency)}</b><em>{bid.status}</em></span>
+            <div className="ops-panel-head">
+              <div>
+                <h3>Recent Counter Offers</h3>
+              </div>
+              <a onClick={() => setTab("Counter Offers")}>View All</a>
+            </div>
+            {!data?.offersKnown && <DriverLoadingNotice>—</DriverLoadingNotice>}
+            {data?.offersKnown && offers.length === 0 && (
+              <div style={{ padding: "20px 14px" }} className="tk-meta">
+                No open counter offers.
+              </div>
+            )}
+            {(data?.offersKnown ? offers : []).map((o, i) => (
+              <div
+                className="offer-row"
+                key={o.bidId}
+                onClick={() => openOffer(o)}
+              >
+                <i>
+                  <Icon
+                    name={i % 2 ? "gavel" : "briefcase-business"}
+                    size={16}
+                  />
+                </i>
+                <span>
+                  <strong>{o.id}</strong>
+                  <small>{o.company}</small>
+                </span>
+                <span className="amount">
+                  <b>{o.amount}</b>
+                  <em>{o.delta}</em>
+                </span>
               </div>
             ))}
           </div>
@@ -388,50 +382,99 @@ export function BidsOffers() {
 
       <div className="bottom-bid-grid">
         <div className="ops-panel">
-          <div className="ops-panel-head"><div><h3>Top Bidding Companies <small>(Rolling 7 Days)</small></h3></div></div>
-          {rollingAnalytics?.topCompanies.length ? rollingAnalytics.topCompanies.map((company, index) => (
-            <div className="rank-row" key={company.id}>
-              <b>{index + 1}</b><span>{company.name}</span><span>{company.totalBids ?? "—"} Bids</span><span>Won: {company.won ?? "—"}</span><span>Win Rate {company.winRate == null ? "—" : `${company.winRate}%`}</span>
+          <div className="ops-panel-head">
+            <div>
+              <h3>
+                Top Bidding Companies <small>(This Week)</small>
+              </h3>
             </div>
-          )) : <div style={{ padding: "20px 14px" }} className="tk-meta">No company analytics available.</div>}
+          </div>
+          {topCompanies == null ? <DriverLoadingNotice>—</DriverLoadingNotice> : topCompanies.map((company, i) => (
+            <div className="rank-row" key={company.id || i}><b>{i + 1}</b><span>{company.name}</span><span>{company.totalBids ?? "—"} Bids</span><span>Won: {company.won ?? "—"}</span><span>Win Rate {company.winRate == null ? "—" : company.winRate + "%"}</span></div>
+          ))}
         </div>
         <div className="ops-panel">
-          <div className="ops-panel-head"><div><h3>Bid Conversion Funnel</h3></div></div>
+          <div className="ops-panel-head">
+            <div>
+              <h3>Bid Conversion Funnel</h3>
+            </div>
+            <a
+              onClick={() =>
+                setToast({
+                  tone: "info",
+                  title: "A full funnel report has no documented API.",
+                })
+              }
+            >
+              View Report
+            </a>
+          </div>
           <div className="funnel">
-            {funnelData.map(([label, value, color]) => (
-              <div className="funnel-row" key={label}><span>{label}</span><i style={{ background: color, width: (value == null || value === 0 ? 0 : Math.max(18, (value / funnelMax) * 100)) + "%" }} /><b>{value ?? "—"}</b></div>
+            {funnelData.map((x) => (
+              <div className="funnel-row" key={x[0]}>
+                <span>{x[0]}</span>
+                <i
+                  style={{
+                    background: x[2],
+                    width: (x[1] == null || x[1] === 0 ? 0 : Math.max(18, (x[1] / funnelMax) * 100)) + "%",
+                  }}
+                />
+                <b>{x[1] ?? "—"}</b>
+              </div>
             ))}
           </div>
         </div>
       </div>
 
+      {menu && <BidScreenMenu anchor={menu.anchor} items={menuItems} onClose={setMenu} />}
+
       <Modal
-        open={!!selectedBidId}
-        onClose={() => setSelectedBidId(null)}
-        title={selectedBid?.id || "Bid Details"}
-        description={selectedBid ? `${selectedBid.truckerName} · ${selectedBid.jobNumber || selectedBid.jobId || "Job unavailable"}` : "Loading bid details…"}
+        open={!!offerModal}
+        onClose={() => { setOfferModal(null); setOfferError(""); }}
+        title="Counter Offer"
+        description={
+          offerModal ? `${offerModal.company} · ${offerModal.id}` : ""
+        }
+        footer={
+          offerModal && (
+            <>
+              <Button
+                variant="outline"
+                disabled={!selectedOffer || selectedOffer.statusCode !== "PENDING" || offerQuery.isFetching}
+                onClick={() => resolveOffer(selectedOffer, false)}
+              >
+                Decline
+              </Button>
+              <Button
+                icon="check"
+                disabled={!selectedOffer || selectedOffer.statusCode !== "PENDING" || offerQuery.isFetching}
+                onClick={() => resolveOffer(selectedOffer, true)}
+              >
+                Accept Offer
+              </Button>
+            </>
+          )
+        }
       >
-        {(detailLoading || detailFetching) && !selectedBid ? (
-          <div role="status" className="tk-meta" style={{ padding: 24, textAlign: "center" }}>Loading bid details…</div>
-        ) : detailError ? (
-          <div style={{ display: "grid", justifyItems: "center", gap: 12, padding: 24 }}>
-            <Banner tone="danger" title="Unable to load bid details." />
-            <Button variant="outline" icon="rotate-cw" onClick={refetchDetail}>Retry</Button>
-          </div>
-        ) : selectedBid ? (
+        {offerQuery.isFetching && !selectedOffer && <Skeleton height={80} />}
+        {offerQuery.error && <Banner tone="danger" title={getApiErrorMessage(offerQuery.error)} action={<Button size="sm" variant="outline" onClick={offerQuery.refetch}>Retry</Button>} />}
+        {offerError && <Banner tone="info" title={offerError} />}
+        {offerModal && (
           <div style={{ display: "grid", gap: 10 }}>
-            <div className="trip-fact"><span>Status</span><b><Badge tone={STATUS_TONES[selectedBid.status] || "neutral"}>{selectedBid.status}</Badge></b></div>
-            <div className="trip-fact"><span>Bid Amount</span><b>{money(selectedBid.amount, selectedBid.currency)}</b></div>
-            <div className="trip-fact"><span>Offer Type</span><b>{selectedBid.isCounterOffer == null ? "—" : selectedBid.isCounterOffer ? "Counter Offer" : "Initial Bid"}</b></div>
-            <div className="trip-fact"><span>Route</span><b>{selectedBid.route || "—"}</b></div>
-            <div className="trip-fact"><span>Submitted</span><b>{dateTime(selectedBid.createdAt)}</b></div>
-            <div className="trip-fact"><span>Expires</span><b>{dateTime(selectedBid.expiresAt)}</b></div>
-            <div className="trip-fact"><span>Responded</span><b>{dateTime(selectedBid.respondedAt)}</b></div>
-            <div className="trip-fact"><span>Estimated Delivery</span><b>{dateTime(selectedBid.estimatedDeliveryDate)}</b></div>
-            <div className="trip-fact"><span>Message</span><b>{selectedBid.message || "—"}</b></div>
-            {selectedBid.jobId && <Button variant="outline" onClick={() => navigate(`/jobs/detail?id=${encodeURIComponent(selectedBid.jobId)}`)}>View Job Details</Button>}
+            <div className="trip-fact">
+              <span>Offer Amount</span>
+              <b>{selectedOffer?.amount ?? "—"}</b>
+            </div>
+            <div className="trip-fact">
+              <span>Δ vs Lowest Bid</span>
+              <b style={{ color: "var(--tk-success)" }}>{selectedOffer?.delta ?? "—"}</b>
+            </div>
+            <span className="tk-meta">
+              Accepting will mark this job's bid as accepted and notify the
+              bidding company.
+            </span>
           </div>
-        ) : null}
+        )}
       </Modal>
     </div>
   );

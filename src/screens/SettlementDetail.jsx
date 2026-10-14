@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import {
@@ -36,12 +37,19 @@ function Fact({ icon, iconTint = 'blue', label, value }) {
 }
 
 export function SettlementDetail() {
+  const { settlementId } = useParams(), search = useSearchParams();
+  const id = search.get('id') || settlementId || '';
+  const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  return <SettlementDetailScreen key={id+':'+String(owner)+':'+String(role)+':'+authenticated} />;
+}
+function SettlementDetailScreen() {
   const { settlementId } = useParams();
   const search = useSearchParams();
   const id = search.get('id') || settlementId || '';
   const navigate = useNavigate();
   const operations = useSettlementOperations();
-  const query = useGetAdminSettlementQuery({ id, owner: operations.owner }, { skip: !operations.authenticated || !id });
+  const query = useGetAdminSettlementQuery({ id, owner: operations.owner, role: operations.role }, { skip: !operations.authenticated || !id });
   const row = operations.authenticated && !query.error ? query.currentData : null;
   const loading = query.isLoading || (query.isFetching && !row);
   const r = row || { id:'—', payer:'—', payee:'—', payerType:'—', payeeType:'—', route:'—', relatedTo:'—', amount:null, type:'—', method:'—', status:'—', settledOn:'—', settledTime:'—' };

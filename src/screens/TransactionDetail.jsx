@@ -87,7 +87,8 @@ export function TransactionDetail() {
   const r = detailQuery.error ? null : detailQuery.currentData;
   const role = useSelector((state) => state.auth.admin?.role);
   const canReverse = role === 'SUPER_ADMIN';
-  const canRefund = ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(role) && r?.actions.canRefund === true;
+  const refundLimit = r?.actions.refundableAmount;
+  const canRefund = ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(role) && r?.actions.canRefund === true && refundLimit != null && refundLimit > 0;
   const [retryTransaction, retryState] = useRetryAdminTransactionMutation();
   const [reverseTransaction, reverseState] = useReverseAdminTransactionMutation();
   const [refundTransaction, refundState] = useRefundAdminTransactionMutation();
@@ -164,7 +165,7 @@ export function TransactionDetail() {
 
   async function handleRefundSubmit() {
     const value = Number(refundAmount);
-    if (operationPending.current || busy || !canRefund || !Number.isFinite(value) || value <= 0 || (r.amount != null && value > r.amount)) return;
+    if (operationPending.current || busy || !canRefund || !Number.isFinite(value) || value <= 0 || value > refundLimit) return;
     operationPending.current = true;
     try {
       const response = await refundTransaction({ id: r.id, amount: value }).unwrap();
@@ -339,7 +340,7 @@ export function TransactionDetail() {
                 onClick={() => r.jobInfo && navigate(transactionJobUrl(r.jobInfo.jobId))}>
                 View Related Job
               </Button>
-              <Button variant="outline" icon="rotate-ccw" fullWidth disabled={busy || !canRefund} title={r.actions.refundReason || undefined} onClick={() => { setRefundAmount(r.amount == null ? '' : String(r.amount)); setModal('refund'); }}>
+              <Button variant="outline" icon="rotate-ccw" fullWidth disabled={busy || !canRefund} title={r.actions.refundReason || undefined} onClick={() => { setRefundAmount(refundLimit == null ? '' : String(refundLimit)); setModal('refund'); }}>
                 Create Refund
               </Button>
               <Button variant="danger" icon="flag" fullWidth onClick={() => setModal('issue')}>
@@ -364,11 +365,11 @@ export function TransactionDetail() {
         description={`Issue a refund against ${r.id}.`}
         footer={<>
           <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
-          <Button disabled={busy || !canRefund || !Number.isFinite(Number(refundAmount)) || !Number(refundAmount) || Number(refundAmount) <= 0 || (r.amount != null && Number(refundAmount) > r.amount)} onClick={handleRefundSubmit}>
+          <Button disabled={busy || !canRefund || !Number.isFinite(Number(refundAmount)) || !Number(refundAmount) || Number(refundAmount) <= 0 || Number(refundAmount) > refundLimit} onClick={handleRefundSubmit}>
             {busy ? 'Processing…' : 'Create Refund'}
           </Button>
         </>}>
-        <TextField label="Refund Amount (₦)" required type="number" min="1" max={r.amount}
+        <TextField label="Refund Amount (₦)" required type="number" min="1" max={refundLimit}
           value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
       </Modal>
 

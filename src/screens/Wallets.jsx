@@ -34,6 +34,8 @@ import {
   escrowMoney as formatNaira, escrowNumber, escrowMillions, escrowCount,
   useGetAdminEscrowReleasesQuery, useGetAdminEscrowAccountsQuery, useGetAdminEscrowAlertsQuery,
 } from "../store/features/wallets/walletsApi.js";
+import { escrowCanRelease, escrowMoneyRoles } from '../store/features/wallets/walletActionsApi.js';
+import { WalletActionDialog } from './WalletActionDialog.jsx';
 import { DriverTableLoading } from "./DriversLoading.jsx";
 
 const TABS = [
@@ -94,6 +96,13 @@ function FlowBox({ label, value, caption, color }) {
 }
 
 export function Wallets() {
+  const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  return <WalletScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
+}
+function WalletScreen() {
+  const role = useSelector(state => state.auth.admin?.role);
+  const [action, setAction] = useState(null);
   const [tab, setTab] = useState("Escrow Overview");
   const [modal, setModal] = useState(null);
   const [amount, setAmount] = useState("");
@@ -101,15 +110,15 @@ export function Wallets() {
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
-  const overviewQuery = useGetAdminEscrowOverviewQuery({ owner }, { skip: !authenticated });
-  const registerQuery = useGetAdminEscrowRegisterQuery({ owner }, { skip: !authenticated || !["Escrow Overview", "Holds"].includes(tab) });
-  const releasesQuery = useGetAdminEscrowReleasesQuery({ owner }, { skip: !authenticated || !["Escrow Overview", "Releases"].includes(tab) });
-  const ledgerQuery = useGetAdminEscrowLedgerQuery({ owner }, { skip: !authenticated || tab !== "Transactions" });
-  const accountsQuery = useGetAdminEscrowAccountsQuery({ owner }, { skip: !authenticated });
-  const alertsQuery = useGetAdminEscrowAlertsQuery({ owner }, { skip: !authenticated });
-  const disputesQuery = useGetAdminEscrowDisputesQuery({ owner }, { skip: !authenticated || tab !== "Disputes" });
-  const rulesQuery = useGetAdminEscrowRulesQuery({ owner }, { skip: !authenticated || tab !== "Escrow Rules" });
-  const activityQuery = useGetAdminEscrowActivityQuery({ owner }, { skip: !authenticated || tab !== "Activity Log" });
+  const overviewQuery = useGetAdminEscrowOverviewQuery({ owner, role }, { skip: !authenticated });
+  const registerQuery = useGetAdminEscrowRegisterQuery({ owner, role }, { skip: !authenticated || !["Escrow Overview", "Holds"].includes(tab) });
+  const releasesQuery = useGetAdminEscrowReleasesQuery({ owner, role }, { skip: !authenticated || !["Escrow Overview", "Releases"].includes(tab) });
+  const ledgerQuery = useGetAdminEscrowLedgerQuery({ owner, role }, { skip: !authenticated || tab !== "Transactions" });
+  const accountsQuery = useGetAdminEscrowAccountsQuery({ owner, role }, { skip: !authenticated });
+  const alertsQuery = useGetAdminEscrowAlertsQuery({ owner, role }, { skip: !authenticated });
+  const disputesQuery = useGetAdminEscrowDisputesQuery({ owner, role }, { skip: !authenticated || tab !== "Disputes" });
+  const rulesQuery = useGetAdminEscrowRulesQuery({ owner, role }, { skip: !authenticated || tab !== "Escrow Rules" });
+  const activityQuery = useGetAdminEscrowActivityQuery({ owner, role }, { skip: !authenticated || tab !== "Activity Log" });
   const { summary, breakdown: escrowBalanceBreakdown, weeklyActivity: escrowWeeklyActivity } = authenticated && !overviewQuery.error ? overviewQuery.currentData || emptyEscrowOverview : emptyEscrowOverview;
   const accounts = authenticated && !accountsQuery.error ? accountsQuery.currentData || [] : [];
   const holds = authenticated && !registerQuery.error ? registerQuery.currentData || [] : [];
@@ -575,7 +584,8 @@ export function Wallets() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled
+                        disabled={!escrowMoneyRoles.includes(role) || !escrowCanRelease(r) || registerQuery.isFetching}
+                        onClick={() => setAction({ kind:'release',record:r })}
                       >
                         Release
                       </Button>
@@ -686,7 +696,8 @@ export function Wallets() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled
+                          disabled={!r.canResolve || disputesQuery.isFetching || !r.jobApiId}
+                          onClick={() => setAction({ kind:'resolve',record:r })}
                         >
                           Resolve
                         </Button>
@@ -909,6 +920,7 @@ export function Wallets() {
           onChange={(e) => setAmount(e.target.value)}
         />
       </Modal>
+      {action && <WalletActionDialog key={action.kind+':'+(action.record.holdId || action.record.id)} kind={action.kind} record={action.record} owner={owner} role={role} onClose={() => setAction(null)} />}
     </>
   );
 }

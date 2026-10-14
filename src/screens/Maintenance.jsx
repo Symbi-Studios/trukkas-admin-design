@@ -25,8 +25,8 @@ import {
 } from "../ds.js";
 import { ProgressBar } from "../ds/components/data/ProgressBar.jsx";
 import { DriverTableLoading } from "./DriversLoading.jsx";
-import { useGetAdminFleetTrucksQuery } from "../store/features/fleet/fleetApi.js";
-import { maintenanceError, maintenanceHref, maintenanceTabs, maintenanceWindow, useGetAdminMaintenanceQuery, useGetAdminMaintenanceStatsQuery, useLazyExportAdminMaintenanceQuery, useImportAdminMaintenanceMutation, useUpdateAdminMaintenanceStatusMutation } from "../store/features/maintenance/maintenanceApi.js";
+import { maintenanceError, maintenanceHref, maintenanceTabs, maintenanceWindow, useGetAdminMaintenanceQuery, useGetAdminMaintenanceStatsQuery, useLazyExportAdminMaintenanceQuery, useImportAdminMaintenanceMutation, useUpdateAdminMaintenanceStatusMutation, useCreateAdminMaintenanceMutation, useGetAdminMaintenanceTruckOptionsQuery } from "../store/features/maintenance/maintenanceApi.js";
+import { MaintenanceActionDialogs } from "./MaintenanceActionDialogs.jsx";
 import "./Maintenance.css";
 const PAGE_SIZE = 10,
   STATUSES = [
@@ -104,6 +104,7 @@ export function Maintenance() {
     [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(PAGE_SIZE),
     [schedule, setSchedule] = useState(false),
+    [actionDialog, setActionDialog] = useState(null),
     [menu, setMenu] = useState(null),
     [form, setForm] = useState({
       plate: "",
@@ -119,21 +120,22 @@ export function Maintenance() {
     [toast, setToast] = useState(""),
     [pendingOnly, setPendingOnly] = useState(false);
   const conflicting = status !== "All Statuses" && (pendingOnly || tab !== "All Maintenance" && status !== tab);
-  const args = { owner, tab: pendingOnly ? "requested" : maintenanceTabs[status !== "All Statuses" ? status : tab], search: q.trim(), type: type === "All Types" ? undefined : type.toUpperCase(), ...(date ? { dateFrom: `${date}T00:00:00+01:00`, dateTo: `${date}T23:59:59.999+01:00` } : {}), page, limit: pageSize };
+  const args = { owner, tab: pendingOnly ? "requested" : maintenanceTabs[status !== "All Statuses" ? status : tab], search: q.trim(), priority: priority === "All Priorities" ? undefined : priority.toUpperCase(), type: type === "All Types" ? undefined : type.toUpperCase(), ...(date ? { dateFrom: `${date}T00:00:00+01:00`, dateTo: `${date}T23:59:59.999+01:00` } : {}), page, limit: pageSize };
   const list = useGetAdminMaintenanceQuery(args, { skip: !authenticated || conflicting, refetchOnMountOrArgChange: true });
   const statsQuery = useGetAdminMaintenanceStatsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const stats = statsQuery.error ? null : statsQuery.currentData;
   const window = maintenanceWindow();
   const upcomingQuery = useGetAdminMaintenanceQuery({ owner, tab: "scheduled", ...window, page: 1, limit: 100 }, { skip: !authenticated });
   const upcomingRows = upcomingQuery.error ? [] : upcomingQuery.currentData?.rows || [];
-  const fleetQuery = useGetAdminFleetTrucksQuery({ page: 1, limit: 100 }, { skip: !authenticated || !schedule });
-  const trucks = fleetQuery.error ? [] : fleetQuery.currentData?.trucks || [];
+  const fleetQuery = useGetAdminMaintenanceTruckOptionsQuery({ owner }, { skip: !authenticated || !schedule });
+  const trucks = fleetQuery.error ? [] : fleetQuery.currentData || [];
   const paged = conflicting || list.error ? [] : list.currentData?.rows || [];
   const total = conflicting ? 0 : list.error ? null : list.currentData?.pagination.total;
   const pageCount = conflicting ? 1 : list.currentData?.pagination.totalPages || 1;
   const [exportMaintenance] = useLazyExportAdminMaintenanceQuery();
   const [importMaintenance] = useImportAdminMaintenanceMutation();
   const [updateStatus] = useUpdateAdminMaintenanceStatusMutation();
+  const [createMaintenance, createState] = useCreateAdminMaintenanceMutation();
   const value = v => v == null ? "—" : v.toLocaleString("en-NG");
   const statValue = v => statsQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value(v);
   const share = v => v == null ? "—" : `${v}%`;
@@ -145,6 +147,7 @@ export function Maintenance() {
     ? `conic-gradient(${shares.map((p, i) => { const start = ringEnd; ringEnd += p; return `${colors[i]} ${start}% ${ringEnd}%`; }).join(",")})` : "var(--tk-viz-track)";
   useEffect(() => { if (trucks.length && !form.plate) setForm(f => ({ ...f, plate: trucks[0].plate })); }, [trucks, form.plate]);
   useEffect(() => { if (list.error) notify(maintenanceError(list.error)); }, [list.error]);
+  useEffect(() => { if (fleetQuery.error) notify(maintenanceError(fleetQuery.error)); }, [fleetQuery.error]);
   useEffect(() => { if (statsQuery.error) notify(maintenanceError(statsQuery.error)); }, [statsQuery.error]);
   function notify(s) {
     setToast(s);
@@ -152,7 +155,14 @@ export function Maintenance() {
   }
   async function submit() {
     if (!form.plate || !form.description || !form.dueDate) return;
-    notify("Scheduling is unavailable: the documented API cannot save the Priority selected in this form.");
+    if (busy.current) return;
+    if (!canWrite) return notify("Your account cannot perform this maintenance operation.");
+    const matching = trucks.filter(truck => truck.plate === form.plate);
+    if (matching.length !== 1 || !matching[0].id) return notify("Select an available truck before scheduling maintenance.");
+    busy.current = true;
+    try { await createMaintenance({ truckId: matching[0].id, type: form.type.toUpperCase(), priority: form.priority.toUpperCase(), description: form.description, dueDate: form.dueDate, serviceCenterName: form.serviceCenter, serviceCenterLocation: form.location, estimatedCost: form.estimatedCost, notes: form.notes }).unwrap(); setSchedule(false); setForm({ plate: "", type: "Preventive", description: "", serviceCenter: "", location: "", dueDate: "", priority: "Medium", estimatedCost: "", notes: "" }); }
+    catch (error) { notify(maintenanceError(error)); }
+    finally { busy.current = false; }
   }
   async function changeStatus(r, action) {
     if (busy.current) return;
@@ -232,12 +242,12 @@ export function Maintenance() {
                     {
                       label: "Service Centers",
                       icon: "building-2",
-                      onClick: () => notify("Service Centers is unavailable in the documented maintenance API."),
+                      onClick: () => setActionDialog("centers"),
                     },
                     {
                       label: "Maintenance Rules",
                       icon: "settings",
-                      onClick: () => notify("Maintenance policies are documented, but this screen has no existing policy editor."),
+                      onClick: () => setActionDialog("policies"),
                     },
                   ]}
                 />
@@ -409,7 +419,6 @@ export function Maintenance() {
               className="maint-select"
               value={priority}
               onChange={(e) => {
-                if (e.target.value !== "All Priorities") { notify("Priority filtering is unavailable in the documented maintenance API."); return; }
                 setPriority(e.target.value);
                 setPage(1);
               }}
@@ -734,7 +743,7 @@ export function Maintenance() {
               icon="calendar"
               title="Maintenance Calendar"
               hint="View calendar and due dates"
-              onClick={() => notify("Calendar data is documented, but this screen has no existing calendar view.")}
+              onClick={() => setActionDialog("calendar")}
             />
             <Action
               icon="file-text"
@@ -751,7 +760,7 @@ export function Maintenance() {
               icon="building-2"
               title="Service Centers"
               hint="Manage service centers"
-              onClick={() => notify("Service Centers is unavailable in the documented maintenance API.")}
+              onClick={() => setActionDialog("centers")}
             />
           </SectionCard>
         </div>
@@ -767,7 +776,7 @@ export function Maintenance() {
               Cancel
             </Button>
             <Button
-              disabled={!form.plate || !form.description || !form.dueDate}
+              disabled={createState.isLoading || !form.plate || !form.description || !form.dueDate}
               onClick={submit}
             >
               Schedule Maintenance
@@ -839,6 +848,7 @@ export function Maintenance() {
           />
         </div>
       </Modal>
+      {actionDialog && <MaintenanceActionDialogs kind={actionDialog} owner={owner} role={role} onClose={() => setActionDialog(null)} />}
       {toast && <div className="maint-toast">{toast}</div>}
     </div>
   );

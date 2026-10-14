@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSelector } from 'react-redux';
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -29,6 +30,8 @@ import {
   settlementDetailUrl, exportSettlementRows,
 } from '../store/features/settlements/settlementsApi.js';
 import { useSettlementOperations } from '../store/features/settlements/useSettlementOperations.js';
+import { defaultSettlementDates, settlementDateParams, settlementDateLabel } from '../store/features/settlements/settlementDates.js';
+import { SettlementDateRangeDialog } from './SettlementDateRangeDialog.jsx';
 import { DriverTableLoading } from './DriversLoading.jsx';
 
 const TABS = [
@@ -105,6 +108,11 @@ const TYPE_TONE = {
 };
 
 export function Settlements() {
+  const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  return <SettlementsScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
+}
+function SettlementsScreen() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("All Settlements");
   const [q, setQ] = useState("");
@@ -119,15 +127,19 @@ export function Settlements() {
   const [view, setView] = useState("list");
   const [menuFor, setMenuFor] = useState(null);
 
+  const [dateRange,setDateRange] = useState(defaultSettlementDates);
+  const [dateDialogOpen,setDateDialogOpen] = useState(false);
+  const dateParams = settlementDateParams(dateRange);
+  const dateLabel = settlementDateLabel(dateRange);
   const operations = useSettlementOperations();
-  const query = useGetAdminSettlementsQuery({ owner: operations.owner, groupBy: tab === 'By Trip' ? 'trip' : 'job' }, { skip: !operations.authenticated });
-  const summaryQuery = useGetAdminSettlementSummaryQuery({ owner: operations.owner }, { skip: !operations.authenticated });
-  const alertsQuery = useGetAdminSettlementAlertsQuery({ owner: operations.owner }, { skip: !operations.authenticated });
+  const query = useGetAdminSettlementsQuery({ owner: operations.owner, role: operations.role, groupBy: tab === 'By Trip' ? 'trip' : 'job', payerBusinessType: ({ Importer:'IMPORTER', Customer:'CUSTOMER', Internal:'INTERNAL' })[payerType], ...dateParams }, { skip: !operations.authenticated });
+  const summaryQuery = useGetAdminSettlementSummaryQuery({ owner: operations.owner, role: operations.role, ...dateParams }, { skip: !operations.authenticated });
+  const alertsQuery = useGetAdminSettlementAlertsQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated });
   const all = useMemo(() => operations.authenticated && !query.error ? query.currentData || [] : [], [query.currentData, query.error, operations.authenticated]);
   const { summary: settlementSummary, payouts: payoutSummary, statuses: settlementStatusBreakdown } = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData || emptySettlementInsights : emptySettlementInsights;
   const settlementAlerts = operations.authenticated && !alertsQuery.error ? alertsQuery.currentData || [] : [];
   const loading = query.isLoading || (query.isFetching && !query.currentData);
-  const value = (content) => summaryQuery.isLoading ? <Skeleton as="span" width={90} height={23} /> : content;
+  const value = (content) => summaryQuery.isLoading || summaryQuery.isFetching && !summaryQuery.currentData ? <Skeleton as="span" width={90} height={23} /> : content;
 
   const tabFiltered = useMemo(() => {
     if (tab === "Driver Settlements")
@@ -175,8 +187,7 @@ export function Settlements() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(Math.max(1, page), pageCount);
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  // Importer/Customer/Internal are not documented payer types for this ledger.
-  const knownCollection = operations.authenticated && query.isSuccess && !query.error && payerType === "All Payers";
+  const knownCollection = operations.authenticated && query.isSuccess && !query.error;
 
   return (
     <>
@@ -186,7 +197,7 @@ export function Settlements() {
         description="Manage and track all settlement activities across jobs, trips and parties."
         actions={
           <>
-            <FilterSelect label="—" icon="calendar" />
+            <FilterSelect label={dateLabel} icon="calendar" active onClick={() => setDateDialogOpen(true)} />
             <Button variant="outline" icon="filter">
               Filters
             </Button>
@@ -210,7 +221,8 @@ export function Settlements() {
           label="Total Settlements"
           value={value(formatNaira(settlementSummary.totalSettlements))}
           delta={settlementSummary.totalSettlementsDelta}
-          caption="—"
+          direction={settlementSummary.totalSettlementsDirection}
+          caption={settlementSummary.comparisonCaption}
         />
         <StatCard
           icon="circle-check"
@@ -218,7 +230,8 @@ export function Settlements() {
           label="Completed Settlements"
           value={value(formatNaira(settlementSummary.completedSettlements))}
           delta={settlementSummary.completedSettlementsDelta}
-          caption="—"
+          direction={settlementSummary.completedSettlementsDirection}
+          caption={settlementSummary.comparisonCaption}
         />
         <StatCard
           icon="hourglass"
@@ -226,8 +239,8 @@ export function Settlements() {
           label="Pending Settlements"
           value={value(formatNaira(settlementSummary.pendingSettlements))}
           delta={settlementSummary.pendingSettlementsDelta}
-          direction="down"
-          caption="—"
+          direction={settlementSummary.pendingSettlementsDirection}
+          caption={settlementSummary.comparisonCaption}
         />
         <StatCard
           icon="circle-pause"
@@ -235,8 +248,8 @@ export function Settlements() {
           label="On Hold"
           value={value(formatNaira(settlementSummary.onHold))}
           delta={settlementSummary.onHoldDelta}
-          direction="down"
-          caption="—"
+          direction={settlementSummary.onHoldDirection}
+          caption={settlementSummary.comparisonCaption}
         />
         <StatCard
           icon="circle-x"
@@ -244,8 +257,8 @@ export function Settlements() {
           label="Failed Settlements"
           value={value(formatNaira(settlementSummary.failedSettlements))}
           delta={settlementSummary.failedSettlementsDelta}
-          direction="down"
-          caption="—"
+          direction={settlementSummary.failedSettlementsDirection}
+          caption={settlementSummary.comparisonCaption}
         />
         <StatCard
           icon="timer"
@@ -253,7 +266,8 @@ export function Settlements() {
           label="Avg. Settlement Time"
           value={value(settlementSummary.avgSettlementTime ?? "—")}
           delta={settlementSummary.avgSettlementTimeDelta}
-          caption="—"
+          direction={settlementSummary.avgSettlementTimeDirection}
+          caption={settlementSummary.comparisonCaption}
         />
       </div>
 
@@ -347,7 +361,7 @@ export function Settlements() {
                     setPage(1);
                   }}
                 />
-                <FilterSelect label="—" icon="calendar" />
+                <FilterSelect label={dateLabel} icon="calendar" active onClick={() => setDateDialogOpen(true)} />
               </>
             }
           />
@@ -567,7 +581,7 @@ export function Settlements() {
         >
           <SectionCard
             title="Payout Summary"
-            footer={<a href="#" onClick={(event) => { event.preventDefault(); void operations.downloadReport(); }}>View Report →</a>}
+            footer={<a href="#" onClick={(event) => { event.preventDefault(); void operations.downloadReport(dateParams); }}>View Report →</a>}
           >
             <div style={{ display: "grid", justifyItems: "center", gap: 14 }}>
               <DonutChart
@@ -575,9 +589,9 @@ export function Settlements() {
                 thickness={18}
                 centerValue={settlementMillions(settlementSummary.completedSettlements)}
                 centerLabel="Total Settled"
-                data={payoutSummary.filter((d) => Number.isFinite(d.pct)).map((d) => ({
+                data={payoutSummary.filter((d) => Number.isFinite(d.chartValue)).map((d) => ({
                   label: d.label,
-                  value: d.pct,
+                  value: d.chartValue,
                   color: d.color,
                 }))}
               />
@@ -712,6 +726,10 @@ export function Settlements() {
           </SectionCard>
         </div>
       </div>
+      {dateDialogOpen && <SettlementDateRangeDialog range={dateRange} onClose={() => setDateDialogOpen(false)} onApply={next => {
+        if (!settlementDateParams(next)) return;
+        setDateRange({ ...next }); setPage(1); setMenuFor(null); setDateDialogOpen(false);
+      }} />}
     </>
   );
 }

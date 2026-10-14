@@ -27,17 +27,28 @@ import {
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 export function DemurrageDetail() {
+  const params=useParams(),search=useSearchParams();
+  const id=search.get('id') || params.demurrageId || '',legacy=search.get('jobId') || '';
+  const owner=useSelector(state=>state.auth.admin?.id),role=useSelector(state=>state.auth.admin?.role);
+  const authenticated=useSelector(state=>Boolean(state.auth.accessToken));
+  return <DemurrageDetailScreen key={id+':'+legacy+':'+String(owner)+':'+String(role)+':'+authenticated} />;
+}
+function DemurrageDetailScreen() {
+  const owner=useSelector(state=>state.auth.admin?.id),role=useSelector(state=>state.auth.admin?.role);
+  const authenticated=useSelector(state=>Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const scope={owner,role},active=useRef(true);
+  useEffect(()=>{ active.current=true; return ()=>{active.current=false;}; },[]);
   const navigate = useNavigate(), params = useParams(), search = useSearchParams();
   const requestedId = search.get("id") || params.demurrageId || "";
   const legacyJobId = search.get("jobId") || "";
-  const directoryQuery = useGetAdminDemurrageDirectoryQuery(undefined, { skip: Boolean(requestedId) || !legacyJobId });
+  const directoryQuery = useGetAdminDemurrageDirectoryQuery(scope, { skip: !authenticated || Boolean(requestedId) || !legacyJobId });
   const matches = (directoryQuery.error ? [] : directoryQuery.currentData?.rows || []).filter((row) => row.jobApiId === legacyJobId);
   const demurrageId = requestedId || (matches.length === 1 ? matches[0].chargeApiId : "");
-  const detailQuery = useGetAdminDemurrageDetailQuery(demurrageId, { skip: !demurrageId });
+  const detailQuery = useGetAdminDemurrageDetailQuery({id:demurrageId,...scope}, { skip: !authenticated || !demurrageId });
   const entry = detailQuery.error ? null : detailQuery.currentData;
-  const jobQuery = useGetAdminDemurrageJobContextQuery(entry?.jobApiId, { skip: !entry?.jobApiId });
-  const invoiceQuery = useGetAdminDemurrageInvoicesQuery(entry?.chargeApiId, { skip: !entry?.chargeApiId });
-  const disputesQuery = useGetAdminDemurrageDisputesQuery(entry?.chargeApiId, { skip: !entry?.chargeApiId });
+  const jobQuery = useGetAdminDemurrageJobContextQuery({id:entry?.jobApiId,...scope}, { skip: !authenticated || !entry?.jobApiId });
+  const invoiceQuery = useGetAdminDemurrageInvoicesQuery({id:entry?.chargeApiId,...scope}, { skip: !authenticated || !entry?.chargeApiId });
+  const disputesQuery = useGetAdminDemurrageDisputesQuery({id:entry?.chargeApiId,...scope}, { skip: !authenticated || !entry?.chargeApiId });
   const r = useMemo(() => entry ? { ...mergeDemurrageDetail(entry, jobQuery.error ? null : jobQuery.currentData, invoiceQuery.error ? null : invoiceQuery.currentData), disputeSummary: disputesQuery.error ? entry.disputeSummary : disputesQuery.currentData?.summary ?? entry.disputeSummary } : null,
     [entry, jobQuery.currentData, jobQuery.error, invoiceQuery.currentData, invoiceQuery.error, disputesQuery.currentData, disputesQuery.error]);
   const canResolve = useSelector((state) => ["SUPER_ADMIN", "FINANCE_ADMIN"].includes(state.auth.admin?.role));
@@ -69,6 +80,7 @@ export function DemurrageDetail() {
     if (error) notify(getApiErrorMessage(error));
   }, [detailQuery.error, jobQuery.error, invoiceQuery.error, disputesQuery.error]);
   function notify(s) {
+    if (!active.current) return;
     clearTimeout(toastTimer.current);
     setToast(s);
     toastTimer.current = setTimeout(() => setToast(""), 1600);
@@ -92,14 +104,14 @@ export function DemurrageDetail() {
     if (operationPending.current || busy) return;
     if (!noteDirty.current && note === "—") { notify("Load demurrage notes before saving."); return; }
     operationPending.current = true;
-    try { await saveChargeNote({ id: r.chargeApiId, note }).unwrap(); noteDirty.current = false; notify("Demurrage note saved."); }
+    try { await saveChargeNote({ id: r.chargeApiId, note, ...scope }).unwrap(); noteDirty.current = false; notify("Demurrage note saved."); }
     catch (error) { notify(getApiErrorMessage(error)); }
     finally { operationPending.current = false; }
   }
   async function raiseDispute() {
     if (operationPending.current || busy || !reason.trim()) return;
     operationPending.current = true;
-    try { await createDispute({ id: r.chargeApiId, reason, details }).unwrap(); setDispute(false); setDetails(""); notify("Demurrage dispute recorded."); }
+    try { await createDispute({ id: r.chargeApiId, reason, details, ...scope }).unwrap(); if (!active.current) return; setDispute(false); setDetails(""); notify("Demurrage dispute recorded."); }
     catch (error) { notify(getApiErrorMessage(error)); }
     finally { operationPending.current = false; }
   }
@@ -109,7 +121,8 @@ export function DemurrageDetail() {
     const popup = preview ? window.open("about:blank", "_blank") : null;
     if (popup) popup.opener = null;
     try {
-      const file = await readInvoice({ id: r.chargeApiId, preview }, false).unwrap();
+      const file = await readInvoice({ id: r.chargeApiId, preview, ...scope }, false).unwrap();
+      if (!active.current) { popup?.close(); URL.revokeObjectURL(file.url); return; }
       if (preview) {
         if (popup) popup.location.replace(file.url);
         else { URL.revokeObjectURL(file.url); notify("Allow pop-ups to preview this invoice."); return; }
@@ -135,28 +148,30 @@ export function DemurrageDetail() {
     if (operationPending.current || busy) return;
     if (!canResolve) { notify("Only Super Admins and Finance Admins can resolve charges."); return; }
     operationPending.current = true;
-    try { await detailQuery.refetch().unwrap(); setResolutionMethod(""); setWaiverReason(""); resolutionRequest.current = null; setResolution(true); }
+    try { await detailQuery.refetch().unwrap(); if (!active.current) return; setResolutionMethod(""); setWaiverReason(""); resolutionRequest.current = null; setResolution(true); }
     catch (error) { notify(getApiErrorMessage(error)); }
     finally { operationPending.current = false; }
   }
   async function confirmResolution() {
     if (operationPending.current || busy || !canResolve || r.version == null || !resolutionMethod || !(r.outstanding > 0) || ["RESOLVED", "WAIVED"].includes(r.statusCode) || (resolutionMethod === "COLLECT" && r.statusCode === "UPCOMING") || (resolutionMethod === "WAIVE" && !waiverReason.trim())) return;
-    const payload = { id: r.chargeApiId, method: resolutionMethod, reason: resolutionMethod === "WAIVE" ? waiverReason.trim() : undefined, expectedVersion: r.version };
+    const payload = { id: r.chargeApiId, method: resolutionMethod, reason: resolutionMethod === "WAIVE" ? waiverReason.trim() : undefined, expectedVersion: r.version, ...scope };
     const signature = JSON.stringify(payload);
     if (resolutionRequest.current?.signature !== signature) resolutionRequest.current = { signature, key: demurrageRequestKey() };
     operationPending.current = true;
     try {
       const result = await resolveCharge({ ...payload, key: resolutionRequest.current.key }).unwrap();
+      if (!active.current) return;
       resolutionRequest.current = null; setResolution(false); notify(`Demurrage status: ${result.status}`);
     } catch (error) {
       notify(getApiErrorMessage(error));
-      if (error.status === 409) { resolutionRequest.current = null; await detailQuery.refetch(); }
+      if ([400, 401, 403, 404, 422].includes(error.status)) resolutionRequest.current = null;
+      if (error.status === 409 && active.current) { resolutionRequest.current = null; await detailQuery.refetch(); }
     } finally { operationPending.current = false; }
   }
   async function emailCustomer() {
     if (operationPending.current || busy) return;
     operationPending.current = true; setMenu(false);
-    if (!emailRequest.current) emailRequest.current = { id: r.chargeApiId, key: demurrageRequestKey() };
+    if (!emailRequest.current) emailRequest.current = { id: r.chargeApiId, key: demurrageRequestKey(), ...scope };
     try { const result = await emailInvoice(emailRequest.current).unwrap(); emailRequest.current = null; notify(result.message || "Demurrage invoice emailed."); }
     catch (error) { notify(getApiErrorMessage(error)); if (typeof error.status === "number" && error.status >= 400 && error.status < 500) emailRequest.current = null; }
     finally { operationPending.current = false; }
@@ -494,7 +509,7 @@ export function DemurrageDetail() {
                   variant="ghost"
                   iconRight="arrow-right"
                   style={{ margin: 8 }}
-                  onClick={() => setTab("Documents")}
+                  onClick={event => event.currentTarget.closest('.tk-section-card')?.querySelector('.tk-table-wrap')?.scrollIntoView({behavior:'smooth',block:'center'})}
                 >
                   View all invoices ({r.invoiceCount ?? "—"})
                 </Button>
@@ -584,13 +599,13 @@ export function DemurrageDetail() {
       </div>
       <Modal
         open={dispute}
-        onClose={() => setDispute(false)}
+        onClose={() => { if (!operationPending.current) setDispute(false); }}
         title="Raise Demurrage Dispute"
         description="Flag this charge for review."
         width={520}
         footer={
           <>
-            <Button variant="outline" onClick={() => setDispute(false)}>
+            <Button variant="outline" disabled={busy} onClick={() => setDispute(false)}>
               Cancel
             </Button>
             <Button variant="danger" disabled={busy || !reason.trim()} onClick={raiseDispute}>

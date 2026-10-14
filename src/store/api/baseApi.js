@@ -126,6 +126,10 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const reportContent = /^(?:get|preview|create|download|save|schedule)AdminReport/.test(api.endpoint);
   const roleContent = /^(?:getAdminRolesDirectory|getAdminRole|getAdminPermissions|changeAdminRole)$/.test(api.endpoint);
   const ticketContent = /^\/admin\/support\/(?:threads|tickets|agents|stats)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
+  const payoutContent = /AdminPayout/.test(api.endpoint);
+  const bidScreenContent = /AdminBidScreen/.test(api.endpoint);
+  const tripScreenContent = /AdminTripScreen/.test(api.endpoint);
+  const jobScreenContent = /AdminJobScreen/.test(api.endpoint);
   const feedbackContent = /^\/admin\/(?:support\/feedback|feedback)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const settingsContent = /^\/admin\/(?:settings(?:\/|$)|sessions(?:\/|$)|security(?:\/|$)|data-protection(?:\/|$)|platform\/version$|auth\/password$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const csvResponse = !result.error && (
@@ -137,13 +141,14 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const auditResponse = /^\/admin\/audit-logs(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const driverActivityResponse = !result.error && api.endpoint === 'getAdminDriverActivity';
   const pricingHistoryResponse = !result.error && ['getAdminPricingHistory', 'getAdminPricingRecentHistory', 'getAdminPricingExceptions'].includes(api.endpoint);
-  const transactionContentResponse = !result.error && ['getAdminTransactionLedger', 'getAdminTransactionDetail', 'getAdminTransactionStats', 'reportAdminTransactionIssue'].includes(api.endpoint);
+  const transactionContentResponse = !result.error && ['getAdminTransactionLedger', 'getAdminTransactionDetail', 'getAdminTransactionStats', 'retryAdminTransaction', 'reverseAdminTransaction', 'refundAdminTransaction', 'reportAdminTransactionIssue'].includes(api.endpoint);
   const settlementResponse = !result.error && ['getAdminSettlements', 'getAdminSettlement', 'getAdminSettlementAlerts', 'approveAdminSettlement', 'retryAdminSettlement'].includes(api.endpoint);
   const feeContentResponse = !result.error && ['getAdminFeeRules', 'getAdminFeeRule', 'getAdminFeeRuleHistory', 'updateAdminFeeRule', 'setAdminFeeRuleStatus', 'bulkUpdateAdminFeeRules'].includes(api.endpoint);
   const demurrageResponse = /Demurrage/.test(api.endpoint);
+  const maintenanceContent = /^\/admin\/maintenance(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const faqContent = /^\/admin\/faq(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const announcementContent = /^\/admin\/support\/broadcasts(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]) || api.endpoint === 'getAdminAnnouncementUsers';
-  const responseBody = feedbackContent
+  const responseBody = payoutContent ? '[Payout content omitted]' : maintenanceContent ? '[Maintenance content omitted]' : jobScreenContent ? '[Job detail content omitted]' : feedbackContent
     ? '[Feedback content omitted]'
     : announcementContent
     ? '[Announcement content omitted]'
@@ -187,7 +192,7 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
     method,
     url,
     headers: sanitizeForLog(request?.headers),
-    body: feedbackContent ? '[Feedback request content omitted]' : announcementContent ? '[Announcement request content omitted]' : faqContent ? '[FAQ request content omitted]' : ticketContent ? '[Support ticket request content omitted]' : settingsContent ? '[Settings and security request content omitted]' : userManagementContent ? '[User management request content omitted]' : roleContent ? '[Role request content omitted]' : reportContent ? '[Report request content omitted]' : verificationContent ? '[Verification request content omitted]' : sanitizeForLog(requestBody),
+    body: payoutContent ? '[Payout request content omitted]' : maintenanceContent ? '[Maintenance request content omitted]' : jobScreenContent ? '[Job detail request omitted]' : feedbackContent ? '[Feedback request content omitted]' : announcementContent ? '[Announcement request content omitted]' : faqContent ? '[FAQ request content omitted]' : ticketContent ? '[Support ticket request content omitted]' : settingsContent ? '[Settings and security request content omitted]' : userManagementContent ? '[User management request content omitted]' : roleContent ? '[Role request content omitted]' : reportContent ? '[Report request content omitted]' : verificationContent ? '[Verification request content omitted]' : sanitizeForLog(requestBody),
   });
   console.info('Response body:', sanitizeForLog(responseBody));
   console.groupEnd();

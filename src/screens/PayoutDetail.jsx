@@ -23,7 +23,9 @@ import {
   Skeleton,
 } from "../ds.js";
 import {
-  useGetAdminPayoutDirectoryQuery, useApproveAdminPayoutWithdrawalMutation, useRejectAdminPayoutWithdrawalMutation,
+  useGetAdminPayoutDetailQuery, useApproveAdminPayoutWithdrawalMutation, useRejectAdminPayoutWithdrawalMutation,
+  useRequestAdminPayoutInfoMutation, useRaiseAdminPayoutIssueMutation, useUpdateAdminPayoutNotesMutation,
+  useLazyGetAdminPayoutStatementQuery, useLazyGetAdminPayoutDocumentQuery, downloadPayoutFile,
   payoutMoney as formatNaira, payoutCompanyUrl, payoutJobUrl, payoutTransactionUrl,
 } from "../store/features/payouts/payoutsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
@@ -292,12 +294,16 @@ export function PayoutDetail() {
   const payoutId = search.get("id") || params.payoutId || "";
   const source = search.get("source");
   const navigate = useNavigate();
-  const directoryQuery = useGetAdminPayoutDirectoryQuery();
-  const matches = (directoryQuery.error ? [] : directoryQuery.currentData?.rows || []).filter((row) => row.id === payoutId && (!source || row.source === source));
-  const r = matches.length === 1 ? matches[0] : null;
+  const detailQuery = useGetAdminPayoutDetailQuery({ id: payoutId, source }, { skip: !payoutId });
+  const r = detailQuery.error ? null : detailQuery.currentData;
   const [approveWithdrawal, approveState] = useApproveAdminPayoutWithdrawalMutation();
   const [rejectWithdrawal, rejectState] = useRejectAdminPayoutWithdrawalMutation();
-  const busy = approveState.isLoading || rejectState.isLoading || directoryQuery.isFetching;
+  const [requestInfo, infoState] = useRequestAdminPayoutInfoMutation();
+  const [raiseIssue, issueState] = useRaiseAdminPayoutIssueMutation();
+  const [saveNotes, notesState] = useUpdateAdminPayoutNotesMutation();
+  const [readStatement, statementState] = useLazyGetAdminPayoutStatementQuery();
+  const [readDocument, documentState] = useLazyGetAdminPayoutDocumentQuery();
+  const busy = approveState.isLoading || rejectState.isLoading || infoState.isLoading || issueState.isLoading || notesState.isLoading || statementState.isFetching || documentState.isFetching || detailQuery.isFetching;
   const operationPending = useRef(false), flashTimer = useRef(null);
 
   const [menu, setMenu] = useState(false);
@@ -313,7 +319,7 @@ export function PayoutDetail() {
     return () => clearTimeout(flashTimer.current);
   }, [payoutId, source]);
 
-  if (!directoryQuery.currentData && directoryQuery.isFetching) return <>
+  if (!detailQuery.currentData && detailQuery.isFetching) return <>
     <Card><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
     <DriverLoadingNotice>Loading payout details…</DriverLoadingNotice>
     <Card><Skeleton width="40%" height={20} /><div style={{ marginTop: 24 }}><Skeleton height={120} /></div></Card>
@@ -322,7 +328,7 @@ export function PayoutDetail() {
   if (!r) {
     return (
       <Card>
-        <span className="tk-body">{directoryQuery.error ? getApiErrorMessage(directoryQuery.error) : matches.length > 1 ? "Select this payout from the payout list to identify its source." : <>No payout found with ID {payoutId}.</>}</span>
+        <span className="tk-body">{detailQuery.error ? getApiErrorMessage(detailQuery.error) : <>No payout found with ID {payoutId}.</>}</span>
         <div style={{ marginTop: 12 }}>
           <Button
             variant="outline"
@@ -350,17 +356,28 @@ export function PayoutDetail() {
     catch { flash("Could not copy to the clipboard.", "danger"); }
   }
 
-  function openDocument(document) {
-    if (!document.url || !/^https?:\/\//i.test(document.url)) { unavailable("Payout document download"); return; }
-    window.open(document.url, "_blank", "noopener,noreferrer");
+  async function openDocument(document) {
+    if (operationPending.current || busy) return;
+    if (!document.url) { unavailable("Payout document download"); return; }
+    operationPending.current = true;
+    try { downloadPayoutFile(await readDocument({ id: r.id, source: r.source, url: document.url }, false).unwrap()); }
+    catch (error) { flash(getApiErrorMessage(error), "danger"); }
+    finally { operationPending.current = false; }
+  }
+
+  async function downloadStatement() {
+    if (operationPending.current || busy) return;
+    setMenu(false); operationPending.current = true;
+    try { downloadPayoutFile(await readStatement({ id: r.id, source: r.source }, false).unwrap()); }
+    catch (error) { flash(getApiErrorMessage(error), "danger"); }
+    finally { operationPending.current = false; }
   }
 
   async function handleApprove() {
     if (operationPending.current || busy || !r.canApprove) return;
-    if (remark.trim()) { flash("The approval API cannot save remarks. Clear the remark before approving.", "info"); return; }
     operationPending.current = true;
     try {
-      const result = await approveWithdrawal({ id: r.id, key: r.key }).unwrap();
+      const result = await approveWithdrawal({ id: r.id, source: r.source, adminRemark: remark }).unwrap();
       flash(result.message);
     } catch (error) {
       flash(getApiErrorMessage(error), "danger");
@@ -373,20 +390,40 @@ export function PayoutDetail() {
     if (operationPending.current || busy || !r.canReject) return;
     operationPending.current = true;
     try {
-      const result = await rejectWithdrawal({ id: r.id, key: r.key, reason: remark }).unwrap();
+      const result = await rejectWithdrawal({ id: r.id, source: r.source, reason: remark }).unwrap();
       setModal(null); setRemark(""); flash(result.message);
     } catch (error) { setModal(null); flash(getApiErrorMessage(error), "danger"); }
     finally { operationPending.current = false; }
   }
 
   async function handleRequestInfoSubmit() {
-    if (!note.trim()) return;
-    setModal(null); unavailable("Requesting more payout information");
+    if (operationPending.current || busy || !note.trim()) return;
+    operationPending.current = true;
+    try {
+      const result = await requestInfo({ id: r.id, source: r.source, message: note }).unwrap();
+      setModal(null); setNote(""); flash('Information request status: ' + result.status);
+    } catch (error) { flash(getApiErrorMessage(error), "danger"); }
+    finally { operationPending.current = false; }
   }
 
   async function handleIssueSubmit() {
-    if (!note.trim()) return;
-    setModal(null); unavailable("Raising a payout issue");
+    if (operationPending.current || busy || !note.trim()) return;
+    operationPending.current = true;
+    try {
+      const result = await raiseIssue({ id: r.id, source: r.source, note }).unwrap();
+      setModal(null); setNote(""); flash('Payout issue status: ' + result.status);
+    } catch (error) { flash(getApiErrorMessage(error), "danger"); }
+    finally { operationPending.current = false; }
+  }
+
+  async function handleNotesSubmit() {
+    if (operationPending.current || busy) return;
+    operationPending.current = true;
+    try {
+      await saveNotes({ id: r.id, source: r.source, note }).unwrap();
+      setModal(null); setNote(""); flash("Notes saved.");
+    } catch (error) { flash(getApiErrorMessage(error), "danger"); }
+    finally { operationPending.current = false; }
   }
 
   async function handleRefundSubmit() {
@@ -461,10 +498,7 @@ export function PayoutDetail() {
                         {
                           label: "Download Statement",
                           icon: "file-text",
-                          onClick: () => {
-                            setMenu(false);
-                            unavailable("Payout statement download");
-                          },
+                          onClick: downloadStatement,
                         },
                       ]}
                     />
@@ -554,7 +588,7 @@ export function PayoutDetail() {
                 value={
                   r.relatedSettlement ? (
                     <Link
-                      to={`/settlements/${r.relatedSettlement}`}
+                      to={`/settlements/detail?id=${encodeURIComponent(r.relatedSettlement)}`}
                       className="tk-mono"
                     >
                       {r.relatedSettlement}
@@ -699,7 +733,7 @@ export function PayoutDetail() {
               title="Payout Breakdown"
               action={
                 r.relatedSettlement && (
-                  <Link to={`/settlements/${r.relatedSettlement}`}>
+                  <Link to={`/settlements/detail?id=${encodeURIComponent(r.relatedSettlement)}`}>
                     View Settlement →
                   </Link>
                 )
@@ -763,9 +797,7 @@ export function PayoutDetail() {
                 <Button
                   variant="ghost"
                   icon="pencil"
-                  onClick={() =>
-                    unavailable("Payout notes editing")
-                  }
+                  onClick={() => { setNote(r.notes === "—" ? "" : r.notes); setModal("notes"); }}
                 >
                   Edit
                 </Button>
@@ -807,7 +839,7 @@ export function PayoutDetail() {
                   id={r.relatedSettlement}
                   description="—"
                   status="—"
-                  to={`/settlements/${r.relatedSettlement}`}
+                  to={`/settlements/detail?id=${encodeURIComponent(r.relatedSettlement)}`}
                 />
               )}
               {r.relatedTransaction && (
@@ -825,7 +857,7 @@ export function PayoutDetail() {
                   id={r.escrowId}
                   description="—"
                   status="—"
-                  to={`/escrow/${r.escrowId}`}
+                  to={`/escrow/detail?id=${encodeURIComponent(r.escrowId)}`}
                 />
               )}
               {r.jobId && <RelatedRecordRow
@@ -864,6 +896,7 @@ export function PayoutDetail() {
                   variant="outline"
                   icon="rotate-ccw"
                   fullWidth
+                  disabled
                   onClick={() => {
                     setRefundAmount(r.amount == null ? "" : String(r.amount));
                     setModal("refund");
@@ -878,7 +911,7 @@ export function PayoutDetail() {
                   disabled={!r.relatedSettlement}
                   onClick={() =>
                     r.relatedSettlement &&
-                    navigate(`/settlements/${r.relatedSettlement}`)
+                    navigate(`/settlements/detail?id=${encodeURIComponent(r.relatedSettlement)}`)
                   }
                 >
                   View Settlement
@@ -941,6 +974,15 @@ export function PayoutDetail() {
             onChange={(e) => setNote(e.target.value)}
             placeholder="e.g. Wrong account credited, amount mismatch…"
           />
+        </Modal>
+
+        <Modal open={modal === "notes"} onClose={() => { if (!operationPending.current) setModal(null); }}
+          title="Edit Notes"
+          footer={<>
+            <Button variant="outline" disabled={busy} onClick={() => setModal(null)}>Cancel</Button>
+            <Button disabled={busy} onClick={handleNotesSubmit}>{busy ? "Saving…" : "Save"}</Button>
+          </>}>
+          <Textarea label="Notes" rows={4} value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} />
         </Modal>
 
         <Modal
@@ -1074,7 +1116,7 @@ export function PayoutDetail() {
                   value={
                     r.relatedSettlement ? (
                       <Link
-                        to={`/settlements/${r.relatedSettlement}`}
+                        to={`/settlements/detail?id=${encodeURIComponent(r.relatedSettlement)}`}
                         className="tk-mono"
                       >
                         {r.relatedSettlement}
@@ -1231,7 +1273,7 @@ export function PayoutDetail() {
             title="Payout Breakdown"
             action={
               r.relatedSettlement && (
-                <Link to={`/settlements/${r.relatedSettlement}`}>
+                <Link to={`/settlements/detail?id=${encodeURIComponent(r.relatedSettlement)}`}>
                   View Settlement →
                 </Link>
               )

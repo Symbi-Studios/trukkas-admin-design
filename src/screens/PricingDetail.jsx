@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
 import {
   PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon,
 } from '../ds.js';
-import { pricingError, pricingMoney as formatNaira, downloadPricingCsv, useGetAdminPricingServiceQuery } from '../store/features/pricing/pricingApi.js';
+import { pricingError, pricingMoney as formatNaira, downloadPricingCsv, useGetAdminPricingServiceQuery, useChangeAdminPricingRecordMutation, canChangePricing } from '../store/features/pricing/pricingApi.js';
 import { DriverLoadingNotice } from './DriversLoading.jsx';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
@@ -35,8 +36,23 @@ export function PricingDetail() {
   const priceId = searchParams.get('id') || params.priceId;
   const navigate = useNavigate();
   const pricingQuery = useGetAdminPricingServiceQuery(priceId, { skip: !priceId });
-  const r = pricingQuery.error ? null : pricingQuery.currentData;
+  const [actionError, setActionError] = useState(null);
+  const [changeRecord, { isLoading: changing }] = useChangeAdminPricingRecordMutation();
+  const changeLock = useRef(false);
+  const admin = useSelector((state) => state.auth.admin);
+  useEffect(() => { setActionError(null); }, [priceId]);
+  const r = pricingQuery.error || actionError ? null : pricingQuery.currentData;
   const [menu, setMenu] = useState(false);
+  async function change(action) {
+    setMenu(false);
+    if (changeLock.current || !canChangePricing(r, action, admin)) return;
+    changeLock.current = true;
+    try {
+      const saved = await changeRecord({ row: r, action }).unwrap();
+      if (action === 'duplicate') navigate('/pricing/detail?id=' + encodeURIComponent(saved.id));
+    } catch (error) { setActionError(error); }
+    finally { changeLock.current = false; }
+  }
   function exportDetails() {
     setMenu(false);
     downloadPricingCsv('pricing-details.csv', ['Pricing ID', 'Service', 'Route', 'Coverage', 'Truck Type / Container', 'Unit', 'Base Price', 'Surcharge', 'Total Price', 'Status', 'Last Updated'], [[r.id, r.service, r.route, r.coverage, r.truckType, r.unit, r.basePrice, r.surcharge, r.totalPrice, r.status, r.updated]]);
@@ -45,7 +61,7 @@ export function PricingDetail() {
   if (!r) {
     return (
       <Card>
-        {pricingQuery.isFetching ? <DriverLoadingNotice>Loading pricing entry…</DriverLoadingNotice> : <span className="tk-body">{pricingQuery.error ? pricingError(pricingQuery.error) : <>No pricing entry found with ID {priceId}.</>}</span>}
+        {pricingQuery.isFetching ? <DriverLoadingNotice>Loading pricing entry…</DriverLoadingNotice> : <span className="tk-body">{pricingQuery.error || actionError ? pricingError(actionError || pricingQuery.error) : <>No pricing entry found with ID {priceId}.</>}</span>}
         <div style={{ marginTop: 12 }}>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/pricing')}>Back to Pricing Management</Button>
         </div>
@@ -65,9 +81,10 @@ export function PricingDetail() {
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Duplicate Pricing', icon: 'copy', disabled: true },
+                  { label: 'Duplicate Pricing', icon: 'copy', disabled: changing || !canChangePricing(r, 'duplicate', admin), onClick: () => void change('duplicate') },
                   { label: r.status === 'Active' ? 'Deactivate' : 'Activate', icon: 'circle-slash',
-                    disabled: true },
+                    disabled: changing || !canChangePricing(r, r.statusCode === 'ACTIVE' ? 'deactivate' : 'activate', admin),
+                    onClick: () => void change(r.statusCode === 'ACTIVE' ? 'deactivate' : 'activate') },
                   { divider: true },
                   { label: 'Export Details', icon: 'file-text', onClick: exportDetails },
                 ]} />
