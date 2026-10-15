@@ -2,36 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import './TriangulationGoogleMap.css';
+import { hasGoogleMapsApiKey, loadGoogleMaps } from '../lib/googleMaps.js';
 
-const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
-let mapsPromise;
 const EMPTY_MAP_DATA = Object.freeze([]);
-
-function loadMaps() {
-  if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
-  if (mapsPromise) return mapsPromise;
-
-  mapsPromise = new Promise((resolve, reject) => {
-    const callback = '__trukkasGoogleMapsReady';
-    const script = document.createElement('script');
-    const params = new URLSearchParams({ key: apiKey, loading: 'async', callback, v: 'weekly', region: 'NG' });
-    window[callback] = () => {
-      delete window[callback];
-      resolve(window.google.maps);
-    };
-    script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?${params}`;
-    script.onerror = () => {
-      delete window[callback];
-      script.remove();
-      mapsPromise = null;
-      reject(new Error('Google Maps could not load. Check the key and allowed website origins.'));
-    };
-    document.head.appendChild(script);
-  });
-
-  return mapsPromise;
-}
 
 function validPoint(point) {
   return point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
@@ -114,7 +87,7 @@ export function TriangulationGoogleMap({
   const drawingCallbacks = useRef({ onDrawingPoint, onDrawingChange, onReady, drawingDisabled });
   const drawingRef = useRef(null);
   const syncingDrawing = useRef(false);
-  const [state, setState] = useState(apiKey ? 'loading' : 'missing-key');
+  const [state, setState] = useState(hasGoogleMapsApiKey() ? 'loading' : 'missing-key');
   const availablePoints = points.filter(validPoint);
   const layerPoints = [
     ...(routes || []).flatMap((route) => route.points || []),
@@ -127,9 +100,9 @@ export function TriangulationGoogleMap({
   useEffect(() => { onReady?.(state === 'ready'); }, [state, onReady]);
 
   useEffect(() => {
-    if (!apiKey || !containerRef.current) return;
+    if (!containerRef.current) return;
     let active = true;
-    loadMaps().then((maps) => {
+    loadGoogleMaps().then((maps) => {
       if (!active || !containerRef.current) return;
       mapRef.current = new maps.Map(containerRef.current, {
         center: { lat: 9.082, lng: 8.6753 },
@@ -249,8 +222,10 @@ export function TriangulationGoogleMap({
   useEffect(() => {
     if (state !== 'ready' || !mapRef.current || !drawingPoints) return;
     const maps = window.google.maps, map = mapRef.current;
-    const polygon = new maps.Polygon({ map, paths: [], editable: !drawingDisabled, clickable: true, strokeColor: '#2563eb', strokeWeight: 2, fillColor: '#2563eb', fillOpacity: 0.15 });
-    const path = polygon.getPath();
+    const polygon = new maps.Polygon({ map, editable: !drawingDisabled, clickable: true, strokeColor: '#2563eb', strokeWeight: 2, fillColor: '#2563eb', fillOpacity: 0.15 });
+    // An empty paths collection has no first path for getPath() to return.
+    const path = new maps.MVCArray();
+    polygon.setPath(path);
     const changed = () => {
       if (!syncingDrawing.current && !drawingCallbacks.current.drawingDisabled) {
         drawingCallbacks.current.onDrawingChange?.(path.getArray().map((point) => ({ lat: point.lat(), lng: point.lng() })));

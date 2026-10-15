@@ -8,7 +8,7 @@ import {
   PageHeader, Button, Card, SectionCard, Badge, Tag, Tabs, LabelValue, DataTable, DropdownMenu,
   Avatar, Icon, ProgressBar, StatusDot,
 } from '../ds.js';
-import { useGetManagedUserProfileQuery, useGetManagedUserActivityQuery, canReadManagedUserActivity, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
+import { useGetManagedUserProfileQuery, useGetManagedUserActivityQuery, canReadManagedUserActivity, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverDetailLoading, DriverTableLoading } from './DriversLoading.jsx';
 
@@ -43,7 +43,6 @@ export function UserDetail() {
   const permitted = source !== 'admin' || role === 'SUPER_ADMIN';
   const query = useGetManagedUserProfileQuery({ id, source, owner: admin?.id }, { skip: !authenticated || !id || !permitted, refetchOnMountOrArgChange: true });
   const u = authenticated && permitted && !query.error ? query.currentData : null;
-  const [changeAccess, accessState] = useChangeManagedUserAccessMutation();
   const [editAdmin, editState] = useUpdateManagedAdminMutation();
   const submitting = useRef(false);
   const operations = useManagedUserOperations();
@@ -56,19 +55,10 @@ export function UserDetail() {
   const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available for this user through this control in the documented API.`); };
   useEffect(() => { setTab('Overview'); setMenu(false); operations.close(); }, [id, source]);
 
-  async function updateAccess(operation) {
+  function updateAccess(operation) {
     setMenu(false);
-    if (submitting.current || accessState.isLoading) return;
-    if (u?.source === 'admin') { operations.open(operation === 'activate' ? 'unlock' : 'lock', u); return; }
-    if (u?.statusCode === 'LOCKED' && operation === 'activate') { operations.open('unlock', u); return; }
-    const supported = u?.isAccount && u.source === 'user' && u.statusCode === (operation === 'suspend' ? 'ACTIVE' : 'SUSPENDED');
-    if (!supported) { unavailable('Changing access'); return; }
-    const reason = operation === 'suspend' ? window.prompt('Reason for suspending this user:') : null;
-    if (operation === 'suspend' && !reason?.trim()) return;
-    submitting.current = true;
-    try { const result = await changeAccess({ id: u.backendId, source: u.source, operation, reason }).unwrap(); window.alert(result.message); }
-    catch (error) { window.alert(getApiErrorMessage(error)); }
-    finally { submitting.current = false; }
+    if (submitting.current) return;
+    void operations.open(operation === 'suspend' ? 'deactivate' : 'activate', u);
   }
 
   async function editUser(transferRole = false) {

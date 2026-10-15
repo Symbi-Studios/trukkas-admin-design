@@ -9,7 +9,7 @@ import {
   DonutChart, LegendList, StatusDot, Skeleton, ActivityFeed,
 } from '../ds.js';
 import {
-  useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useChangeManagedUserAccessMutation, useUpdateManagedAdminMutation, useCreateManagedAdminMutation,
+  useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useUpdateManagedAdminMutation, useCreateManagedAdminMutation,
   managedUserSummary, managedUserRoleChart, managedUserStatusChart, managedUsersCsv, managedUserMatchesRole, useGetUserManagementRecentActivityQuery,
 } from '../store/features/users/usersApi.js';
 import { DriverTableLoading, DriverLoadingNotice } from './DriversLoading.jsx';
@@ -53,7 +53,6 @@ export function UserManagement() {
   const usersSummary = managedUserSummary(directory?.rows, !authenticated || statsQuery.error ? null : statsQuery.currentData, includeAdmins);
   const usersByRole = managedUserRoleChart(directory?.rows, directory?.adminsIncluded, statsQuery.error ? null : statsQuery.currentData);
   const usersByStatus = managedUserStatusChart(directory?.rows, usersSummary, statsQuery.error ? null : statsQuery.currentData);
-  const [changeAccess, accessState] = useChangeManagedUserAccessMutation();
   const [editAdmin, editState] = useUpdateManagedAdminMutation();
   const [createAdmin, createState] = useCreateManagedAdminMutation();
   const operations = useManagedUserOperations();
@@ -112,20 +111,10 @@ export function UserManagement() {
     finally { submitting.current = false; setSaving(false); }
   }
 
-  async function updateAccess(user) {
+  function updateAccess(user, action) {
     setMenuFor(null);
-    if (submitting.current || accessState.isLoading) return;
-    if (user.source === 'admin') { operations.open(user.statusCode === 'REVOKED' ? 'unlock' : 'lock', user); return; }
-    if (user.statusCode === 'LOCKED') { operations.open('unlock', user); return; }
-    const supported = user.isAccount && ['ACTIVE', 'SUSPENDED'].includes(user.statusCode);
-    if (!supported) { unavailable('Changing access'); return; }
-    const operation = user.statusCode === 'SUSPENDED' ? 'activate' : 'suspend';
-    const reason = operation === 'suspend' ? window.prompt('Reason for suspending this user:') : null;
-    if (operation === 'suspend' && !reason?.trim()) return;
-    submitting.current = true;
-    try { const result = await changeAccess({ id: user.backendId, source: user.source, operation, reason }).unwrap(); window.alert(result.message); }
-    catch (error) { window.alert(getApiErrorMessage(error)); }
-    finally { submitting.current = false; }
+    if (submitting.current) return;
+    void operations.open(action, user);
   }
 
   async function editUser(user) {
@@ -158,8 +147,8 @@ export function UserManagement() {
     ];
     if (u.status === 'Locked' || u.statusCode === 'REVOKED') items.push({ label: 'Unlock Account', icon: 'lock-open', onClick: () => { setMenuFor(null); operations.open('unlock', u); } });
     else items.push({ label: 'Lock Account', icon: 'lock', onClick: () => { setMenuFor(null); operations.open('lock', u); } });
-    if (['Inactive', 'Suspended', 'Revoked'].includes(u.status)) items.push({ label: 'Activate User', icon: 'user-check', onClick: () => updateAccess(u) });
-    else items.push({ label: 'Deactivate User', icon: 'user-x', onClick: () => updateAccess(u) });
+    if (['Inactive', 'Suspended', 'Revoked'].includes(u.status)) items.push({ label: 'Activate User', icon: 'user-check', onClick: () => updateAccess(u, 'activate') });
+    else items.push({ label: 'Deactivate User', icon: 'user-x', onClick: () => updateAccess(u, 'deactivate') });
     items.push({ divider: true });
     items.push({ label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => { setMenuFor(null); operations.open('delete', u); } });
     return items;

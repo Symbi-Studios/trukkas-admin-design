@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSelector } from 'react-redux';
+import { VerificationDateRangeDialog } from './VerificationDateRangeDialog.jsx';
+import { verificationDateParams } from '../store/features/verification/verificationDates.js';
 import { Link, useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, Tabs, TableToolbar, SearchField, FilterSelect,
@@ -42,9 +45,17 @@ function FilterButton({ value, options, active, onChange }) {
 }
 
 export function Verification() {
+  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  return <VerificationScreen key={scope} />;
+}
+
+function VerificationScreen() {
   const navigate = useNavigate();
   const operations = useVerificationOperations();
-  const query = useGetAdminVerificationDirectoryQuery({ owner: operations.owner }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
+  const [range, setRange] = useState(null);
+  const [dateDialog, setDateDialog] = useState(false);
+  const allTime = useGetAdminVerificationDirectoryQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
+  const query = useGetAdminVerificationDirectoryQuery({ owner: operations.owner, role: operations.role, ...(range ? { range } : {}) }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
   const [dialog, setDialog] = useState(null);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   useEffect(() => { setDialog(null); }, [operations.owner]);
@@ -54,9 +65,9 @@ export function Verification() {
     setDialog({ action, model });
   }
   const verifications = !operations.authenticated || query.error ? EMPTY_ROWS : query.currentData || EMPTY_ROWS;
-  const summary = verificationSummary(!operations.authenticated || query.error ? null : query.currentData);
+  const summary = verificationSummary(!operations.authenticated || allTime.error ? null : allTime.currentData);
   const loading = query.isLoading || (query.isFetching && !query.currentData);
-  const statValue = (value) => loading ? <Skeleton as="span" width={54} height={23} /> : value;
+  const statValue = (value) => allTime.isLoading || (allTime.isFetching && !allTime.currentData) ? <Skeleton as="span" width={54} height={23} /> : value;
   const unavailable = (action) => window.alert(`${action} is not available in the documented verification API.`);
   const [tab, setTab] = useState('All Verifications');
   const [q, setQ] = useState('');
@@ -83,7 +94,7 @@ export function Verification() {
     const entities = { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER' };
     const types = { 'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE' };
     if ((entityType !== 'All Types' && !entities[entityType]) || (verType !== 'All Types' && !types[verType]) || (STATUSES.includes(tab) && status !== 'All Statuses' && status !== tab)) { unavailable('Export with these filters'); return; }
-    const params = {};
+    const params = range ? { ...verificationDateParams(range) } : {};
     if (q.trim()) params.search = q.trim();
     if (entities[entityType]) params.entityType = entities[entityType];
     if (types[verType]) params.verificationType = types[verType];
@@ -96,7 +107,7 @@ export function Verification() {
 
   function resetFilters() {
     setEntityType('All Types'); setVerType('All Types'); setStatus('All Statuses');
-    setRiskLevel('All Levels'); setQ(''); setPage(1);
+    setRiskLevel('All Levels'); setQ(''); setRange(null); setPage(1);
   }
 
   return (
@@ -130,7 +141,7 @@ export function Verification() {
               onChange={(v) => { setStatus(v); setPage(1); }} />
             <FilterButton value={riskLevel} options={['All Levels', ...RISK_LEVELS]} active={riskLevel !== 'All Levels'}
               onChange={(v) => { setRiskLevel(v); setPage(1); }} />
-            <FilterSelect label="Date Range" icon="calendar" onClick={() => unavailable('Date Range filtering')} />
+            <FilterSelect label="Date Range" icon="calendar" active={Boolean(range)} onClick={() => setDateDialog(true)} />
             <Button variant="outline" icon="list-filter" onClick={() => unavailable('Additional filters')}>Filters</Button>
           </>}
           onClear={resetFilters} />
@@ -198,6 +209,7 @@ export function Verification() {
           pageCount={Math.max(1, Math.ceil(filtered.length / pageSize))}
           onPage={(next) => setPage(Math.max(1, Math.min(next, Math.max(1, Math.ceil(filtered.length / pageSize)))))} onPageSize={(size) => { if (Number.isInteger(size) && size > 0) { setPageSize(size); setPage(1); } }} />
       </SectionCard>
+      {dateDialog && <VerificationDateRangeDialog range={range} onClose={() => setDateDialog(false)} onApply={next => { setRange(next); setPage(1); setMenuFor(null); setDateDialog(false); }} />}
       {dialog && <VerificationActionDialog key={operations.owner + dialog.action + (dialog.model?.id || '')} {...dialog} canManage={operations.canManage} onClose={() => setDialog(null)} />}
     </>
   );

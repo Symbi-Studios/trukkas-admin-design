@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Banner, Button, Modal, TextField, Select } from '../ds.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
@@ -13,6 +13,9 @@ const split = (value) => [...new Set(value.split(',').map((v) => v.trim()).filte
 
 export function VerificationActionDialog({ action, model, canManage, onClose }) {
   const owner = useSelector((state) => state.auth.admin?.id);
+  const role = useSelector((state) => state.auth.admin?.role);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [values, setValues] = useState({ entityId: '', verificationType: '', priority: model?.priorityCode || '', dueDate: '', clearDueDate: 'keep', assignedAdminId: model?.assignedAdminId || '', reason: '', message: '', requestedFields: '', documentTypes: '', documentIds: '', body: '' });
   const [error, setError] = useState(null);
   const [change, state] = useChangeAdminVerificationMutation();
@@ -48,8 +51,8 @@ export function VerificationActionDialog({ action, model, canManage, onClose }) 
     } else if (['cancel', 'noncompliant'].includes(action)) body.reason = values.reason.trim();
     else body.body = values.body.trim();
     pending.current = true; setError(null);
-    try { await change({ action, id: model?.id, body, owner }).unwrap(); onClose(); }
-    catch (requestError) { setError(getApiErrorMessage(requestError)); }
+    try { await change({ action, id: model?.id, body, owner, role }).unwrap(); if (active.current) onClose(); }
+    catch (requestError) { if (active.current) setError(getApiErrorMessage(requestError)); }
     finally { pending.current = false; }
   }
   return <Modal open title={TITLES[action]} description={model?.entityName} onClose={() => { if (!pending.current) onClose(); }} footer={<>

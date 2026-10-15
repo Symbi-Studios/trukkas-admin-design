@@ -31,6 +31,8 @@ import {
 import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
+import { JobDetailMap } from "./JobDetailMap.jsx";
+import { useGetAdminTrackingOverviewQuery } from "../store/features/tracking/trackingApi.js";
 import "./JobDetail.css";
 
 const STAGES = [
@@ -410,6 +412,17 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     pollingInterval: tab === "Tracking & Updates" ? 30000 : 0,
   });
   const selectedTrip = tripQuery.error ? null : tripQuery.currentData || selectedTripBase;
+  const trackingMapQuery = useGetAdminTrackingOverviewQuery({ owner, role }, {
+    skip: !authenticated || tab !== "Tracking & Updates" || !selectedTripBase,
+    pollingInterval: tab === "Tracking & Updates" && selectedTripBase ? 30000 : 0,
+  });
+  const selectedRecordedRoute = useMemo(() => {
+    const routes = trackingMapQuery.currentData?.routes;
+    if (!selectedTripBase || !Array.isArray(routes)) return null;
+    const matches = routes.filter((route) => route.source === "RECORDED_GPS" && route.tripIds?.includes(selectedTripBase.id) && Array.isArray(route.points) && route.points.length >= 2);
+    return matches.length === 1 ? matches[0].points : null;
+  }, [trackingMapQuery.currentData, selectedTripBase?.id]);
+  const recordedRouteLoading = trackingMapQuery.isFetching && !trackingMapQuery.currentData;
   const trackingUpdates = useMemo(() => !tripQuery.error && tripQuery.currentData ? tripQuery.currentData.trackingUpdates : job?.trackingUpdates || [], [job, tripQuery.currentData, tripQuery.error]);
   const photos = useMemo(() => tripQuery.error ? [] : tripQuery.currentData?.photos || [], [tripQuery.currentData, tripQuery.error]);
   useEffect(() => { if (tripQuery.error) setToast({ tone: "danger", title: getApiErrorMessage(tripQuery.error) }); }, [tripQuery.error]);
@@ -518,7 +531,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   }
   async function refreshTracking() {
     try {
-      await Promise.all([jobQuery.refetch().unwrap(), ...(selectedTripBase ? [tripQuery.refetch().unwrap()] : [])]);
+      await Promise.all([jobQuery.refetch().unwrap(), ...(selectedTripBase ? [tripQuery.refetch().unwrap(), trackingMapQuery.refetch().unwrap()] : [])]);
       if (active.current) notify("info", "Tracking data refreshed.");
     } catch (error) { if (active.current) notify("danger", getApiErrorMessage(error)); }
   }
@@ -877,11 +890,8 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     <span className="tk-meta">{job.deliveryDate}</span>
                   </div>
                 </div>
-                <div className="jd-map-placeholder">
-                  <Icon name="map" size={28} />
-                  <span className="tk-meta">
-                    Map surface is supplied by the consuming app's tile layer.
-                  </span>
+                <div className="jd-map-placeholder jd-map-active">
+                  <JobDetailMap origin={job.origin} destination={job.destination} ariaLabel="Job pickup and delivery route map" />
                 </div>
               </div>
               <div className="jd-route-stats">
@@ -1631,18 +1641,24 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                   </Button>
                 }
               >
-                <div className="jd-map-placeholder" style={{ height: 260 }}>
-                  <Icon
-                    name={job.status === "In Transit" ? "navigation" : "map"}
-                    size={28}
+                <div className="jd-map-placeholder jd-map-active" style={{ height: 260 }}>
+                  <JobDetailMap
+                    origin={job.origin}
+                    destination={job.destination}
+                    liveLocation={selectedTrip?.livePosition && selectedTrip.liveCoordinates ? {
+                      ...selectedTrip.liveCoordinates,
+                      heading: selectedTrip.heading,
+                      title: selectedTrip.truckPlate,
+                      description: selectedTrip.currentLocation,
+                      updatedAt: selectedTrip.locationUpdatedAt,
+                    } : null}
+                    recordedRoute={selectedRecordedRoute}
+                    recordedRouteLoading={recordedRouteLoading}
+                    preferRecordedRoute
+                    locationCaption={selectedTrip?.livePosition ? selectedTrip.currentLocation || "—" : "No live position to display for this job's current status."}
+                    ariaLabel="Live trip tracking map"
+                    zoomControl
                   />
-                  {selectedTrip?.livePosition ? (
-                    <span className="tk-meta">{selectedTrip?.currentLocation || "—"}</span>
-                  ) : (
-                    <span className="tk-meta">
-                      No live position to display for this job's current status.
-                    </span>
-                  )}
                 </div>
                 <div className="jd-route-stats" style={{ marginTop: 14 }}>
                   <span>
@@ -2869,11 +2885,8 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
         description={`${job.origin} → ${job.destination}`}
         width={640}
       >
-        <div className="jd-map-placeholder" style={{ height: 320 }}>
-          <Icon name="map" size={34} />
-          <span className="tk-meta">
-            Map surface is supplied by the consuming app's tile layer.
-          </span>
+        <div className="jd-map-placeholder jd-map-active" style={{ height: 320, minHeight: 320 }}>
+          <JobDetailMap origin={job.origin} destination={job.destination} ariaLabel="Job driving route map" zoomControl />
         </div>
       </Modal>
     </div>

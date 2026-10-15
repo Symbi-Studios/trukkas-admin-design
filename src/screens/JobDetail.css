@@ -84,6 +84,62 @@
   margin: 2px 0 2px 5px;
   min-height: 28px;
 }
+.jd-map-placeholder.jd-map-active {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  color: var(--tk-ink-500);
+}
+.jd-google-map,
+.jd-google-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.jd-google-map-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--tk-surface-sunk);
+  color: var(--tk-ink-500);
+  text-align: center;
+  font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-sans);
+}
+.jd-google-map-message-ready {
+  inset: auto 10px 10px;
+  display: block;
+  width: fit-content;
+  max-width: calc(100% - 20px);
+  padding: 7px 9px;
+  border: 1px solid var(--tk-line);
+  border-radius: var(--tk-r-sm);
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--tk-shadow-card);
+}
+.jd-google-map-message-with-caption {
+  bottom: auto;
+  top: 10px;
+}
+.jd-google-map-caption {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  padding: 7px 9px;
+  border: 1px solid var(--tk-line);
+  border-radius: var(--tk-r-sm);
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--tk-shadow-card);
+  color: var(--tk-ink-700);
+  font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .jd-map-placeholder {
   min-height: 150px;
   border-radius: var(--tk-r-lg);

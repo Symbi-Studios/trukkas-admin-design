@@ -1,11 +1,26 @@
+import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
+import { verificationDateParams } from './verificationDates.js';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 const text = (v) => typeof v === 'string' && v.trim() ? v.trim() : null;
 const record = (v) => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-const count = (v) => Number.isInteger(v) && v >= 0 ? v : null;
+const count = (v) => Number.isSafeInteger(v) && v >= 0 ? v : null;
 const display = (v) => text(v) || '—';
 const label = (v) => text(v)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—';
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+const serializeVerificationQuery = args => defaultSerializeQueryArgs(args) + ':v2';
+function scopedQuery(baseQuery, api, args = {}) {
+  const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
+  const current = () => {
+    const next = api.getState().auth;
+    return !api.signal.aborted && Boolean(next.accessToken && owner) && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
+  };
+  return async request => {
+    if (!current()) return failure('Your session changed. Reopen Verification before continuing.');
+    const result = await baseQuery(request);
+    return current() ? result : failure('Your session changed. Reopen Verification before continuing.');
+  };
+}
 const STATUS = { PENDING: 'Pending', IN_REVIEW: 'In Review', VERIFIED: 'Verified', REJECTED: 'Rejected', NON_COMPLIANT: 'Non-Compliant', CANCELLED: 'Cancelled' };
 const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', EXPORTER_LICENCE: 'Export License', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
 const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', EXPORTER: 'Exporter', TRUCK: 'Truck' };
@@ -18,14 +33,15 @@ export function verificationDocumentUrl(value) {
 export function verificationDate(value, withTime = false) {
   if (!text(value)) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}) });
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-US', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric', year: 'numeric', ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}) });
 }
 const person = (v) => text(v) || text(record(v).name) || '—';
 function progress(v) {
   const p = record(v), values = ['completed', 'inReview', 'pending', 'total'].map((key) => count(p[key]));
   return values.every((n) => n != null) && values[0] + values[1] + values[2] === values[3] ? { completed: values[0], inReview: values[1], pending: values[2], total: values[3] } : null;
 }
-export function adaptVerification(dto) {
+export function adaptVerification(value) {
+  const dto = record(value);
   const name = display(dto.entityName), assessment = record(dto.assessment);
   const requirements = Array.isArray(dto.requirements) && dto.requirements.every((r) => r && typeof r === 'object' && !Array.isArray(r)) ? dto.requirements.map((r, i) => ({
     key: text(r.id) || String(i), name: display(r.name), sub: display(r.description), cat: label(r.category), status: label(r.status),
@@ -45,7 +61,7 @@ export function adaptVerification(dto) {
     progress: progress(dto.progress), requirements, documentCount: count(dto.documentCount), commentCount: count(dto.commentCount),
     assessment: display(assessment.outcome), assessmentDescription: display(assessment.description),
     riskDescription: Array.isArray(dto.riskSignals) && dto.riskSignals.every((v) => text(v)) ? dto.riskSignals.join('; ') || '—' : '—',
-    canApprove: (!Object.hasOwn(dto, 'actions') || dto.actions != null) && ['PENDING', 'IN_REVIEW'].includes(dto.status) && Boolean(SOURCES[dto.sourceType] && text(dto.sourceId)),
+    canApprove: Object.keys(record(dto.actions)).length > 0 && ['PENDING', 'IN_REVIEW'].includes(dto.status) && Boolean(SOURCES[dto.sourceType] && text(dto.sourceId)),
     documentIds: Array.isArray(dto.documentIds) && dto.documentIds.every((v) => text(v)) ? dto.documentIds : null,
   };
 }
@@ -64,12 +80,12 @@ async function readDetail(baseQuery, id) {
   const dto = record(unwrapApiResponseData(result.data));
   return dto.verificationId === id ? { data: adaptVerification(dto) } : failure('The response does not identify the selected verification.');
 }
-async function pages(baseQuery, api, url, select, identity) {
+async function pages(baseQuery, api, url, select, identity, filters = {}) {
   const rows = [], seen = new Set(), owner = api.getState().auth.admin?.id;
   let total = null, totalPages = null;
   for (let page = 1; page <= 500; page += 1) {
     if (api.signal.aborted || api.getState().auth.admin?.id !== owner) return failure('Verification loading was cancelled.');
-    const result = await baseQuery({ url, params: { page, limit: 100 } });
+    const result = await baseQuery({ url, params: { ...filters, page, limit: 100 } });
     if (result.error) return result;
     if (api.getState().auth.admin?.id !== owner) return failure('Verification loading was cancelled.');
     const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination), list = select(dto);
@@ -91,7 +107,7 @@ function historyItems(dto) {
 const EVENTS = ['APPLICATION_SUBMITTED', 'DOCUMENT_REVIEW', 'INFORMATION_VERIFICATION', 'COMPLIANCE_ASSESSMENT', 'FINAL_DECISION'];
 export function verificationTimeline(model, events) {
   return EVENTS.map((type, i) => {
-    const event = events?.find((e) => Object.values(e).includes(type));
+    const event = events?.filter((e) => Object.values(e).includes(type)).sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0];
     return { title: ['Application Submitted', 'Document Review', 'Information Verification', 'Compliance Assessment', 'Final Decision'][i], icon: 'check',
       state: event ? ['REJECTED', 'NON_COMPLIANT', 'FAILED'].includes(event.outcome) ? 'danger' : ['VERIFIED', 'APPROVED', 'COMPLETED', 'SUBMITTED'].includes(event.outcome) ? 'done' : 'pending' : i === 0 && model.submittedOn !== '—' ? 'done' : 'pending',
       time: event ? verificationDate(event.timestamp, true) : i === 0 ? model.submittedOn : i === 4 ? model.reviewedOn : '—', description: event ? label(event.outcome) : '—' };
@@ -100,6 +116,7 @@ export function verificationTimeline(model, events) {
 export const verificationEntryActivity = (entries) => (entries || []).map((e) => ({ text: display(e.body), actor: person(e.author), time: verificationDate(e.createdAt, true) }));
 export const verificationActivity = (events) => (events || []).map((e) => ({ text: label(Object.values(e).find((value) => EVENTS.includes(value))), actor: person(e.actor), time: verificationDate(e.timestamp, true) }));
 async function download(baseQuery, id, kind, filters) {
+  if (!['documents', 'report'].includes(kind) || id != null && !text(id) || kind === 'documents' && !text(id)) return failure('Unsupported verification download.');
   const zip = kind === 'documents', format = zip ? 'zip' : 'pdf';
   const url = id ? '/admin/verification/' + encodeURIComponent(id) + (zip ? '/documents/download' : '/report') : '/admin/verification/report';
   const result = await baseQuery({ url, params: { ...filters, ...(zip ? { format } : {}) }, headers: { Accept: zip ? 'application/zip' : 'application/pdf' }, responseHandler: async (response) => {
@@ -122,15 +139,22 @@ export function saveVerificationDocument(document) {
 const tags = ['AdminVerificationDirectory', 'AdminVerificationDetail', 'AdminVerificationHistory'];
 const invalidations = [...tags, 'AdminCompanies', 'AdminDrivers', 'AdminDriverStats', 'AdminForwarders', 'AdminFleet'];
 export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminVerificationDirectory: builder.query({
-      async queryFn(_args, api, _options, baseQuery) {
-        const result = await pages(baseQuery, api, '/admin/verification', (dto) => dto.verifications, (dto) => text(dto?.verificationId));
+      serializeQueryArgs: serializeVerificationQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedQuery(baseQuery, api, args);
+        const filters = args?.range ? verificationDateParams(args.range) : {};
+        if (!filters) return failure('Choose a valid verification date range.');
+        const result = await pages(baseQuery, api, '/admin/verification', (dto) => dto.verifications, (dto) => text(dto?.verificationId), filters);
         return result.error ? result : { data: result.data.map(adaptVerification) };
       }, providesTags: ['AdminVerificationDirectory'],
     }),
     getAdminVerificationDetail: builder.query({
+      serializeQueryArgs: serializeVerificationQuery,
       async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedQuery(baseQuery, api, args);
         if (!text(args.id)) return failure('A verification ID is required.');
         if (args.source && SOURCES[args.source]) {
           const directory = await pages(baseQuery, api, '/admin/verification', (dto) => dto.verifications, (dto) => text(dto?.verificationId));
@@ -142,19 +166,25 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
       }, providesTags: ['AdminVerificationDetail'],
     }),
     getAdminVerificationHistory: builder.query({
-      queryFn: ({ id }, api, _options, baseQuery) => text(id) ? pages(baseQuery, api, '/admin/verification/' + encodeURIComponent(id) + '/history', historyItems, (dto) => text(dto?.id) || [dto?.timestamp, dto?.type, dto?.outcome].filter(text).join(':')) : failure('A verification ID is required.'),
+      serializeQueryArgs: serializeVerificationQuery,
+      queryFn: (args, api, _options, baseQuery) => text(args.id) ? pages(scopedQuery(baseQuery, api, args), api, '/admin/verification/' + encodeURIComponent(args.id) + '/history', historyItems, (dto) => text(dto?.id) || [dto?.timestamp, dto?.type, dto?.outcome].filter(text).join(':')) : failure('A verification ID is required.'),
       providesTags: ['AdminVerificationHistory'],
     }),
     getAdminVerificationEntries: builder.query({
-      queryFn: ({ id, kind }, api, _options, baseQuery) => text(id) && ['comments', 'notes'].includes(kind) ? pages(baseQuery, api, '/admin/verification/' + encodeURIComponent(id) + '/' + kind, (dto) => {
+      serializeQueryArgs: serializeVerificationQuery,
+      queryFn: (args, api, _options, baseQuery) => text(args.id) && ['comments', 'notes'].includes(args.kind) ? pages(scopedQuery(baseQuery, api, args), api, '/admin/verification/' + encodeURIComponent(args.id) + '/' + args.kind, (dto) => {
         const arrays = Object.values(dto).filter(Array.isArray);
         return arrays.length === 1 && arrays[0].every((row) => text(row?.body)) ? arrays[0] : null;
       }, (dto) => text(dto?.id) || [dto?.body, dto?.createdAt].filter(text).join(':')) : failure('Unsupported verification entry collection.'),
       providesTags: ['AdminVerificationHistory'],
     }),
-    getAdminVerificationDownload: builder.query({ queryFn: ({ id, kind, filters }, _api, _options, baseQuery) => download(baseQuery, id, kind, filters) }),
+    getAdminVerificationDownload: builder.query({
+      serializeQueryArgs: serializeVerificationQuery,
+      queryFn: (args, api, _options, baseQuery) => download(scopedQuery(baseQuery, api, args), args.id, args.kind, args.filters),
+    }),
     approveAdminVerificationEntity: builder.mutation({
-      async queryFn({ id, owner }, api, _options, baseQuery) {
+      async queryFn({ id, owner, role }, api, _options, baseQuery) {
+        baseQuery = scopedQuery(baseQuery, api, { owner, role });
         if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return failure('Your session changed. Reload before approving.');
         if (!text(id)) return failure('A verification ID is required.');
         const current = await readDetail(baseQuery, id); if (current.error) return current;
@@ -169,7 +199,8 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
       }, invalidatesTags: invalidations,
     }),
     changeAdminVerification: builder.mutation({
-      async queryFn({ action, id, body, owner }, api, _options, baseQuery) {
+      async queryFn({ action, id, body, owner, role }, api, _options, baseQuery) {
+        baseQuery = scopedQuery(baseQuery, api, { owner, role });
         if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return failure('Your session changed. Reload before saving.');
         if (!canManageVerification(api.getState().auth.admin?.role)) return failure('Your account cannot manage verifications.');
         const config = { create: ['POST', ''], edit: ['PATCH', ''], reassign: ['POST', '/reassign'], information: ['POST', '/request-information'], noncompliant: ['POST', '/mark-non-compliant'], cancel: ['POST', '/cancel'], comment: ['POST', '/comments'], note: ['POST', '/notes'] }[action];

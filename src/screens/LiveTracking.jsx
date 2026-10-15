@@ -223,9 +223,14 @@ export function LiveTracking() {
     }
     else if (label === 'Traffic View') { setShowTraffic((s) => !s); notify('info', `Traffic view ${showTraffic ? 'hidden' : 'shown'}.`); }
     else if (label === 'Heat Map') {
+      if (showHeatMap) { setShowHeatMap(false); notify('info', 'Heat map hidden.'); return; }
       if (quickFilter) { notify('warning', 'Reset the quick filter to display fleet heat map data.'); return; }
-      if (!trackingOverview?.heatmap) { notify('warning', 'Heat map data is unavailable.'); return; }
-      setShowHeatMap((value) => !value);
+      const hasHeatmapPoints = trackingOverview?.heatmap?.some((point) => point.position
+        && Number.isFinite(point.position.lat) && Number.isFinite(point.position.lng)
+        && Number.isFinite(point.weight) && point.weight > 0);
+      if (!hasHeatmapPoints) { notify('warning', 'Heat map data is unavailable.'); return; }
+      setShowHeatMap(true);
+      notify('info', 'Heat map shown.');
     }
   }
 

@@ -25,15 +25,22 @@ const STAGE_PILL = {
 export function VerificationDetail() {
   const { verificationId } = useParams();
   const search = useSearchParams();
+  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  return <VerificationDetailScreen key={[scope, search.get('id') || verificationId, search.get('source')].join(':')} />;
+}
+
+function VerificationDetailScreen() {
+  const { verificationId } = useParams();
+  const search = useSearchParams();
   const id = search.get('id') || verificationId;
   const source = search.get('source');
   const navigate = useNavigate();
   const operations = useVerificationOperations();
-  const args = { source, id, owner: operations.owner };
+  const args = { source, id, owner: operations.owner, role: operations.role };
   const query = useGetAdminVerificationDetailQuery(args, { skip: !id || !operations.authenticated, refetchOnMountOrArgChange: true });
-  const history = useGetAdminVerificationHistoryQuery({ id: query.currentData?.id, owner: operations.owner }, { skip: !operations.authenticated || !query.currentData?.id || Boolean(query.error), refetchOnMountOrArgChange: true });
+  const history = useGetAdminVerificationHistoryQuery({ id: query.currentData?.id, owner: operations.owner, role: operations.role }, { skip: !operations.authenticated || !query.currentData?.id || Boolean(query.error), refetchOnMountOrArgChange: true });
   const events = history.error ? null : history.currentData;
-  const entryArgs = { id: query.currentData?.id, owner: operations.owner };
+  const entryArgs = { id: query.currentData?.id, owner: operations.owner, role: operations.role };
   const entryOptions = { skip: !operations.authenticated || !query.currentData?.id || Boolean(query.error), refetchOnMountOrArgChange: true };
   const comments = useGetAdminVerificationEntriesQuery({ ...entryArgs, kind: 'comments' }, entryOptions);
   const notes = useGetAdminVerificationEntriesQuery({ ...entryArgs, kind: 'notes' }, entryOptions);
@@ -49,7 +56,8 @@ export function VerificationDetail() {
   const v = !operations.authenticated || query.error ? null : query.currentData;
   const [approve, approval] = useApproveAdminVerificationEntityMutation();
   const role = useSelector((state) => state.auth.admin?.role);
-  const submitting = useRef(false);
+  const submitting = useRef(false), active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [tab, setTab] = useState('Verification Overview');
   const [menu, setMenu] = useState(false);
   const activity = tab === 'Comments' ? verificationEntryActivity(commentEntries) : tab === 'History' ? historyActivity : [...historyActivity, ...verificationEntryActivity(noteEntries)];
@@ -61,8 +69,8 @@ export function VerificationDetail() {
     if (submitting.current || approval.isLoading) return;
     if (!v?.canApprove || !canReviewVerification(role, v?.source)) { window.alert('This verification cannot be approved by your account in its current state.'); return; }
     submitting.current = true;
-    try { const result = await approve({ id: v.id, owner: operations.owner }).unwrap(); window.alert(result.message); }
-    catch (error) { window.alert(getApiErrorMessage(error)); }
+    try { const result = await approve({ id: v.id, owner: operations.owner, role: operations.role }).unwrap(); if (active.current) window.alert(result.message); }
+    catch (error) { if (active.current) window.alert(getApiErrorMessage(error)); }
     finally { submitting.current = false; }
   }
 

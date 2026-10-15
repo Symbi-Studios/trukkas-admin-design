@@ -4,6 +4,10 @@ const object = (v) => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
 const text = (v) => typeof v === 'string' && v.trim() ? v.trim() : null;
 const number = (v) => (typeof v === 'number' || typeof v === 'string' && v.trim()) && Number.isFinite(Number(v)) ? Number(v) : null;
 const nonnegative = (v) => number(v) != null && number(v) >= 0 ? number(v) : null;
+const coordinatePair = (latitude, longitude) => {
+  const lat = number(latitude), lng = number(longitude);
+  return lat != null && lat >= -90 && lat <= 90 && lng != null && lng >= -180 && lng <= 180 ? { lat, lng } : null;
+};
 const count = (v) => Number.isSafeInteger(number(v)) && number(v) >= 0 ? number(v) : null;
 const shown = (v) => text(v) || '—';
 const roles = new Set(['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN']);
@@ -70,8 +74,13 @@ function mapDocument(d, jobId) {
   };
 }
 function mapTrip(t) {
-  const distance = object(t.distance), driver = object(t.driver), truck = object(t.truck), company = object(t.truckingCompany);
+  const distance = object(t.distance), driver = object(t.driver), truck = object(t.truck), company = object(t.truckingCompany), currentLocation = object(t.currentLocation);
   const progress = number(t.progressPercent);
+  const liveGps = t.telemetryLive === true && currentLocation.source === 'LIVE_GPS';
+  const liveCoordinates = liveGps
+    ? coordinatePair(currentLocation.latitude, currentLocation.longitude) || coordinatePair(truck.lastLatitude, truck.lastLongitude)
+    : null;
+  const heading = number(t.heading);
   return {
     id: t.tripId, jobId: text(t.jobId), statusCode: text(t.status), isDelayed: typeof t.isDelayed === 'boolean' ? t.isDelayed : null,
     status: t.isDelayed === true ? 'Delayed' : text(t.segmentLabel) || title(t.status),
@@ -83,8 +92,9 @@ function mapTrip(t) {
     eta: jobScreenTime(t.eta), deliveryDate: jobScreenTime(t.dates?.deliveredAt),
     distanceKm: nonnegative(distance.totalKm), coveredKm: nonnegative(distance.coveredKm),
     speedKmH: t.telemetryLive === true ? nonnegative(t.speedKmH) : null,
-    livePosition: t.telemetryLive === true && t.currentLocation?.source === 'LIVE_GPS',
-    locationUpdatedAt: jobScreenTime(t.currentLocation?.updatedAt), currentLocation: shown(t.currentLocation?.description),
+    livePosition: liveGps, liveCoordinates,
+    heading: liveGps && heading != null && heading >= 0 && heading <= 360 ? heading : null,
+    locationUpdatedAt: jobScreenTime(currentLocation.updatedAt || truck.lastLocationUpdate), currentLocation: shown(currentLocation.description),
     cost: null, driverPayment: null, expenses: null,
     canMarkAtDelivery: arrivals.has(t.status), canMarkDelayed: Boolean(text(t.status)) && !['COMPLETED', 'CANCELLED'].includes(t.status),
   };
