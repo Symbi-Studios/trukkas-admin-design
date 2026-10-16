@@ -7,7 +7,7 @@ const admins = ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'];
 const owned = (api, owner, account) => Boolean(owner && api.getState().auth.admin?.id === owner && api.getState().auth.accessToken && admins.includes(api.getState().auth.admin?.role) && !api.signal.aborted && api.getState().auth.admin === account);
 const sessionError = () => roleFailure('An active admin session is required. Sign in again.');
 const path = (id) => '/admin/roles/' + encodeURIComponent(id);
-const signature = (catalog) => JSON.stringify(catalog.modules.map((m) => [m.key, m.actions.map((a) => a.key)]));
+const signature = (catalog) => JSON.stringify(catalog.modules.map((m) => [m.key, m.uiGroupKey, m.actions.map((a) => a.key)]));
 async function readCatalog(baseQuery) {
   const result = await baseQuery({ url: '/admin/permissions' });
   if (result.error) return result;
@@ -41,13 +41,21 @@ function confirmsFields(role, body) {
   return Object.entries(body).every(([key, value]) => {
     if (['expectedVersion', 'permissionKeys', 'moduleAccess'].includes(key)) return true;
     // The API only supports organization-wide scope; SHARED ownership means companyId null.
-    if (key === 'scope') return value === 'organization-wide';
-    if (key === 'companyId' && value === null) return role?.ownership === 'SHARED';
+    if (key === 'scope') return value === 'organization-wide' && source?.scope === 'ORGANIZATION' && source?.settings?.scope === 'ORGANIZATION';
+    if (key === 'companyId' && value === null) return role?.ownership === 'SHARED' && source?.company === null;
     if (key === 'description' && value === '' && Object.hasOwn(source, key) && source[key] === null) return true;
     if (key === 'color') return typeof source?.color === 'string' && source.color.toLowerCase() === value.toLowerCase();
     if (key === 'isActive') return role?.statusCode === (value ? 'ACTIVE' : 'INACTIVE');
     return source?.[key] === value;
   });
+}
+function confirmsDuplicate(role, original) {
+  const source = role.source, previous = original.source;
+  const fields = ['description', 'color', 'icon', 'isActive', 'scope'];
+  return role.memberCount === 0 && role.pendingInvites === 0 && role.version != null
+    && fields.every((key) => Object.hasOwn(previous, key) && Object.hasOwn(source, key) && previous[key] === source[key])
+    && ['scope', 'manageUsers', 'require2fa'].every((key) => previous.settings && source.settings
+      && Object.hasOwn(previous.settings, key) && Object.hasOwn(source.settings, key) && previous.settings[key] === source.settings[key]);
 }
 const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminRoles', 'AdminPermissions'] });
 export const rolesApi = taggedApi.injectEndpoints({
@@ -102,6 +110,7 @@ export const rolesApi = taggedApi.injectEndpoints({
         const account = api.getState().auth.admin;
         if (!owned(api, owner, account)) return sessionError();
         if (!['create', 'edit', 'duplicate', 'delete'].includes(action)) return roleFailure('This role operation is not supported.');
+        if (action === 'delete' && !['SUPER_ADMIN', 'OPS_ADMIN'].includes(account.role)) return roleFailure('Only Super Admin and Operations Admin can delete roles.');
         let request, body, current, catalog, expectedKeys;
         if (action === 'create' || action === 'edit' || action === 'duplicate') {
           const result = await readCatalog(baseQuery);
@@ -143,7 +152,9 @@ export const rolesApi = taggedApi.injectEndpoints({
           request = { url: path(id), method: 'PATCH', body };
         } else if (action === 'duplicate') {
           if (!roleText(current.source?.name)) return roleFailure('The role name is unavailable.');
-          if (!current.ownership || current.ownership === 'COMPANY' && !roleText(current.source.companyId)) return roleFailure('The current role ownership is unavailable. Refresh before duplicating.');
+          if (!current.ownership || current.ownership === 'COMPANY' && !current.companyId) return roleFailure('The current role ownership is unavailable. Refresh before duplicating.');
+          if (!['description', 'color', 'icon', 'isActive', 'scope', 'settings'].every((key) => Object.hasOwn(current.source, key))
+            || !current.source.settings || !['scope', 'manageUsers', 'require2fa'].every((key) => Object.hasOwn(current.source.settings, key))) return roleFailure('The current role settings are unavailable. Refresh before duplicating.');
           expectedKeys = grantedRoleKeys(current, catalog);
           if (!expectedKeys) return roleFailure('The full permission matrix is required before duplicating the role.');
           body = { name: current.source.name + ' (copy)' };
@@ -157,6 +168,8 @@ export const rolesApi = taggedApi.injectEndpoints({
         if (!owned(api, owner, account)) return sessionError();
         if (result.error) return result;
         if (action === 'delete') {
+          const confirmation = unwrapApiResponseData(result.data);
+          if (confirmation?.deleted !== true || confirmation.id !== id) return roleFailure('The delete request completed, but its response could not be confirmed. Refresh before trying again.');
           const check = await baseQuery({ url: path(id) });
           if (!owned(api, owner, account)) return sessionError();
           return check.error?.status === 404 ? { data: { deleted: true, id } } : roleFailure('The delete request completed, but removal could not be confirmed. Refresh before trying again.');
@@ -168,8 +181,11 @@ export const rolesApi = taggedApi.injectEndpoints({
         if (check.error) return roleFailure('The save request completed, but the role could not be reloaded. Refresh before trying again.');
         const updated = check.data;
         if (!confirmsFields(updated, body) || action !== 'edit' && updated.isSystem !== false) return roleFailure('The save request completed, but its fields could not be confirmed. Refresh before trying again.');
+        if (action === 'create' && (updated.source.settings?.manageUsers !== false || updated.source.settings?.require2fa !== false)) return roleFailure('The role was created, but its settings could not be confirmed. Refresh before trying again.');
         if (action === 'duplicate' && (updated.ownership !== (current.ownership === 'COMPANY' ? 'COMPANY' : 'SHARED')
-          || current.ownership === 'COMPANY' && updated.source.companyId !== current.source.companyId)) return roleFailure('The duplicate was created, but its ownership could not be confirmed. Refresh before trying again.');
+          || current.ownership === 'COMPANY' && updated.companyId !== current.companyId
+          || current.ownership !== 'COMPANY' && updated.source.company !== null)) return roleFailure('The duplicate was created, but its ownership could not be confirmed. Refresh before trying again.');
+        if (action === 'duplicate' && !confirmsDuplicate(updated, current)) return roleFailure('The duplicate was created, but its copied settings could not be confirmed. Refresh before trying again.');
         if (expectedKeys) {
           const actualKeys = grantedRoleKeys(updated, catalog);
           if (!actualKeys || actualKeys.length !== expectedKeys.length || expectedKeys.some((key) => !actualKeys.includes(key))) return roleFailure('The save request completed, but its permissions could not be confirmed. Refresh before trying again.');

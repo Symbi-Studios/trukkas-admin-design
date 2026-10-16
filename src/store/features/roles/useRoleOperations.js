@@ -10,6 +10,7 @@ export function useRoleOperations() {
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const owner = admin?.id;
   const canManage = Boolean(owner && authenticated && ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(admin?.role));
+  const canDelete = canManage && ['SUPER_ADMIN', 'OPS_ADMIN'].includes(admin?.role);
   const [change, mutation] = useChangeAdminRoleMutation();
   const pending = useRef(false), currentOwner = useRef(owner);
   currentOwner.current = owner;
@@ -26,5 +27,5 @@ export function useRoleOperations() {
     try { return await perform(args); }
     catch (error) { if (currentOwner.current === owner) window.alert(error instanceof Error ? error.message : getApiErrorMessage(error)); return null; }
   }
-  return { owner, authenticated: canManage, canManage, saving: mutation.isLoading, perform, performWithAlert };
+  return { owner, authenticated: canManage, canManage, canDelete, saving: mutation.isLoading, perform, performWithAlert };
 }

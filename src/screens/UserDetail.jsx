@@ -8,7 +8,7 @@ import {
   PageHeader, Button, Card, SectionCard, Badge, Tag, Tabs, LabelValue, DataTable, DropdownMenu,
   Avatar, Icon, ProgressBar, StatusDot,
 } from '../ds.js';
-import { useGetManagedUserProfileQuery, useGetManagedUserActivityQuery, canReadManagedUserActivity, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
+import { useGetManagedUserProfileQuery, useGetManagedUserActivityQuery, canReadManagedUserActivity, useRenameManagedUserMutation } from '../store/features/users/usersApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverDetailLoading, DriverTableLoading } from './DriversLoading.jsx';
 
@@ -43,7 +43,7 @@ export function UserDetail() {
   const permitted = source !== 'admin' || role === 'SUPER_ADMIN';
   const query = useGetManagedUserProfileQuery({ id, source, owner: admin?.id }, { skip: !authenticated || !id || !permitted, refetchOnMountOrArgChange: true });
   const u = authenticated && permitted && !query.error ? query.currentData : null;
-  const [editAdmin, editState] = useUpdateManagedAdminMutation();
+  const [renameUser, editState] = useRenameManagedUserMutation();
   const submitting = useRef(false);
   const operations = useManagedUserOperations();
   const [tab, setTab] = useState('Overview');
@@ -65,13 +65,13 @@ export function UserDetail() {
     setMenu(false);
     if (submitting.current || editState.isLoading) return;
     if (transferRole) { operations.open('permissions', u); return; }
-    if (u?.source !== 'admin' || role !== 'SUPER_ADMIN') { unavailable('Edit User'); return; }
+    if (!u?.isAccount || (u.source === 'admin' && role !== 'SUPER_ADMIN')) { unavailable('Edit User'); return; }
     const value = window.prompt('Full Name', u.name === '—' ? '' : u.name);
     if (!value?.trim()) return;
     const body = { name: value.trim() };
     if (body.name === u.name) return;
     submitting.current = true;
-    try { const result = await editAdmin({ id: u.backendId, ...body }).unwrap(); window.alert(result.message); }
+    try { const result = await renameUser({ id: u.backendId, source: u.source, ...body, expectedVersion: u.version, owner: admin?.id }).unwrap(); window.alert(result.message); }
     catch (error) { window.alert(getApiErrorMessage(error)); }
     finally { submitting.current = false; }
   }

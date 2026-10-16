@@ -368,7 +368,7 @@
   background: var(--tk-surface-soft);
 }
 .support-page .feedback-ring:after {
-  content: "—";
+  content: attr(data-feedback-label);
 }
 .feedback-ring {
   width: 94px;

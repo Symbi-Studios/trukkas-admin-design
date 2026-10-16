@@ -165,7 +165,7 @@ export function RolesPermissions() {
                         { label: 'Edit Role', icon: 'pencil', disabled: !operations.canManage || operations.saving, onClick: () => { setMenuFor(null); setEditId(r.id); } },
                         { label: 'Duplicate Role', icon: 'copy', disabled: !operations.canManage || operations.saving, onClick: async () => { setMenuFor(null); const saved = await operations.performWithAlert({ action: 'duplicate', id: r.id }); if (saved) setSelectedId(saved.id); } },
                         { divider: true },
-                        { label: 'Delete Role', icon: 'trash-2', tone: 'danger', disabled: !operations.canManage || operations.saving || r.isSystem !== false || r.memberCount !== 0 || r.pendingInvites !== 0, onClick: async () => { setMenuFor(null); if (!window.confirm('Delete this role?')) return; const saved = await operations.performWithAlert({ action: 'delete', id: r.id }); if (saved) setSelectedId((current) => current === r.id ? null : current); } },
+                        { label: 'Delete Role', icon: 'trash-2', tone: 'danger', disabled: !operations.canDelete || operations.saving || r.isSystem !== false || r.memberCount !== 0 || r.pendingInvites !== 0, onClick: async () => { setMenuFor(null); if (!window.confirm('Delete this role?')) return; const saved = await operations.performWithAlert({ action: 'delete', id: r.id }); if (saved) setSelectedId((current) => current === r.id ? null : current); } },
                       ]} />
                     </span>
                   )}

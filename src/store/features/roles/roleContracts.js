@@ -19,7 +19,12 @@ export const ROLE_ICON_VALUES = { Shield: 'shield', 'Shield Check': 'shield-chec
 const icons = new Set([...Object.values(ROLE_ICON_VALUES), ...ROLE_MODULE_MATRIX.map((m) => m.icon), 'truck', 'radio-tower']);
 const icon = (value) => icons.has(value) ? value : 'shield';
 const display = (value) => roleText(value) || '—';
-export const roleSourceKeys = (key) => key === 'jobs' ? ['jobs', 'trips'] : [key];
+// Jobs & Trips is an existing combined row. Other backend groups must match
+// an existing row explicitly; in particular, bids is not an alias for jobs.
+export function roleGroupKey(module) {
+  const key = roleText(module.uiGroupKey) || module.key;
+  return key === 'trips' ? 'jobs' : key;
+}
 export const emptyRoleDetail = {
   id: '—', name: '—', description: '—', type: '—', users: '—', status: '—', statusCode: null,
   lastUpdated: '—', createdOn: '—', createdBy: '—', updatedBy: '—', color: '#0241E8', icon: 'shield',
@@ -37,15 +42,14 @@ export function adaptPermissionCatalog(dto) {
       seenKeys.add(action.key);
       actions.push({ key: action.key, action: roleText(action.action), name: display(action.name), description: display(action.description) });
     }
-    modules.push({ key: item.key, name: display(item.name), icon: icon(item.icon), actions });
+    modules.push({ key: item.key, uiGroupKey: roleText(item.uiGroupKey), name: display(item.name), icon: icon(item.icon), actions });
   }
   const totalModules = roleInteger(dto.totalModules), totalPermissions = roleInteger(dto.totalPermissions);
   if (totalModules != null && totalModules !== modules.length || totalPermissions != null && totalPermissions !== seenKeys.size) return null;
   return { modules, totalModules, totalPermissions };
 }
 export function catalogForRow(catalog, key) {
-  const keys = roleSourceKeys(key);
-  return (catalog?.modules || []).filter((m) => keys.includes(m.key));
+  return (catalog?.modules || []).filter((m) => roleGroupKey(m) === key);
 }
 function editorFromRoleDto(dto) {
   return {
@@ -69,15 +73,16 @@ export function adaptRole(dto, detail = false) {
     const actions = Array.isArray(module.actions) ? module.actions.flatMap((action) => !roleText(action?.key) ? [] : [{
       key: action.key, name: display(action.name), description: display(action.description), granted: typeof action.granted === 'boolean' ? action.granted : null,
     }]) : null;
-    return [{ key: module.key, name: display(module.name), icon: icon(module.icon), granted: roleCount(module.granted), total: roleCount(module.total),
+    return [{ key: module.key, uiGroupKey: roleText(module.uiGroupKey), name: display(module.name), icon: icon(module.icon), granted: roleCount(module.granted), total: roleCount(module.total),
       fullAccess: typeof module.fullAccess === 'boolean' ? module.fullAccess : null, level: ['full', 'custom', 'none'].includes(module.level) ? module.level : null, actions }];
   }) || [];
   const keys = Array.isArray(dto.permissions) && dto.permissions.every((key) => roleText(key)) && new Set(dto.permissions).size === dto.permissions.length ? dto.permissions : null;
   const detailCountKnown = sourceModules && rawModules.length === sourceModules.length && rawModules.every((m) => m.granted !== '—');
-  const permissionCount = detailCountKnown ? rawModules.reduce((sum, m) => sum + roleInteger(m.granted.replaceAll(',', '')), 0) : keys?.length;
+  const summaryGranted = roleInteger(dto.permissionSummary?.granted), summaryTotal = roleInteger(dto.permissionSummary?.total);
+  const permissionCount = summaryGranted ?? (detailCountKnown ? rawModules.reduce((sum, m) => sum + roleInteger(m.granted.replaceAll(',', '')), 0) : keys?.length);
   const groups = new Map();
   for (const module of rawModules) {
-    const row = ROLE_MODULE_MATRIX.find((m) => roleSourceKeys(m.key).includes(module.key));
+    const row = ROLE_MODULE_MATRIX.find((m) => m.key === roleGroupKey(module));
     const groupKey = row?.key || module.key;
     const previous = groups.get(groupKey);
     if (!previous) groups.set(groupKey, { ...module, key: groupKey, name: row?.label || module.name, icon: row?.icon || module.icon });
@@ -91,13 +96,17 @@ export function adaptRole(dto, detail = false) {
   const modules = [...groups.values()];
   return {
     id: dto.id, name: display(dto.name), description: display(dto.description), isSystem, ownership,
+    companyId: roleText(dto.company?.id),
     type: isSystem === true ? 'System' : isSystem === false ? 'Custom' : '—',
     users: roleCount(dto.memberCount), memberCount: roleInteger(dto.memberCount), pendingInvites: roleInteger(dto.pendingInvites),
     permissionsCount: roleCount(permissionCount), statusCode, status: statusCode === 'ACTIVE' ? 'Active' : statusCode === 'INACTIVE' ? 'Inactive' : '—',
     createdOn: roleDate(dto.createdAt), lastUpdated: roleDate(dto.updatedAt, true),
-    createdBy: display(dto.createdBy?.name), updatedBy: display(dto.updatedBy?.name), permissionSummary: display(dto.permissionSummary),
+    createdBy: display(dto.createdBy?.name), updatedBy: display(dto.updatedBy?.name),
+    permissionSummary: summaryGranted != null && summaryTotal != null && summaryGranted <= summaryTotal
+      ? roleCount(summaryGranted) + ' of ' + roleCount(summaryTotal) + ' permissions granted.' : '—',
     color: typeof dto.color === 'string' && /^#[0-9a-f]{6}$/i.test(dto.color) ? dto.color : '#0241E8', icon: icon(dto.icon), modules,
-    version: roleDate(dto.version) !== '—' ? dto.version : null,
+    // expectedVersion is the returned updatedAt string, compared opaquely.
+    version: roleText(dto.version) ? dto.version : null,
     editor: editorFromRoleDto(dto),
     source: detail ? dto : undefined,
   };
@@ -132,6 +141,8 @@ export function permissionsForConfiguration(configuration, catalog) {
 
 export function buildRoleAccess(values, catalog) {
   if (!catalog?.modules) throw new Error('The permission catalogue must finish loading.');
+  const unmapped = catalog.modules.filter((module) => !ROLE_MODULE_MATRIX.some((row) => row.key === roleGroupKey(module)));
+  if (unmapped.length) throw new Error('This form cannot configure these permission groups: ' + unmapped.map((module) => module.key).join(', ') + '. Role creation and preview are unavailable until their mapping is confirmed.');
   const moduleAccess = catalog.modules.map((m) => ({ moduleKey: m.key, level: 'none' }));
   for (const row of ROLE_MODULE_MATRIX) {
     const level = values.levels[row.key];

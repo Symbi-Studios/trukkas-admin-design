@@ -10,7 +10,7 @@ import { useReportDraft } from '../store/features/reports/useReportDraft.js';
 import { REPORT_TYPES, EXPORT_FORMATS } from '../store/features/reports/reportsConfig.js';
 import { ReportTemplateDialog } from './ReportDialogs.jsx';
 import { useReportPreview } from '../store/features/reports/useReportPreview.js';
-import { useReportOperations } from '../store/features/reports/useReportOperations.js';
+import { useReportOperations, useReportSession } from '../store/features/reports/useReportOperations.js';
 import { reportConfiguration, reportTimestamp } from '../store/features/reports/reportContracts.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
 import { REPORT_CAPABILITIES, reportCount } from '../store/features/reports/reportsApi.js';
@@ -25,6 +25,11 @@ function cellValue(row, key) {
 }
 
 export function ExportReportPreview() {
+  const session = useReportSession();
+  return <ExportReportPreviewScreen key={session.key} />;
+}
+
+function ExportReportPreviewScreen() {
   const navigate = useNavigate();
   const { draft, updateReportDraft } = useReportDraft();
   const operations = useReportOperations(draft);

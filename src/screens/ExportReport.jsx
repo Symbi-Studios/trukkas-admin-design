@@ -11,7 +11,7 @@ import { REPORT_TYPES, ENTITY_TYPE_OPTIONS, STATUS_OPTIONS, LOCATION_OPTIONS } f
 import { reportCount } from '../store/features/reports/reportsApi.js';
 import { ReportTemplateDialog } from './ReportDialogs.jsx';
 import { useReportPreview } from '../store/features/reports/useReportPreview.js';
-import { useReportOperations } from '../store/features/reports/useReportOperations.js';
+import { useReportOperations, useReportSession } from '../store/features/reports/useReportOperations.js';
 import { reportRangeQuery } from '../store/features/reports/reportDraft.js';
 
 const STEPS = [
@@ -32,6 +32,11 @@ function selectedColumns(columnGroups) {
 }
 
 export function ExportReport() {
+  const session = useReportSession();
+  return <ExportReportScreen key={session.key} />;
+}
+
+function ExportReportScreen() {
   const navigate = useNavigate();
   const { draft, updateReportDraft } = useReportDraft();
   const [saveOpen, setSaveOpen] = useState(false);

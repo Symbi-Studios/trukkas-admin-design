@@ -172,7 +172,7 @@ function accessTransition(action, target) {
   }
   if (action === 'activate') {
     if (locked) return { action: 'unlock', reason: true, version: true };
-    return target.source === 'user' && target.statusCode === 'SUSPENDED' ? { operation: 'activate' } : { error: 'This account is not eligible for activation. Refresh its status before continuing.' };
+    return target.source === 'user' && ['SUSPENDED', 'INACTIVE'].includes(target.statusCode) ? { operation: 'activate', reason: target.statusCode === 'INACTIVE', version: true } : { error: 'This account is not eligible for activation. Refresh its status before continuing.' };
   }
   return { error: 'This account action is unavailable.' };
 }
@@ -200,7 +200,7 @@ function UserAccessDialog({ dialog, onClose, onReload, onPendingChange }) {
     try {
       const base = { id: target.backendId, source: target.source, owner, reason };
       const response = transition.operation
-        ? await changeAccess({ ...base, operation: transition.operation }).unwrap()
+        ? await changeAccess({ ...base, operation: transition.operation, expectedVersion: target.version }).unwrap()
         : await runAction({ ...base, action: transition.action, expectedVersion: target.version }).unwrap();
       if (mounted.current && currentOwner.current === owner) setSuccess(response.message);
     } catch (failure) {

@@ -13,7 +13,7 @@ import { currentReportRange, reportComparisonRange, reportDateLabel, reportRange
 import { useGetAdminReportOverviewQuery, REPORT_CAPABILITIES, emptyReportOverview, reportCount, reportMoney as formatNaira, reportPercent } from '../store/features/reports/reportsApi.js';
 
 import { ReportDateDialog } from './ReportDialogs.jsx';
-import { useReportOperations } from '../store/features/reports/useReportOperations.js';
+import { useReportOperations, useReportSession } from '../store/features/reports/useReportOperations.js';
 import { reportEntityScope } from '../store/features/reports/reportContracts.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
@@ -24,6 +24,11 @@ const OVERVIEW_METRICS = ['Jobs', 'Trips', 'Revenue'];
 const SORT_OPTIONS = ['By Revenue', 'By Jobs', 'By Growth'];
 
 export function ReportsAnalytics() {
+  const session = useReportSession();
+  return <ReportsAnalyticsScreen key={session.key} />;
+}
+
+function ReportsAnalyticsScreen() {
   const navigate = useNavigate();
   const { draft, updateReportDraft } = useReportDraft();
   const operations = useReportOperations(draft);
@@ -49,13 +54,13 @@ export function ReportsAnalytics() {
   const compareArgs = reportRangeQuery(comparison);
   const scope = reportEntityScope({ entityType: entityTypeFilter, entity: entityFilter });
   const overviewArgs = args && compareArgs ? { ...args, compareFrom: compareArgs.dateFrom, compareTo: compareArgs.dateTo, ...scope.params,
-    groupBy: { Daily: 'day', Weekly: 'week', Monthly: 'month' }[groupBy], metric: overviewMetric.toLowerCase(), sortBy: sortEntities === 'By Jobs' ? 'jobs' : 'revenue', owner: operations.owner } : null;
+    groupBy: { Daily: 'day', Weekly: 'week', Monthly: 'month' }[groupBy], metric: overviewMetric.toLowerCase(), sortBy: { 'By Jobs': 'jobs', 'By Revenue': 'revenue', 'By Growth': 'growth' }[sortEntities], owner: operations.owner, role: operations.role } : null;
   const reports = useGetAdminReportOverviewQuery(overviewArgs, { skip: !authenticated || Boolean(scope.error) || !overviewArgs, refetchOnMountOrArgChange: true });
   const overview = authenticated && !scope.error && !reports.error && reports.currentData ? reports.currentData : emptyReportOverview();
   const dashboardSummary = overview.dashboardSummary;
   const { operationsOverview, jobsByStatus, jobsByType, geographicalDistribution,
     topPerformingEntities, financialSummary, userEngagement, complianceOverview, alertsExceptions, trendData } = overview;
-  const filteredEntities = sortEntities === 'By Growth' ? [] : topPerformingEntities;
+  const filteredEntities = topPerformingEntities;
   const totalChange = overview.deltaValues?.totalJobs ?? null;
   const completedChange = overview.deltaValues?.completedJobs ?? null;
   const comparisonCaption = 'vs ' + reportDateLabel(comparison);

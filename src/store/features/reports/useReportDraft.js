@@ -16,8 +16,9 @@ export function useReportDraft() {
 }
 export function useReportEntities(entityType) {
   const owner = useSelector((state) => state.auth.admin?.id);
+  const role = useSelector((state) => state.auth.admin?.role);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
-  const query = useGetAdminReportEntitiesQuery({ owner }, { skip: !authenticated });
+  const query = useGetAdminReportEntitiesQuery({ owner, role }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const options = (!authenticated || query.isError ? [] : query.currentData || [])
     .filter((row) => entityType === 'All Types' || row.entityType === entityType)
     .map((row) => ({ value: row.id, label: row.name }));

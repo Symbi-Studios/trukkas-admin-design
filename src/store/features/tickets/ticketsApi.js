@@ -50,10 +50,24 @@ function attachment(value) {
   return { url, name: name || '—', size, icon: /^image\//.test(text(file.mimeType) || '') || /\.(png|jpe?g|webp)$/i.test(name || '') ? 'image' : 'file-text' };
 }
 const personName = (user) => text(user.name) || [text(user.firstName), text(user.lastName)].filter(Boolean).join(' ') || '—';
+const ticketActorName = (actor) => text(record(actor).name) || '—';
+const mergedTicketId = (value) => text(record(value).id) || text(value);
+const isMergedTicket = (ticket) => ticket.mergedInto != null;
+const matchesTicketField = (ticket, key, value) => ticket[key] === value || key === 'status' && value === 'CLOSED' && ticket.status === 'RESOLVED';
+function ticketEntryIds(ticket) {
+  if (!Array.isArray(ticket.messages) || !Array.isArray(ticket.notes)) return null;
+  const entries = [...ticket.messages, ...ticket.notes], ids = entries.map((entry) => text(entry?.id));
+  return ids.every(Boolean) && new Set(ids).size === ids.length ? ids : null;
+}
+function containsMovedEntries(source, target) {
+  return ['messages', 'notes'].every((section) => source[section].every((entry) => target[section].some((saved) => (
+    saved.id === entry.id && saved.content === entry.content && saved.threadId === target.id
+  ))));
+}
 export const emptyTicket = {
   id: '—', subject: '—', subjectValue: null, userId: null, customer: '—', email: '—', company: '—', category: '—', categoryKnown: false, categoryCode: null,
   subcategory: '—', priority: '—', priorityCode: null, status: '—', statusCode: null, assignee: '—', assignedTo: null,
-  source: '—', created: '—', createdAge: '—', updated: '—', description: '—', attachments: [], attachmentsKnown: false,
+  source: '—', created: '—', createdBy: '—', createdAge: '—', updated: '—', description: '—', attachments: [], attachmentsKnown: false,
   messages: [], messagesKnown: false, history: [], mergedInto: null, sourceData: {},
 };
 function adaptTicket(dto, currentAdmin) {
@@ -82,8 +96,7 @@ function adaptTicket(dto, currentAdmin) {
   // Only the two existing update slots follow the creation slot; no timeline rows are added.
   const history = Array.isArray(dto.statusHistory) ? dto.statusHistory.map((item) => ({
     time: date(item?.createdAt), timestamp: timestamp(item?.createdAt), description: text(item?.description) || '—',
-    // The actor's nested schema is not documented; do not infer a name from an ID.
-    actor: '—',
+    actor: ticketActorName(item?.actor),
   })).filter((item) => item.timestamp != null && item.timestamp !== timestamp(dto.createdAt)).sort((a, b) => a.timestamp - b.timestamp).slice(-2) : [];
   return {
     ...emptyTicket, id: dto.id, subject: text(dto.subject) || '—', subjectValue: text(dto.subject), userId: text(user.id) || text(dto.userId), customer,
@@ -93,9 +106,9 @@ function adaptTicket(dto, currentAdmin) {
     status: STATUS_LABELS[statusCode] || '—', statusCode: STATUS_LABELS[statusCode] ? statusCode : null,
     assignedTo, assignee: assignedAdmin.id === assignedTo && text(assignedAdmin.name) ? text(assignedAdmin.name)
       : assignedTo && assignedTo === currentAdmin?.id ? personName(record(currentAdmin)) : '—',
-    source: SOURCE_LABELS[dto.source] || '—', created: date(dto.createdAt), createdAge: age(dto.createdAt), updated: date(dto.updatedAt),
+    source: SOURCE_LABELS[dto.source] || '—', created: date(dto.createdAt), createdBy: ticketActorName(dto.createdBy), createdAge: age(dto.createdAt), updated: date(dto.updatedAt),
     description: text(dto.description) || '—', messages, messagesKnown: publicKnown && notesKnown && entriesKnown,
-    attachments: [...files.values()], attachmentsKnown, history, mergedInto: text(dto.mergedInto), sourceData: dto,
+    attachments: [...files.values()], attachmentsKnown, history, mergedInto: mergedTicketId(dto.mergedInto), sourceData: dto,
   };
 }
 export function ticketWithAgents(ticket, agents = []) {
@@ -204,6 +217,8 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
         if (result.error) return result;
         const dto = record(record(unwrapApiResponseData(result.data)).thread);
         if (!text(dto.id)) return failure('Creation was accepted but the ticket ID was not returned. Refresh the list before creating it again.');
+        if (['subject', 'category', 'priority', 'description'].some((key) => dto[key] !== body[key])
+          || text(record(dto.user).email)?.toLowerCase() !== body.email.toLowerCase()) return failure('Creation was accepted but the returned ticket could not be confirmed. Refresh the list before creating it again.');
         const check = await readTicket(dto.id, baseQuery);
         if (!owns(api, owner)) return sessionError();
         if (check.error || ['subject', 'category', 'priority', 'description'].some((key) => check.data[key] !== body[key])
@@ -224,14 +239,19 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
         const current = await readTicket(id, baseQuery);
         if (!owns(api, owner)) return sessionError();
         if (current.error) return current;
-        if (text(current.data.mergedInto)) return failure('Merged tickets cannot be edited.', 409);
+        if (isMergedTicket(current.data)) return failure('Merged tickets cannot be edited.', 409);
         if (expectedUpdatedAt && current.data.updatedAt !== expectedUpdatedAt) return failure('The ticket changed. Refresh and review it before saving.', 409);
         const result = await baseQuery({ url: path(id), method: 'PATCH', body });
         if (!owns(api, owner)) return sessionError();
         if (result.error) return result;
+        const response = record(unwrapApiResponseData(result.data)), returned = record(response.thread);
+        const changed = keys.filter((key) => !matchesTicketField(current.data, key, body[key]));
+        if (returned.id !== id || keys.some((key) => !matchesTicketField(returned, key, body[key]))
+          || !Array.isArray(response.changedFields) || !response.changedFields.every((field) => text(field))
+          || changed.some((key) => !response.changedFields.includes(key))) return failure('The update was accepted but its returned ticket or changed fields could not be confirmed. Refresh before trying again.');
         const check = await readTicket(id, baseQuery);
         if (!owns(api, owner)) return sessionError();
-        if (check.error || keys.some((key) => check.data[key] !== body[key] && !(key === 'status' && body.status === 'CLOSED' && check.data.status === 'RESOLVED'))) return failure('The update was accepted but could not be confirmed. Refresh before trying again.');
+        if (check.error || keys.some((key) => !matchesTicketField(check.data, key, body[key]))) return failure('The update was accepted but could not be confirmed. Refresh before trying again.');
         return { data: adaptTicket(check.data, owner) };
       }, invalidatesTags: (_result, _error, { id }) => [...ticketTags(id), 'AdminTicketAgents'],
     }),
@@ -270,15 +290,25 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
         if (!owns(api, owner)) return sessionError();
         if (target.error) return target;
         const userId = text(source.data.userId) || text(record(source.data.user).id), targetUser = text(target.data.userId) || text(record(target.data.user).id);
-        if (!userId || userId !== targetUser || text(source.data.mergedInto) || text(target.data.mergedInto)) return failure('Both tickets must belong to the same customer and must not already be merged.');
+        if (!userId || userId !== targetUser || isMergedTicket(source.data) || isMergedTicket(target.data)) return failure('Both tickets must belong to the same customer and must not already be merged.');
+        const sourceEntries = ticketEntryIds(source.data);
+        if (!sourceEntries) return failure('The source ticket conversation is incomplete. Refresh before merging.');
         const result = await baseQuery({ url: path(id) + '/merge', method: 'POST', body: { targetThreadId } });
         if (!owns(api, owner)) return sessionError();
         if (result.error) return result;
         const dto = record(unwrapApiResponseData(result.data));
-        if (dto.survivingThreadId !== targetThreadId || dto.mergedThreadId !== id) return failure('The merge was accepted but its result could not be confirmed. Refresh before trying again.');
+        const returned = record(dto.thread), movedMessages = count(dto.movedMessages), returnedEntries = ticketEntryIds(returned);
+        if (dto.survivingThreadId !== targetThreadId || dto.mergedThreadId !== id || returned.id !== targetThreadId
+          || movedMessages == null || movedMessages < sourceEntries.length || isMergedTicket(returned)
+          || !returnedEntries || !containsMovedEntries(source.data, returned)) return failure('The merge was accepted but its result could not be confirmed. Refresh before trying again.');
         const check = await readTicket(targetThreadId, baseQuery);
         if (!owns(api, owner)) return sessionError();
-        if (check.error || text(check.data.mergedInto)) return failure('The merge was accepted but the surviving ticket could not be loaded. Refresh the list before trying again.');
+        if (check.error || isMergedTicket(check.data) || (text(check.data.userId) || text(record(check.data.user).id)) !== userId) return failure('The merge was accepted but the surviving ticket could not be loaded. Refresh the list before trying again.');
+        const savedEntries = ticketEntryIds(check.data);
+        if (!savedEntries || !containsMovedEntries(source.data, check.data)) return failure('The merge was accepted but the moved messages and notes could not be confirmed. Refresh the list before trying again.');
+        const sourceCheck = await readTicket(id, baseQuery);
+        if (!owns(api, owner)) return sessionError();
+        if (sourceCheck.error || mergedTicketId(sourceCheck.data.mergedInto) !== targetThreadId || sourceCheck.data.status !== 'RESOLVED') return failure('The merge was accepted but the source ticket closure could not be confirmed. Refresh the list before trying again.');
         return { data: adaptTicket(check.data, owner) };
       }, invalidatesTags: (_result, _error, { id, targetThreadId }) => [...ticketTags(id), ...ticketTags(targetThreadId), 'AdminTicketAgents'],
     }),

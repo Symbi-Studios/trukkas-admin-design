@@ -84,7 +84,7 @@ export function adaptManagedUser(raw, source = 'user', _profile = false, extras 
     login = record(security.lastLogin);
   const id = text(dto.id) || text(identity.id),
     r = roleData(dto.role, source),
-    prefs = record(extras.preferences),
+    prefs = record(extras.preferences ?? dto.notifications),
     permission = record(extras.permissions);
   const permissionKeys = Array.isArray(permission.permissionKeys) && permission.permissionKeys.every(v => text(v)) ? permission.permissionKeys : null;
   const joinedAt = text(dto.joinedAt),
@@ -103,7 +103,7 @@ export function adaptManagedUser(raw, source = 'user', _profile = false, extras 
     role: r.label,
     roleCode: r.core,
     roleKind: r.kind,
-    roleId: r.id || text(dto.roleId) || text(permission.roleId) || text(permission.role?.id),
+    roleId: r.id || text(dto.roleId) || text(permission.roleId) || text(permission.role?.id) || text(permission.primaryRole?.id),
     roleFilterCode: r.code,
     roleTone: {
       SUPER_ADMIN: 'purple',
@@ -281,7 +281,7 @@ export function managedUserStatusChart(_rows, _summary, stats) {
   const entries = breakdown(stats?.byStatus);
   return ['Active', 'Inactive', 'Locked', 'Pending Invitation'].map(name => {
     const code = name.toUpperCase().replaceAll(' ', '_'),
-      item = entries.find(e => (text(e.code) || text(e.status)) === code || text(e.label) === name),
+      item = entries.find(e => (text(e.code) || text(e.status)) === code || (text(e.label)?.toUpperCase().replaceAll(' ', '_')) === code),
       value = item ? count(item.count) : null,
       percent = item ? share(item.sharePercent ?? item.share) : null;
     return {
@@ -335,7 +335,7 @@ export function adaptManagedUserSection(section, raw) {
     return {
       values: [{
         label: 'Access Level',
-        value: text(dto.accessLevel) || '—'
+        value: text(dto.accessLevel) || (dto.primaryRole?.kind === 'ADMIN_ACCESS' ? text(dto.primaryRole.code) : null) || '—'
       }],
       rows: keys ? keys.map(key => ({
         id: key,
@@ -354,13 +354,13 @@ export function adaptManagedUserSection(section, raw) {
     rows: list.map((raw, i) => {
       const r = record(raw);
       return section === 'sessions' ? {
-        id: text(r.id) || String(i),
+        id: text(r.sessionId) || text(r.id) || String(i),
         device: text(r.device) || text(r.userAgent) || '—',
         ip: text(r.ipAddress) || '—',
-        status: ['ACTIVE', 'REVOKED', 'EXPIRED'].includes(r.status) ? label(r.status) : '—',
+        status: ['ACTIVE', 'REVOKED', 'EXPIRED', 'ENDED'].includes(r.status) ? label(r.status) : '—',
         reason: text(r.revokedReason) || '—',
         created: managedUserDate(r.createdAt),
-        lastActive: managedUserDate(r.lastActiveAt),
+        lastActive: managedUserDate(r.lastSeenAt ?? r.lastActiveAt),
         expires: managedUserDate(r.expiresAt)
       } : {
         id: text(r.id) || String(i),
@@ -368,7 +368,7 @@ export function adaptManagedUserSection(section, raw) {
         status: label(r.status),
         uploaded: managedUserDate(r.uploadedAt),
         expires: managedUserDate(r.expiresAt),
-        url: safeDocumentUrl(r.fileURL)
+        url: safeDocumentUrl(r.url ?? r.fileURL)
       };
     })
   };
@@ -625,35 +625,56 @@ export const usersApi = apiWithTags.injectEndpoints({
       },
       invalidatesTags: allTags
     }),
+    renameManagedUser: builder.mutation({
+      async queryFn({ id, source, name, expectedVersion }, api, _opts, baseQuery) {
+        const blocked = access(api, source);
+        if (blocked) return blocked;
+        const nextName = text(name);
+        if (!['user', 'admin'].includes(source) || !text(id) || id.startsWith('invite_') || !nextName || nextName.length < 2 || nextName.length > 100 || !text(expectedVersion)) return failure('Enter a name of 2–100 characters and refresh the account version before saving.');
+        const result = await baseQuery({
+          url: ROOT + '/' + encodeURIComponent(id),
+          method: 'PATCH',
+          body: { accountType: source, name: nextName, expectedVersion }
+        });
+        if (result.error) return result;
+        const dto = record(unwrapApiResponseData(result.data));
+        if (dto.id !== id || dto.accountType !== source || dto.name !== nextName || !text(dto.version) || dto.version === expectedVersion) return failure('The name update could not be confirmed. Refresh before trying again.');
+        const current = api.getState().auth.admin;
+        if (source === 'admin' && current?.id === id) api.dispatch(setCredentials({ admin: { ...current, name: dto.name } }));
+        return { data: { message: 'User updated.', authUpdated: source === 'admin' && current?.id === id } };
+      },
+      invalidatesTags: allTags
+    }),
     changeManagedUserAccess: builder.mutation({
       async queryFn({
         id,
         source,
         operation,
-        reason
+        reason,
+        expectedVersion
       }, api, _opts, baseQuery) {
         const blocked = access(api, source);
         if (blocked) return blocked;
         if (source !== 'user' || !text(id) || id.startsWith('invite_') || !['suspend', 'activate'].includes(operation)) return failure('This access transition needs the account lock/unlock control.');
         if (operation === 'suspend' && !text(reason)) return failure('A suspension reason is required.');
-        const before = await baseQuery({
-          url: `/admin/users/${encodeURIComponent(id)}/profile`
-        });
+        const before = await readProfile(baseQuery, id, source, false);
         if (before.error) return before;
-        const account = record(unwrapApiResponseData(before.data));
-        if (account.id !== id || account.status !== (operation === 'suspend' ? 'ACTIVE' : 'SUSPENDED')) return failure('The account status changed or this transition is unavailable. Refresh the user.');
+        const account = before.data;
+        if (account.backendId !== id || (operation === 'suspend' ? account.statusCode !== 'ACTIVE' : !['SUSPENDED', 'INACTIVE'].includes(account.statusCode))) return failure('The account status changed or this transition is unavailable. Refresh the user.');
+        if (operation === 'activate' && (!text(expectedVersion) || account.version !== expectedVersion)) return failure('The account version changed. Refresh the user before activating.', 409);
+        if (operation === 'activate' && account.statusCode === 'INACTIVE' && !text(reason)) return failure('An activation reason is required.');
         const result = await baseQuery({
-          url: `/admin/users/${encodeURIComponent(id)}/${operation}`,
+          url: '/admin/users/' + encodeURIComponent(id) + '/' + operation,
           method: 'POST',
-          ...(operation === 'suspend' ? {
-            body: {
-              reason: reason.trim()
-            }
-          } : {})
+          body: operation === 'suspend' ? { reason: reason.trim() } : { expectedVersion, ...(text(reason) ? { reason: reason.trim() } : {}) }
         });
         if (result.error) return result;
         const dto = record(unwrapApiResponseData(result.data));
-        if (dto.user?.id !== id || (operation === 'suspend' ? dto.user.status !== 'SUSPENDED' : timestamp(dto.user.activatedAt) == null)) return failure('The updated access could not be confirmed. Refresh before trying again.');
+        if (operation === 'suspend') {
+          if (dto.user?.id !== id || dto.user.status !== 'SUSPENDED') return failure('The updated access could not be confirmed. Refresh before trying again.');
+        } else if (dto.id !== id || dto.status !== 'ACTIVE' || !text(dto.version) || dto.version === expectedVersion || dto.user?.id !== id) {
+          return failure('The updated access could not be confirmed. Refresh before trying again.');
+        }
         return {
           data: {
             message: text(dto.message) || 'Account updated.'
@@ -915,6 +936,7 @@ export const {
   useCreateManagedAdminMutation,
   useChangeManagedUserAccessMutation,
   useUpdateManagedAdminMutation,
+  useRenameManagedUserMutation,
   useRunManagedUserActionMutation,
   useUpdateManagedUserPermissionsMutation,
   useSendManagedUserMessageMutation,

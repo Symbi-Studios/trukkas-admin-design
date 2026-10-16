@@ -9,7 +9,7 @@ import {
   DonutChart, LegendList, StatusDot, Skeleton, ActivityFeed,
 } from '../ds.js';
 import {
-  useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useUpdateManagedAdminMutation, useCreateManagedAdminMutation,
+  useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useRenameManagedUserMutation, useCreateManagedAdminMutation,
   managedUserSummary, managedUserRoleChart, managedUserStatusChart, managedUsersCsv, managedUserMatchesRole, useGetUserManagementRecentActivityQuery,
 } from '../store/features/users/usersApi.js';
 import { DriverTableLoading, DriverLoadingNotice } from './DriversLoading.jsx';
@@ -53,7 +53,7 @@ export function UserManagement() {
   const usersSummary = managedUserSummary(directory?.rows, !authenticated || statsQuery.error ? null : statsQuery.currentData, includeAdmins);
   const usersByRole = managedUserRoleChart(directory?.rows, directory?.adminsIncluded, statsQuery.error ? null : statsQuery.currentData);
   const usersByStatus = managedUserStatusChart(directory?.rows, usersSummary, statsQuery.error ? null : statsQuery.currentData);
-  const [editAdmin, editState] = useUpdateManagedAdminMutation();
+  const [renameUser, editState] = useRenameManagedUserMutation();
   const [createAdmin, createState] = useCreateManagedAdminMutation();
   const operations = useManagedUserOperations();
   const [activityOpen, setActivityOpen] = useState(false);
@@ -120,11 +120,11 @@ export function UserManagement() {
   async function editUser(user) {
     setMenuFor(null);
     if (submitting.current || editState.isLoading) return;
-    if (user.source !== 'admin' || admin?.role !== 'SUPER_ADMIN') { unavailable('Edit User'); return; }
+    if (!user.isAccount || (user.source === 'admin' && admin?.role !== 'SUPER_ADMIN')) { unavailable('Edit User'); return; }
     const name = window.prompt('Full Name', user.name === '—' ? '' : user.name);
     if (!name?.trim() || name.trim() === user.name) return;
     submitting.current = true;
-    try { const result = await editAdmin({ id: user.backendId, name }).unwrap(); window.alert(result.message); }
+    try { const result = await renameUser({ id: user.backendId, source: user.source, name, expectedVersion: user.version, owner: admin?.id }).unwrap(); window.alert(result.message); }
     catch (error) { window.alert(getApiErrorMessage(error)); }
     finally { submitting.current = false; }
   }
