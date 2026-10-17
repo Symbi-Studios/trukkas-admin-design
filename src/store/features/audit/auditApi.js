@@ -1,3 +1,4 @@
+import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -8,15 +9,29 @@ const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
 const permissionError = () => ({ error: { status: 403, data: { message: 'Only Super Admins can view audit logs.' } } });
 const CATEGORIES = new Set(['SECURITY', 'DATA_CHANGE', 'FINANCIAL', 'COMPLIANCE', 'OPERATIONS', 'COMMUNICATION']);
-const PERIODS = {
-  'May 1, 2026 – May 30, 2026': ['2026-05-01', '2026-05-30'],
-  'May 24, 2026 – May 30, 2026': ['2026-05-24', '2026-05-30'],
-  'May 1, 2026 – May 15, 2026': ['2026-05-01', '2026-05-15'],
-};
-export function auditPeriod(value) {
-  const period = PERIODS[value];
-  // Date-only filters are inclusive Lagos calendar dates in the documented API.
-  return period ? { dateFrom: period[0], dateTo: period[1] } : {};
+export const AUDIT_DATE_OPTIONS = ['This Month', 'Last 7 Days', 'Last 30 Days', 'All Time'];
+export function auditPeriod(value, now = new Date()) {
+  if (value === 'All Time') return {};
+  if (!AUDIT_DATE_OPTIONS.includes(value) || Number.isNaN(now.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+  const part = name => parts.find(item => item.type === name).value;
+  const dateTo = part('year') + '-' + part('month') + '-' + part('day');
+  const start = new Date(dateTo + 'T12:00:00.000Z');
+  start.setUTCDate(start.getUTCDate() - (value === 'Last 30 Days' ? 29 : 6));
+  return { dateFrom: value === 'This Month' ? dateTo.slice(0, 8) + '01' : start.toISOString().slice(0, 10), dateTo };
+}
+const serializeAuditQuery = args => defaultSerializeQueryArgs(args) + ':v2';
+function scopedAuditQuery(baseQuery, api, args = {}) {
+  const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
+  const current = () => {
+    const next = api.getState().auth;
+    return !api.signal.aborted && Boolean(next.accessToken && owner) && role === 'SUPER_ADMIN' && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
+  };
+  return async request => {
+    if (!current()) return permissionError();
+    const result = await baseQuery(request);
+    return current() ? result : failure('Your session changed. Reopen Audit Logs before continuing.');
+  };
 }
 export function auditTabAvailable(tab, rows = []) {
   if (!['All Logs', 'User Actions', 'Data Changes', 'Security Events', 'Login History'].includes(tab)) return false;
@@ -75,6 +90,7 @@ function relatedRecord(dto, index = 0) {
     DRIVER: { icon: 'user', label: 'Driver', path: `/drivers/detail?id=${encoded}` },
     COMPANY: { icon: 'building-2', label: 'Company', path: `/companies/detail?id=${encoded}` },
     FORWARDER: { icon: 'user', label: 'Forwarder', path: `/forwarders/detail?id=${encoded}` },
+    MAINTENANCE: { icon: 'file-text', label: 'Maintenance', path: `/maintenance/detail?id=${encoded}` },
   };
   let target = targets[type];
   if (type === 'DOCUMENT' && text(context.jobId)) {
@@ -123,6 +139,8 @@ function readPage(response, requestedPage) {
     || count(pagination.totalPages) == null || (pagination.total > 0 && pagination.totalPages === 0)) {
     return failure('The audit API response is missing the logs or pagination needed to load all records.');
   }
+  const size = count(pagination.limit);
+  if (!size || size > 100 || pagination.totalPages > 500 || Math.max(1, pagination.totalPages) !== Math.max(1, Math.ceil(pagination.total / size)) || dto.logs.length !== Math.max(0, Math.min(size, pagination.total - (requestedPage - 1) * size))) return failure('The audit API returned an incomplete page or inconsistent pagination.');
   const ids = dto.logs.map((row) => text(row?.id));
   if (dto.logs.length > pagination.total || (pagination.total === 0 && pagination.totalPages > 1)
     || requestedPage > Math.max(1, pagination.totalPages)) return failure('The audit API returned inconsistent pagination.');
@@ -133,7 +151,7 @@ async function readAuditDirectory(baseQuery, params, api) {
   const rows = [], seen = new Set();
   let page = 1, total = null, totalPages = 1;
   do {
-    if (api.signal.aborted) return failure('The audit request was cancelled.');
+    if (api.signal.aborted || page > 500) return failure('The audit request was cancelled.');
     const result = await baseQuery({ url: '/admin/audit-logs', params: { ...params, page, limit: 100, sort: '-createdAt' } });
     if (result.error) return result;
     const parsed = readPage(result.data, page);
@@ -171,7 +189,7 @@ function adaptSummary(response) {
     const previous = count(metric.previous), change = number(metric.changePercent);
     const direction = ['UP', 'DOWN', 'FLAT'].includes(metric.direction) ? metric.direction : null;
     const consistent = change != null && ((change > 0 && direction === 'UP') || (change < 0 && direction === 'DOWN') || (change === 0 && direction === 'FLAT'));
-    comparisons[key] = values[key] != null && previous != null && consistent
+    comparisons[key] = values[key] != null && previous != null && previous > 0 && consistent
       ? { percent: Math.abs(change), direction: direction === 'FLAT' ? null : direction.toLowerCase() }
       : { percent: null, direction: null };
   }
@@ -181,13 +199,17 @@ export const auditApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminAuditLogs
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminAuditDirectory: builder.query({
+      serializeQueryArgs: serializeAuditQuery,
       queryFn(params = {}, api, _options, baseQuery) {
+        baseQuery = scopedAuditQuery(baseQuery, api, params);
         if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return permissionError();
         return readAuditDirectory(baseQuery, { ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}), ...(params.dateTo ? { dateTo: params.dateTo } : {}) }, api);
       }, providesTags: ['AdminAuditLogs'],
     }),
     getAdminAuditScreenSummary: builder.query({
-      async queryFn(_args, api, _options, baseQuery) {
+      serializeQueryArgs: serializeAuditQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedAuditQuery(baseQuery, api, args);
         if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return permissionError();
         const result = await baseQuery({ url: '/admin/audit-logs/summary' });
         if (result.error) return result;
@@ -195,7 +217,10 @@ export const auditApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminAuditLogs
       }, providesTags: ['AdminAuditLogs'],
     }),
     getAdminAuditDetail: builder.query({
-      async queryFn({ id }, api, _options, baseQuery) {
+      serializeQueryArgs: serializeAuditQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedAuditQuery(baseQuery, api, args);
+        const { id } = args;
         if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return permissionError();
         if (!text(id)) return failure('An audit ID is required.');
         const result = await baseQuery({ url: `/admin/audit-logs/${encodeURIComponent(id)}` });

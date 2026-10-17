@@ -40,9 +40,15 @@ export function CreateRole() {
   const [permissionDialog, setPermissionDialog] = useState(null);
   const [preview, setPreview] = useState(null);
   useEffect(() => { setName(''); setDescription(''); setRoleType(''); setStatus('Active'); setColor('#0241E8'); setIcon('Shield'); setScope('org'); setManageUsers(true); setRequire2fa(false); setLevels(initialLevels()); setPermissionKeys({}); setPermQ(''); setPermissionDialog(null); setPreview(null); }, [owner]);
+  useEffect(() => {
+    if (catalog) setLevels(current => Object.fromEntries(ROLE_MODULE_MATRIX.map(row => [row.key, catalogForRow(catalog, row.key).length ? current[row.key] : null])));
+  }, [catalog]);
+  const editingDisabled = saving || !operations.canManage;
   const values = { name, description, roleType, status, color, icon, scope, manageUsers, require2fa, levels, permissionKeys };
   function chooseLevel(key, level) {
-    if (saving) return;
+    if (editingDisabled) return;
+    if (!catalog) { window.alert('Wait for the permission catalogue to load.'); return; }
+    if (!catalogForRow(catalog, key).length) { window.alert('This module has no backend permissions and cannot be configured.'); return; }
     if (level === 'custom') {
       if (!catalog) { window.alert('Wait for the permission catalogue to load.'); return; }
       const modules = catalogForRow(catalog, key);
@@ -65,7 +71,9 @@ export function CreateRole() {
   ), [permQ]);
 
   function setAll(level) {
-    if (!saving) setLevels(Object.fromEntries(ROLE_MODULE_MATRIX.map((m) => [m.key, level])));
+    if (editingDisabled) return;
+    if (!catalog) { window.alert('Wait for the permission catalogue to load.'); return; }
+    setLevels(Object.fromEntries(ROLE_MODULE_MATRIX.map((m) => [m.key, catalogForRow(catalog, m.key).length ? level : null])));
   }
 
   return (
@@ -81,24 +89,24 @@ export function CreateRole() {
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
           <SectionCard title="Role Information">
             <div style={{ display: 'grid', gap: 14 }}>
-              <TextField label="Role Name" required placeholder="e.g. Operations Manager" value={name} disabled={saving}
+              <TextField label="Role Name" required placeholder="e.g. Operations Manager" value={name} disabled={editingDisabled}
                 onChange={(e) => setName(e.target.value)} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Select label="Role Type" required placeholder="Select role type" options={ROLE_TYPES} value={roleType} disabled={saving}
+                <Select label="Role Type" required placeholder="Select role type" options={ROLE_TYPES} value={roleType} disabled={editingDisabled}
                   onChange={(e) => setRoleType(e.target.value)} />
-                <Select label="Status" required options={['Active', 'Inactive']} value={status} disabled={saving}
+                <Select label="Status" required options={['Active', 'Inactive']} value={status} disabled={editingDisabled}
                   leadingDot={status === 'Active' ? 'var(--tk-success)' : 'var(--tk-ink-300)'}
                   onChange={(e) => setStatus(e.target.value)} />
               </div>
               <Textarea label="Description" placeholder="Describe the purpose and scope of this role…" maxLength={500}
-                value={description} disabled={saving} onChange={(e) => setDescription(e.target.value)} />
+                value={description} disabled={editingDisabled} onChange={(e) => setDescription(e.target.value)} />
 
               <div>
                 <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>Role Color &amp; Icon</span>
                 <div className="tk-meta" style={{ marginBottom: 8 }}>Choose a color and icon to visually identify this role.</div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap' }}>
-                  <ColorSwatchPicker value={color} onChange={(value) => { if (!saving) setColor(value); }} />
-                  <Select label="Icon" style={{ minWidth: 160 }} options={ICONS} value={icon} disabled={saving}
+                  <ColorSwatchPicker value={color} onChange={(value) => { if (!editingDisabled) setColor(value); }} />
+                  <Select label="Icon" style={{ minWidth: 160 }} options={ICONS} value={icon} disabled={editingDisabled}
                     onChange={(e) => setIcon(e.target.value)} />
                 </div>
               </div>
@@ -110,16 +118,16 @@ export function CreateRole() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
               {ROLE_SCOPES.map((s) => (
                 <ChoiceCard key={s.key} selected={scope === s.key} icon={s.icon} title={s.title}
-                  description={s.description} onSelect={() => { if (!saving) setScope(s.key); }} />
+                  description={s.description} onSelect={() => { if (!editingDisabled) setScope(s.key); }} />
               ))}
             </div>
           </SectionCard>
 
           <SectionCard title="Additional Settings">
             <div style={{ display: 'grid', gap: 16 }}>
-              <Switch checked={manageUsers} disabled={saving} onChange={(value) => { if (!saving) setManageUsers(value); }} label="Allow this role to manage users"
+              <Switch checked={manageUsers} disabled={editingDisabled} onChange={(value) => { if (!editingDisabled) setManageUsers(value); }} label="Allow this role to manage users"
                 hint="Can create, edit and deactivate user accounts." />
-              <Switch checked={require2fa} disabled={saving} onChange={(value) => { if (!saving) setRequire2fa(value); }} label="Require 2FA for users with this role"
+              <Switch checked={require2fa} disabled={editingDisabled} onChange={(value) => { if (!editingDisabled) setRequire2fa(value); }} label="Require 2FA for users with this role"
                 hint="Enforce two-factor authentication for added security." />
             </div>
           </SectionCard>
@@ -155,7 +163,7 @@ export function CreateRole() {
               <div className="tk-scroll" style={{ maxHeight: 460, overflowY: 'auto' }}>
                 {visibleModules.map((m) => (
                   <PermissionRow key={m.key} icon={m.icon} module={m.label} actions={m.actions ? (catalogForRow(catalog, m.key).length ? String(catalogForRow(catalog, m.key).reduce((count, source) => count + source.actions.length, 0)) : '—') : undefined}
-                    value={levels[m.key]} onChange={(v) => chooseLevel(m.key, v)} />
+                    value={catalog && !catalogForRow(catalog, m.key).length ? null : levels[m.key]} onChange={(v) => chooseLevel(m.key, v)} />
                 ))}
               </div>
             </div>

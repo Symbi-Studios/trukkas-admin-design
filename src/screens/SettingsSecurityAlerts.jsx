@@ -46,7 +46,7 @@ export function SettingsSecurityAlerts() {
   const saveSecurityAlertsSettings = () => editor.save();
   const resetSecurityAlertsSettings = () => editor.unavailable('Reset Security Alerts Settings');
   const securityAlertsStatus = editor.status(securityAlertsStatusTemplate);
-  const recentSecurityAlerts = [];
+  const recentSecurityAlerts = editor.events;
   const events = securityAlertControls.map(({ key, icon, label, description }) => ({ key, icon, label, description, inApp: null, email: null, sms: null }));
   const delivery = editor.group('settingsAlertDelivery');
   const quiet = editor.group('settingsSecurityAlertsQuietHours');
@@ -160,7 +160,7 @@ export function SettingsSecurityAlerts() {
                   </div>
                 </div>
               ))}
-              {'—'}
+              {recentSecurityAlerts.length ? null : '—'}
             </div>
             <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => openEvents()}>View All Security Events</Button>
           </SectionCard>

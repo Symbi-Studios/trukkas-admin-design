@@ -1,10 +1,10 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import {
   feedbackText as text, feedbackObject as object, feedbackVersion as version, feedbackFailure as failure,
-  feedbackCollection, feedbackPagination, feedbackFilters, feedbackTimestamp,
+  feedbackCollection, feedbackPagination, feedbackFilters, feedbackTimestamp, feedbackRecordVersion, feedbackReplyDelivery, feedbackInteger,
   adaptFeedback, adaptFeedbackSummary, adaptFeedbackHistory, FEEDBACK_STATUSES, FEEDBACK_TYPES,
 } from './feedbackContracts.js';
-export { emptyFeedback, feedbackCount, feedbackPercentage, feedbackDetailUrl, feedbackUnavailable, feedbackHistoryPreview, FEEDBACK_PERIODS } from './feedbackContracts.js';
+export { emptyFeedback, feedbackCount, feedbackPercentage, feedbackDetailUrl, feedbackUnavailable, feedbackHistoryPreview, feedbackReplyMessage, FEEDBACK_PERIODS } from './feedbackContracts.js';
 const ROOT = '/admin/support/feedback';
 const ADMIN_ROLES = ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'];
 const path = (id) => ROOT + '/' + encodeURIComponent(id);
@@ -23,7 +23,7 @@ async function readDetail(id, baseQuery) {
   const result = await baseQuery(path(id));
   if (result.error) return result;
   const dto = object(unwrapApiResponseData(result.data));
-  return dto.id === id ? { data: dto } : failure('The response did not identify the requested feedback.');
+  return dto.id === id && feedbackRecordVersion(dto.version) ? { data: dto } : failure('The feedback response is missing its expected ID or ISO version.');
 }
 async function readSettings(baseQuery) {
   const result = await baseQuery(ROOT + '/settings');
@@ -39,9 +39,9 @@ async function readPage(url, params, kind, baseQuery) {
   const dto = unwrapApiResponseData(result.data), rows = feedbackCollection(dto, kind);
   if (!rows || rows.length > params.limit) return failure('The response does not contain an unambiguous valid feedback collection.');
   const meta = feedbackPagination(dto, params.page, params.limit, rows.length);
-  return { data: { rows, total: meta?.total ?? null, pages: meta?.pages ?? null } };
+  return meta ? { data: { rows, total: meta.total, pages: meta.pages } } : failure('The feedback response is missing valid documented pagination.');
 }
-async function readDirectory(url, kind, baseQuery, active, allowPartial = false) {
+async function readDirectory(url, kind, baseQuery, active) {
   const rows = [], seen = new Set();
   let page = 1, total = null, pages = 1;
   do {
@@ -51,7 +51,7 @@ async function readDirectory(url, kind, baseQuery, active, allowPartial = false)
     if (!active()) return sessionError();
     if (result.error) return result;
     const data = result.data;
-    if (data.total == null || data.pages == null) return allowPartial && page === 1 ? { data: { rows: data.rows, complete: false } } : failure('The directory pagination is unavailable. Its response schema needs confirmation.');
+    if (data.total == null || data.pages == null) return failure('The directory pagination is unavailable. Refresh the directory.');
     if (total != null && (total !== data.total || pages !== data.pages)) return failure('The feedback collection changed while loading. Refresh it again.');
     total = data.total; pages = data.pages;
     for (const row of data.rows) { if (seen.has(row.id)) return failure('The collection contains duplicate IDs.'); seen.add(row.id); rows.push(row); }
@@ -91,7 +91,7 @@ export const feedbackApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFeedba
     getAdminFeedbackHistory: builder.query({
       queryFn: guarded(async ({ id, page = 1, all = false }, baseQuery, active) => {
         if (!text(id) || !Number.isSafeInteger(page) || page < 1) return failure('Choose valid feedback history.');
-        const result = all ? await readDirectory(path(id) + '/history', 'history', baseQuery, active, true) : await readPage(path(id) + '/history', { page, limit: 20 }, 'history', baseQuery);
+        const result = all ? await readDirectory(path(id) + '/history', 'history', baseQuery, active) : await readPage(path(id) + '/history', { page, limit: 20 }, 'history', baseQuery);
         return result.error ? result : { data: { ...result.data, rows: result.data.rows.map(adaptFeedbackHistory) } };
       }), providesTags: ['AdminFeedback'],
     }),
@@ -100,7 +100,7 @@ export const feedbackApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFeedba
         if (!text(id)) return failure('A feedback ID is required.');
         const result = await baseQuery({ url: path(id) + '/related', params: { limit: 3 } });
         if (result.error) return result;
-        const rows = feedbackCollection(unwrapApiResponseData(result.data));
+        const rows = feedbackCollection(unwrapApiResponseData(result.data), 'related');
         return !rows || rows.length > 3 || rows.some((row) => row.id === id) ? failure('The related feedback collection could not be confirmed.') : { data: rows.map(adaptFeedback) };
       }), providesTags: ['AdminFeedback'],
     }),
@@ -112,17 +112,23 @@ export const feedbackApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFeedba
         let parsed; try { parsed = feedbackFilters(filters); } catch (error) { return failure(error.message); }
         if (parsed.incompatible) return failure('The selected tab and status filters do not overlap.');
         const result = await baseQuery({ url: ROOT + '/export', params: { ...parsed.params, format: 'csv' }, headers: { Accept: 'text/csv' }, responseHandler: async (response) => {
-          if (response.ok) return response.blob();
+          if (response.ok) {
+            const rawTruncated = response.headers.get('X-Truncated');
+            const disposition = response.headers.get('Content-Disposition') || '';
+            const filename = disposition.match(/filename="?((?:feedback-)\d{4}-\d{2}-\d{2}\.csv)"?/i)?.[1] || null;
+            return { blob: await response.blob(), truncated: rawTruncated === 'true' ? true : rawTruncated === 'false' ? false : null,
+              exportedCount: feedbackInteger(response.headers.get('X-Total-Count')), matchingCount: feedbackInteger(response.headers.get('X-Matching-Count')), filename };
+          }
           const body = await response.text(); try { return JSON.parse(body); } catch { return { message: 'Unable to download feedback.' }; }
         } });
         if (result.error) return result;
-        const blob = result.data;
+        const download = object(result.data), blob = download.blob;
         if (!(blob instanceof Blob) || !blob.size || !['text/csv', 'application/csv', 'application/vnd.ms-excel'].includes(blob.type.split(';')[0].toLowerCase())
           || /^\s*[<{\[]/.test(await blob.slice(0, 200).text())) return failure('The backend did not return a valid CSV download.');
         const bytes = new Uint8Array(await blob.arrayBuffer());
         let binary = '';
         for (let start = 0; start < bytes.length; start += 32768) binary += String.fromCharCode(...bytes.subarray(start, start + 32768));
-        return { data: { content: btoa(binary), format: 'csv' } };
+        return { data: { content: btoa(binary), format: 'csv', truncated: download.truncated, exportedCount: download.exportedCount, matchingCount: download.matchingCount, filename: download.filename } };
       }), keepUnusedDataFor: 0,
     }),
     changeAdminFeedback: builder.mutation({
@@ -154,7 +160,7 @@ async function changeFeedback({ owner, action, id, expectedVersion, values = {},
     if (Object.keys(body).length === 1) return failure('There are no settings changes to save.');
     request = { url: ROOT + '/settings', method: 'PATCH', body };
   } else {
-    if (!version(expectedVersion)) return failure('The feedback version is unavailable. Refresh before saving.');
+    if (!feedbackRecordVersion(expectedVersion)) return failure('The feedback version is unavailable. Refresh before saving.');
     const current = await readDetail(id, baseQuery);
     if (!active()) return sessionError();
     if (current.error) return current;
@@ -202,19 +208,20 @@ async function changeFeedback({ owner, action, id, expectedVersion, values = {},
   if (!active()) return sessionError();
   if (check.error) return failure('The change was accepted but the saved feedback could not be read back. Refresh before trying again.');
   const saved = check.data;
+  const delivery = action === 'reply' ? feedbackReplyDelivery(dto.delivery) : null;
   const confirmed = action === 'create' ? saved.title === body.title && saved.body === body.body && saved.type === body.type && saved.submitterType === 'ADMIN' && saved.userId === owner
     : action === 'update' ? Object.keys(body).filter((key) => key !== 'expectedVersion').every((key) => saved[key] === body[key])
     : action === 'read' ? saved.isRead === body.isRead : action === 'spam' ? saved.status === 'SPAM'
     : action === 'tags' ? Array.isArray(saved.tags) && saved.tags.length === body.tags.length && body.tags.every((tag) => saved.tags.includes(tag))
     : action === 'note' ? body.text === '' ? saved.note === null || object(saved.note).text === '' || object(saved.note).text === null : object(saved.note).text === body.text
-    : action === 'reply' ? text(dto.replyId) && dto.message === body.message && feedbackTimestamp(dto.sentAt) != null && version(dto.version) && saved.version === dto.version && (before.status !== 'OPEN' || saved.status === 'IN_PROGRESS') && saved.isRead === true : false;
+    : action === 'reply' ? text(dto.replyId) && dto.message === body.message && feedbackTimestamp(dto.sentAt) != null && feedbackRecordVersion(dto.version) && dto.version !== expectedVersion && saved.version === dto.version && dto.status === saved.status && object(dto.author).id === owner && text(dto.deliveryReference) && delivery && (before.status !== 'OPEN' || saved.status === 'IN_PROGRESS') && saved.isRead === true : false;
   if (!confirmed) return failure('The change was accepted but its saved values could not be confirmed. Refresh before trying again.');
-  return { data: { feedback: adaptFeedback(saved), ...(action === 'reply' ? { delivery: object(dto.delivery) } : {}) } };
+  return { data: { feedback: adaptFeedback(saved), ...(action === 'reply' ? { delivery, replyId: dto.replyId, sentAt: dto.sentAt, deliveryReference: dto.deliveryReference } : {}) } };
 }
 export function saveFeedbackCsv(download) {
   const bytes = Uint8Array.from(atob(download.content), (character) => character.charCodeAt(0));
   const url = URL.createObjectURL(new Blob([bytes], { type: 'text/csv;charset=utf-8' })), anchor = document.createElement('a');
-  anchor.href = url; anchor.download = 'feedback.csv'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 0);
+  anchor.href = url; anchor.download = download.filename || 'feedback.csv'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 export const {
   useGetAdminFeedbackPageQuery, useGetAdminFeedbackSummaryQuery, useGetAdminFeedbackDetailQuery,

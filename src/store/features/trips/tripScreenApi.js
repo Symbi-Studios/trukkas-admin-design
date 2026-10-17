@@ -31,6 +31,17 @@ function readPage(dto, page, requestedLimit) {
   if (ids.some((id) => !id) || new Set(ids).size !== ids.length) throw error('The trips response contains invalid or repeated IDs.');
   return { rows: dto.trips, pagination: { page: p.page, limit: p.limit, total: p.total, totalPages: Math.max(1, p.totalPages) } };
 }
+function companyPayout(dto, trip) {
+  const payout = dto.companyPayout;
+  if (!payout || typeof payout !== 'object' || Array.isArray(payout) || !text(payout.id) || payout.kind !== 'JOB_SETTLEMENT'
+    || !trip.truckerId || payout.payeeId !== trip.truckerId || !Array.isArray(payout.tripIds)
+    || !payout.tripIds.every(id => text(id)) || !payout.tripIds.includes(trip.id)) return null;
+  return {
+    id: payout.id,
+    status: ({ PENDING: 'Pending', PARTIALLY_PAID: 'Partially Paid', COMPLETED: 'Completed', ON_HOLD: 'On Hold', CANCELLED: 'Cancelled' })[payout.status] || '—',
+    url: '/settlements/detail?id=' + encodeURIComponent(payout.id),
+  };
+}
 function presentation(dto) {
   const t = mapAdminTripDto(dto);
   const containerParts = [text(t.container.size), text(t.container.type)].filter(Boolean).join(' ');
@@ -42,7 +53,7 @@ function presentation(dto) {
     distanceLabel: t.distance.remainingKm == null ? '—' : t.distance.remainingKm.toLocaleString('en-NG', { maximumFractionDigits: 1 }) + ' km',
     etaLabel: t.displayEta || '—', progress: t.progressPercent,
     live: t.telemetryLive === true && t.hasGpsPosition && !['COMPLETED', 'CANCELLED'].includes(t.statusCode),
-    payout: null,
+    payout: companyPayout(dto, t),
     // The reference's multi-truck note requires independent assignments; containers share a job assignment today.
     multipleTruckAssignmentsKnown: false,
     siblingIds: t.otherTripsOnJob.map((s) => s.id).filter((id) => id && id !== '—' && id !== t.id),
@@ -133,8 +144,16 @@ export const tripScreenApi = baseApi.injectEndpoints({
     exportAdminTripScreen: builder.query({
       async queryFn({ owner, role, ...params }, api, _options, baseQuery) {
         try {
-          const csv = await transport(api, baseQuery, owner, role)({ url: '/admin/trips/export', params: filters(params), responseHandler: 'text', headers: { Accept: 'text/csv' } });
-          if (typeof csv !== 'string') throw error('The export response is not CSV.');
+          const download = await transport(api, baseQuery, owner, role)({
+            url: '/admin/trips/export', params: filters(params), headers: { Accept: 'text/csv' },
+            responseHandler: async (response) => {
+              const body = await response.text();
+              if (!response.ok) { try { return JSON.parse(body); } catch { return { message: 'Unable to export trips.' }; } }
+              return { csv: body, contentType: response.headers.get('Content-Type') };
+            },
+          });
+          const csv = download?.csv, type = download?.contentType?.split(';')[0].trim().toLowerCase();
+          if (typeof csv !== 'string' || !csv.trim() || type !== 'text/csv' || /^[<{\[]/.test(csv.replace(/^\uFEFF/, '').trimStart())) throw error('The export response is not a valid CSV download.');
           return { data: csv };
         } catch (e) { return { error: e?.status ? e : error('Unable to export trips.') }; }
       },

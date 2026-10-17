@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
+import { useSearchParams } from 'next/navigation';
 import { useNavigate } from "../router.js";
 import {
   PageHeader,
@@ -43,12 +44,15 @@ export function SupportTickets() {
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const searchParams = useSearchParams();
+  const assignedTo = searchParams.get('assignedTo') === 'me' ? 'me' : undefined;
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [priority, setPriority] = useState("All");
   const [category, setCategory] = useState("All");
   const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [assignedTo]);
   const [create, setCreate] = useState(false);
   const [form, setForm] = useState({
     subject: "",
@@ -64,9 +68,9 @@ export function SupportTickets() {
   currentOwner.current = admin?.id;
   useEffect(() => { if (!authenticated) setCreate(false); }, [authenticated]);
   useEffect(() => { const timer = setTimeout(() => setSearch(q.trim()), 250); return () => clearTimeout(timer); }, [q]);
-  const directory = useGetAdminSupportTicketDirectoryQuery(undefined, { skip: !authenticated });
+  const directory = useGetAdminSupportTicketDirectoryQuery(assignedTo ? { assignedTo } : undefined, { skip: !authenticated });
   const serverFilters = Boolean(search || priority !== "All" || status !== "All" || category !== "All");
-  const searched = useGetAdminSupportTicketDirectoryQuery({ search, priority: TICKET_PRIORITY_CODES[priority], status: TICKET_STATUS_CODES[status], category: TICKET_CATEGORY_CODES[category] }, { skip: !authenticated || !serverFilters });
+  const searched = useGetAdminSupportTicketDirectoryQuery({ search, priority: TICKET_PRIORITY_CODES[priority], status: TICKET_STATUS_CODES[status], category: TICKET_CATEGORY_CODES[category], ...(assignedTo ? { assignedTo } : {}) }, { skip: !authenticated || !serverFilters });
   const statsQuery = useGetAdminSupportTicketStatsQuery(undefined, { skip: !authenticated });
   const agentsQuery = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated });
   const agents = authenticated && !agentsQuery.error ? agentsQuery.currentData : undefined;

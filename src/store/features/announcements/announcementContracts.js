@@ -34,15 +34,16 @@ export function adaptBroadcast(value) {
   const schedule = dateParts(dto.scheduledFor), published = dateParts(dto.publishedAt), expiry = dateParts(dto.expiresAt), display = status === 'SCHEDULED' ? schedule : published;
   const title = typeof dto.title === 'string' ? dto.title : '', message = typeof dto.message === 'string' ? dto.message : '';
   const pinned = typeof dto.pinned === 'boolean' ? dto.pinned : null, acknowledgement = typeof dto.acknowledgement === 'boolean' ? dto.acknowledgement : null;
-  const channels = Array.isArray(dto.channels) && dto.channels.every((channel) => typeof channel === 'string') ? dto.channels : null;
+  const channels = Array.isArray(dto.channels) && dto.channels.every((channel) => text(channel)) && new Set(dto.channels).size === dto.channels.length ? dto.channels : null;
   return { id: text(dto.id), t: text(title) ? title : '—', p: text(message) ? message : '—', searchKnown: typeof dto.title === 'string' && typeof dto.message === 'string',
     type: type || '—', typeKnown: Boolean(type), icon: icons[type] || 'megaphone', aud: audience || '—', audienceKnown: Boolean(audience), statusCode: status, st: labels[status] || '—',
-    d: display.d, tm: display.tm, v: count(dto.seenCount ?? dto.viewCount), createdAt: timestamp(dto.createdAt), priority: priority || '—', pinned, acknowledgement, channels,
+    d: display.d, tm: display.tm, v: count(dto.seenCount ?? dto.viewCount), sentCount: count(dto.sentCount), acknowledgedCount: count(dto.acknowledgedCount), createdAt: timestamp(dto.createdAt), priority: priority || '—', pinned, acknowledgement, channels,
     version: timestamp(dto.version) == null ? null : dto.version,
     form: { title, message, type: type || null, audience: mode ? audienceNames[mode] : null, targeting,
       schedule: status === 'SCHEDULED' ? 'Schedule for Later' : status ? 'Publish Now' : null,
       scheduleDate: schedule.inputDate, scheduleTime: schedule.inputTime, priority: priority || null, pinned, acknowledgement, expiry: expiry.inputDate },
     state: { title, message, type: dto.type, priority: dto.priority, pinned, acknowledgement, audienceMode: mode, targeting, channels,
+      publishedAt: dto.publishedAt, unpublishedAt: dto.unpublishedAt, archivedAt: dto.archivedAt,
       scheduledFor: Object.hasOwn(dto, 'scheduledFor') ? dto.scheduledFor : undefined, expiresAt: Object.hasOwn(dto, 'expiresAt') ? dto.expiresAt : undefined },
   };
 }
@@ -52,19 +53,28 @@ export function unwrapBroadcast(response, expectedId) {
   return adapted;
 }
 function option(value) {
-  if (typeof value === 'string' && text(value)) return { id: value, label: value };
-  const dto = record(value), id = text(dto.id) || text(dto.value) || text(dto.key), label = text(dto.label) || text(dto.name);
+  const dto = record(value), id = text(dto.id), label = text(dto.label);
   return id && label ? { id, label } : null;
 }
 export function adaptOptions(response) {
   const dto = record(unwrapApiResponseData(response));
-  return { modes: Array.isArray(dto.audienceModes) ? dto.audienceModes.filter((mode) => Object.hasOwn(audienceNames, mode?.mode)).map((mode) => ({ mode: mode.mode, name: audienceNames[mode.mode], requires: mode.requires, options: Array.isArray(mode.options) ? mode.options.map(option).filter(Boolean) : [] })) : [] };
+  const modes = Array.isArray(dto.audienceModes) ? dto.audienceModes.filter((mode) => Object.hasOwn(audienceNames, mode?.mode)) : [];
+  return {
+    modes: modes.filter((mode) => modes.filter((entry) => entry.mode === mode.mode).length === 1).map((mode) => {
+      const allowed = ids(mode.options), choices = Array.isArray(mode.optionList) ? mode.optionList.map(option) : null;
+      const complete = allowed && choices && choices.every(Boolean) && choices.length === allowed.length
+        && new Set(choices.map((entry) => entry.id)).size === choices.length && choices.every((entry) => allowed.includes(entry.id));
+      return { mode: mode.mode, name: audienceNames[mode.mode], requires: mode.requires,
+        options: mode.requires === audienceKeys[mode.mode] && complete ? choices : [] };
+    }),
+    limits: { titleMax: count(dto.limits?.titleMax), messageMax: count(dto.limits?.messageMax), customUsersMax: count(dto.limits?.customUsersMax) },
+  };
 }
 export function adaptStats(response) {
   const dto = record(unwrapApiResponseData(response));
   const cards = Object.fromEntries(['totalAnnouncements', 'publishedCount', 'scheduledCount', 'totalViews'].map((key) => {
     const card = record(dto[key]), percent = typeof card.changePercent === 'number' && Number.isFinite(card.changePercent) ? card.changePercent : null;
-    return [key, { value: count(card.value), delta: percent == null ? '—' : (percent > 0 ? '+' : '') + percent.toLocaleString('en-NG', { maximumFractionDigits: 2 }) + '%', direction: ['up', 'down'].includes(text(card.direction)?.toLowerCase()) ? card.direction.toLowerCase() : null }];
+    return [key, { value: count(card.value), previous: count(card.previous), delta: percent == null ? '—' : (percent > 0 ? '+' : '') + percent.toLocaleString('en-NG', { maximumFractionDigits: 2 }) + '%', direction: ['up', 'down'].includes(card.direction) ? card.direction : null }];
   }));
   return { ...cards, countsByType: record(dto.countsByType) };
 }
@@ -75,7 +85,8 @@ function localISO(date, time = '23:59:59.999') {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 export function prepareForm(form, original, mode, options, creating = false) {
-  if (!text(form.title) || form.title.length > 150 || !text(form.message) || form.message.length > 5000) throw new Error('Enter a title and message within their allowed lengths.');
+  const titleMax = Math.min(150, options.limits?.titleMax ?? 150), messageMax = Math.min(5000, options.limits?.messageMax ?? 5000);
+  if (!text(form.title) || form.title.length > titleMax || !text(form.message) || form.message.length > messageMax) throw new Error('Enter a title and message within their allowed lengths.');
   if (!Object.hasOwn(types, form.type) || !Object.hasOwn(priorities, form.priority) || typeof form.pinned !== 'boolean' || typeof form.acknowledgement !== 'boolean') throw new Error('Choose supported announcement settings.');
   const body = { title: form.title.trim(), message: form.message, type: types[form.type], priority: priorities[form.priority], pinned: form.pinned, acknowledgement: form.acknowledgement };
   const audienceChanged = creating || form.audience !== original?.form.audience || !same(form.targeting, original?.form.targeting);
@@ -84,12 +95,16 @@ export function prepareForm(form, original, mode, options, creating = false) {
     if (!audienceMode) throw new Error('Choose a supported audience.');
     body.audienceMode = audienceMode;
     const key = audienceKeys[audienceMode];
+    const catalogue = options.modes.find((item) => item.mode === audienceMode);
+    if (!catalogue || catalogue.requires !== key) throw new Error('The backend has not confirmed the selected audience mode.');
     if (key) {
       const selected = ids(form.targeting?.[key]);
       if (!selected?.length) throw new Error('Select real audience IDs before saving.');
       if (audienceMode !== 'CUSTOM') {
-        const allowed = options.modes.find((item) => item.mode === audienceMode)?.options;
+        const allowed = catalogue.options;
         if (!allowed?.length || selected.some((id) => !allowed.some((item) => item.id === id))) throw new Error('The backend has not confirmed these audience choices.');
+      } else if (!options.limits?.customUsersMax || selected.length > options.limits.customUsersMax) {
+        throw new Error('The custom audience exceeds the confirmed user limit or its limit is unavailable.');
       }
       body[key] = selected;
     }
@@ -103,8 +118,7 @@ export function prepareForm(form, original, mode, options, creating = false) {
   } else if (!['Publish Now', 'Schedule for Later'].includes(form.schedule)) throw new Error('Choose when to publish the announcement.');
   if (creating) { if (form.expiry) body.expiresAt = localISO(form.expiry); }
   else if (form.expiry !== original?.form.expiry) {
-    if (!form.expiry) throw new Error('Clearing expiry is not documented by the backend. Choose an expiry date instead.');
-    body.expiresAt = localISO(form.expiry);
+    body.expiresAt = form.expiry ? localISO(form.expiry) : null;
   }
   const expiry = Object.hasOwn(body, 'expiresAt') ? body.expiresAt : original?.state.expiresAt;
   const publishAt = mode === 'Draft' ? Date.now() : body.scheduledFor ? timestamp(body.scheduledFor) : form.schedule === 'Schedule for Later' ? timestamp(original?.state.scheduledFor) : Date.now();
@@ -119,5 +133,13 @@ export function prepareForm(form, original, mode, options, creating = false) {
 }
 export function matchesFields(saved, fields) {
   const state = saved.state;
-  return Object.entries(fields).every(([key, value]) => key === 'expectedVersion' || key === 'saveAsDraft' ? true : ['scheduledFor', 'expiresAt'].includes(key) ? value === null ? state[key] === null : timestamp(value) != null && timestamp(state[key]) === timestamp(value) : ['roleIds', 'moduleIds', 'userIds'].includes(key) ? Array.isArray(state.targeting[key]) && state.targeting[key].length === value.length && value.every((id) => state.targeting[key].includes(id)) : same(state[key], value));
+  return Object.entries(fields).every(([key, value]) => {
+    if (['expectedVersion', 'saveAsDraft'].includes(key)) return true;
+    if (['scheduledFor', 'expiresAt'].includes(key)) return value === null ? state[key] === null : timestamp(value) != null && timestamp(state[key]) === timestamp(value);
+    if (['roleIds', 'moduleIds', 'userIds', 'channels'].includes(key)) {
+      const actual = key === 'channels' ? state.channels : state.targeting[key];
+      return Array.isArray(actual) && actual.length === value.length && value.every((id) => actual.includes(id));
+    }
+    return same(state[key], value);
+  });
 }

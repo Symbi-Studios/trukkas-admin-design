@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { Dashboard } from './screens/Dashboard.jsx';
 import { FleetManagement } from './screens/FleetManagement.jsx';
 import { Verification } from './screens/Verification.jsx';
@@ -82,7 +83,8 @@ const screens = {
 
 export function ScreenRouter({ screen }) {
   const Screen = screens[screen];
-  if (Screen) return <Screen />;
+  if (Screen) return screen === 'tickets' || screen === 'feedback'
+    ? <Suspense fallback={null}><Screen /></Suspense> : <Screen />;
   const item = NAV.flatMap((group) => group.items).find((entry) => entry.id === screen);
   return <ScreenPlaceholder label={item?.label || screen} />;
 }

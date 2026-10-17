@@ -9,7 +9,7 @@ import {
   PageHeader, Button, StatCard, SectionCard, Tabs, TableToolbar, SearchField, FilterSelect,
   DataTable, Pagination, Badge, CopyableId, Avatar, DropdownMenu, IconButton, Icon, Skeleton, EmptyState,
 } from '../ds.js';
-import { useGetAdminVerificationDirectoryQuery, verificationSummary, verificationDetailUrl } from '../store/features/verification/verificationApi.js';
+import { useGetAdminVerificationDirectoryQuery, useGetAdminVerificationSummaryQuery, verificationSummary, verificationDetailUrl, verificationFilterValue } from '../store/features/verification/verificationApi.js';
 import { VerificationActionDialog } from './VerificationActionDialog.jsx';
 import { useVerificationOperations } from '../store/features/verification/useVerificationOperations.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
@@ -54,7 +54,7 @@ function VerificationScreen() {
   const operations = useVerificationOperations();
   const [range, setRange] = useState(null);
   const [dateDialog, setDateDialog] = useState(false);
-  const allTime = useGetAdminVerificationDirectoryQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
+  const allTime = useGetAdminVerificationSummaryQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
   const query = useGetAdminVerificationDirectoryQuery({ owner: operations.owner, role: operations.role, ...(range ? { range } : {}) }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
   const [dialog, setDialog] = useState(null);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
@@ -65,7 +65,7 @@ function VerificationScreen() {
     setDialog({ action, model });
   }
   const verifications = !operations.authenticated || query.error ? EMPTY_ROWS : query.currentData || EMPTY_ROWS;
-  const summary = verificationSummary(!operations.authenticated || allTime.error ? null : allTime.currentData);
+  const summary = !operations.authenticated || allTime.error ? verificationSummary(null) : allTime.currentData || verificationSummary(null);
   const loading = query.isLoading || (query.isFetching && !query.currentData);
   const statValue = (value) => allTime.isLoading || (allTime.isFetching && !allTime.currentData) ? <Skeleton as="span" width={54} height={23} /> : value;
   const unavailable = (action) => window.alert(`${action} is not available in the documented verification API.`);
@@ -91,13 +91,12 @@ function VerificationScreen() {
   useEffect(() => setPage((current) => Math.min(current, Math.max(1, Math.ceil(filtered.length / pageSize)))), [filtered.length, pageSize]);
 
   function exportReport() {
-    const entities = { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER' };
-    const types = { 'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE' };
-    if ((entityType !== 'All Types' && !entities[entityType]) || (verType !== 'All Types' && !types[verType]) || (STATUSES.includes(tab) && status !== 'All Statuses' && status !== tab)) { unavailable('Export with these filters'); return; }
+    const entity = verificationFilterValue('entityType', entityType), type = verificationFilterValue('verificationType', verType);
+    if (entity === undefined || type === undefined || (STATUSES.includes(tab) && status !== 'All Statuses' && status !== tab)) { unavailable('Export with these filters'); return; }
     const params = range ? { ...verificationDateParams(range) } : {};
     if (q.trim()) params.search = q.trim();
-    if (entities[entityType]) params.entityType = entities[entityType];
-    if (types[verType]) params.verificationType = types[verType];
+    if (entity) params.entityType = entity;
+    if (type) params.verificationType = type;
     const selectedStatus = STATUSES.includes(tab) ? tab : status;
     if (STATUSES.includes(selectedStatus)) params.status = selectedStatus.toUpperCase().replaceAll(' ', '_');
     if (riskLevel !== 'All Levels') params.riskLevel = riskLevel.toUpperCase();
@@ -134,9 +133,9 @@ function VerificationScreen() {
             onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
             <FilterButton value={entityType} options={['All Types', ...ENTITY_TYPES]} active={entityType !== 'All Types'}
-              onChange={(v) => { setEntityType(v); setPage(1); }} />
+              onChange={(v) => { if (verificationFilterValue('entityType', v) === undefined) { unavailable(v); return; } setEntityType(v); setPage(1); }} />
             <FilterButton value={verType} options={['All Types', ...VERIFICATION_TYPES]} active={verType !== 'All Types'}
-              onChange={(v) => { setVerType(v); setPage(1); }} />
+              onChange={(v) => { if (verificationFilterValue('verificationType', v) === undefined) { unavailable(v); return; } setVerType(v); setPage(1); }} />
             <FilterButton value={status} options={['All Statuses', ...STATUSES]} active={status !== 'All Statuses'}
               onChange={(v) => { setStatus(v); setPage(1); }} />
             <FilterButton value={riskLevel} options={['All Levels', ...RISK_LEVELS]} active={riskLevel !== 'All Levels'}

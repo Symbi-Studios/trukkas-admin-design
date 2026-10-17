@@ -29,7 +29,7 @@ import {
 import {
   useGetAdminFeeSummaryQuery, useGetAdminFeeRulesQuery, emptyFeeSummary,
   unavailableFeeCatalog, unavailableFeeDistribution, editableFeeRule, feeDetailUrl,
-  feeMoney as formatNaira, feeMillions,
+  feeMoney as formatNaira, feeMillions, feePeriods, feeCategories,
 } from '../store/features/fees/feesApi.js';
 
 import { DriverTableLoading } from './DriversLoading.jsx';
@@ -113,14 +113,18 @@ function FilterButton({ label, value, options, active, onChange }) {
 export function FeesCommission() {
   const navigate = useNavigate();
   const operations = useFeeOperations();
-  const summaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner }, { skip: !operations.authenticated });
+  const [summaryPeriod, setSummaryPeriod] = useState('month');
+  const summaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner, period: 'month' }, { skip: !operations.authenticated });
+  const periodSummaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner, period: summaryPeriod }, { skip: !operations.authenticated });
   const catalogQuery = useGetAdminFeeRulesQuery({ owner: operations.owner }, { skip: !operations.authenticated });
   const catalog = operations.authenticated && !catalogQuery.error ? catalogQuery.currentData || unavailableFeeCatalog : unavailableFeeCatalog;
   const rules = catalog.rules || [];
   const feeSummary = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData?.summary || emptyFeeSummary : emptyFeeSummary;
-  const feeDistribution = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData?.distribution || unavailableFeeDistribution : unavailableFeeDistribution;
+  const periodSummary = operations.authenticated && !periodSummaryQuery.error ? periodSummaryQuery.currentData?.summary || emptyFeeSummary : emptyFeeSummary;
+  const feeDistribution = operations.authenticated && !periodSummaryQuery.error ? periodSummaryQuery.currentData?.distribution || unavailableFeeDistribution : unavailableFeeDistribution;
   const revenueLoading = summaryQuery.isLoading || (summaryQuery.isFetching && !summaryQuery.currentData);
   const metric = (value) => summaryQuery.isLoading ? <Skeleton as="span" width={96} height={23} /> : value;
+  const periodMetric = (value) => periodSummaryQuery.isFetching && !periodSummaryQuery.currentData ? <Skeleton as="span" width={96} height={16} /> : value;
   const [editRule, setEditRule] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   function openBulk() {
@@ -134,9 +138,12 @@ export function FeesCommission() {
   const [status, setStatus] = useState("All Status");
   const [jobType, setJobType] = useState("All Job Types");
   const [cargoType, setCargoType] = useState("All Cargo Types");
+  const [location, setLocation] = useState('All Locations');
+  const [category, setCategory] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [menuFor, setMenuFor] = useState(null);
+  const locationOptions = useMemo(() => ['All Locations', ...new Set(rules.map((rule) => rule.location).filter((value) => value && value !== 'ALL' && value !== '—'))], [rules]);
 
   const filtered = useMemo(
     () =>
@@ -145,12 +152,14 @@ export function FeesCommission() {
           (status === "All Status" || r.status === status) &&
           (jobType === "All Job Types" || r.jobType === "All" || r.jobType === jobType) &&
           (cargoType === "All Cargo Types" || r.cargoType === "All" || r.cargoType === cargoType) &&
+          (location === 'All Locations' || r.location === 'ALL' || r.location === location) &&
+          (!category || r.category === category) &&
           (!q ||
             [r.name, r.sub, r.appliesTo].some(
               (v) => v && v.toLowerCase().includes(q.toLowerCase()),
             )),
       ),
-    [rules, status, jobType, cargoType, q],
+    [rules, status, jobType, cargoType, location, category, q],
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -158,7 +167,7 @@ export function FeesCommission() {
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const exportRules = (format) => {
     setMenuFor(null);
-    void operations.download('rules', format, null, { search: q, status: status === 'All Status' ? undefined : status.toUpperCase(), jobType: jobType === 'All Job Types' ? undefined : jobType, cargoType: cargoType === 'All Cargo Types' ? undefined : cargoType });
+    void operations.download('rules', format, null, { search: q, status: status === 'All Status' ? undefined : status.toUpperCase(), jobType: jobType === 'All Job Types' ? undefined : jobType, cargoType: cargoType === 'All Cargo Types' ? undefined : cargoType, location: location === 'All Locations' ? undefined : location, category });
   };
 
   return (
@@ -225,7 +234,7 @@ export function FeesCommission() {
                       { label: "Bulk Update Fees", icon: "list-checks", onClick: openBulk },
                       { label: "Import Fee Rules", icon: "upload", onClick: () => { setMenuFor(null); operations.unavailable("Importing fee rules"); } },
                       { divider: true },
-                      { label: "Export Fee Report", icon: "file-text", onClick: () => { setMenuFor(null); void operations.download("report"); } },
+                      { label: "Export Fee Report", icon: "file-text", onClick: () => { setMenuFor(null); void operations.download("report", 'csv', null, { period: summaryPeriod }); } },
                     ]}
                   />
                 </span>
@@ -336,7 +345,7 @@ export function FeesCommission() {
                         setPage(1);
                       }}
                     />
-                    <FilterSelect label="All Locations" />
+                    <FilterButton label="Locations" value={location} options={locationOptions} active={location !== 'All Locations'} onChange={(value) => { setLocation(value); setPage(1); }} />
                     <FilterButton
                       label="Cargo Types"
                       value={cargoType}
@@ -347,9 +356,14 @@ export function FeesCommission() {
                         setPage(1);
                       }}
                     />
-                    <Button variant="outline" icon="sliders-horizontal">
-                      More Filters
-                    </Button>
+                    <span style={{ position: 'relative' }}>
+                      <Button variant="outline" icon="sliders-horizontal" onClick={() => setMenuFor(menuFor === 'filters' ? null : 'filters')}>
+                        More Filters
+                      </Button>
+                      {menuFor === 'filters' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
+                        <DropdownMenu width={190} items={feeCategories.map((option) => ({ label: option.label, icon: category === option.value ? 'check' : undefined, onClick: () => { setCategory(option.value); setPage(1); setMenuFor(null); } }))} />
+                      </span>}
+                    </span>
                   </>
                 }
               />
@@ -510,34 +524,34 @@ export function FeesCommission() {
         >
           <SectionCard
             title="Fee & Commission Summary"
-            action={<FilterSelect label="This Month" />}
-            footer={<a href="#">View full analytics →</a>}
+            action={<FilterButton label="Period" value={feePeriods.find((period) => period.value === summaryPeriod).label} options={feePeriods.map((period) => period.label)} active={summaryPeriod !== 'month'} onChange={(value) => setSummaryPeriod(feePeriods.find((period) => period.label === value).value)} />}
+            footer={<a href="#" onClick={(event) => { event.preventDefault(); setTab('Analytics'); }}>View full analytics →</a>}
           >
             <LabelValue
               label="Total Fees Collected"
-              value={formatNaira(feeSummary.totalFeesCollected)}
+              value={periodMetric(formatNaira(periodSummary.totalFeesCollected))}
             />
             <LabelValue
               label="Total Commissions Paid"
-              value={formatNaira(feeSummary.totalCommissionsPaid)}
+              value={periodMetric(formatNaira(periodSummary.totalCommissionsPaid))}
             />
             <LabelValue
               label="Total Deductions"
-              value={formatNaira(feeSummary.totalDeductionsCollected)}
+              value={periodMetric(formatNaira(periodSummary.totalDeductionsCollected))}
             />
             <LabelValue
               label="Net Platform Revenue"
-              value={formatNaira(feeSummary.netPlatformRevenue)}
+              value={periodMetric(formatNaira(periodSummary.netPlatformRevenue))}
             />
             <LabelValue
               label="Avg. Effective Rate"
-              value={feeSummary.avgEffectiveRateLabel}
+              value={periodMetric(periodSummary.avgEffectiveRateLabel)}
             />
           </SectionCard>
 
           <SectionCard
             title="Fee Distribution by Type"
-            footer={<a href="#">View detailed breakdown →</a>}
+            footer={<a href="#" onClick={(event) => { event.preventDefault(); setTab('Analytics'); }}>View detailed breakdown →</a>}
           >
             <div
               style={{
@@ -551,7 +565,7 @@ export function FeesCommission() {
               <DonutChart
                 size={160}
                 thickness={16}
-                centerValue={feeMillions(feeSummary.totalFeesCollected)}
+                centerValue={feeMillions(periodSummary.totalFeesCollected)}
                 centerLabel="Total Fees"
                 data={feeDistribution.filter((d) => Number.isFinite(d.value)).map((d) => ({
                   label: d.label,
@@ -602,7 +616,7 @@ export function FeesCommission() {
                 icon: "file-text",
                 label: "Export Fee Report",
                 hint: "Download as CSV/PDF",
-                onClick: () => void operations.download("report"),
+                onClick: () => void operations.download("report", 'csv', null, { period: summaryPeriod }),
               },
             ]}
           />

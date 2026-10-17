@@ -1,9 +1,24 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { clearSession } from '../auth/authSlice.js';
-import { adaptSection, adaptPreferences, adaptStatus, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp } from './settingsContracts.js';
+import { adaptSection, adaptPreferences, adaptStatus, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp, sectionVersion } from './settingsContracts.js';
 export { findSettingsField, preferenceFields } from './settingsContracts.js';
 const failure = (message, status = 'CUSTOM_ERROR') => ({ error: { status, error: message, data: { message } } });
 const sections = ['general', 'operations', 'finance', 'fleet', 'security', 'passwords', 'security-alerts', 'data-protection'];
+// Defaults explicitly documented by GET admin/notifications/settings.
+const notificationDefaults = { emailEnabled: true, pushEnabled: true, smsEnabled: false, quietHoursEnabled: false, quietHoursStart: '22:00', quietHoursEnd: '07:00' };
+function editableDefaults(dto) {
+  if (!Array.isArray(dto.fields)) throw new Error('The backend did not return the fields needed to confirm reset defaults.');
+  const fields = dto.fields.filter((field) => field?.editable === true);
+  if (fields.some((field) => typeof field.key !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(field.key) || ['constructor', 'prototype', '__proto__'].includes(field.key) || !Object.hasOwn(field, 'default') || !(field.default === null || ['string', 'boolean'].includes(typeof field.default) || (typeof field.default === 'number' && Number.isFinite(field.default))))) throw new Error('The backend did not return complete editable defaults.');
+  if (new Set(fields.map((field) => field.key)).size !== fields.length) throw new Error('The backend returned ambiguous editable defaults.');
+  return Object.fromEntries(fields.map((field) => [field.key, field.default]));
+}
+const valuesMatch = (values, expected) => Object.entries(expected).every(([field, value]) => Object.hasOwn(record(values), field) && values[field] === value);
+function settingsError(result) {
+  const dto = record(result.error?.data), errors = Array.isArray(dto.errors) ? dto.errors.map(text).filter(Boolean) : [];
+  if (!errors.length) return result;
+  return { error: { ...result.error, data: { ...dto, message: [text(dto.message), ...errors].filter(Boolean).join(' ') } } };
+}
 function sessionGuard(api, owner) {
   const actor = api.getState().auth.admin;
   if (!actor?.id || actor.id !== owner || !api.getState().auth.accessToken) throw new Error('Please sign in again before using Settings.');
@@ -23,7 +38,7 @@ const readQuery = (url, adapter) => async (args, api, _options, baseQuery) => {
     return { data: adapter(result.data, args) };
   } catch (error) { return failure(error.message); }
 };
-const settingsTags = ['AdminSettings', 'AdminSettingsStatus', 'AdminAuditLogs', 'AdminPricingConfig', 'AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
+const settingsTags = ['AdminSettings', 'AdminSettingsStatus', 'AdminAuditLogs', 'AdminPricingConfig', 'AdminPricing', 'AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
 export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsTags, 'AdminSettingsSessions', 'AdminSettingsEvents', 'AdminSettingsChannels'] }).injectEndpoints({
   endpoints: (builder) => ({
     getAdminSystemSettings: builder.query({
@@ -50,7 +65,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const url = personal ? '/admin/notifications/settings' : '/admin/settings/' + encodeURIComponent(page);
           const read = await baseQuery({ url }); check(); if (read.error) return read;
           const before = personal ? adaptPreferences(read.data) : adaptSection(read.data, page);
-          if (!personal && (!timestamp(expectedVersion) || before.version !== expectedVersion)) return failure('These settings changed or their version is unavailable. Reload before saving.', 409);
+          if (!personal && (!sectionVersion(expectedVersion) || before.version !== expectedVersion)) return failure('These settings changed or their version is unavailable. Reload before saving.', 409);
           const body = {}, submitted = [];
           for (const change of changes) {
             const control = findSettingsField(page, change.group, change.field), contract = before.contracts[change.group + '.' + change.field];
@@ -61,7 +76,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           }
           if (!personal) body.expectedVersion = expectedVersion;
           check();
-          const result = await baseQuery({ url, method: 'PATCH', body }); check(); if (result.error) return result;
+          const result = await baseQuery({ url, method: 'PATCH', body }); check(); if (result.error) return settingsError(result);
           // A successful HTTP response alone is not proof that every submitted
           // field was saved. Read back once; never replay the write.
           const afterRead = await baseQuery({ url }); check();
@@ -88,21 +103,60 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const readUrl = personal ? '/admin/notifications/settings' : '/admin/settings/' + page;
           const preflight = await baseQuery({ url: readUrl }); check(); if (preflight.error) return preflight;
           const before = personal ? adaptPreferences(preflight.data) : adaptSection(preflight.data, page);
-          if (!timestamp(expectedVersion) || before.version !== expectedVersion) return failure('The reset requires a confirmed current section version. Reload before continuing.', 409);
+          if (!(personal ? timestamp(expectedVersion) : sectionVersion(expectedVersion)) || before.version !== expectedVersion) return failure('The reset requires a confirmed current section version. Reload before continuing.', 409);
           const rawBefore = record(unwrapApiResponseData(preflight.data));
-          const defaults = Array.isArray(rawBefore.fields) ? rawBefore.fields.filter((field) => field?.editable === true && Object.hasOwn(field, 'default')) : [];
-          if (!personal && !defaults.length) return failure('This section has no confirmed editable defaults to reset.');
+          const defaults = personal ? notificationDefaults : editableDefaults(rawBefore);
+          if (!Object.keys(defaults).length) return failure('This section has no confirmed editable defaults to reset.');
           const result = await baseQuery({ url: '/admin/settings/' + page + '/reset', method: 'POST', body: { expectedVersion, idempotencyKey: key() } }); check(); if (result.error) return result;
+          const saved = record(unwrapApiResponseData(result.data));
+          const responseConfirmed = personal ? saved.scope === 'PERSONAL' && saved.adminId === owner && timestamp(saved.version) && valuesMatch(saved, defaults) : saved.section === page && sectionVersion(saved.version) && valuesMatch(saved.values, defaults) && Array.isArray(saved.changedFields);
           const reread = await baseQuery({ url: readUrl }); check();
           if (reread.error) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
           const after = personal ? adaptPreferences(reread.data) : adaptSection(reread.data, page);
           const rawAfter = record(unwrapApiResponseData(reread.data));
-          const confirmed = defaults.every((field) => Object.hasOwn(record(rawAfter.values), field.key) && rawAfter.values[field.key] === field.default);
-          if (!after.version || (!personal && !confirmed)) return failure('The reset was sent, but the defaults could not be confirmed. Reload before trying again.');
+          const confirmed = valuesMatch(personal ? rawAfter : rawAfter.values, defaults);
+          if (!responseConfirmed || !after.version || !confirmed) return failure('The reset was sent, but the defaults could not be confirmed. Reload before trying again.');
           api.dispatch(settingsApi.util.updateQueryData(personal ? 'getAdminSettingsPreferences' : 'getAdminSystemSettings', personal ? { owner } : { page, owner }, () => after));
           return { data: { section: after } };
         } catch (error) { return failure(error.message); }
       }, invalidatesTags: [...settingsTags, 'AdminNotificationSettings', 'AdminSettingsEvents'],
+    }),
+    resetAllAdminSettings: builder.mutation({
+      async queryFn({ owner }, api, _options, baseQuery) {
+        try {
+          const check = sessionGuard(api, owner);
+          if (api.getState().auth.admin.role !== 'SUPER_ADMIN') return failure('Only Super Admins can reset platform settings.', 403);
+          const expectedVersions = {}, defaults = {};
+          // Read every section first: no reset is sent with missing defaults or
+          // versions, and the backend checks all versions atomically.
+          for (const page of sections) {
+            const read = await baseQuery({ url: '/admin/settings/' + page }); check(); if (read.error) return read;
+            const dto = record(unwrapApiResponseData(read.data)), fields = editableDefaults(dto);
+            if (!Object.keys(fields).length) continue;
+            const version = sectionVersion(dto.version);
+            if (!version) return failure('A settings section has no confirmed version. Reload before resetting.');
+            expectedVersions[page] = version; defaults[page] = fields;
+          }
+          const pages = Object.keys(expectedVersions);
+          if (!pages.length) return failure('There are no confirmed editable settings to reset.');
+          check();
+          const result = await baseQuery({ url: '/admin/settings/reset', method: 'POST', body: { expectedVersions, idempotencyKey: key() } }); check(); if (result.error) return settingsError(result);
+          const dto = record(unwrapApiResponseData(result.data));
+          const resetSections = Array.isArray(dto.resetSections) ? dto.resetSections : [];
+          if (!timestamp(dto.resetAt) || resetSections.length !== pages.length || new Set(resetSections).size !== pages.length || !pages.every((page) => resetSections.includes(page)) || !Array.isArray(dto.sections)) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
+          for (const page of pages) {
+            const matches = dto.sections.filter((section) => section?.section === page);
+            const saved = matches.length === 1 ? matches[0] : {};
+            if (!sectionVersion(saved.version) || !Array.isArray(saved.changedFields) || !valuesMatch(saved.values, defaults[page]) || !valuesMatch(saved.defaults, defaults[page])) return failure('The reset was sent, but the defaults could not be confirmed. Reload before trying again.');
+            const reread = await baseQuery({ url: '/admin/settings/' + page }); check();
+            if (reread.error) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
+            const raw = record(unwrapApiResponseData(reread.data)), after = adaptSection(reread.data, page);
+            if (!after.version || !valuesMatch(raw.values, defaults[page])) return failure('The reset was sent, but the defaults could not be confirmed. Reload before trying again.');
+            api.dispatch(settingsApi.util.updateQueryData('getAdminSystemSettings', { page, owner }, () => after));
+          }
+          return { data: { resetSections } };
+        } catch (error) { return failure(error.message); }
+      }, invalidatesTags: [...settingsTags, 'AdminSettingsEvents'],
     }),
     testAdminSettingsNotification: builder.mutation({
       async queryFn({ owner }, api, _options, baseQuery) {
@@ -149,4 +203,4 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
     }),
   }),
 });
-export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;
+export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;

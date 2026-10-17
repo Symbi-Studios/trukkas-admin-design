@@ -1,4 +1,6 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js';
+import { transactionComparisonCaption } from './transactionDates.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -177,6 +179,7 @@ export function transactionInsights(rows, from, to, stats) {
   if (volumeTotal != null && !Number.isFinite(volumeTotal)) { amounts = null; volumeTotal = null; }
   return {
     summary: {
+      comparisonCaption: stats?.comparisonCaption || '—',
       totalTransactions: stats?.totalTransactions ?? scoped?.length ?? null, successfulCount, successfulPct: summaryPercent(successfulCount),
       failedReversedCount, failedReversedPct: summaryPercent(failedReversedCount),
       totalInflow: stats?.totalInflow ?? null, totalOutflow: stats?.totalOutflow ?? null, netMovement: stats?.netMovement ?? null,
@@ -193,14 +196,12 @@ export function transactionInsights(rows, from, to, stats) {
 export function adaptAdminTransactionStats(response) {
   const dto = record(unwrapApiResponseData(response)), cards = record(dto.cards);
   const card = (key) => record(cards[key]);
-  // Preserve the existing fixed May comparison caption without mislabeling another period.
-  const comparison = record(dto.comparisonPeriod);
-  const comparisonDate = (value) => timestamp(value) == null ? null : new Date(timestamp(value) + 3600000).toISOString().slice(0, 10);
-  const matchesCaption = comparisonDate(comparison.from) === '2026-05-17' && comparisonDate(comparison.to) === '2026-05-23';
-  // The user requested 0% when comparison data is unavailable or does not match the caption.
-  const delta = (value) => matchesCaption && number(value) != null ? percentLabel(value) : '0%';
+  const comparisonCaption = transactionComparisonCaption(dto.period, dto.comparisonPeriod);
+  // Preserve the requested 0% fallback when comparison data is unavailable.
+  const delta = value => comparisonCaption && number(value) != null ? percentLabel(value) : '0%';
   const alertStyle = { TRANSACTION_FAILED: ['circle-x', 'danger'], TRANSACTION_STUCK: ['hourglass', 'warning'], TRANSACTION_ISSUE: ['flag', 'warning'] };
   return {
+    comparisonCaption: comparisonCaption || '—',
     totalTransactions: count(card('transactionCount').value), successfulCount: count(card('successful').count), failedReversedCount: count(card('failedReversed').count),
     successfulDelta: delta(card('successful').vsPreviousPct), failedReversedDelta: delta(card('failedReversed').vsPreviousPct),
     totalInflow: number(card('totalInflow').value),
@@ -220,17 +221,20 @@ function statsRange({ from, to } = {}) {
   return { dateFrom, dateTo, ...(!dateFrom && !dateTo ? { period: 'all' } : {}) };
 }
 
-async function transactionPdf(baseQuery, id, kind) {
-  if (!text(id)) return { error: { status: 'CUSTOM_ERROR', error: 'A transaction ID is required.' } };
-  const result = await baseQuery({ url: `/admin/payments/${encodeURIComponent(id)}/${kind}`, headers: { Accept: 'application/pdf' }, responseHandler: async (response) => {
+async function transactionPdf(baseQuery, args, kind) {
+  const target = typeof args === 'string' ? { id: args } : record(args), id = text(target.id);
+  if (!id) return { error: { status: 'CUSTOM_ERROR', error: 'A transaction ID is required.' } };
+  const params = kind === 'statement' ? Object.fromEntries(['dateFrom', 'dateTo'].filter(key => target[key] != null && target[key] !== '').map(key => [key, target[key]])) : {};
+  if (Object.values(params).some(value => timestamp(value) == null) || params.dateFrom && params.dateTo && timestamp(params.dateFrom) > timestamp(params.dateTo)) return { error: { status: 'CUSTOM_ERROR', error: 'Select a valid statement date range.' } };
+  const result = await baseQuery({ url: '/admin/payments/' + encodeURIComponent(id) + '/' + kind, params, headers: { Accept: 'application/pdf' }, responseHandler: async response => {
     if (response.ok) return response.blob();
     const body = await response.text();
     try { return JSON.parse(body); } catch { return { message: 'Unable to download this transaction document.' }; }
   } });
   if (result.error) return { error: result.error };
   const file = result.data;
-  if (!(file instanceof Blob) || await file.slice(0, 5).text() !== '%PDF-') return { error: { status: 'CUSTOM_ERROR', error: 'The server did not return a valid PDF document.' } };
-  return { data: { url: URL.createObjectURL(file), name: `transaction-${kind}-${id}.pdf` } };
+  if (!await isPdfAttachment(file)) return { error: { status: 'CUSTOM_ERROR', error: 'The server did not return a valid PDF document.' } };
+  return { data: { url: URL.createObjectURL(file), name: pdfAttachmentFilename(result.meta?.response?.headers, 'transaction-' + kind + '-' + id + '.pdf') } };
 }
 export function downloadTransactionPdf(file) {
   const anchor = document.createElement('a'); anchor.href = file.url; anchor.download = file.name;
@@ -303,8 +307,8 @@ export const transactionsApi = baseApi.enhanceEndpoints({ addTagTypes: financial
         return row;
       }, providesTags: ['AdminTransactions'],
     }),
-    getAdminTransactionReceipt: builder.query({ queryFn: (id, _api, _options, baseQuery) => transactionPdf(baseQuery, id, 'receipt') }),
-    getAdminTransactionStatement: builder.query({ queryFn: (id, _api, _options, baseQuery) => transactionPdf(baseQuery, id, 'statement') }),
+    getAdminTransactionReceipt: builder.query({ queryFn: (id, _api, _options, baseQuery) => transactionPdf(baseQuery, id, 'receipt'), keepUnusedDataFor: 0 }),
+    getAdminTransactionStatement: builder.query({ queryFn: (args, _api, _options, baseQuery) => transactionPdf(baseQuery, args, 'statement'), keepUnusedDataFor: 0 }),
     retryAdminTransaction: builder.mutation({
       queryFn: (id, api, _options, baseQuery) => performPaymentAction(baseQuery, api, id, 'retry'),
       invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? financialTags : [],

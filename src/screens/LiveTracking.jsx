@@ -202,9 +202,9 @@ export function LiveTracking() {
     }
     else if (label === 'Send Message') { if (selected?.driverId) setMessageOpen(true); else notify('warning', 'Select a trip with an assigned driver first.'); }
     else if (label === 'Export Tracking') {
-      if (quickFilter) { notify('warning', 'Trips export does not support Speeding or Long Stops filters.'); return; }
       try {
-        downloadCsv(await exportTripsCsv({ statusFilter: STATUS_FILTERS[statusFilter], search: q.trim() || undefined }).unwrap());
+        downloadCsv(await exportTripsCsv({ statusFilter: STATUS_FILTERS[statusFilter], search: q.trim() || undefined,
+          speeding: quickFilter === 'speeding', longStopped: quickFilter === 'longStopped' }).unwrap());
         notify('success', 'Trips CSV exported.');
       } catch (error) { notify('danger', apiErrorMessage(error, 'Unable to export trips.')); }
     }
@@ -238,7 +238,7 @@ export function LiveTracking() {
     if (!selected?.driverId || !message.trim() || sendingMessage || messageLock.current) return;
     messageLock.current = true;
     try {
-      await messageDriver({ id: selected.id, message }).unwrap();
+      await messageDriver({ id: selected.id, driverId: selected.driverId, message }).unwrap();
       setMessageOpen(false);
       setMessage('');
       notify('success', 'Message sent to driver.');

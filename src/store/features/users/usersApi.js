@@ -180,10 +180,11 @@ async function readPages(baseQuery, api, url, names, params = {}, all = true) {
     if (!list) return failure('The response is missing a confirmed collection contract.');
     const ids = list.map(r => text(r?.id));
     if (ids.some(id => !id) || new Set(ids).size !== ids.length) return failure('The collection contains missing or duplicate record IDs.');
-    if (!all) return {
-      data: list.slice(0, 5)
-    };
-    if (meta.page !== page || count(meta.total) == null || count(meta.totalPages) == null || meta.totalPages > 500 || meta.total > 0 && meta.totalPages === 0 || page > Math.max(1, meta.totalPages)) return failure('The response needs complete pagination before filtering or exporting.');
+    if (meta.page !== page || count(meta.total) == null || count(meta.totalPages) == null || !count(meta.limit) || meta.limit > 100 || meta.totalPages > 500
+      || list.length > meta.limit || list.length > meta.total || meta.total > 0 && !list.length
+      || meta.totalPages !== Math.ceil(meta.total / meta.limit) && !(meta.total === 0 && meta.totalPages === 1)
+      || page > Math.max(1, meta.totalPages)) return failure('The response needs complete pagination before filtering or exporting.');
+    if (!all) return { data: list.slice(0, 5) };
     if (total != null && (total !== meta.total || totalPages !== Math.max(1, meta.totalPages))) return failure('The collection changed while loading. Refresh to load every record.');
     total = meta.total;
     totalPages = Math.max(1, meta.totalPages);
@@ -207,9 +208,8 @@ async function readProfile(baseQuery, id, source, extras = true) {
     }
   });
   if (result.error) return result;
-  const dto = record(unwrapApiResponseData(result.data)),
-    identity = record(dto.identity);
-  if ((text(dto.id) || text(identity.id)) !== id || text(dto.accountType) && dto.accountType !== source) return failure('The profile response does not match the requested account.');
+  const dto = record(unwrapApiResponseData(result.data));
+  if (dto.id !== id || dto.accountType !== source) return failure('The profile response does not match the requested account.');
   let permissions = null,
     preferences = null;
   if (extras) {
@@ -229,23 +229,22 @@ async function readProfile(baseQuery, id, source, extras = true) {
     })
   };
 }
-function metric(v) {
-  return count(typeof v === 'number' ? v : record(v).value ?? record(v).current ?? record(v).count);
-}
 export function managedUserSummary(_rows, stats) {
-  const raw = record(stats),
-    cards = record(raw.cards || raw.metrics || raw),
-    out = {};
+  const cards = record(stats), out = {};
   for (const [view, key] of [['total', 'total'], ['active', 'active'], ['inactive', 'inactive'], ['locked', 'locked'], ['newThisMonth', 'newThisPeriod']]) {
-    out[view] = metric(cards[key]);
-    const m = record(cards[key]),
-      percent = number(m.changePercent),
-      direction = ['UP', 'DOWN', 'FLAT'].includes(m.direction) ? m.direction : null;
-    out[`${view === 'newThisMonth' ? 'newThisMonth' : view}Caption`] = percent == null ? '— vs last month' : `${Math.abs(percent)}% vs last month`;
-    out[`${view === 'newThisMonth' ? 'newThisMonth' : view}Direction`] = direction === 'FLAT' ? null : direction?.toLowerCase() ?? (percent == null || percent === 0 ? null : percent > 0 ? 'up' : 'down');
+    const metric = record(cards[key]);
+    out[view] = count(metric.value);
+    const previous = count(metric.previous);
+    // State-card comparisons are unknown until a previous snapshot exists.
+    // Use the supplied percentage and direction; do not estimate either one.
+    const percent = out[view] != null && previous != null ? number(metric.changePercent) : null;
+    const direction = percent != null && ['UP', 'DOWN', 'FLAT'].includes(metric.direction) ? metric.direction : null;
+    out[view + 'Caption'] = percent == null ? '— vs last month' : Math.abs(percent) + '% vs last month';
+    out[view + 'Direction'] = direction && direction !== 'FLAT' ? direction.toLowerCase() : null;
   }
   return out;
 }
+
 function breakdown(raw) {
   if (Array.isArray(raw)) return raw.filter(v => v && typeof v === 'object' && !Array.isArray(v));
   return Object.entries(record(raw)).map(([code, value]) => typeof value === 'number' ? {
@@ -300,19 +299,17 @@ export function managedUsersCsv(rows) {
 }
 export const canReadManagedUserActivity = (user, role) => Boolean(user?.isAccount && ADMIN_ROLES.has(role) && (user.source !== 'admin' || role === 'SUPER_ADMIN'));
 function activity(raw) {
-  const r = record(raw),
-    outcome = text(r.result) || text(r.outcome);
+  const event = record(raw), outcome = text(event.outcome);
   return {
-    id: text(r.id),
-    text: text(r.title) || text(r.action) || text(r.text) || '—',
-    description: text(r.description) || text(r.note) || '—',
-    ip: text(r.ipAddress) || '—',
-    location: '—',
-    time: managedUserDate(text(r.createdAt) || text(r.timestamp) || text(r.at)),
+    id: text(event.id), actor: text(event.userName) || '—',
+    text: label(event.action), description: text(event.description) || '—',
+    ip: text(event.ipAddress) || '—', location: text(event.location) || '—',
+    time: managedUserDate(event.timestamp),
     icon: outcome === 'SUCCESS' ? 'circle-check' : outcome === 'FAILED' ? 'circle-x' : 'history',
     tone: outcome === 'SUCCESS' ? 'var(--tk-success)' : outcome === 'FAILED' ? 'var(--tk-danger)' : 'var(--tk-ink-400)'
   };
 }
+
 function safeDocumentUrl(v) {
   try {
     const u = new URL(v);
@@ -372,6 +369,16 @@ export function adaptManagedUserSection(section, raw) {
       };
     })
   };
+}
+function accountDownloadFilename(headers, kind) {
+  const extension = kind === 'report' ? 'pdf' : 'json';
+  const disposition = headers?.get('content-disposition') || '';
+  const encoded = disposition.match(/filename\*\s*=\s*UTF-8'[^']*'([^;]+)/i)?.[1];
+  const plain = disposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+  let filename = plain?.[1] || plain?.[2] || '';
+  if (encoded) { try { filename = decodeURIComponent(encoded.trim()); } catch { /* Use the plain filename. */ } }
+  filename = filename.split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1f\x7f]/g, '').trim();
+  return filename && filename.length <= 180 && !filename.startsWith('.') && filename.toLowerCase().endsWith('.' + extension) ? filename : kind === 'report' ? 'trukkas-user-report.pdf' : 'trukkas-user-data.json';
 }
 async function stateAfter(baseQuery, id, source) {
   return readProfile(baseQuery, id, source, false);
@@ -439,9 +446,10 @@ export const usersApi = apiWithTags.injectEndpoints({
             scope: includeAdmins ? 'all' : 'users'
           }
         });
-        return result.error ? result : {
-          data: record(unwrapApiResponseData(result.data))
-        };
+        if (result.error) return result;
+        const data = record(unwrapApiResponseData(result.data));
+        if (data.scope !== (includeAdmins ? 'all' : 'users')) return failure('The summary response does not match the requested account scope.');
+        return { data };
       },
       providesTags: ['AdminManagedUsers']
     }),
@@ -451,7 +459,7 @@ export const usersApi = apiWithTags.injectEndpoints({
       } = {}, api, _opts, baseQuery) {
         const blocked = access(api);
         if (blocked) return blocked;
-        const result = await readPages(baseQuery, api, `${ROOT}/activity`, ['events', 'activity', 'items'], {}, all);
+        const result = await readPages(baseQuery, api, `${ROOT}/activity`, ['events'], {}, all);
         return result.error ? result : {
           data: result.data.map(activity)
         };
@@ -479,7 +487,7 @@ export const usersApi = apiWithTags.injectEndpoints({
         const blocked = access(api, source);
         if (blocked) return blocked;
         if (!text(id) || id.startsWith('invite_')) return failure('This record is an invitation, not an account.');
-        const result = await readPages(baseQuery, api, `${ROOT}/${encodeURIComponent(id)}/activity`, ['events', 'activity', 'items'], {
+        const result = await readPages(baseQuery, api, `${ROOT}/${encodeURIComponent(id)}/activity`, ['events'], {
           accountType: source
         }, all);
         return result.error ? result : {
@@ -884,7 +892,11 @@ export const usersApi = apiWithTags.injectEndpoints({
             accountType: source,
             format: kind === 'report' ? 'pdf' : 'json'
           },
-          responseHandler: response => response.blob()
+          responseHandler: async response => {
+            if (response.ok) return response.blob();
+            const body = await response.text();
+            try { return JSON.parse(body); } catch { return { message: 'The account download failed.' }; }
+          }
         });
         if (result.error) {
           if (result.error.data instanceof Blob) return {
@@ -906,9 +918,13 @@ export const usersApi = apiWithTags.injectEndpoints({
             const dto = JSON.parse(await blob.text()),
               data = unwrapApiResponseData(dto);
             if (!data || typeof data !== 'object' || Array.isArray(data) || data.error || data.statusCode >= 400) return failure('The export response was not account data.');
-            const profile = record(data.profile || data.user || data),
-              profileId = text(profile.id) || text(profile.identity?.id);
-            if (profileId !== id || text(profile.accountType) && profile.accountType !== source) return failure('The export response could not be matched to this account.');
+            const profile = record(data.profile);
+            if (profile.id !== id || profile.accountType !== source) return failure('The export response could not be matched to this account.');
+            const permissions = data.permissions;
+            if (timestamp(data.exportedAt) == null || !permissions || typeof permissions !== 'object' || Array.isArray(permissions)
+              || ['sessions', 'activity', 'documents', 'jobs'].some(section => !Array.isArray(data[section]))
+              || !Object.hasOwn(data, 'wallet') || data.wallet !== null && (!data.wallet || typeof data.wallet !== 'object' || Array.isArray(data.wallet) || !Array.isArray(data.wallet.transactions))) return failure('The export response was missing documented account sections.');
+            if (text(permissions.accountType) && permissions.accountType !== source) return failure('The export permissions did not match this account type.');
           } catch {
             return failure('The export response was not valid JSON.');
           }
@@ -916,7 +932,7 @@ export const usersApi = apiWithTags.injectEndpoints({
         return {
           data: {
             url: URL.createObjectURL(blob),
-            filename: kind === 'report' ? 'trukkas-user-report.pdf' : 'trukkas-user-data.json'
+            filename: accountDownloadFilename(result.meta?.response?.headers, kind)
           }
         };
       },

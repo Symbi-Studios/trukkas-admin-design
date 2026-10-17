@@ -134,7 +134,7 @@ export function PricingDetail() {
           <LabelValue label="Truck Type / Container" value={r.truckType} />
           <LabelValue label="Unit" value={r.unit} />
           <LabelValue label="Status" value={<Badge>{r.status}</Badge>} />
-          <LabelValue label="Currency" value="NGN (₦)" />
+          <LabelValue label="Currency" value={r.currency} />
         </SectionCard>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>

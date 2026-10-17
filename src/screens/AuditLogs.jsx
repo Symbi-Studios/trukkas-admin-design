@@ -7,7 +7,7 @@ import {
   PageHeader, StatCard, Card, Tabs, SearchField, FilterSelect, DropdownMenu,
   Button, DataTable, Pagination, Badge, Avatar, Icon, IconButton, EmptyState, Skeleton,
 } from '../ds.js';
-import { useGetAdminAuditDirectoryQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery, auditPeriod, auditMatchesTab, auditTabAvailable, auditCsv } from '../store/features/audit/auditApi.js';
+import { useGetAdminAuditDirectoryQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery, auditPeriod, auditMatchesTab, auditTabAvailable, auditCsv, AUDIT_DATE_OPTIONS } from '../store/features/audit/auditApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
 import './AuditLogs.css';
@@ -17,7 +17,7 @@ const STATUS_TONE = { Success: 'success', Failed: 'danger' };
 
 const ACTION_TONE = { APPROVE: 'success', CREATE: 'info', UPDATE: 'warning', UPLOAD: 'purple', LOGIN: 'neutral', REJECT: 'danger', DELETE: 'danger', SYSTEM: 'neutral', VERIFY: 'success' };
 const TABS = ['All Logs', 'User Actions', 'System Events', 'Data Changes', 'Security Events', 'Login History'];
-const DATE_OPTIONS = ['May 1, 2026 – May 30, 2026', 'May 24, 2026 – May 30, 2026', 'May 1, 2026 – May 15, 2026', 'All Time'];
+const DATE_OPTIONS = AUDIT_DATE_OPTIONS;
 
 function MenuFilter({ value, options, icon, onChange }) {
   const [open, setOpen] = useState(false);
@@ -67,11 +67,16 @@ function AuditDrawer({ audit, loading, onClose, onNavigate, onNotify, onCopy }) 
 }
 
 export function AuditLogs() {
+  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  return <AuditLogsScreen key={scope} />;
+}
+
+function AuditLogsScreen() {
   const navigate = useNavigate();
   const role = useSelector((state) => state.auth.admin?.role);
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
-  const canView = authenticated && role === 'SUPER_ADMIN';
+  const canView = authenticated && Boolean(owner) && role === 'SUPER_ADMIN';
   const [tab, setTab] = useState('All Logs');
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState({ date: DATE_OPTIONS[0], user: 'All Users', module: 'All Modules', action: 'All Actions', status: 'All Statuses' });
@@ -81,10 +86,10 @@ export function AuditLogs() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState('');
-  const toastTimer = useRef(null), initialDrawer = useRef(false);
+  const toastTimer = useRef(null), initialDrawer = useRef(false), active = useRef(true);
   const period = useMemo(() => auditPeriod(filters.date), [filters.date]);
-  const logsQuery = useGetAdminAuditDirectoryQuery({ ...period, owner }, { skip: !canView, refetchOnMountOrArgChange: true });
-  const summaryQuery = useGetAdminAuditScreenSummaryQuery({ owner }, { skip: !canView, refetchOnMountOrArgChange: true });
+  const logsQuery = useGetAdminAuditDirectoryQuery({ ...period, owner, role }, { skip: !canView, refetchOnMountOrArgChange: true });
+  const summaryQuery = useGetAdminAuditScreenSummaryQuery({ owner, role }, { skip: !canView, refetchOnMountOrArgChange: true });
   const error = role && !canView ? { status: 403, data: { message: 'Only Super Admins can view audit logs.' } } : logsQuery.error;
   const audits = !canView || logsQuery.error ? EMPTY_ROWS : logsQuery.currentData?.rows || EMPTY_ROWS;
   const summary = canView && !summaryQuery.error ? summaryQuery.currentData : null;
@@ -95,7 +100,7 @@ export function AuditLogs() {
   const delta = (key) => comparison(key)?.percent == null ? '—' : `${comparison(key).percent}%`;
   const direction = (key) => comparison(key)?.direction ?? null;
   const selectedAuditRow = audits.find((row) => row.id === selectedAuditId) || null;
-  const detailQuery = useGetAdminAuditDetailQuery({ id: selectedAuditId, owner }, { skip: !canView || !selectedAuditRow, refetchOnMountOrArgChange: true });
+  const detailQuery = useGetAdminAuditDetailQuery({ id: selectedAuditId, owner, role }, { skip: !canView || !selectedAuditRow, refetchOnMountOrArgChange: true });
   const selectedAudit = selectedAuditRow && !detailQuery.error && detailQuery.currentData?.id === selectedAuditId ? detailQuery.currentData : selectedAuditRow;
   const detailLoading = detailQuery.isLoading || (detailQuery.isFetching && !detailQuery.currentData);
   const selectAudit = (row) => { if (row.id === selectedAuditId && detailQuery.error) detailQuery.refetch(); setSelectedAuditId(row.id); };
@@ -118,7 +123,7 @@ export function AuditLogs() {
   }), [audits, tab, filters, query, period]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  useEffect(() => { active.current = true; return () => { active.current = false; window.clearTimeout(toastTimer.current); }; }, []);
   useEffect(() => { if (detailQuery.error && selectedAuditRow) notify(getApiErrorMessage(detailQuery.error)); }, [detailQuery.error, selectedAuditId]);
   useEffect(() => {
     setPage((current) => Math.max(1, Math.min(current, pageCount)));
@@ -132,7 +137,7 @@ export function AuditLogs() {
   }, [canView, filtered, logsQuery.currentData, logsQuery.error]);
 
   function reset() { setDraft(baseFilters); setFilters(baseFilters); setQuery(''); setPage(1); }
-  function notify(message) { window.clearTimeout(toastTimer.current); setToast(message); toastTimer.current = window.setTimeout(() => setToast(''), 1800); }
+  function notify(message) { if (!active.current) return; window.clearTimeout(toastTimer.current); setToast(message); toastTimer.current = window.setTimeout(() => setToast(''), 1800); }
   async function copyReference(value) {
     if (!value || value === '—') { notify('The API did not provide a reference to copy.'); return; }
     try {
@@ -166,7 +171,7 @@ export function AuditLogs() {
         <MenuFilter value={draft.status} options={['All Statuses', 'Success', 'Failed']} onChange={(status) => setDraft((old) => ({ ...old, status }))} />
       </div>
       <div className="audit-search-row"><SearchField placeholder="Search audit logs..." value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /><div /><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); notify('Filters applied'); }}>Apply</Button></div>
-      {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={logsQuery.refetch}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length ? <><DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
+      {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={() => { if (canView) logsQuery.refetch(); else notify('Only Super Admins can view audit logs.'); }}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length ? <><DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
         { key: 'date', header: 'Date & Time', width: 126, render: (r) => <span className="audit-cell-stack"><span>{r.date}</span><small>{r.time}</small></span> },
         { key: 'user', header: 'User', width: 175, render: (r) => <span className="audit-user-cell"><Avatar name={r.user} size={32} /><span className="audit-cell-stack"><strong>{r.user}</strong><small>{r.email}</small></span></span> },
         { key: 'action', header: 'Action', width: 94, render: (r) => <Badge tone={ACTION_TONE[r.action]}>{r.action}</Badge> },

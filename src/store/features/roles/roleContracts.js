@@ -19,10 +19,10 @@ export const ROLE_ICON_VALUES = { Shield: 'shield', 'Shield Check': 'shield-chec
 const icons = new Set([...Object.values(ROLE_ICON_VALUES), ...ROLE_MODULE_MATRIX.map((m) => m.icon), 'truck', 'radio-tower']);
 const icon = (value) => icons.has(value) ? value : 'shield';
 const display = (value) => roleText(value) || '—';
-// Jobs & Trips is an existing combined row. Other backend groups must match
-// an existing row explicitly; in particular, bids is not an alias for jobs.
-export function roleGroupKey(module) {
-  const key = roleText(module.uiGroupKey) || module.key;
+// The permission catalogue is authoritative when role detail carries older
+// grouping metadata. Backend module keys remain separate in write payloads.
+export function roleGroupKey(module, catalog) {
+  const key = catalog?.modules.find(item => item.key === module.key)?.uiGroupKey || roleText(module.uiGroupKey) || module.key;
   return key === 'trips' ? 'jobs' : key;
 }
 export const emptyRoleDetail = {
@@ -42,11 +42,20 @@ export function adaptPermissionCatalog(dto) {
       seenKeys.add(action.key);
       actions.push({ key: action.key, action: roleText(action.action), name: display(action.name), description: display(action.description) });
     }
-    modules.push({ key: item.key, uiGroupKey: roleText(item.uiGroupKey), name: display(item.name), icon: icon(item.icon), actions });
+    if (!ROLE_MODULE_MATRIX.some(row => row.key === item.uiGroupKey)) return null;
+    modules.push({ key: item.key, uiGroupKey: item.uiGroupKey, name: display(item.name), icon: icon(item.icon), actions });
   }
   const totalModules = roleInteger(dto.totalModules), totalPermissions = roleInteger(dto.totalPermissions);
-  if (totalModules != null && totalModules !== modules.length || totalPermissions != null && totalPermissions !== seenKeys.size) return null;
-  return { modules, totalModules, totalPermissions };
+  if (totalModules !== modules.length || totalPermissions !== seenKeys.size || !Array.isArray(dto.uiGroups) || dto.uiGroups.length !== ROLE_MODULE_MATRIX.length) return null;
+  const seenGroups = new Set(), uiGroups = [];
+  for (const group of dto.uiGroups) {
+    if (!ROLE_MODULE_MATRIX.some(row => row.key === group?.key) || seenGroups.has(group.key) || typeof group.supported !== 'boolean'
+      || !Array.isArray(group.moduleKeys) || new Set(group.moduleKeys).size !== group.moduleKeys.length) return null;
+    const sources = modules.filter(module => module.uiGroupKey === group.key);
+    if (group.supported !== (sources.length > 0) || sources.length !== group.moduleKeys.length || group.moduleKeys.some(key => !sources.some(module => module.key === key))) return null;
+    seenGroups.add(group.key); uiGroups.push({ key: group.key, supported: group.supported, moduleKeys: [...group.moduleKeys] });
+  }
+  return { modules, uiGroups, totalModules, totalPermissions };
 }
 export function catalogForRow(catalog, key) {
   return (catalog?.modules || []).filter((m) => roleGroupKey(m) === key);
@@ -60,7 +69,7 @@ function editorFromRoleDto(dto) {
   };
 }
 export const roleEditorValues = (role) => role?.editor || editorFromRoleDto(role?.source);
-export function adaptRole(dto, detail = false) {
+export function adaptRole(dto, detail = false, catalog) {
   if (!roleText(dto?.id)) return null;
   const ownership = ['SYSTEM', 'SHARED', 'COMPANY'].includes(dto.ownership) ? dto.ownership : null;
   const isSystem = ownership ? ownership === 'SYSTEM' : typeof dto.isSystem === 'boolean' ? dto.isSystem : null;
@@ -82,7 +91,7 @@ export function adaptRole(dto, detail = false) {
   const permissionCount = summaryGranted ?? (detailCountKnown ? rawModules.reduce((sum, m) => sum + roleInteger(m.granted.replaceAll(',', '')), 0) : keys?.length);
   const groups = new Map();
   for (const module of rawModules) {
-    const row = ROLE_MODULE_MATRIX.find((m) => m.key === roleGroupKey(module));
+    const row = ROLE_MODULE_MATRIX.find((m) => m.key === roleGroupKey(module, catalog));
     const groupKey = row?.key || module.key;
     const previous = groups.get(groupKey);
     if (!previous) groups.set(groupKey, { ...module, key: groupKey, name: row?.label || module.name, icon: row?.icon || module.icon });
@@ -146,16 +155,23 @@ export function buildRoleAccess(values, catalog) {
   const moduleAccess = catalog.modules.map((m) => ({ moduleKey: m.key, level: 'none' }));
   for (const row of ROLE_MODULE_MATRIX) {
     const level = values.levels[row.key];
-    if (!['full', 'custom', 'none'].includes(level)) throw new Error('Select an access level for ' + row.label + '.');
     const sources = catalogForRow(catalog, row.key);
-    if (!sources.length && level !== 'none') throw new Error(row.label + ' has no documented permission catalogue entry. Select No Access.');
+    if (!sources.length) {
+      if (level != null && level !== 'none') throw new Error(row.label + ' has no backend permissions and cannot be configured.');
+      continue;
+    }
+    if (!['full', 'custom', 'none'].includes(level)) throw new Error('Select an access level for ' + row.label + '.');
     const selected = values.permissionKeys?.[row.key];
     if (level === 'custom' && (!Array.isArray(selected) || !selected.length)) throw new Error('Select custom actions for ' + row.label + '.');
     const valid = new Set(sources.flatMap((m) => m.actions.map((a) => a.key)));
     if (level === 'custom' && (new Set(selected).size !== selected.length || selected.some((key) => !valid.has(key)))) throw new Error('The custom permissions for ' + row.label + ' do not match the current catalogue.');
     for (const source of sources) {
       const entry = moduleAccess.find((m) => m.moduleKey === source.key); entry.level = level;
-      if (level === 'custom') entry.permissionKeys = selected.filter((key) => source.actions.some((a) => a.key === key));
+      if (level === 'custom') {
+        const permissionKeys = selected.filter((key) => source.actions.some((a) => a.key === key));
+        entry.level = permissionKeys.length ? 'custom' : 'none';
+        if (permissionKeys.length) entry.permissionKeys = permissionKeys;
+      }
     }
   }
   return moduleAccess;

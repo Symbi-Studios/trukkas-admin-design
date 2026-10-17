@@ -13,7 +13,7 @@ import {
   QuickActionsCard,
 } from "../ds.js";
 import { faqQuickTopics } from "../mock/fixtures/faq.js";
-import { FAQ_CATEGORIES, useGetAdminFaqDirectoryQuery } from "../store/features/faq/faqApi.js";
+import { FAQ_CATEGORIES, useGetAdminFaqDirectoryQuery, useGetAdminFaqHelpLinksQuery } from "../store/features/faq/faqApi.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 
@@ -71,6 +71,8 @@ export function FAQ() {
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const navigate = useNavigate();
   const query = useGetAdminFaqDirectoryQuery({ owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const helpQuery = useGetAdminFaqHelpLinksQuery({ owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const helpLinks = authenticated && !helpQuery.error ? helpQuery.currentData : null;
   const groups = useMemo(() => authenticated && !query.error ? query.currentData || [] : [], [authenticated, query.error, query.currentData]);
   const loading = !authenticated || query.isLoading || query.isFetching;
   const [category, setCategory] = useState("All Categories");
@@ -80,11 +82,15 @@ export function FAQ() {
   const available = authenticated && !query.error && Boolean(query.currentData)
     && (category === "All Categories" || groups.every((group) => group.categoryAvailable))
     && (!q.trim() || groups.every((group) => group.questions.every((item) => item.questionAvailable && item.answerAvailable)));
-  const quickTopics = faqQuickTopics.map((topic) => ({
-    ...topic,
-    onClick: topic.label === "Visit Knowledge Base" ? () => navigate("/knowledge-base")
-      : () => window.alert(`${topic.label} is not available for an admin requester through the documented API.`),
-  }));
+  const quickTopics = faqQuickTopics.map((topic) => ({ ...topic, onClick: () => {
+    if (topic.label === "Visit Knowledge Base") { navigate("/knowledge-base"); return; }
+    if (helpQuery.isFetching) { window.alert('Wait for FAQ help links to finish loading.'); return; }
+    if (helpQuery.error) { window.alert(getApiErrorMessage(helpQuery.error)); return; }
+    const target = helpLinks?.[({ 'Contact Support': 'contactSupport', 'Send Feedback': 'feedback', 'View My Tickets': 'myTickets' })[topic.label]];
+    if (!target) { window.alert(`${topic.label} is not available for an admin requester through the documented API.`); return; }
+    if (topic.label === 'Contact Support') window.location.assign(target);
+    else navigate(target);
+  } }));
 
   const visibleGroups = useMemo(() => {
     const term = q.trim().toLowerCase();

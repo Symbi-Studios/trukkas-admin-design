@@ -34,7 +34,7 @@ export function useFeedbackOperations(id = '') {
   async function download(filters) {
     if (lock.current || !authenticated) return;
     lock.current = true;
-    try { const result = await requestDownload({ owner, ...filters }).unwrap(); if (currentScope.current === scope) saveFeedbackCsv(result); }
+    try { const result = await requestDownload({ owner, ...filters }).unwrap(); if (currentScope.current === scope) { saveFeedbackCsv(result); return { truncated: result.truncated, exportedCount: result.exportedCount, matchingCount: result.matchingCount }; } return null; }
     catch (error) { if (currentScope.current !== scope) return; throw error; }
     finally { lock.current = false; }
   }

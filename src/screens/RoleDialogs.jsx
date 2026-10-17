@@ -40,6 +40,7 @@ function RoleEditForm({ role: loadedRole, catalog, operations, onClose, onSaved 
   const [keys, setKeys] = useState(originalKeys || []);
   const [permissionsChanged, setPermissionsChanged] = useState(false);
   const [error, setError] = useState(null);
+  const editingDisabled = operations.saving || !operations.canManage;
   const changes = {};
   if (name !== editor.name) changes.name = name.trim();
   if (description !== editor.description) changes.description = description;
@@ -64,14 +65,14 @@ function RoleEditForm({ role: loadedRole, catalog, operations, onClose, onSaved 
       {error && <Banner tone="danger" title="Unable to save">{error}</Banner>}
       {!role.version && <Banner tone="warning" title="Version unavailable">Refresh the role before saving.</Banner>}
       {role.isSystem === true && <Banner tone="warning" title="System role">Permission changes affect every company using this role.</Banner>}
-      <TextField label="Role Name" required placeholder="—" value={name} disabled={role.isSystem !== false || operations.saving} onChange={(event) => setName(event.target.value)} />
-      <Textarea label="Description" maxLength={500} value={description} disabled={operations.saving} onChange={(event) => setDescription(event.target.value)} />
-      <Select label="Status" placeholder="Select status" options={['Active', 'Inactive']} value={status} disabled={operations.saving} onChange={(event) => setStatus(event.target.value)} />
-      <ColorSwatchPicker value={color} onChange={(value) => { if (!operations.saving) setColor(value); }} />
-      <Select label="Icon" placeholder="Select icon" options={iconNames} value={icon} disabled={operations.saving} onChange={(event) => setIcon(event.target.value)} />
+      <TextField label="Role Name" required placeholder="—" value={name} disabled={role.isSystem !== false || editingDisabled} onChange={(event) => setName(event.target.value)} />
+      <Textarea label="Description" maxLength={500} value={description} disabled={editingDisabled} onChange={(event) => setDescription(event.target.value)} />
+      <Select label="Status" placeholder="Select status" options={['Active', 'Inactive']} value={status} disabled={editingDisabled} onChange={(event) => setStatus(event.target.value)} />
+      <ColorSwatchPicker value={color} onChange={(value) => { if (!editingDisabled) setColor(value); }} />
+      <Select label="Icon" placeholder="Select icon" options={iconNames} value={icon} disabled={editingDisabled} onChange={(event) => setIcon(event.target.value)} />
       {!originalKeys ? <Banner tone="warning" title="Permissions unavailable">The full permission matrix is required before editing permissions.</Banner> : catalog.modules.map((module) => <div key={module.key} style={{ display: 'grid', gap: 10 }}>
         <strong>{module.name}</strong>
-        {module.actions.map((action) => <Checkbox key={action.key} label={action.name} checked={keys.includes(action.key)} disabled={operations.saving} onChange={(checked) => {
+        {module.actions.map((action) => <Checkbox key={action.key} label={action.name} checked={keys.includes(action.key)} disabled={editingDisabled} onChange={(checked) => {
           setPermissionsChanged(true); setKeys((current) => checked ? [...current, action.key] : current.filter((key) => key !== action.key));
         }} />)}
       </div>)}

@@ -158,7 +158,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   }
   async function exportTrips() {
     if (exporting || !authenticated) return;
-    try { const csv = await exportTripsCsv({ ...session, ...listFilters }).unwrap(); if (active.current) { downloadCsv(csv); notify("success", "Trips exported."); } }
+    try { const csv = await exportTripsCsv({ ...session, ...listFilters }).unwrap(); if (active.current) { downloadCsv(csv); notify(total > 5000 ? "warning" : "success", total > 5000 ? "Trips exported. This filter matches more than 5,000 trips; the API exports up to 5,000. Narrow the filters for smaller groups." : "Trips exported."); } }
     catch (e) { notify("danger", getApiErrorMessage(e)); }
   }
   async function perform(action, trip, details = {}) {
@@ -428,7 +428,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
                   <Button
                     variant="outline"
                     style={{ flex: 1 }}
-                    onClick={() => navigate(`/payouts/${selectedPayout.id}`)}
+                    onClick={() => navigate(selectedPayout.url)}
                   >
                     View Payout
                   </Button>

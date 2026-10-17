@@ -4,6 +4,7 @@ export { roleSummary, emptyRoleDetail, roleCount } from './roleContracts.js';
 
 export const ROLE_CAPABILITIES = Object.freeze({ create: true, edit: true, duplicate: true, delete: true, matrix: true, preview: true });
 const admins = ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'];
+const writers = ['SUPER_ADMIN', 'OPS_ADMIN'];
 const owned = (api, owner, account) => Boolean(owner && api.getState().auth.admin?.id === owner && api.getState().auth.accessToken && admins.includes(api.getState().auth.admin?.role) && !api.signal.aborted && api.getState().auth.admin === account);
 const sessionError = () => roleFailure('An active admin session is required. Sign in again.');
 const path = (id) => '/admin/roles/' + encodeURIComponent(id);
@@ -14,12 +15,26 @@ async function readCatalog(baseQuery) {
   const catalog = adaptPermissionCatalog(unwrapApiResponseData(result.data));
   return catalog ? { data: catalog } : roleFailure('The permission catalogue response is missing valid modules or actions.');
 }
-async function readRole(id, baseQuery) {
+async function readRole(id, baseQuery, catalog) {
   if (!roleText(id) || id === '—') return roleFailure('Select a valid role.');
   const result = await baseQuery({ url: path(id) });
   if (result.error) return result;
-  const role = adaptRole(unwrapApiResponseData(result.data), true);
+  const role = adaptRole(unwrapApiResponseData(result.data), true, catalog);
   return role?.id === id ? { data: role } : roleFailure('The role detail response is missing the requested role.');
+}
+async function readAccessLevels(baseQuery) {
+  const result = await baseQuery({ url: '/admin/roles/access-levels' });
+  if (result.error) return result;
+  const dto = unwrapApiResponseData(result.data);
+  if (!Array.isArray(dto?.levels) || !Array.isArray(dto.routes)
+    || admins.some(code => dto.levels.filter(level => level?.code === code).length !== 1)) return roleFailure('The admin access-level catalogue is incomplete.');
+  const operations = {};
+  for (const [action, method, target] of [['create', 'POST', '/admin/roles'], ['edit', 'PATCH', '/admin/roles/{id}'], ['duplicate', 'POST', '/admin/roles/{id}/duplicate'], ['delete', 'DELETE', '/admin/roles/{id}']]) {
+    const routes = dto.routes.filter(route => route?.method === method && roleText(route.path)?.replace(/^\/api\/v1(?=\/)/, '').replace(/:id(?=\/|$)/g, '{id}') === target);
+    if (routes.length !== 1 || routes[0].roles !== null && (!Array.isArray(routes[0].roles) || new Set(routes[0].roles).size !== routes[0].roles.length || routes[0].roles.some(role => !admins.includes(role)))) return roleFailure('The role operation permissions could not be confirmed.');
+    operations[action] = (routes[0].roles === null ? admins : routes[0].roles).filter(role => writers.includes(role));
+  }
+  return { data: { operations } };
 }
 export function grantedRoleKeys(role, catalog) {
   const modules = role?.source?.modules;
@@ -57,10 +72,18 @@ function confirmsDuplicate(role, original) {
     && ['scope', 'manageUsers', 'require2fa'].every((key) => previous.settings && source.settings
       && Object.hasOwn(previous.settings, key) && Object.hasOwn(source.settings, key) && previous.settings[key] === source.settings[key]);
 }
-const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminRoles', 'AdminPermissions'] });
+const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminRoles', 'AdminPermissions', 'AdminRoleAccess'] });
 export const rolesApi = taggedApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
+    getAdminRoleAccessLevels: builder.query({
+      async queryFn({ owner }, api, _options, baseQuery) {
+        const account = api.getState().auth.admin;
+        if (!owned(api, owner, account)) return sessionError();
+        const result = await readAccessLevels(baseQuery);
+        return owned(api, owner, account) ? result : sessionError();
+      }, providesTags: ['AdminRoleAccess'],
+    }),
     getAdminRolesDirectory: builder.query({
       async queryFn({ owner }, api, _options, baseQuery) {
         const account = api.getState().auth.admin;
@@ -100,7 +123,10 @@ export const rolesApi = taggedApi.injectEndpoints({
       async queryFn({ owner, id }, api, _options, baseQuery) {
         const account = api.getState().auth.admin;
         if (!owned(api, owner, account)) return sessionError();
-        const result = await readRole(id, baseQuery);
+        const catalog = await readCatalog(baseQuery);
+        if (!owned(api, owner, account)) return sessionError();
+        if (catalog.error) return catalog;
+        const result = await readRole(id, baseQuery, catalog.data);
         return owned(api, owner, account) ? result : sessionError();
       }, providesTags: ['AdminRoles'],
     }),
@@ -110,7 +136,11 @@ export const rolesApi = taggedApi.injectEndpoints({
         const account = api.getState().auth.admin;
         if (!owned(api, owner, account)) return sessionError();
         if (!['create', 'edit', 'duplicate', 'delete'].includes(action)) return roleFailure('This role operation is not supported.');
-        if (action === 'delete' && !['SUPER_ADMIN', 'OPS_ADMIN'].includes(account.role)) return roleFailure('Only Super Admin and Operations Admin can delete roles.');
+        if (!writers.includes(account.role)) return roleFailure('Only Super Admin and Operations Admin can change roles.');
+        const access = await readAccessLevels(baseQuery);
+        if (!owned(api, owner, account)) return sessionError();
+        if (access.error) return access;
+        if (!access.data.operations[action]?.includes(account.role)) return roleFailure('Your admin access level does not allow this role operation.');
         let request, body, current, catalog, expectedKeys;
         if (action === 'create' || action === 'edit' || action === 'duplicate') {
           const result = await readCatalog(baseQuery);
@@ -120,7 +150,7 @@ export const rolesApi = taggedApi.injectEndpoints({
           if (action !== 'duplicate' && (!args.catalog || signature(catalog) !== signature(args.catalog))) return roleFailure('The permission catalogue changed. Refresh and review permissions before saving.');
         }
         if (action !== 'create') {
-          const result = await readRole(id, baseQuery);
+          const result = await readRole(id, baseQuery, catalog);
           if (!owned(api, owner, account)) return sessionError();
           if (result.error) return result;
           current = result.data;
@@ -174,9 +204,9 @@ export const rolesApi = taggedApi.injectEndpoints({
           if (!owned(api, owner, account)) return sessionError();
           return check.error?.status === 404 ? { data: { deleted: true, id } } : roleFailure('The delete request completed, but removal could not be confirmed. Refresh before trying again.');
         }
-        const saved = adaptRole(unwrapApiResponseData(result.data), true);
+        const saved = adaptRole(unwrapApiResponseData(result.data), true, catalog);
         if (!saved || action === 'edit' && saved.id !== id || action !== 'edit' && saved.id === id) return roleFailure('The save request completed, but the returned role could not be confirmed. Refresh before trying again.');
-        const check = await readRole(saved.id, baseQuery);
+        const check = await readRole(saved.id, baseQuery, catalog);
         if (!owned(api, owner, account)) return sessionError();
         if (check.error) return roleFailure('The save request completed, but the role could not be reloaded. Refresh before trying again.');
         const updated = check.data;
@@ -195,4 +225,4 @@ export const rolesApi = taggedApi.injectEndpoints({
     }),
   }),
 });
-export const { useGetAdminRolesDirectoryQuery, useGetAdminPermissionsQuery, useGetAdminRoleQuery, useChangeAdminRoleMutation } = rolesApi;
+export const { useGetAdminRoleAccessLevelsQuery, useGetAdminRolesDirectoryQuery, useGetAdminPermissionsQuery, useGetAdminRoleQuery, useChangeAdminRoleMutation } = rolesApi;

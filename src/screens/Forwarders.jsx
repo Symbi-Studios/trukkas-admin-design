@@ -25,10 +25,11 @@ import {
   Avatar, Banner, Modal, EmptyState,
 } from "../ds.js";
 
-import { forwarderMoney, forwarderError, useGetAdminForwarderDirectoryQuery, useGetAdminPendingExporterLicensesQuery } from '../store/features/forwarders/forwardersApi.js';
+import { forwarderMoney, forwarderError, useGetAdminForwarderDirectoryQuery, useGetAdminForwarderStatsQuery, useGetAdminForwarderRankingsQuery, useLazyDownloadAdminForwarderReportQuery, useGetAdminPendingExporterLicensesQuery } from '../store/features/forwarders/forwardersApi.js';
 import { ForwardersLoading } from './ForwardersLoading.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import { ForwarderActionModal, ForwarderAnnouncementModal, downloadForwarderCsv } from './ForwarderActions.jsx';
+import { ForwarderProfileModal, ForwarderBulkVerifyModal } from './ForwarderForms.jsx';
 import './ForwarderDetail.css';
 
 const STATUSES = ["Active", "Pending", "Suspended", "Inactive", "Banned"];
@@ -70,16 +71,28 @@ export function Forwarders() {
   const owner = useSelector(state => state.auth.admin?.id);
   const directoryQuery = useGetAdminForwarderDirectoryQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const pendingQuery = useGetAdminPendingExporterLicensesQuery(owner, { skip: !authenticated });
+  const statsQuery = useGetAdminForwarderStatsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const rankingsQuery = useGetAdminForwarderRankingsQuery({ owner, page: 1, limit: 20 }, { skip: !authenticated });
+  const [downloadReport, reportState] = useLazyDownloadAdminForwarderReportQuery();
+  const [addOpen, setAddOpen] = useState(false), [bulkOpen, setBulkOpen] = useState(false);
   const FORWARDERS = directoryQuery.error ? [] : directoryQuery.currentData || [];
   const pendingLicenses = pendingQuery.error ? [] : pendingQuery.currentData?.rows || [];
   const [action, setAction] = useState(null), [announcement, setAnnouncement] = useState(false), [requestsOpen, setRequestsOpen] = useState(false), [notice, setNotice] = useState(null), [pageSize, setPageSize] = useState(10);
   const unavailable = (feature) => setNotice({ tone: 'info', text: `${feature} is not available yet.` });
-  const STATS = useMemo(() => {
-    const available = Boolean(directoryQuery.currentData) && !directoryQuery.error;
-    const count = (match) => available && FORWARDERS.every(row => row.statusCode) ? FORWARDERS.filter(match).length : '—';
-    return { total: available ? FORWARDERS.length : '—', active: count((row) => row.statusCode === 'ACTIVE'), exporters: available && FORWARDERS.every(row => row.isExporter != null) ? FORWARDERS.filter(row => row.isExporter === true).length : '—', suspended: count((row) => row.statusCode === 'SUSPENDED'), pending: available && FORWARDERS.every((row) => row.kycStatusCode) ? count((row) => ['PENDING', 'IN_REVIEW', 'PENDING_REVIEW'].includes(row.kycStatusCode)) : '—', totalSpend: null };
-  }, [directoryQuery.currentData, directoryQuery.error]);
-  const OVERVIEW = directoryQuery.currentData && !directoryQuery.error && FORWARDERS.every(row => row.statusCode) ? STATUSES.map((label, index) => ({ label, value: FORWARDERS.filter((row) => row.status === label).length, color: ['var(--tk-success)', 'var(--tk-warning)', 'var(--tk-danger-solid)', 'var(--tk-neutral)', 'var(--tk-ink-400)'][index] })) : [];
+  const summary = statsQuery.error ? null : statsQuery.currentData;
+  const STATS = { total: summary?.total ?? '—', active: summary?.active ?? '—', exporters: summary?.exporters ?? '—', suspended: summary?.suspended ?? '—', pending: summary?.pending ?? '—', totalSpend: summary?.totalSpend ?? null };
+  const overviewColors = { Active: 'var(--tk-success)', Pending: 'var(--tk-warning)', Suspended: 'var(--tk-danger-solid)', Inactive: 'var(--tk-neutral)', Banned: 'var(--tk-ink-400)' };
+  const OVERVIEW = (summary?.overview || []).map(item => ({ ...item, color: overviewColors[item.label] }));
+  useEffect(() => { if (statsQuery.error) setNotice({ tone: 'danger', text: forwarderError(statsQuery.error) }); }, [statsQuery.error]);
+  async function exportReport() {
+    if (reportState.isLoading) return;
+    try {
+      const file = await downloadReport().unwrap(), link = document.createElement('a');
+      link.href = file.url; link.download = file.name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(file.url), 1000);
+      if (typeof STATS.total === 'number' && STATS.total > 1000) setNotice({ tone: 'info', text: 'The PDF report includes the newest 1,000 forwarders.' });
+    } catch (error) { setNotice({ tone: 'danger', text: forwarderError(error) }); }
+  }
 
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -138,7 +151,7 @@ export function Forwarders() {
         description="Manage and monitor all forwarders and exporters on the platform. Forwarders are individuals; an exporter is a forwarder holding a valid export license."
         actions={
           <>
-            <Button icon="plus" onClick={() => unavailable("Adding a forwarder")}>Add Forwarder</Button>
+            <Button icon="plus" onClick={() => setAddOpen(true)}>Add Forwarder</Button>
             <Button variant="outline" icon="download" iconRight="chevron-down" disabled={!directoryQuery.currentData || Boolean(directoryQuery.error)} onClick={exportList}>
               Export
             </Button>
@@ -151,7 +164,7 @@ export function Forwarders() {
 
       {notice && <Banner tone={notice.tone} action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice.text}</Banner>}
       {directoryQuery.error && <Banner tone="danger" title="Unable to load forwarders" action={<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button>}>{forwarderError(directoryQuery.error)}</Banner>}
-      {directoryQuery.isFetching && <DriverLoadingNotice>Refreshing forwarders…</DriverLoadingNotice>}
+      {(directoryQuery.isFetching || statsQuery.isFetching) && <DriverLoadingNotice>Refreshing forwarders…</DriverLoadingNotice>}
       {FORWARDERS.some((row) => row.profileUnavailable) && <Banner tone="warning" action={<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button>}>Some profiles could not be loaded. Their joined dates and verification statuses are unavailable.</Banner>}
       <div className="fw-stats">
         <StatCard
@@ -493,13 +506,13 @@ export function Forwarders() {
                 thickness={20}
                 centerValue={STATS.total}
                 centerLabel="Total"
-                data={OVERVIEW}
+                data={OVERVIEW.every(item => item.value != null) && OVERVIEW.reduce((sum, item) => sum + item.value, 0) === STATS.total ? OVERVIEW : []}
               />
               <LegendList
                 style={{ width: "100%" }}
                 items={OVERVIEW.map((o) => ({
                   ...o,
-                  display: `${o.value} (${typeof STATS.total === "number" && STATS.total > 0 ? Math.round((o.value / STATS.total) * 100) : "—"}%)`,
+                  display: `${o.value ?? "—"} (${o.share ?? "—"}%)`,
                 }))}
                 showShare={false}
               />
@@ -508,18 +521,18 @@ export function Forwarders() {
 
           <SectionCard title="Top Forwarders by Spend">
             <div style={{ display: "grid" }}>
-              <p className="tk-meta">Spending totals and rankings are not available yet.</p>
+              {rankingsQuery.isFetching ? <DriverTableLoading columns={3} label="Loading spending rankings" /> : rankingsQuery.error ? <Banner tone="danger" action={<Button variant="outline" onClick={rankingsQuery.refetch}>Retry</Button>}>{forwarderError(rankingsQuery.error)}</Banner> : !rankingsQuery.currentData?.rows.length ? <span className="tk-meta">No spending rankings available.</span> : rankingsQuery.currentData.rows.slice(0, 5).map(row => <div key={row.id} className="fd-row"><span className="tk-meta">{row.rank}</span><Link to={'/forwarders/detail?id=' + encodeURIComponent(row.id)} style={{ flex: 1 }}>{row.name}</Link><strong>{naira(row.spend)}</strong></div>)}
 
             </div>
             <div style={{ textAlign: "center", marginTop: 10 }}>
-              <Button variant="ghost" onClick={() => unavailable("The spending report")}>View full report →</Button>
+              <Button variant="ghost" disabled={reportState.isLoading} onClick={exportReport}>View full report →</Button>
             </div>
           </SectionCard>
 
           <QuickActionsCard
             items={[
-              { icon: "user-plus", label: "Add Forwarder", onClick: () => unavailable("Adding a forwarder") },
-              { icon: "shield-check", label: "Bulk Verify Forwarders", onClick: () => unavailable("Bulk forwarder verification") },
+              { icon: "user-plus", label: "Add Forwarder", onClick: () => setAddOpen(true) },
+              { icon: "shield-check", label: "Bulk Verify Forwarders", onClick: () => setBulkOpen(true) },
               { icon: "download", label: "Export Forwarders List", onClick: () => { if (directoryQuery.currentData && !directoryQuery.error) exportList(); else unavailable("Exporting the unloaded directory"); } },
               { icon: "megaphone", label: "Send Announcement", onClick: () => setAnnouncement(true) },
               {
@@ -535,6 +548,8 @@ export function Forwarders() {
       <Modal open={requestsOpen} title="Verification Requests" description="Exporter licenses awaiting review" width={640} onClose={() => setRequestsOpen(false)}>
         {pendingQuery.isFetching ? <DriverTableLoading columns={3} label="Loading exporter license requests" /> : pendingQuery.error ? <Banner tone="danger" action={<Button variant="outline" onClick={pendingQuery.refetch}>Retry</Button>}>{forwarderError(pendingQuery.error)}</Banner> : !pendingLicenses.length ? <EmptyState title="No pending exporter licenses" description="Submitted licenses awaiting review will appear here." /> : pendingLicenses.map((row) => <div key={row.id} className="fd-row"><span style={{ flex: 1 }}>{row.name}<small className="tk-meta" style={{ display: 'block' }}>{row.submitted}</small></span><Button variant="outline" onClick={() => { setRequestsOpen(false); setAction({ kind: 'review', forwarder: row }); }}>Review</Button></div>)}
       </Modal>
+      {addOpen && <ForwarderProfileModal onClose={() => setAddOpen(false)} onDone={(text, tone = 'success') => setNotice({ tone, text })} />}
+      {bulkOpen && <ForwarderBulkVerifyModal forwarders={FORWARDERS} onClose={() => setBulkOpen(false)} onDone={(text, tone = 'success') => setNotice({ tone, text })} />}
       {action && <ForwarderActionModal key={`${action.kind}:${action.forwarder.id}`} action={action} onClose={() => setAction(null)} onDone={(text) => setNotice({ tone: 'success', text })} />}
       {announcement && <ForwarderAnnouncementModal onClose={() => setAnnouncement(false)} onDone={(text) => setNotice({ tone: 'success', text })} />}
     </>

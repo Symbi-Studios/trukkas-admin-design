@@ -11,6 +11,19 @@ const count = (value) => Number.isSafeInteger(feeNumber(value)) && feeNumber(val
 const display = (value) => text(value) ?? '—';
 const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) ?? '—';
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+export const feePeriods = [
+  { value: 'week', label: 'Last 7 Days' },
+  { value: 'month', label: 'This Month' },
+  { value: 'year', label: 'Year' },
+];
+export const feeCategories = [
+  { value: null, label: 'All Categories' },
+  { value: 'PLATFORM', label: 'Platform' },
+  { value: 'SERVICE', label: 'Service' },
+  { value: 'PROCESSING', label: 'Processing' },
+  { value: 'OTHER', label: 'Other' },
+];
+const validPeriod = (value) => feePeriods.some((period) => period.value === value);
 export function feeMoney(value) {
   const parsed = feeNumber(value);
   return parsed == null ? '—' : (parsed < 0 ? '-' : '') + '₦' + Math.abs(parsed).toLocaleString('en-NG');
@@ -106,7 +119,7 @@ export function adaptFeeRule(value) {
   const numericValue = calculationType === 'FLAT' ? dto.currency === 'NGN' ? feeNumber(dto.amount) : null : calculationType === 'PERCENTAGE' ? feeNumber(dto.rate) : null;
   return {
     ...unavailableFeeRule, id, name: display(dto.name), sub: display(dto.subtitle), description: display(dto.description),
-    category: text(dto.category), appliesTo: display(dto.appliesTo), jobType: label(dto.jobType), cargoType: label(dto.cargoType),
+    category: text(dto.category), location: display(dto.location), appliesTo: display(dto.appliesTo), jobType: label(dto.jobType), cargoType: label(dto.cargoType),
     calcType: label(calculationType), calculationType, numericValue,
     rate: numericValue == null ? '—' : calculationType === 'FLAT' ? feeMoney(numericValue) : numericValue.toLocaleString('en-NG') + '%',
     status: label(dto.status), statusCode: text(dto.status), effectiveFrom: date(dto.effectiveFrom), effectiveTo: date(dto.effectiveTo),
@@ -228,16 +241,35 @@ async function bulkUpdate({ updates }, api, baseQuery) {
   }
   return { data: { verified, failures, reportedFailureCount: dto.failures.length } };
 }
-async function download(baseQuery, url, format, filters = {}) {
+function feeDocumentFilename(headers, format, fallback) {
+  const safe = (value) => {
+    if (!text(value)) return null;
+    const name = value.split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1f\x7f]/g, '').trim();
+    return name.length <= 180 && !name.startsWith('.') && name.toLowerCase().endsWith('.' + format) ? name : null;
+  };
+  const disposition = headers?.get('content-disposition') || '';
+  const encoded = disposition.match(/filename\*\s*=\s*UTF-8'[^']*'([^;]+)/i)?.[1];
+  const plain = disposition.match(/filename\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+  let name = null;
+  if (encoded) { try { name = safe(decodeURIComponent(encoded.trim())); } catch { /* Fall back to the regular filename. */ } }
+  return name || safe(plain?.[1] || plain?.[2]) || safe(fallback + '.' + format) || 'fees.' + format;
+}
+async function download(baseQuery, api, url, format, filters = {}, fallback = 'fees') {
   if (!['csv', 'pdf'].includes(format)) return failure('Unsupported fee export format.');
   if (filters.status && !['ACTIVE', 'INACTIVE'].includes(filters.status)) return failure('Draft fee rules are not supported by the backend.');
+  const admin = api.getState().auth.admin;
+  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && admin?.id && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  if (!sameSession()) return failure('Sign in before downloading fee documents.');
   const result = await baseQuery({ url, params: { ...filters, format }, headers: { Accept: format === 'pdf' ? 'application/pdf' : 'text/csv' }, responseHandler: async (response) => {
     if (response.ok) return response.blob();
     const body = await response.text();
     try { return JSON.parse(body); } catch { return { message: 'Unable to download the fee document.' }; }
   } });
   if (result.error) return result;
+  if (!sameSession()) return failure('The session changed. Download the fee document again.');
   if (!(result.data instanceof Blob) || !result.data.size) return failure('The backend did not return a fee document.');
+  const expectedType = format === 'pdf' ? 'application/pdf' : 'text/csv';
+  if (result.data.type.split(';')[0].trim().toLowerCase() !== expectedType) return failure('The backend returned an unexpected fee document type.');
   const bytes = new Uint8Array(await result.data.arrayBuffer());
   if (format === 'pdf' && String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') return failure('The backend did not return a valid PDF.');
   if (format === 'csv') {
@@ -246,12 +278,30 @@ async function download(baseQuery, url, format, filters = {}) {
   }
   let binary = '';
   for (let start = 0; start < bytes.length; start += 32768) binary += String.fromCharCode(...bytes.subarray(start, start + 32768));
-  return { data: { content: btoa(binary), format } };
+  if (!sameSession()) return failure('The session changed. Download the fee document again.');
+  return { data: { content: btoa(binary), format, filename: feeDocumentFilename(result.meta?.response?.headers, format, fallback) } };
+}
+async function exportFeeRules({ format, filters = {} }, api, baseQuery) {
+  const params = Object.fromEntries(['search', 'status', 'jobType', 'cargoType', 'location', 'category'].map((key) => [key, text(filters[key])]).filter(([, value]) => value != null));
+  if (!['csv', 'pdf'].includes(format)) return failure('Unsupported fee export format.');
+  if (params.status && !['ACTIVE', 'INACTIVE'].includes(params.status)) return failure('Draft fee rules are not supported by the backend.');
+  if (params.category && !feeCategories.some((category) => category.value === params.category)) return failure('Select a supported fee category.');
+  const owner = api.getState().auth.admin?.id;
+  if (!owner || api.signal.aborted) return failure('Sign in before downloading fee documents.');
+  // The documented file endpoint caps exports at 100; never download a silently truncated catalog.
+  const preview = await baseQuery({ url: '/admin/fees/rules', params: { ...params, page: 1, limit: 100 } });
+  if (preview.error) return preview;
+  if (api.signal.aborted || api.getState().auth.admin?.id !== owner) return failure('The session changed. Download the fee document again.');
+  const dto = record(unwrapApiResponseData(preview.data)), total = count(record(dto.pagination).total);
+  if (total == null || !Array.isArray(dto.rules)) return failure('The complete fee export scope could not be confirmed.');
+  if (total > 100) return failure('The backend exports at most 100 fee rules. Narrow the filters before exporting.');
+  if (dto.rules.length !== total) return failure('The complete fee export scope could not be confirmed.');
+  return download(baseQuery, api, '/admin/fees/rules/export', format, params, 'fee-rules');
 }
 export function saveFeeDocument(document, name) {
   const bytes = Uint8Array.from(atob(document.content), (character) => character.charCodeAt(0));
   const url = URL.createObjectURL(new Blob([bytes], { type: document.format === 'pdf' ? 'application/pdf' : 'text/csv;charset=utf-8' }));
-  const link = window.document.createElement('a'); link.href = url; link.download = name + '.' + document.format; link.click();
+  const link = window.document.createElement('a'); link.href = url; link.download = document.filename || name + '.' + document.format; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 const feeTags = ['AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
@@ -260,7 +310,13 @@ export const feesApi = baseApi.enhanceEndpoints({ addTagTypes: changedTags }).in
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminFeeRevenue: builder.query({ query: () => ({ url: '/admin/overview' }), transformResponse: adaptAdminFeeRevenue, providesTags: ['AdminFeeRevenue'] }),
-    getAdminFeeSummary: builder.query({ query: () => ({ url: '/admin/fees/summary', params: { period: 'month' } }), transformResponse: adaptFeeSummary, providesTags: ['AdminFeeSummary'] }),
+    getAdminFeeSummary: builder.query({
+      async queryFn({ period = 'month' } = {}, _api, _options, baseQuery) {
+        if (!validPeriod(period)) return failure('Select a supported fee summary period.');
+        const result = await baseQuery({ url: '/admin/fees/summary', params: { period } });
+        return result.error ? result : { data: adaptFeeSummary(result.data) };
+      }, providesTags: ['AdminFeeSummary'],
+    }),
     getAdminFeeRules: builder.query({
       async queryFn(_args, api, _options, baseQuery) {
         const result = await allPages(baseQuery, api, '/admin/fees/rules', (dto) => dto.rules, (row) => text(row?.id));
@@ -277,9 +333,9 @@ export const feesApi = baseApi.enhanceEndpoints({ addTagTypes: changedTags }).in
     updateAdminFeeRule: builder.mutation({ queryFn: (args, api, _options, baseQuery) => updateRule(args, api, baseQuery), invalidatesTags: changedTags }),
     setAdminFeeRuleStatus: builder.mutation({ queryFn: (args, api, _options, baseQuery) => updateRule(args, api, baseQuery), invalidatesTags: changedTags }),
     bulkUpdateAdminFeeRules: builder.mutation({ queryFn: (args, api, _options, baseQuery) => bulkUpdate(args, api, baseQuery), invalidatesTags: changedTags }),
-    getAdminFeeRulesExport: builder.query({ queryFn: ({ format, filters = {} }, _api, _options, baseQuery) => download(baseQuery, '/admin/fees/rules/export', format, { ...(text(filters.search) ? { search: text(filters.search) } : {}), ...(text(filters.status) ? { status: filters.status } : {}), ...(text(filters.jobType) ? { jobType: filters.jobType } : {}), ...(text(filters.cargoType) ? { cargoType: filters.cargoType } : {}) }), keepUnusedDataFor: 0 }),
-    getAdminFeeRuleExport: builder.query({ queryFn: ({ id, format }, _api, _options, baseQuery) => download(baseQuery, '/admin/fees/rules/' + encodeURIComponent(id) + '/export', format), keepUnusedDataFor: 0 }),
-    getAdminFeeReport: builder.query({ queryFn: ({ format }, _api, _options, baseQuery) => download(baseQuery, '/admin/fees/report', format, { period: 'month' }), keepUnusedDataFor: 0 }),
+    getAdminFeeRulesExport: builder.query({ queryFn: (args, api, _options, baseQuery) => exportFeeRules(args, api, baseQuery), keepUnusedDataFor: 0 }),
+    getAdminFeeRuleExport: builder.query({ queryFn: ({ id, format }, api, _options, baseQuery) => text(id) ? download(baseQuery, api, '/admin/fees/rules/' + encodeURIComponent(id) + '/export', format, {}, 'fee-rule-' + id) : failure('Select a valid fee rule.'), keepUnusedDataFor: 0 }),
+    getAdminFeeReport: builder.query({ queryFn: ({ format, period = 'month' }, api, _options, baseQuery) => validPeriod(period) ? download(baseQuery, api, '/admin/fees/report', format, { period }, 'fees-report') : failure('Select a supported fee report period.'), keepUnusedDataFor: 0 }),
   }),
 });
 export const { useGetAdminFeeRevenueQuery, useGetAdminFeeSummaryQuery, useGetAdminFeeRulesQuery, useGetAdminFeeRuleQuery, useGetAdminFeeRuleHistoryQuery, useUpdateAdminFeeRuleMutation, useSetAdminFeeRuleStatusMutation, useBulkUpdateAdminFeeRulesMutation, useLazyGetAdminFeeRulesExportQuery, useLazyGetAdminFeeRuleExportQuery, useLazyGetAdminFeeReportQuery } = feesApi;

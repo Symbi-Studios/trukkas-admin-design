@@ -215,7 +215,7 @@ export function UserDetail() {
       {!['Overview', 'Activity Log'].includes(tab) && <ManagedUserSection tab={tab} user={u} owner={admin?.id} />}
       {(tab === 'Overview' || tab === 'Activity Log') && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="Recent Activity" pad="none" footer={<a href="#" onClick={(event) => { event.preventDefault(); viewActivity(); }}>View All Activity →</a>}>
-          {activityLoading ? <DriverTableLoading columns={5} label="Loading user activity" /> : <DataTable rows={activity} rowKey={(r, i) => i}
+          {activityLoading ? <DriverTableLoading columns={5} label="Loading user activity" /> : <DataTable rows={activity} rowKey={(r) => r.id}
             columns={[
               { key: 'text', header: 'Activity', render: (r) => (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

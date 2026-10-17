@@ -3,7 +3,7 @@ import { useEffect,useRef,useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate,useParams } from '../router.js';
 import { PageHeader,Button,Card,SectionCard,Badge,Avatar,Icon,Modal,Textarea,Select } from '../ds.js';
-import { useGetAdminFeedbackDetailQuery, useGetAdminFeedbackAssigneesQuery, useGetAdminFeedbackHistoryQuery, useGetAdminRelatedFeedbackQuery, emptyFeedback, feedbackDetailUrl, feedbackUnavailable, feedbackHistoryPreview } from '../store/features/feedback/feedbackApi.js';
+import { useGetAdminFeedbackDetailQuery, useGetAdminFeedbackAssigneesQuery, useGetAdminFeedbackHistoryQuery, useGetAdminRelatedFeedbackQuery, emptyFeedback, feedbackDetailUrl, feedbackUnavailable, feedbackHistoryPreview, feedbackReplyMessage } from '../store/features/feedback/feedbackApi.js';
 import { useGetManagedUserProfileQuery } from '../store/features/users/usersApi.js';
 import { DriverDetailLoading, DriverLoadingNotice } from './DriversLoading.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
@@ -45,7 +45,7 @@ export function FeedbackDetail(){const navigate=useNavigate(),params=useParams()
  async function sendReply(){
    if(!reply.trim()||f.submitterType!=='USER')return;
    const result=await change('reply',{message:reply});
-   if(result){setReplyOpen(false);setReply('');notify(result.delivery?.email==='FAILED'?'Reply recorded; email delivery failed.':result.delivery?.inApp===false?'Reply recorded; in-app delivery was not confirmed.':'Reply recorded')}
+   if(result){setReplyOpen(false);setReply('');notify(feedbackReplyMessage(result.delivery))}
  }
  async function saveNote(){if(await change('note',{text:note},'Internal note updated'))setNoteOpen(false)}
  async function addTag(){if(tag.trim()&&await change('tags',{tag},'Tag added'))setTag('')}

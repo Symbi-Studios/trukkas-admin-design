@@ -139,7 +139,7 @@ export function MaintenanceDetail() {
   const maintStatusLabel = isOverdue ? "Overdue" : isInProgress ? "Maintenance In Progress" : "—";
   const maintStatusTone = STATUS_TONE[r.status] || "neutral";
   const maintStatusDesc = isOverdue ? "This asset has overdue maintenance and requires immediate attention." : isInProgress ? "A maintenance job is currently in progress for this asset." : "—";
-  const remainingKm = r.nextDueOdometer != null && r.currentOdometer != null ? Math.max(0, r.nextDueOdometer - r.currentOdometer) : null;
+  const remainingKm = r.remainingKm ?? (r.nextDueOdometer != null && r.currentOdometer != null ? Math.max(0, r.nextDueOdometer - r.currentOdometer) : null);
   const scaleMax = r.nextDueOdometer;
   const compliance = [
     { label: "Maintenance Compliant", hint: "All mandatory maintenance completed", ok: r.maintenanceCompliant },

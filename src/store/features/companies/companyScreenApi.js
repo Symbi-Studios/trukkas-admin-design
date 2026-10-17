@@ -3,6 +3,7 @@ import { companyDate } from './companiesApi.js';
 const text=v=>typeof v==='string'&&v.trim()?v.trim():null;
 const num=v=>(typeof v==='number'||typeof v==='string'&&v.trim())&&Number.isFinite(Number(v))?Number(v):null;
 const count=v=>Number.isSafeInteger(num(v))&&num(v)>=0?num(v):null;
+const amount=v=>num(v)!=null&&num(v)>=0?num(v):null;
 const fail=error=>({status:'CUSTOM_ERROR',error});
 const roles=new Set(['SUPER_ADMIN','OPS_ADMIN','FINANCE_ADMIN']);
 const userPath=id=>'/admin/users/'+encodeURIComponent(id);
@@ -30,7 +31,9 @@ export const companyScreenApi=baseApi.injectEndpoints({
     getAdminCompanyScreenSummary:builder.query({
       async queryFn({id,owner,role},api,_options,baseQuery){try{
         const dto=await transport(api,baseQuery,owner,role)({url:userPath(id)+'/settlements/summary'});
-        return {data:{pending:dto?.currency==='NGN'?num(dto.pendingReviewAmount):null,processing:dto?.currency==='NGN'?num(dto.processingAmount):null,available:null}};
+        return {data:{pending:dto?.currency==='NGN'?amount(dto.pendingReviewAmount):null,processing:dto?.currency==='NGN'?amount(dto.processingAmount):null,
+          pendingReviewCount:count(dto?.pendingReviewCount),processingCount:count(dto?.processingCount),currency:dto?.currency==='NGN'?'NGN':null,
+          available:dto?.currency==='NGN'?amount(dto.availableForApprovalAmount):null,availableForApprovalCount:count(dto?.availableForApprovalCount)}};
       }catch(e){return {error:e?.status?e:fail('Company payout summary is unavailable.')};}},
       providesTags:['AdminCompanies'],
     }),
@@ -43,11 +46,11 @@ export const companyScreenApi=baseApi.injectEndpoints({
     }),
     getAdminCompanyScreenActivity:builder.query({
       async queryFn({id,owner,role,entityType,entityId},api,_options,baseQuery){try{
-        const rows=await all(transport(api,baseQuery,owner,role),userPath(id)+'/activity',['events','activity','activities','rows'],{entityType,entityId});
+        const rows=await all(transport(api,baseQuery,owner,role),userPath(id)+'/activity',['events'],{entityType,entityId});
         if(rows.some(a=>a.related?.companyId!==id&&!(a.entityType==='COMPANY'&&a.entityId===id)))throw fail('Activity records could not be associated with this company.');
-        if(entityId&&rows.some(a=>a.entityId!==entityId||entityType&&a.entityType!==entityType))throw fail('The activity response does not match this inspector.');
+        if(rows.some(a=>entityId&&a.entityId!==entityId||entityType&&a.entityType!==entityType))throw fail('The activity response does not match this inspector.');
         return {data:rows.map(a=>({id:a.id,icon:a.entityType==='TRUCK'?'truck':a.entityType==='DRIVER'?'users':'clipboard-check',title:text(a.title)||'—',sub:text(a.description)||text(a.actor?.name)||'—',time:companyDate(a.timestamp)}))};
-      }catch(e){return {error:e?.status?e:fail('Company activity is unavailable. Its response envelope is not documented.')};}},
+      }catch(e){return {error:e?.status?e:fail('Company activity could not be loaded from its documented events collection.')};}},
       providesTags:['AdminCompanies','AdminFleet','AdminDrivers'],
     }),
     getAdminCompanyScreenDriver:builder.query({

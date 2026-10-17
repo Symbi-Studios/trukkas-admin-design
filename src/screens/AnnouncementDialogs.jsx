@@ -8,18 +8,24 @@ import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 export function AnnouncementAudienceDialog({ name, owner, selected = [], onApply, onClose }) {
   const [ids, setIds] = useState(selected || []), [search, setSearch] = useState(''), [page, setPage] = useState(1);
   const custom = name === 'Custom Users';
-  const catalog = useGetAdminAnnouncementOptionsQuery({ owner }, { skip: custom, refetchOnMountOrArgChange: true });
+  const catalog = useGetAdminAnnouncementOptionsQuery({ owner }, { refetchOnMountOrArgChange: true });
   const users = useGetAdminAnnouncementUsersQuery({ owner, search, page }, { skip: !custom, refetchOnMountOrArgChange: true });
   const query = custom ? users : catalog;
+  const error = query.error || catalog.error;
+  const loading = query.isFetching || catalog.isFetching;
+  const customUsersMax = catalog.currentData?.limits?.customUsersMax;
   const options = query.error ? [] : custom ? users.currentData?.users || [] : catalog.currentData?.modes.find((mode) => mode.mode === audiences[name])?.options || [];
-  function toggle(id, checked) { setIds((current) => checked ? [...new Set([...current, id])] : current.filter((value) => value !== id)); }
+  function toggle(id, checked) {
+    if (checked && custom && customUsersMax != null && ids.length >= customUsersMax) { window.alert('Select no more than ' + customUsersMax + ' users.'); return; }
+    setIds((current) => checked ? [...new Set([...current, id])] : current.filter((value) => value !== id));
+  }
   return <Modal open title={name} width={580} onClose={onClose} footer={<>
     <Button variant="outline" onClick={onClose}>Cancel</Button>
-    <Button disabled={!ids.length || query.isFetching || Boolean(query.error)} onClick={() => onApply(ids)}>Apply</Button>
+    <Button disabled={!ids.length || loading || Boolean(error) || custom && (!customUsersMax || ids.length > customUsersMax)} onClick={() => onApply(ids)}>Apply</Button>
   </>}>
     <div style={{ display: 'grid', gap: 14 }}>
       {custom && <SearchField value={search} placeholder="Search users..." onChange={(event) => { setSearch(event.target.value); setPage(1); }} />}
-      {query.error ? <Banner tone="danger">{getApiErrorMessage(query.error)}</Banner> : query.isLoading || (query.isFetching && !query.currentData) ? <Skeleton height={140} /> : options.length ? options.map((option) => <Checkbox key={option.id} label={option.label} checked={ids.includes(option.id)} onChange={(checked) => toggle(option.id, checked)} />) : <span>—</span>}
+      {error ? <Banner tone="danger">{getApiErrorMessage(error)}</Banner> : query.isLoading || (query.isFetching && !query.currentData) || (catalog.isFetching && !catalog.currentData) ? <Skeleton height={140} /> : options.length ? options.map((option) => <Checkbox key={option.id} label={option.label} checked={ids.includes(option.id)} onChange={(checked) => toggle(option.id, checked)} />) : <span>—</span>}
       {custom && <Pagination page={page} pageSize={20} total={users.currentData?.total ?? null} pageCount={users.currentData?.pageCount ?? null} onPage={setPage} />}
     </div>
   </Modal>;

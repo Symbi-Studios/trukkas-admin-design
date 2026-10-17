@@ -69,6 +69,24 @@ export function adaptCompanyTruck(truck = {}) {
     maintenanceRecordId: Array.isArray(truck.maintenance?.records) ? text(truck.maintenance.records.find(row => text(row?.id))?.id) : null };
 }
 
+function companyMonthlyComparison(value) {
+  const period = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const at = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    && companyDate(value) !== '—' ? Date.parse(value) : null;
+  const currentFrom = at(period.currentPeriod?.from), currentTo = at(period.currentPeriod?.to);
+  const previousFrom = at(period.previousPeriod?.from), previousTo = at(period.previousPeriod?.to);
+  const knownPeriod = period.timezone === 'Africa/Lagos' && [currentFrom, currentTo, previousFrom, previousTo].every(value => value != null)
+    && currentFrom <= currentTo && previousFrom <= previousTo && previousTo <= currentFrom;
+  return Object.fromEntries(['fleetSize', 'totalDrivers', 'activeDrivers', 'inactiveDrivers', 'completedJobs'].map(key => {
+    const current = count(period[key]?.current), previous = count(period[key]?.previous), rawChange = number(period[key]?.changePercent);
+    const changePercent = knownPeriod && current != null && previous != null && rawChange != null
+      && (previous > 0 || current === 0 && rawChange === 0) ? rawChange : null;
+    return [key, { current, previous, changePercent,
+      delta: changePercent == null ? '—' : (changePercent > 0 ? '+' : '') + changePercent.toLocaleString('en-NG', { maximumFractionDigits: 2 }) + '%',
+      direction: changePercent == null || changePercent === 0 ? null : changePercent > 0 ? 'up' : 'down' }];
+  }));
+}
+
 export function adaptAdminCompanyProfile(response) {
   const dto = unwrapApiResponseData(response);
   if (!dto || typeof dto !== 'object' || Array.isArray(dto)) return null;
@@ -82,6 +100,7 @@ export function adaptAdminCompanyProfile(response) {
     lastLogin: companyDate(dto.lastLoginAt || account.lastLogin),
     totalJobs: count(stats.totalJobs?.count), failedJobs: count(stats.failedJobs?.count),
     totalEarned: number(stats.totalEarned?.amount), walletBalance: number(stats.walletBalance?.amount), updated: companyDate(account.lastUpdated), documentCount: count(dto.verification?.documents?.total),
+    monthlyComparison: companyMonthlyComparison(stats.monthlyComparison),
     fleet,
     fleetCounts: { active: fleetKnown ? fleet.filter(truck => ['Available','On Trip','Active'].includes(truck.status)).length : null, inactive: fleetKnown ? fleet.filter(truck => ['Inactive','Suspended','Rejected','Banned'].includes(truck.status)).length : null, maintenance: fleetKnown ? fleet.filter(truck => truck.status === 'In Maintenance').length : null },
   };

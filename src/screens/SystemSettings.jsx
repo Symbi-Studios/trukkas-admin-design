@@ -46,7 +46,7 @@ export function SystemSettings() {
   const updatePlatformInfo = editor.change('settingsPlatformInfo');
   const updateOperationalGeneral = editor.change('settingsOperationalGeneral');
   const updateNotificationGeneral = editor.change('settingsNotificationGeneral');
-  const resetPlatformSettings = () => editor.unavailable('Reset Platform Settings');
+  const resetPlatformSettings = () => editor.resetAll();
   const systemStatus = editor.status(systemStatusTemplate);
   const platformVersion = editor.platformVersion || { currentVersion: '—', lastUpdated: '—', environment: '—', buildNumber: '—' };
   const platformInfo = editor.group('settingsPlatformInfo');

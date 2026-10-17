@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { adaptKnowledgeAnalytics, KNOWLEDGE_ANALYTICS_INTERVALS, KNOWLEDGE_ANALYTICS_PERIODS } from './knowledgeAnalyticsContracts.js';
 
 // Existing UI taxonomy, without the fixture counts.
 export const KNOWLEDGE_CATEGORIES = ['Trips & Jobs', 'Container Triangulation', 'Provisional Release', 'Fleet Management', 'Finance', 'Live Tracking', 'Pricing', 'General'];
@@ -48,12 +49,12 @@ function adaptArticle(dto, includeRelated = true) {
     published: date(dto.publishedAt), publishedTime: date(dto.publishedAt, true),
     visibilityCode: ['ALL', 'FORWARDERS', 'TRUCKERS', 'DRIVERS', 'INTERNAL'].includes(dto.visibility) ? dto.visibility : null,
     visibility: ({ ALL: 'Public', FORWARDERS: 'Forwarders', TRUCKERS: 'Truckers', DRIVERS: 'Drivers', INTERNAL: 'Internal' }[dto.visibility] || '—'),
-    featured: boolean(dto.featured), feedback: boolean(dto.feedback ?? dto.allowFeedback), related: null,
+    featured: boolean(dto.featured), feedback: boolean(dto.feedback ?? dto.allowFeedback), related: boolean(dto.showRelated),
     seoTitle: text(dto.seoTitle), metaDescription: text(dto.metaDescription),
     tags: Array.isArray(dto.tags) && dto.tags.every((tag) => text(tag)) ? dto.tags : null,
     attachments: Array.isArray(dto.attachments) ? dto.attachments.map(attachment) : null,
     relatedArticles: includeRelated && Array.isArray(dto.relatedArticles) && dto.relatedArticles.every((article) => text(article?.id)) ? dto.relatedArticles.map((article) => adaptArticle(article, false)) : null,
-    core: { title: text(dto.title), body, category: text(dto.category), status: STATUS_LABELS[code] ? code : null, summary: dto.summaryIsGenerated === true ? null : text(dto.summary), subcategory: text(dto.subcategory), visibility: text(dto.visibility), featured: boolean(dto.featured), feedback: boolean(dto.feedback ?? dto.allowFeedback), seoTitle: text(dto.seoTitle), metaDescription: text(dto.metaDescription), tags: stringList(dto.tags), attachmentIds: Array.isArray(dto.attachments) && dto.attachments.every(file => text(file?.id)) ? dto.attachments.map(file => file.id) : null },
+    core: { title: text(dto.title), body, category: text(dto.category), status: STATUS_LABELS[code] ? code : null, summary: dto.summaryIsGenerated === true ? null : text(dto.summary), subcategory: text(dto.subcategory), visibility: text(dto.visibility), featured: boolean(dto.featured), feedback: boolean(dto.feedback ?? dto.allowFeedback), showRelated: boolean(dto.showRelated), seoTitle: text(dto.seoTitle), metaDescription: text(dto.metaDescription), tags: stringList(dto.tags), attachmentIds: Array.isArray(dto.attachments) && dto.attachments.every(file => text(file?.id)) ? dto.attachments.map(file => file.id) : null },
   };
 }
 function adaptGuide(raw) {
@@ -62,7 +63,7 @@ function adaptGuide(raw) {
   return {
     steps: Array.isArray(raw.steps) ? raw.steps.map(step => ({ title: text(step?.title), paragraphs: stringList(step?.paragraphs) })) : null,
     tip: text(raw.tip), fieldItems: Array.isArray(raw.fieldItems) ? raw.fieldItems.map(item => ({ label: text(item?.label), description: text(item?.description) })) : null,
-    screenshot: raw.screenshot == null ? null : { header: text(screenshot.header), navigation: stringList(screenshot.navigation), title: text(screenshot.title), tabs: stringList(screenshot.tabs), columns: stringList(screenshot.columns), rows: Array.isArray(screenshot.rows) && screenshot.rows.every(row => stringList(row)) ? screenshot.rows : null },
+    screenshot: raw.screenshot == null ? null : { header: text(screenshot.header), navigation: stringList(screenshot.navigation), title: text(screenshot.title), actionLabel: typeof screenshot.actionLabel === 'string' && screenshot.actionLabel.length <= 60 ? text(screenshot.actionLabel) : null, tabs: stringList(screenshot.tabs), columns: stringList(screenshot.columns), rows: Array.isArray(screenshot.rows) && screenshot.rows.every(row => stringList(row)) ? screenshot.rows : null },
   };
 }
 export function knowledgeSummary(rows, stats) {
@@ -103,7 +104,7 @@ async function readArticle(baseQuery, id) {
 function writeBody(fields, creating) {
   const source = record(fields), keys = Object.keys(source), body = {};
   const strings = { title: 150, body: Infinity, category: Infinity, summary: 500, subcategory: 100, seoTitle: 70, metaDescription: 160 };
-  if (!keys.length || keys.some(key => ![...Object.keys(strings), 'status', 'visibility', 'featured', 'feedback', 'tags', 'attachmentIds'].includes(key))) throw new Error('Only documented article fields can be saved.');
+  if (!keys.length || keys.some(key => ![...Object.keys(strings), 'status', 'visibility', 'featured', 'feedback', 'showRelated', 'tags', 'attachmentIds'].includes(key))) throw new Error('Only documented article fields can be saved.');
   for (const key of keys) {
     const value = source[key];
     if (key in strings) {
@@ -115,7 +116,7 @@ function writeBody(fields, creating) {
     } else if (key === 'visibility') {
       if (!['ALL', 'FORWARDERS', 'TRUCKERS', 'DRIVERS', 'INTERNAL'].includes(value)) throw new Error('Choose a supported article visibility.');
       body[key] = value;
-    } else if (['featured', 'feedback'].includes(key)) {
+    } else if (['featured', 'feedback', 'showRelated'].includes(key)) {
       if (typeof value !== 'boolean') throw new Error('Choose an article setting.');
       body[key] = value;
     } else {
@@ -129,6 +130,7 @@ function writeBody(fields, creating) {
 export function knowledgeArticleFields(form, status) {
   const fields = { title: form.title?.trim(), body: form.content, category: form.category, status: ARTICLE_STATUS_CODES[status] };
   for (const key of ['summary', 'subcategory', 'featured', 'feedback', 'seoTitle', 'metaDescription', 'tags']) if (form[key] != null) fields[key] = form[key];
+  if (form.related != null) fields.showRelated = form.related;
   if (form.visibility != null) fields.visibility = ({ Public: 'ALL', Internal: 'INTERNAL' })[form.visibility] || form.visibility;
   if (form.attachments != null) { if (!form.attachments.every(file => text(file.id))) throw new Error('Existing attachment IDs are unavailable. Reload the article before saving.'); fields.attachmentIds = form.attachments.map(file => file.id); }
   return fields;
@@ -153,6 +155,19 @@ async function confirmWrite(baseQuery, response, expected, existingId) {
 export const knowledgeBaseApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminKnowledgeArticles'] }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
+    getAdminKnowledgeAnalytics: builder.query({
+      async queryFn({ owner, role, period = 'thisMonth', interval = 'day' }, api, _options, baseQuery) {
+        const current = () => !api.signal.aborted && Boolean(owner && api.getState().auth.accessToken) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        if (!current()) return failure('The session changed. Reload before continuing.');
+        if (!KNOWLEDGE_ANALYTICS_PERIODS.some(option => option.value === period) || !KNOWLEDGE_ANALYTICS_INTERVALS.some(option => option.value === interval)) return failure('Choose a supported analytics period and interval.');
+        const result = await baseQuery({ url: '/admin/knowledge-base/analytics', params: { period, interval } });
+        if (!current()) return failure('The session changed. Reload before continuing.');
+        if (result.error) return result;
+        try { return { data: adaptKnowledgeAnalytics(payload(result.data), { period, interval }) }; }
+        catch (error) { return failure(error.message); }
+      },
+      providesTags: [{ type: 'AdminKnowledgeArticles', id: 'STATS' }],
+    }),
     getAdminKnowledgeStats: builder.query({
       query: ({ period = 'thisMonth', comparisonDays = 7, dateFrom, dateTo } = {}) => ({ url: '/admin/knowledge-base/stats', params: { period, comparisonDays, ...(dateFrom ? { dateFrom } : {}), ...(dateTo ? { dateTo } : {}) } }),
       transformResponse: response => record(payload(response)),
@@ -228,6 +243,7 @@ export const knowledgeBaseApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminK
   }),
 });
 export const {
+  useGetAdminKnowledgeAnalyticsQuery,
   useGetAdminKnowledgeStatsQuery, useUploadAdminKnowledgeAttachmentsMutation, useVoteAdminKnowledgeArticleMutation,
   useGetAdminKnowledgeArticleDirectoryQuery, useGetAdminKnowledgeArticleDetailQuery,
   useCreateAdminKnowledgeArticleMutation, useUpdateAdminKnowledgeArticleMutation,

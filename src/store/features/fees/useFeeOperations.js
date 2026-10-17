@@ -34,7 +34,7 @@ export function useFeeOperations() {
     if (pending.current || busy || !authenticated) return;
     pending.current = true;
     try {
-      const result = await (kind === 'rule' ? exportRule({ id: rule.id, format, owner }) : kind === 'report' ? report({ format, owner }) : exportRules({ format, filters, owner })).unwrap();
+      const result = await (kind === 'rule' ? exportRule({ id: rule.id, format, owner }) : kind === 'report' ? report({ format, period: filters?.period ?? 'month', owner }) : exportRules({ format, filters, owner })).unwrap();
       if (currentOwner.current === owner) saveFeeDocument(result, kind === 'rule' ? 'fee-rule' : kind === 'report' ? 'fee-report' : 'fee-rules');
     } catch (error) { if (currentOwner.current === owner) window.alert(getApiErrorMessage(error)); }
     finally { pending.current = false; }

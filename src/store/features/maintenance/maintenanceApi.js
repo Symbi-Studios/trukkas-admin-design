@@ -63,14 +63,24 @@ function mapDocuments(response) {
   const dto = unwrapApiResponseData(response);
   if (!Array.isArray(dto?.documents)) throw new Error('The maintenance response is missing its documents list.');
   if (dto.documents.some(item => !text(item?.id)) || new Set(dto.documents.map(item => item.id)).size !== dto.documents.length) throw new Error('The maintenance documents returned missing or duplicate IDs.');
-  return { total: integer(dto.total), attachments: dto.documents.map(item => [text(item.name) || '—', byteSize(item.sizeBytes), item.id, safeUrl(item.downloadUrl)]) };
+  const total = integer(dto.total);
+  if (total != null && total !== dto.documents.length) throw new Error('The maintenance documents response is incomplete.');
+  return { total, attachments: dto.documents.map(item => [text(item.name) || '—', byteSize(item.sizeBytes), item.id, safeUrl(item.downloadUrl)]) };
 }
-function mapUsage(response) {
+function mapUsage(response, _meta, { truckId }) {
   const dto = unwrapApiResponseData(response) || {};
+  if (dto.truckId !== truckId) throw new Error('The maintenance usage response returned a different truck.');
+  const from = dateValue(dto.period?.from), to = dateValue(dto.period?.to);
+  if (dto.period != null && (!from || !to || Date.parse(from) > Date.parse(to))) throw new Error('The maintenance usage response has an invalid period.');
   const monthly = Array.isArray(dto.monthlyDistance) ? dto.monthlyDistance : null;
   if (monthly && (monthly.some(item => !/^\d{4}-(0[1-9]|1[0-2])$/.test(item?.month)) || new Set(monthly.map(item => item.month)).size !== monthly.length)) throw new Error('The maintenance usage response has invalid months.');
   const sorted = monthly?.slice().sort((a, b) => a.month.localeCompare(b.month));
-  return { monthly: sorted?.map(item => number(item.distanceKm)) ?? null, labels: sorted?.map(item => item.month) ?? null, averageMonthlyDistanceKm: number(dto.averageMonthlyDistanceKm) };
+  return {
+    monthly: sorted?.map(item => number(item.distanceKm)) ?? null,
+    labels: sorted?.map(item => item.month) ?? null,
+    averageMonthlyDistanceKm: number(dto.averageMonthlyDistanceKm),
+    period: dto.period == null ? null : { from, to, months: integer(dto.period.months) },
+  };
 }
 
 function mapRecord(dto) {
@@ -88,7 +98,7 @@ function mapRecord(dto) {
     daysUntilDue: days, priority: Object.hasOwn(priorities, dto.priority) ? priorities[dto.priority] : '—', notes: text(dto.notes) || '—',
     assetStatus: dto.truck?.status === 'MAINTENANCE' ? 'In Maintenance' : statuses[dto.truck?.status] || (dto.truck?.status === 'ACTIVE' ? 'Active' : '—'),
     makeModel: '—', year: '—', vin: '—', truckRef: text(dto.truck?.id) || '—', assetLocation: location(dto.asset?.currentLocation),
-    currentOdometer: number(dto.asset?.currentOdometerKm), nextDueOdometer: number(dto.asset?.nextDueOdometerKm), nextDueDate: '—', nextDueDays: null, lastUpdated: maintenanceDate(dto.asset?.odometerUpdatedAt),
+    currentOdometer: number(dto.asset?.currentOdometerKm), remainingKm: number(dto.asset?.kmUntilServiceDue), nextDueOdometer: number(dto.asset?.nextDueOdometerKm), nextDueDate: '—', nextDueDays: null, lastUpdated: maintenanceDate(dto.asset?.odometerUpdatedAt),
     attachments: null, checklist: mapServiceItems(dto.serviceItems), fitForRoad: bool(dto.asset?.fitForRoad), maintenanceCompliant: bool(dto.asset?.maintenanceCompliant), noOpenIssues: null,
     eligibleForJobs: dto.truckEligibility?.id === dto.truck?.id ? bool(dto.truckEligibility?.eligibleForJobs) : null,
   };
@@ -255,12 +265,16 @@ export const maintenanceApi = taggedApi.injectEndpoints({
     }),
     getAdminMaintenanceServiceCenters: builder.query({
       query: ({ page = 1, limit = 10, search } = {}) => ({ url: `${path}/service-centers`, params: { page, limit, ...(text(search) ? { search: search.trim() } : {}) } }),
-      transformResponse: (response) => {
+      transformResponse: (response, _meta, { page: requestedPage = 1 } = {}) => {
         const dto = unwrapApiResponseData(response);
-        const centers = dto?.centers ?? dto?.serviceCenters;
+        const centers = dto?.centers;
         if (!Array.isArray(centers) || centers.some(item => !text(item?.id)) || new Set(centers.map(item => item.id)).size !== centers.length) throw new Error('The service centers response is missing valid records.');
-        return { rows: centers.map(item => ({ id: item.id, name: text(item.name) || '—', location: text(item.location) || '—' })),
-          total: integer(dto.pagination?.total), totalPages: integer(dto.pagination?.totalPages) };
+        const p = dto.pagination || {};
+        const page = integer(p.page), limit = integer(p.limit), total = integer(p.total), totalPages = integer(p.totalPages);
+        if (page !== requestedPage || !limit || total == null || totalPages == null || centers.length > limit || centers.length > total
+          || totalPages !== Math.ceil(total / limit) && !(total === 0 && totalPages === 1)
+          || page > Math.max(1, totalPages) || total > 0 && !centers.length) throw new Error('The service centers response has invalid pagination.');
+        return { rows: centers.map(item => ({ id: item.id, name: text(item.name) || '—', location: text(item.location) || '—' })), total, totalPages };
       }, providesTags: ['AdminMaintenance'],
     }),
     getAdminMaintenanceCalendar: builder.query({

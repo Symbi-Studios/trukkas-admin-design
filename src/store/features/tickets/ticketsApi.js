@@ -174,14 +174,16 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminSupportTicketDirectory: builder.query({
-      async queryFn({ search, priority, status, category } = {}, api, _options, baseQuery) {
+      async queryFn({ search, priority, status, category, assignedTo } = {}, api, _options, baseQuery) {
         if (priority && !Object.values(TICKET_PRIORITY_CODES).includes(priority) || status && ![...Object.values(TICKET_STATUS_CODES), 'ESCALATED'].includes(status)
-          || category && !Object.values(TICKET_CATEGORY_CODES).includes(category)) return failure('Select supported ticket filters.');
+          || category && !Object.values(TICKET_CATEGORY_CODES).includes(category)
+          || assignedTo !== undefined && assignedTo !== 'me') return failure('Select supported ticket filters.');
         const owner = account(api), params = { tab: 'all' };
         if (text(search)) params.search = search.trim();
         if (priority) params.priority = priority;
         if (status) params.status = status;
         if (category) params.category = category;
+        if (assignedTo === 'me') params.assignedTo = 'me';
         const result = await readAll(baseQuery, '/admin/support/threads', 'threads', params);
         if (!owns(api, owner)) return sessionError();
         return result.error ? result : { data: result.data.map((row) => adaptTicket(row, owner)) };

@@ -36,10 +36,10 @@ function partyName(value) {
 }
 
 const balanceFields = [
-  ['Held in Escrow', 'heldInEscrow', 'var(--tk-viz-1)'],
+  ['Held in Escrow', 'held', 'var(--tk-viz-1)'],
   ['Pending Release', 'pendingRelease', 'var(--tk-viz-3)'],
   ['Available to Settle', 'availableToSettle', 'var(--tk-viz-5)'],
-  ['Disputed Amounts', 'disputedAmounts', 'var(--tk-danger-solid)'],
+  ['Disputed Amounts', 'disputed', 'var(--tk-danger-solid)'],
 ];
 const summaryFields = ['totalEscrowBalance', 'heldInEscrow', 'pendingRelease', 'availableToSettle', 'completedReleases', 'disputedAmounts'];
 export function adaptEscrowOverview(response) {
@@ -59,32 +59,44 @@ export function adaptEscrowOverview(response) {
   const weeklyActivity = Object.fromEntries(Object.keys(unavailableEscrowWeeklyActivity).map((field) => [field,
     ['fundsHeldTx', 'fundsReleasedTx', 'settlementsCount', 'newDisputes'].includes(field) ? count(dto.weeklyActivity?.[field]) : number(dto.weeklyActivity?.[field]),
   ]));
-  // A pie needs a complete partition. These balances may overlap (available
-  // to settle can be part of pending release); keep the legend's real values
-  // without plotting a misleading distribution.
-  // Numeric equality alone cannot establish that overlapping balances are disjoint.
-  // The documented chart categories differ from these four existing UI rows.
-  const canPlot = false;
+  // Only the documented exclusive snapshot can supply the pie and its legend.
+  // escrowBalances overlaps and cannot be substituted for a missing partition.
+  const partition = record(dto.escrowBalanceBreakdown), rawTotal = naira(partition.total, partition.currency);
+  const breakdownTotal = rawTotal != null && rawTotal >= 0 ? rawTotal : null;
+  const segments = Array.isArray(partition.segments) ? partition.segments : [];
+  const breakdown = balanceFields.map(([label, key, color]) => {
+    const matches = segments.filter(segment => segment?.key === key);
+    const value = matches.length === 1 ? naira(matches[0].amount, partition.currency) : null;
+    return { label, key, value: value != null && value >= 0 ? value : null, color };
+  });
+  const sum = breakdown.reduce((total, segment) => total + (segment.value ?? 0), 0);
+  const canPlot = breakdownTotal != null && Number.isFinite(sum) && datePart(partition.asOf) !== '—' && segments.length === balanceFields.length
+    && breakdown.every(segment => segment.value != null)
+    && Math.abs(sum - breakdownTotal) <= Math.max(1, sum, breakdownTotal) * Number.EPSILON * 8;
   return {
-    summary, weeklyActivity,
-    breakdown: balanceFields.map(([label, field, color]) => {
-      const value = summary[field];
-      return { label, value, chartValue: canPlot ? value : null, color, pct: canPlot && value != null && summary.totalEscrowBalance > 0 ? (value / summary.totalEscrowBalance * 100).toFixed(1) + '%' : '—' };
-    }),
+    summary, weeklyActivity, breakdownTotal,
+    breakdown: breakdown.map(segment => ({ ...segment, chartValue: canPlot ? segment.value : null,
+      pct: canPlot ? (breakdownTotal === 0 ? 0 : segment.value / breakdownTotal * 100).toFixed(1) + '%' : '—' })),
   };
 }
 export const unavailableEscrowWeeklyActivity = Object.fromEntries(['fundsHeld', 'fundsHeldTx', 'fundsReleased', 'fundsReleasedTx', 'settlementsMade', 'settlementsCount', 'newDisputes', 'newDisputesAmount'].map((field) => [field, null]));
 
 export const emptyEscrowOverview = adaptEscrowOverview(null);
 
-// These are the existing rule rows, not generated records. Undocumented rule
-// values stay unavailable; demurrage grace periods are not escrow hold periods.
+// These are the existing rule rows. Hours and minutes are alternative policy
+// settings (minutes can override hours), not additive duration components.
 export function adaptEscrowRules(response) {
-  const fee = number(unwrapApiResponseData(response)?.config?.pricing?.platformFee);
+  const config = record(unwrapApiResponseData(response)?.config), escrow = record(config.escrow);
+  const fee = number(config.pricing?.platformFee), duration = record(escrow.standardHoldDuration);
+  const hours = number(duration.hours), minutes = number(duration.minutes);
+  const confirmedDuration = hours != null && hours >= 0 && Number.isFinite(hours * 60) && minutes != null && minutes >= 0
+    && Math.abs(hours * 60 - minutes) <= Math.max(1, minutes, hours * 60) * Number.EPSILON * 8;
+  const hold = confirmedDuration ? minutes % 60 === 0 ? (minutes / 60).toLocaleString('en-NG') + ' hrs' : minutes.toLocaleString('en-NG') + ' mins' : '—';
+  const enabled = value => typeof value === 'boolean' ? value ? 'Enabled' : 'Disabled' : '—';
   return [
-    { id: 'ESR-001', icon: 'lock', iconTint: 'blue', name: 'Standard Hold Period', description: 'Funds held until delivery confirmation + 48 hours', value: '—' },
-    { id: 'ESR-002', icon: 'shield-check', iconTint: 'green', name: 'Auto-Release on Confirmation', description: 'Releases automatically when customer confirms delivery', value: '—' },
-    { id: 'ESR-003', icon: 'circle-alert', iconTint: 'red', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', value: '—' },
+    { id: 'ESR-001', icon: 'lock', iconTint: 'blue', name: 'Standard Hold Period', description: 'Funds held until delivery confirmation + 48 hours', value: hold },
+    { id: 'ESR-002', icon: 'shield-check', iconTint: 'green', name: 'Auto-Release on Confirmation', description: 'Releases automatically when customer confirms delivery', value: enabled(escrow.autoRelease?.enabled) },
+    { id: 'ESR-003', icon: 'circle-alert', iconTint: 'red', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', value: enabled(escrow.disputeFreeze?.enabled) },
     { id: 'ESR-004', icon: 'percent', iconTint: 'purple', name: 'Platform Fee Deduction', description: 'Deducted from held amount before release', value: escrowMoney(fee) },
   ];
 }

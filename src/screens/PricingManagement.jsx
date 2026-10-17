@@ -25,7 +25,7 @@ import {
   Select,
   EmptyState, Banner,
 } from "../ds.js";
-import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation,
+import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation,
   useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useGetAdminPricingSummaryQuery,
   useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
   useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery,
@@ -226,7 +226,9 @@ export function PricingManagement() {
   });
   const busy = false;
   const [changeRecord, { isLoading: pricingChanging }] = useChangeAdminPricingRecordMutation();
+  const [exportPricingPdf] = useExportAdminPricingServicesMutation();
   const changeLock = useRef(false);
+  const pdfExportLock = useRef(false);
 
   const serviceOptions = useMemo(
     () => ["All Services", ...new Set(services.map((s) => s.service).filter((value) => value !== '—'))],
@@ -295,6 +297,17 @@ export function PricingManagement() {
     setExportOpen(false);
     if (!servicesQuery.currentData || servicesQuery.error || servicesQuery.isFetching) { unavailable('Load the complete service pricing list before exporting.'); return; }
     downloadPricingCsv('service-pricing.csv', ['Service', 'Route', 'Coverage', 'Truck Type / Container', 'Unit', 'Base Price', 'Surcharge', 'Total Price', 'Status', 'Last Updated'], filtered.map((row) => [row.service, row.route, row.coverage, row.truckType, row.unit, row.basePrice, row.surcharge, row.totalPrice, row.status, row.updated]));
+  }
+  async function exportServicesAsPdf() {
+    setExportOpen(false);
+    if (!servicesQuery.currentData || servicesQuery.error || servicesQuery.isFetching) { unavailable('Load the complete service pricing list before exporting.'); return; }
+    const ids = filtered.map((row) => row.id).filter(Boolean);
+    if (!ids.length) { unavailable('There are no service pricing records to export.'); return; }
+    if (pdfExportLock.current) return;
+    pdfExportLock.current = true; setActionError(null);
+    try { await exportPricingPdf({ ids }).unwrap(); }
+    catch (error) { setActionError(error); }
+    finally { pdfExportLock.current = false; }
   }
 
   if ([configQuery, servicesQuery, summaryQuery].some((query) => !query.currentData && query.isFetching)) return <PricingLoading />;
@@ -515,7 +528,7 @@ export function PricingManagement() {
                         width={180}
                         items={[
                           { label: "Export as CSV", icon: "file-text", onClick: exportServices },
-                          { label: "Export as PDF", icon: "file-text", onClick: () => unavailable('PDF export is not documented by the pricing API.') },
+                          { label: "Export as PDF", icon: "file-text", onClick: () => void exportServicesAsPdf() },
                         ]}
                       />
                     </span>
@@ -1179,7 +1192,7 @@ export function PricingManagement() {
         </div>
       </div>
 
-      {setting && <PricingSettingModal key={setting.id} row={setting} writesUnavailable={setting.source === 'config' && (setting.group !== 'fee' || !canEditConfig)} onClose={() => setSetting(null)} onDone={setNotice} />}
+      {setting && <PricingSettingModal key={setting.id} row={setting} writesUnavailable={setting.source === 'config' && !canEditConfig} onClose={() => setSetting(null)} onDone={setNotice} />}
       <Modal
         open={addOpen}
         onClose={() => setAddOpen(false)}

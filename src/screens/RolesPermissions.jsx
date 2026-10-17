@@ -122,7 +122,7 @@ export function RolesPermissions() {
         description="Create, manage and configure roles and their permissions."
         actions={<>
           <Button variant="outline" icon="grid-2x2" disabled={!catalog || catalogQuery.isFetching} onClick={() => setMatrixOpen(true)}>Permissions Matrix</Button>
-          <Button icon="plus" onClick={() => navigate('/roles/new')}>Create New Role</Button>
+          <Button icon="plus" disabled={!operations.canManage} onClick={() => navigate('/roles/new')}>Create New Role</Button>
         </>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>

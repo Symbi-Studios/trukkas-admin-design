@@ -26,7 +26,12 @@ function points(value, minimum = 1) {
   const result = value.map(coordinate);
   return result.every(Boolean) ? result : null;
 }
-const ids = (value) => Array.isArray(value) && value.every((id) => text(id)) ? value : null;
+const ids = (value) => Array.isArray(value) && value.every((id) => text(id)) && new Set(value).size === value.length ? value : null;
+function sessionCheck(api) {
+  const account = api.getState().auth.admin;
+  return () => Boolean(account?.id) && !api.signal.aborted && Boolean(api.getState().auth.accessToken)
+    && api.getState().auth.admin === account;
+}
 function overview(response) {
   const dto = record(unwrapApiResponseData(response));
   const alerts = collection(dto.alerts, (alert) => ({
@@ -64,13 +69,18 @@ export const trackingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminTracki
     shareAdminTripLocation: builder.mutation({
       async queryFn(id, _api, _options, baseQuery) {
         if (!text(id)) return failure('Select a trip first.');
-        const owner = _api.getState().auth.admin?.id;
+        const sameSession = sessionCheck(_api);
+        if (!sameSession()) return failure('An active admin session is required to share a location.');
         const result = await baseQuery({ url: '/admin/trips/' + encodeURIComponent(id) + '/location-share', method: 'POST', body: {} });
         if (result.error) return result;
-        if (!owner || _api.signal.aborted || _api.getState().auth.admin?.id !== owner || !_api.getState().auth.accessToken) return failure('The session changed. Refresh before continuing.');
-        const dto = record(unwrapApiResponseData(result.data)), expiresAt = timestamp(dto.expiresAt);
+        if (!sameSession()) return failure('The session changed. Refresh before continuing.');
+        const dto = record(unwrapApiResponseData(result.data)), expiresAt = timestamp(dto.expiresAt), token = text(dto.token);
         let url;
-        try { const parsed = new URL(dto.url); if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) url = parsed.href; } catch { /* Require a usable server-issued link. */ }
+        try {
+          const parsed = new URL(dto.url);
+          if (token && parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.search && !parsed.hash
+            && parsed.pathname === '/api/v1/track/' + encodeURIComponent(token)) url = parsed.href;
+        } catch { /* Require a usable server-issued link matching its returned token. */ }
         return url && expiresAt && Date.parse(expiresAt) > Date.now() ? { data: { url, expiresAt, expiryLabel: displayTime(expiresAt) } } : failure('The server did not return a valid location link and expiry. Refresh before trying again.');
       },
     }),
@@ -79,7 +89,7 @@ export const trackingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminTracki
         let body; try { body = geofenceBody(fields); } catch (error) { return failure(error.message); }
         if (!text(fields.tripId)) return failure('Select a trip first.');
         const owner = _api.getState().auth.admin?.id;
-        const sameSession = () => owner && !_api.signal.aborted && _api.getState().auth.admin?.id === owner && _api.getState().auth.accessToken;
+        const sameSession = sessionCheck(_api);
         if (!sameSession()) return failure('The session changed. Refresh before continuing.');
         const tripResult = await baseQuery('/admin/trips/' + encodeURIComponent(fields.tripId));
         if (tripResult.error) return tripResult;
@@ -102,6 +112,8 @@ export const trackingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminTracki
         const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
         return text(dto.id) && same(boundary(dto.polygon), boundary(body.polygon)) && ids(dto.truckIds) && same([...dto.truckIds].sort(), [...body.truckIds].sort())
           && dto.notifyOnEntry === body.notifyOnEntry && dto.notifyOnExit === body.notifyOnExit
+          && dto.isActive === true && dto.createdById === owner && timestamp(dto.createdAt)
+          && ids(dto.trucksInsideNow) && dto.trucksInsideNow.every((id) => body.truckIds.includes(id))
           ? { data: dto } : { error: { status: 'CUSTOM_ERROR', error: 'The geofence save could not be confirmed. Close this dialog and refresh before trying again.', saveUnconfirmed: true } };
       },
       invalidatesTags: ['AdminTracking'],

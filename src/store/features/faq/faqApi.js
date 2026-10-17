@@ -7,8 +7,6 @@ const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN']);
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 const text = value => typeof value === 'string' && value.trim() ? value : null;
 const failure = message => ({ error: { status: 'CUSTOM_ERROR', error: message, data: { message } } });
-const listKeys = ['faqs', 'items', 'groups', 'faqGroups', 'categories', 'questions', 'data'];
-const childQuestions = value => ['questions', 'faqs', 'items'].map(key => value?.[key]).find(Array.isArray);
 function categoryLabel(value) {
   const raw = text(value)?.trim();
   return raw ? FAQ_CATEGORIES.slice(1).find(label => label.toLowerCase() === raw.toLowerCase()) || raw : '—';
@@ -16,17 +14,8 @@ function categoryLabel(value) {
 
 export function adaptFaqResponse(response) {
   const dto = unwrapApiResponseData(response);
-  let list = Array.isArray(dto) ? dto : listKeys.map(key => dto?.[key]).find(Array.isArray);
-  let dictionary = false;
-  if (record(dto) && text(dto.category) && childQuestions(dto) && !Object.hasOwn(dto, 'question') && !Object.hasOwn(dto, 'answer')) list = [dto];
-  if (!list && record(dto)) {
-    const entries = Object.entries(dto);
-    if (entries.length && entries.every(([, values]) => Array.isArray(values))) {
-      list = entries.map(([category, questions]) => ({ category, questions }));
-      dictionary = true;
-    }
-  }
-  if (!Array.isArray(list)) throw new Error('The FAQ response is missing a valid collection. A list response example is needed.');
+  const list = dto?.faqs;
+  if (!Array.isArray(list)) throw new Error('The FAQ response is missing its documented faqs collection.');
   if (list.some(value => !record(value))) throw new Error('The FAQ response contains an invalid record.');
   const groups = new Map();
   let position = 0;
@@ -40,7 +29,7 @@ export function adaptFaqResponse(response) {
       groups.set(key, group);
     }
     for (const row of rows) {
-      const q = text(row.question) || text(row.q), a = text(row.answer) || text(row.a);
+      const q = text(row.question), a = text(row.answer);
       const backendId = text(row.id)?.trim() || (Number.isSafeInteger(row.id) && row.id >= 0 ? String(row.id) : null);
       const identity = backendId ? JSON.stringify(['id', backendId]) : JSON.stringify(['question', key, q, a]);
       const occurrence = keyOccurrences.get(identity) || 0;
@@ -54,13 +43,7 @@ export function adaptFaqResponse(response) {
       });
     }
   }
-  const grouped = dictionary || list.length > 0 && list.every(value => childQuestions(value) && !Object.hasOwn(value, 'question') && !Object.hasOwn(value, 'answer') && !Object.hasOwn(value, 'q') && !Object.hasOwn(value, 'a'));
-  if (grouped) {
-    for (const group of list) add(text(group.category) || text(group.name) || text(group.key), childQuestions(group));
-  } else {
-    if (list.some(value => childQuestions(value))) throw new Error('The FAQ response mixes grouped and individual records.');
-    for (const row of list) add(row.category, [row]);
-  }
+  for (const row of list) add(row.category, [row]);
   const metadata = record(dto?.pagination) ? dto.pagination : null;
   if (metadata && (!Number.isSafeInteger(metadata.total) || metadata.total < 0 || metadata.total !== position
     || !Number.isSafeInteger(metadata.totalPages) || metadata.totalPages < 0 || metadata.totalPages > 1
@@ -79,7 +62,24 @@ export function adaptFaqResponse(response) {
   });
 }
 
-const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFaqs'] });
+export function adaptFaqHelpLinks(response) {
+  const dto = unwrapApiResponseData(response);
+  let contactSupport = null;
+  if (text(dto?.contactSupportUrl) && !/[\u0000-\u0020\u007f]/.test(dto.contactSupportUrl)) {
+    try {
+      const url = new URL(dto.contactSupportUrl);
+      if (url.protocol === 'mailto:' && url.pathname && !url.hash) contactSupport = url.href;
+    } catch { /* Keep an unavailable destination unavailable. */ }
+  }
+  // These documented API destinations describe existing console actions.
+  // Navigate to their screens; never open an authenticated JSON API as a page.
+  const feedback = dto?.feedbackUrl === '/api/v1/admin/support/feedback' ? '/feedback?action=provide' : null;
+  const myTickets = dto?.myTicketsUrl === '/api/v1/admin/support/threads?assignedTo=me'
+    ? '/tickets?assignedTo=me' : null;
+  return { contactSupport, feedback, myTickets };
+}
+
+const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFaqs', 'AdminFaqHelpLinks'] });
 export const faqApi = taggedApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: builder => ({
@@ -100,6 +100,18 @@ export const faqApi = taggedApi.injectEndpoints({
       },
       providesTags: [{ type: 'AdminFaqs', id: 'LIST' }],
     }),
+    getAdminFaqHelpLinks: builder.query({
+      async queryFn({ owner }, api, _options, baseQuery) {
+        const account = api.getState().auth.admin;
+        const owned = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken) && Boolean(owner)
+          && api.getState().auth.admin === account && account?.id === owner && ADMIN_ROLES.has(account?.role);
+        if (!owned()) return failure('An active admin session is required to load FAQ help links.');
+        const result = await baseQuery({ url: '/admin/faq/help-links' });
+        if (!owned()) return failure('The admin session changed while loading FAQ help links.');
+        return result.error ? result : { data: adaptFaqHelpLinks(result.data) };
+      },
+      providesTags: ['AdminFaqHelpLinks'],
+    }),
   }),
 });
-export const { useGetAdminFaqDirectoryQuery } = faqApi;
+export const { useGetAdminFaqDirectoryQuery, useGetAdminFaqHelpLinksQuery } = faqApi;

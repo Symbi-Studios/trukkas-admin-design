@@ -32,6 +32,7 @@ import {
   transactionInsights, transactionNumber, transactionMoney as formatNaira, transactionAmount, transactionDetailUrl,
 } from "../store/features/transactions/transactionsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
+import { transactionDatePresets, transactionRangeLabel } from "../store/features/transactions/transactionDates.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import styles from "./Transactions.module.css";
 
@@ -96,20 +97,11 @@ const RELATED_OPTIONS = [
   "System",
 ];
 
-const DATE_PRESETS = {
-  "May 24 – May 30, 2026": ["2026-05-24", "2026-05-30"],
-  "May 17 – May 23, 2026": ["2026-05-17", "2026-05-23"],
-  "May 10 – May 16, 2026": ["2026-05-10", "2026-05-16"],
-  "This Month (May 2026)": ["2026-05-01", "2026-05-31"],
-};
-
 const DEFAULT_FILTERS = {
   type: "All Types",
   status: "All Statuses",
   related: RELATED_OPTIONS[0],
   party: "All Parties",
-  from: DATE_PRESETS["May 24 – May 30, 2026"][0],
-  to: DATE_PRESETS["May 24 – May 30, 2026"][1],
 };
 
 function relatedKind(relatedTo) {
@@ -166,7 +158,7 @@ function downloadCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-function DateRangeButton({ value, onChange }) {
+function DateRangeButton({ value, onChange, presets }) {
   const [open, setOpen] = useState(false);
   return (
     <span style={{ position: "relative" }}>
@@ -182,11 +174,11 @@ function DateRangeButton({ value, onChange }) {
         >
           <DropdownMenu
             width={220}
-            items={Object.keys(DATE_PRESETS).map((k) => ({
-              label: k,
-              icon: k === value ? "check" : undefined,
+            items={presets.map((preset) => ({
+              label: preset.label,
+              icon: preset.label === value ? "check" : undefined,
               onClick: () => {
-                onChange(k);
+                onChange(preset);
                 setOpen(false);
               },
             }))}
@@ -230,10 +222,12 @@ export function Transactions() {
   const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching || detailState.isFetching || receiptState.isFetching;
 
   const [tab, setTab] = useState("All Transactions");
-  const [dateLabel, setDateLabel] = useState("May 24 – May 30, 2026");
+  const [datePresets] = useState(() => transactionDatePresets());
+  const defaultFilters = useMemo(() => ({ ...DEFAULT_FILTERS, from: datePresets[0].from, to: datePresets[0].to }), [datePresets]);
   const [showFilters, setShowFilters] = useState(true);
-  const [draft, setDraft] = useState(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState(DEFAULT_FILTERS);
+  const [draft, setDraft] = useState(defaultFilters);
+  const [applied, setApplied] = useState(defaultFilters);
+  const dateLabel = datePresets.find(preset => preset.from === applied.from && preset.to === applied.to)?.label || transactionRangeLabel(applied.from, applied.to);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [menuFor, setMenuFor] = useState(null);
@@ -341,30 +335,30 @@ export function Transactions() {
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const filtersActive =
-    JSON.stringify(applied) !== JSON.stringify(DEFAULT_FILTERS);
+    JSON.stringify(applied) !== JSON.stringify(defaultFilters);
 
   function handleApply() {
     setApplied(draft);
     setPage(1);
   }
   function handleReset() {
-    setDraft(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
+    setDraft(defaultFilters);
+    setApplied(defaultFilters);
     setQ("");
     setPage(1);
     if (ledgerQuery.error) ledgerQuery.refetch();
     if (statsQuery.error) statsQuery.refetch();
   }
   function jumpToStatus(status) {
-    const next = { ...DEFAULT_FILTERS, status };
+    const next = { ...defaultFilters, status };
     setDraft(next);
     setApplied(next);
     setTab("All Transactions");
     setPage(1);
   }
   function resetToAll() {
-    setDraft(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
+    setDraft(defaultFilters);
+    setApplied(defaultFilters);
     setQ("");
     setTab("All Transactions");
     setPage(1);
@@ -380,9 +374,8 @@ export function Transactions() {
           <>
             <DateRangeButton
               value={dateLabel}
-              onChange={(k) => {
-                setDateLabel(k);
-                const [from, to] = DATE_PRESETS[k];
+              presets={datePresets}
+              onChange={({ from, to }) => {
                 setDraft((d) => ({ ...d, from, to }));
                 setApplied((a) => ({ ...a, from, to }));
                 setPage(1);
@@ -426,7 +419,7 @@ export function Transactions() {
           label="Total Transactions"
           value={metric(transactionNumber(transactionSummary.totalTransactions))}
           delta={transactionSummary.totalTransactionsDelta}
-          caption="vs May 17 – May 23"
+          caption={transactionSummary.comparisonCaption}
         />
         <StatCard
           icon="trending-up"
@@ -434,7 +427,7 @@ export function Transactions() {
           label="Total Inflow"
           value={metric(formatNaira(transactionSummary.totalInflow))}
           delta={transactionSummary.totalInflowDelta}
-          caption="vs May 17 – May 23"
+          caption={transactionSummary.comparisonCaption}
         />
         <StatCard
           icon="trending-down"
@@ -443,7 +436,7 @@ export function Transactions() {
           value={metric(formatNaira(transactionSummary.totalOutflow))}
           delta={transactionSummary.totalOutflowDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption={transactionSummary.comparisonCaption}
         />
         <StatCard
           icon="arrow-left-right"
@@ -451,7 +444,7 @@ export function Transactions() {
           label="Net Movement"
           value={metric(formatNaira(transactionSummary.netMovement))}
           delta={transactionSummary.netMovementDelta}
-          caption="vs May 17 – May 23"
+          caption={transactionSummary.comparisonCaption}
         />
         <StatCard
           icon="circle-check"
@@ -459,7 +452,7 @@ export function Transactions() {
           label="Successful Transactions"
           value={metric(transactionSummary.successfulCount == null ? "—" : `${transactionNumber(transactionSummary.successfulCount)} (${transactionSummary.successfulPct})`)}
           delta={transactionSummary.successfulDelta}
-          caption="vs May 17 – May 23"
+          caption={transactionSummary.comparisonCaption}
         />
         <StatCard
           icon="circle-x"
@@ -468,7 +461,7 @@ export function Transactions() {
           value={metric(transactionSummary.failedReversedCount == null ? "—" : `${transactionNumber(transactionSummary.failedReversedCount)} (${transactionSummary.failedReversedPct})`)}
           delta={transactionSummary.failedReversedDelta}
           direction="down"
-          caption="vs May 17 – May 23"
+          caption={transactionSummary.comparisonCaption}
         />
       </div>
 

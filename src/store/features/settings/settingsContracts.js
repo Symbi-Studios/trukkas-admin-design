@@ -7,6 +7,7 @@ export const numeric = (value) => (typeof value === 'number' || (typeof value ==
 const safeKey = (key) => typeof key === 'string' && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(key) && !['constructor', 'prototype', '__proto__'].includes(key);
 const labelKey = (value) => text(value)?.toLowerCase().replace(/\s+/g, ' ');
 export function timestamp(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? value : null; }
+export const sectionVersion = (value) => value === 'initial' ? value : timestamp(value);
 export function dateLabel(value) { return timestamp(value) ? new Date(value).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; }
 const aliases = { defaultLanguage: 'platformLanguage', commissionRate: 'commissionPercent', vatRate: 'vatPercent', autoCompleteTrips: 'autoCompleteTripsOnPod' };
 const displayCodes = {
@@ -47,7 +48,9 @@ export function adaptSection(response, page) {
   for (const control of settingsControls.filter((field) => field.page === page)) {
     values[control.group] ||= {};
     const descriptor = matchDescriptor(control, descriptors);
-    const compatible = descriptor && descriptor.type === control.type;
+    // Fixed string facts (for example timezone) still fit the screen's existing
+    // select when their value has an exact supported display label.
+    const compatible = descriptor && (descriptor.type === control.type || (control.type === 'enum' && descriptor.type === 'string' && descriptor.editable === false));
     const raw = descriptor && Object.hasOwn(flat, descriptor.key) ? flat[descriptor.key] : descriptor?.value;
     values[control.group][control.field] = compatible ? decode(control, descriptor, raw) : null;
     if (compatible) contracts[control.group + '.' + control.field] = {
@@ -57,7 +60,7 @@ export function adaptSection(response, page) {
       defaultValue: decode(control, descriptor, descriptor.default),
     };
   }
-  return { page, values, contracts, version: timestamp(dto.version), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: text(record(dto.updatedBy).name) || '—' }, hasDescriptors: Array.isArray(dto.fields) };
+  return { page, values, contracts, version: sectionVersion(dto.version), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: text(record(dto.updatedBy).name) || '—' }, hasDescriptors: Array.isArray(dto.fields) };
 }
 export function encodeSetting(control, contract, value) {
   if (!contract?.editable || !safeKey(contract.key)) throw new Error('This setting is fixed or has no documented editable field.');
@@ -116,16 +119,12 @@ export function statusForTemplate(status, template) {
     return { label, status: matches.length === 1 ? matches[0].status : '—' };
   }) };
 }
-// Array envelopes are not specified. Accept an actual array or an unambiguous
-// single-array envelope; do not assume a records namespace or fabricate totals.
-export function collection(response) {
-  const dto = unwrapApiResponseData(response);
-  if (Array.isArray(dto)) return { rows: dto, pagination: {} };
-  const object = record(dto), arrays = Object.values(object).filter(Array.isArray);
-  return { rows: arrays.length === 1 ? arrays[0] : [], pagination: record(object.pagination) };
+export function collection(response, key) {
+  const dto = record(unwrapApiResponseData(response));
+  return { rows: Array.isArray(dto[key]) ? dto[key] : [], pagination: record(dto.pagination) };
 }
 export function adaptSessions(response, { page = 1, limit = 5 } = {}) {
-  const dto = collection(response), seen = new Set();
+  const dto = collection(response, 'sessions'), seen = new Set();
   const rows = dto.rows.filter((item) => text(item?.id) && !seen.has(item.id) && seen.add(item.id)).map((item) => ({
     id: item.id, name: text(item.user?.name) || '—', role: text(item.user?.role) || '—', device: text(item.device) || '—',
     client: [text(item.browser), text(item.os)].filter(Boolean).join(' · ') || '—',
@@ -136,17 +135,17 @@ export function adaptSessions(response, { page = 1, limit = 5 } = {}) {
   return { rows, page, total: Number.isSafeInteger(total) && total >= rows.length ? total : null, pageCount: Number.isSafeInteger(count) && count >= 0 ? count : Number.isSafeInteger(total) && total >= rows.length ? Math.ceil(total / limit) : null };
 }
 export function adaptEvents(response, { page = 1 } = {}) {
-  const dto = collection(response);
+  const dto = collection(response, 'events');
   const rows = dto.rows.filter((item) => text(item?.id)).map((item) => ({ id: item.id,
     label: text(item.label) || text(item.title) || text(item.type) || '—', detail: text(item.description) || text(item.detail) || '—',
-    time: dateLabel(item.createdAt || item.timestamp), location: text(item.location) || '—',
+    time: dateLabel(item.timestamp), location: text(item.location) || '—',
     ip: text(item.ipAddress) || '—', device: text(item.device) || '—', icon: 'shield', tone: 'var(--tk-blue)',
   }));
   const total = numeric(dto.pagination.total), pages = numeric(dto.pagination.totalPages);
   return { rows, page, total: Number.isSafeInteger(total) && total >= 0 ? total : null, pageCount: Number.isSafeInteger(pages) && pages >= 0 ? pages : null };
 }
 export function adaptProcessors(response) {
-  return collection(response).rows.filter((item) => text(item?.id)).map((item) => ({ id: item.id, label: text(item.name) || '—', detail: text(item.purpose) || '—', icon: 'server' }));
+  return collection(response, 'processors').rows.filter((item) => text(item?.id)).map((item) => ({ id: item.id, label: text(item.name) || '—', detail: text(item.purpose) || '—', icon: 'server' }));
 }
 export function adaptVersion(response) {
   const dto = record(unwrapApiResponseData(response));
@@ -155,7 +154,8 @@ export function adaptVersion(response) {
 export function adaptChannels(response) {
   const dto = record(unwrapApiResponseData(response));
   return Object.fromEntries(['inApp', 'email', 'sms', 'push'].map((key) => {
-    const channel = record(dto[key]);
+    const matches = Array.isArray(dto.channels) ? dto.channels.filter((item) => item?.channel === key) : [];
+    const channel = matches.length === 1 ? record(matches[0]) : {};
     return [key, { detail: [text(channel.provider), text(channel.sender), text(channel.recipient)].filter(Boolean).join(' · ') || '—', status: ['ACTIVE', 'CONFIGURED', 'NOT_CONFIGURED'].includes(channel.status) ? channel.status : '—' }];
   }));
 }

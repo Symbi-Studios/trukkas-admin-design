@@ -119,7 +119,7 @@ function WalletScreen() {
   const disputesQuery = useGetAdminEscrowDisputesQuery({ owner, role }, { skip: !authenticated || tab !== "Disputes" });
   const rulesQuery = useGetAdminEscrowRulesQuery({ owner, role }, { skip: !authenticated || tab !== "Escrow Rules" });
   const activityQuery = useGetAdminEscrowActivityQuery({ owner, role }, { skip: !authenticated || tab !== "Activity Log" });
-  const { summary, breakdown: escrowBalanceBreakdown, weeklyActivity: escrowWeeklyActivity } = authenticated && !overviewQuery.error ? overviewQuery.currentData || emptyEscrowOverview : emptyEscrowOverview;
+  const { summary, breakdown: escrowBalanceBreakdown, breakdownTotal, weeklyActivity: escrowWeeklyActivity } = authenticated && !overviewQuery.error ? overviewQuery.currentData || emptyEscrowOverview : emptyEscrowOverview;
   const accounts = authenticated && !accountsQuery.error ? accountsQuery.currentData || [] : [];
   const holds = authenticated && !registerQuery.error ? registerQuery.currentData || [] : [];
   const tx = authenticated && !ledgerQuery.error ? ledgerQuery.currentData || [] : [];
@@ -251,7 +251,7 @@ function WalletScreen() {
                     <DonutChart
                       size={160}
                       thickness={18}
-                      centerValue={escrowMillions(summary.totalEscrowBalance)}
+                      centerValue={escrowMillions(breakdownTotal)}
                       centerLabel="Total Balance"
                       data={escrowBalanceBreakdown.filter((d) => d.chartValue != null).map((d) => ({
                         label: d.label,

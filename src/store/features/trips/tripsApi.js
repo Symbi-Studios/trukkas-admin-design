@@ -63,6 +63,7 @@ function formatDateTime(value) {
   if (!valid) return null;
   const date = new Date(valid);
   return new Intl.DateTimeFormat('en-NG', {
+    timeZone: 'Africa/Lagos',
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -111,7 +112,7 @@ function mapTrackingTrip(trip) {
     engine: trip.telemetryLive === true ? trip.engineStatus || '—' : '—',
     progress: trip.progressPercent,
     stops: trip.milestones.map((milestone) => ({
-      time: milestone.at ? new Date(milestone.at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }) : '—',
+      time: milestone.at ? new Date(milestone.at).toLocaleTimeString('en-NG', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit' }) : '—',
       label: milestone.label,
       state: milestone.completed === true ? 'done' : milestone.completed === false ? 'pending' : null,
     })),
@@ -335,7 +336,7 @@ export const tripsApi = baseApi.injectEndpoints({
     }),
     exportAdminTrips: builder.query({
       query: (filters = {}) => ({
-        url: '/admin/trips/export', params: tripFilters({ ...filters, speeding: undefined, longStopped: undefined }),
+        url: '/admin/trips/export', params: tripFilters(filters),
         responseHandler: 'text', headers: { Accept: 'text/csv' },
       }),
       transformResponse: (response) => {
@@ -359,10 +360,25 @@ export const tripsApi = baseApi.injectEndpoints({
       invalidatesTags: ['AdminTrips', 'AdminJobs'],
     }),
     messageAdminTripDriver: builder.mutation({
-      query: ({ id, message }) => ({
-        url: `/admin/trips/${encodeURIComponent(id)}/message-driver`, method: 'POST',
-        body: { message: message.trim() },
-      }),
+      async queryFn({ id, driverId, message }, api, _options, baseQuery) {
+        const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+        if (!text(id) || !text(driverId) || !text(message) || message.trim().length > 2000) return failure('Select a driver and enter a message within the allowed length.');
+        const account = api.getState().auth.admin;
+        const sameSession = () => Boolean(account?.id) && !api.signal.aborted && Boolean(api.getState().auth.accessToken) && api.getState().auth.admin === account;
+        if (!sameSession()) return failure('An active admin session is required to message the driver.');
+        const current = await baseQuery({ url: `/admin/trips/${encodeURIComponent(id)}` });
+        if (!sameSession()) return failure('The admin session changed. Refresh before continuing.');
+        if (current.error) return current;
+        const trip = record(unwrapApiResponseData(current.data));
+        if (trip.tripId !== id || trip.driver?.id !== driverId) return failure('The assigned driver changed. Refresh before sending the message.');
+        const result = await baseQuery({ url: `/admin/trips/${encodeURIComponent(id)}/message-driver`, method: 'POST', body: { message: message.trim() } });
+        if (!sameSession()) return failure('The session changed after sending. Reload before trying again.');
+        if (result.error) return result;
+        const saved = record(unwrapApiResponseData(result.data));
+        return text(saved.threadId) && saved.driverId === driverId
+          ? { data: { threadId: saved.threadId, driverId: saved.driverId } }
+          : failure('The message was sent, but its driver and support thread could not be confirmed. Reload before trying again.');
+      },
     }),
   }),
 });

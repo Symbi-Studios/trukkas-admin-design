@@ -1,3 +1,4 @@
+import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -320,8 +321,8 @@ async function payoutPdf(baseQuery, args, documentUrl) {
     try { return JSON.parse(body); } catch { return { message: 'Unable to download this payout document.' }; }
   } });
   if (result.error) return { error: result.error };
-  if (!(result.data instanceof Blob) || await result.data.slice(0, 5).text() !== '%PDF-') return apiError('The server did not return a valid PDF document.');
-  return { data: { url: URL.createObjectURL(result.data), name: 'payout-' + target.id + '.pdf' } };
+  if (!await isPdfAttachment(result.data)) return apiError('The server did not return a valid PDF document.');
+  return { data: { url: URL.createObjectURL(result.data), name: pdfAttachmentFilename(result.meta?.response?.headers, 'payout-' + target.id + '.pdf') } };
 }
 
 export function downloadPayoutFile(file) {
