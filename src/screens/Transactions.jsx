@@ -28,7 +28,7 @@ import {
 } from "../ds.js";
 import {
   useGetAdminTransactionLedgerQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
-  useGetAdminTransactionStatsQuery, useLazyGetAdminTransactionDetailQuery, useLazyGetAdminTransactionReceiptQuery, downloadTransactionPdf,
+  useGetAdminTransactionStatsQuery, useLazyGetAdminTransactionDetailQuery, useLazyGetAdminTransactionReceiptQuery, useLazyGetAdminTransactionReportQuery, downloadTransactionPdf,
   transactionInsights, transactionNumber, transactionMoney as formatNaira, transactionAmount, transactionDetailUrl,
 } from "../store/features/transactions/transactionsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
@@ -214,12 +214,14 @@ export function Transactions() {
   const ledger = ledgerQuery.error ? null : ledgerQuery.currentData;
   const all = ledger?.rows || EMPTY_ROWS;
   const canReverse = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
+  const owner = useSelector((state) => state.auth.admin?.id);
   const [retryTransaction, retryState] = useRetryAdminTransactionMutation();
   const [reverseTransaction, reverseState] = useReverseAdminTransactionMutation();
   const [readTransaction, detailState] = useLazyGetAdminTransactionDetailQuery();
   const [readReceipt, receiptState] = useLazyGetAdminTransactionReceiptQuery();
+  const [readReport, reportState] = useLazyGetAdminTransactionReportQuery();
   const operationPending = useRef(false);
-  const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching || detailState.isFetching || receiptState.isFetching;
+  const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching || detailState.isFetching || receiptState.isFetching || reportState.isFetching;
 
   const [tab, setTab] = useState("All Transactions");
   const [datePresets] = useState(() => transactionDatePresets());
@@ -246,6 +248,13 @@ export function Transactions() {
     if (operationPending.current || busy) return;
     setMenuFor(null); operationPending.current = true;
     try { downloadTransactionPdf(await readReceipt(row.id, false).unwrap()); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
+    finally { operationPending.current = false; }
+  }
+  async function viewReport() {
+    if (operationPending.current || busy) return;
+    operationPending.current = true;
+    try { downloadTransactionPdf(await readReport({ from: applied.from, to: applied.to, owner }, false).unwrap()); }
     catch (error) { window.alert(getApiErrorMessage(error)); }
     finally { operationPending.current = false; }
   }
@@ -754,7 +763,7 @@ export function Transactions() {
                 href="#"
                 onClick={(e) => {
                   e.preventDefault();
-                  window.alert("Transaction reports are not available yet.");
+                  void viewReport();
                 }}
               >
                 View Report →

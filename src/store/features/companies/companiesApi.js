@@ -1,5 +1,6 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { adaptAdminDriver } from '../drivers/driversApi.js';
+import { companyCardComparison, companyPerformancePage, companyPayoutAllocation } from './companyUpdateContracts.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const number = (value) => typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -183,7 +184,36 @@ export const companiesApi = baseApi.injectEndpoints({
           total: count(cards.totalCompanies), active: count(cards.activeCompanies), verified: count(cards.verifiedCompanies), pending: count(cards.pendingReview), suspended: count(cards.suspendedCompanies), rejected: count(cards.rejectedCompanies),
           trucks: count(cards.totalTrucks), activeTrucks: count(cards.activeTrucks), drivers: count(cards.totalDrivers), paidOut: cards.paidOut?.currency === 'NGN' ? number(cards.paidOut.amount) : null,
           rankings: Array.isArray(data.rankings?.topByRevenueThisMonth) ? data.rankings.topByRevenueThisMonth.map(dto => ({ id: text(dto.id), name: text(dto.name) || '—', revenue: number(dto.revenue), jobs: count(dto.completedJobs) })) : null,
+          changes: Object.fromEntries(Object.entries({ total: 'totalCompanies', active: 'activeCompanies', verified: 'verifiedCompanies', pending: 'pendingReview', suspended: 'suspendedCompanies', trucks: 'totalTrucks', activeTrucks: 'activeTrucks', drivers: 'totalDrivers', paidOut: 'paidOut' }).map(([key, field]) => [key,
+            companyCardComparison(data.cardChanges?.[field], field === 'paidOut' ? cards.paidOut?.currency === 'NGN' ? number(cards.paidOut.amount) : null : count(cards[field]), value => typeof value === 'string' && value.includes('T') && companyDate(value) !== '—')
+          ])),
         };
+      },
+      providesTags: ['AdminCompanies'],
+    }),
+    getAdminCompanyPerformance: builder.query({
+      async queryFn({ owner, role, all = false }, api, _options, baseQuery) {
+        const current = () => !api.signal.aborted && Boolean(owner && api.getState().auth.accessToken) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const rows = [], seen = new Set(), limit = all ? 100 : 5;
+        let total = null, pages = 1;
+        try {
+          for (let page = 1; page <= pages; page++) {
+            if (!current()) return failure('The session changed. Reopen Companies before continuing.');
+            if (page > 500) return failure('The company rankings exceeded the supported page limit.');
+            const result = await baseQuery({ url: '/admin/users/truckers/rankings', params: { truckerType: 'COMPANY', metric: 'performance', period: 'thisMonth', page, limit } });
+            if (!current()) return failure('The session changed. Reopen Companies before continuing.');
+            if (result.error) return result;
+            const data = companyPerformancePage(unwrapApiResponseData(result.data), page, limit);
+            if (total != null && (total !== data.total || pages !== data.totalPages)) return failure('The company rankings changed while loading. Refresh before continuing.');
+            total = data.total; pages = data.totalPages;
+            for (const row of data.rows) {
+              if (seen.has(row.id) || rows.length && row.rank < rows[rows.length - 1].rank) return failure('The company rankings contain repeated companies or invalid ordering.');
+              rows.push(row); seen.add(row.id);
+            }
+            if (!all) break;
+          }
+          return !all || rows.length === total ? { data: rows } : failure('The company rankings could not be loaded completely.');
+        } catch (error) { return failure(error.message); }
       },
       providesTags: ['AdminCompanies'],
     }),
@@ -225,11 +255,11 @@ export const companiesApi = baseApi.injectEndpoints({
           const valid= dto.currency === 'NGN';
           const deductions=Array.isArray(dto.deductions)&&dto.deductions.every(d=>number(d?.amount)!=null)?dto.deductions.reduce((sum,d)=>sum+d.amount,0):null;
           const status=dto.payoutStatus==='PAID'?'Completed':dto.payoutStatus==='PROCESSING'?'Processing':dto.payoutStatus==='FAILED'?'Failed':dto.payoutStatus==='REVERSED'?'Reversed':dto.reviewStatus==='REJECTED'?'Rejected':dto.reviewStatus==='APPROVED'?'Approved':dto.reviewStatus==='PENDING_REVIEW'?'Pending Review':null;
-          return { id:text(dto.id),source:text(dto.source),payoutId:text(dto.id),companyId:id,reference:text(dto.reference),jobId:'—',jobDatabaseId:null,tripIds:null,tripCount:null,
+          return { id:text(dto.id),source:text(dto.source),payoutId:text(dto.id),companyId:id,reference:text(dto.reference),...companyPayoutAllocation(dto),
             grossAmount:valid?number(dto.grossAmount):null,deductions:valid?deductions:null,netAmount:valid?number(dto.netAmount):null,amount:valid?number(dto.netAmount):null,
             paid:valid&&dto.payoutStatus==='PAID'?number(dto.netAmount):dto.payoutStatus==='PAID'?null:['AWAITING_APPROVAL','PROCESSING','FAILED','REJECTED','REVERSED'].includes(dto.payoutStatus)?0:null,status:status||'—',statusCode:text(dto.payoutStatus),
             eligibility:typeof dto.eligibility?.eligible==='boolean'?dto.eligibility.eligible?'Eligible':'Needs Review':'—',approvalReady:boolean(dto.approvalReady),
-            reconciliation:{ok:null},dateRequested:companyDate(dto.requestedAt) };
+            dateRequested:companyDate(dto.requestedAt) };
         }) };
       },
       providesTags: ['AdminCompanies'],
@@ -311,4 +341,4 @@ export const companiesApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useGetAdminCompaniesQuery, useGetAdminPendingCompaniesQuery, useGetAdminCompanyStatsQuery, useGetAdminCompanyTruckQuery, useGetAdminCompanyProfileQuery, useGetAdminCompanyInfoQuery, useGetAdminCompanyDriversQuery, useGetAdminCompanyJobsQuery, useGetAdminCompanyPayoutsQuery, useGetAdminCompanyActivityQuery, useReviewAdminCompanyMutation, useSuspendAdminCompanyMutation, useActivateAdminCompanyMutation, useCreateAdminCompanyMutation, useUpdateAdminCompanyMutation, useMessageAdminCompanyMutation } = companiesApi;
+export const { useGetAdminCompaniesQuery, useGetAdminPendingCompaniesQuery, useGetAdminCompanyStatsQuery, useGetAdminCompanyPerformanceQuery, useGetAdminCompanyTruckQuery, useGetAdminCompanyProfileQuery, useGetAdminCompanyInfoQuery, useGetAdminCompanyDriversQuery, useGetAdminCompanyJobsQuery, useGetAdminCompanyPayoutsQuery, useGetAdminCompanyActivityQuery, useReviewAdminCompanyMutation, useSuspendAdminCompanyMutation, useActivateAdminCompanyMutation, useCreateAdminCompanyMutation, useUpdateAdminCompanyMutation, useMessageAdminCompanyMutation } = companiesApi;

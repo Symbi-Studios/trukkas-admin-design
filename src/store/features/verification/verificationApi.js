@@ -8,7 +8,7 @@ const count = (v) => Number.isSafeInteger(v) && v >= 0 ? v : null;
 const display = (v) => text(v) || '—';
 const label = (v) => text(v)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—';
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
-const serializeVerificationQuery = args => defaultSerializeQueryArgs(args) + ':v2';
+const serializeVerificationQuery = args => defaultSerializeQueryArgs(args) + ':v3';
 function scopedQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
@@ -25,7 +25,11 @@ const STATUS = { PENDING: 'Pending', IN_REVIEW: 'In Review', VERIFIED: 'Verified
 const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', EXPORTER_LICENCE: 'Export License', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
 const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', EXPORTER: 'Exporter', TRUCK: 'Truck' };
 const SOURCES = { TRUCKER: 'truckers', DRIVER: 'drivers', KYB: 'kyb', EXPORTER_LICENSE: 'exporter-licenses', TRUCK: 'trucks', COMPANY_DOCUMENT: 'company-documents' };
-const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER' }, verificationType: { 'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE' } };
+const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER', Forwarder: 'FORWARDER' }, verificationType: {
+  'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE', 'License Verification': 'LICENSE',
+  'Company Address Verification': 'ADDRESS', 'Fleet Verification': 'FLEET', 'Tax Identification (TIN)': 'TIN',
+  'Insurance Verification': 'INSURANCE', 'Vehicle Documents': 'VEHICLE_DOCUMENTS',
+} };
 export const verificationFilterValue = (kind, choice) => choice === 'All Types' ? null : FILTERS[kind]?.[choice];
 export const canReviewVerification = (role, source) => source === 'COMPANY_DOCUMENT' ? ['SUPER_ADMIN', 'OPS_ADMIN'].includes(role) : ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(role);
 export const canManageVerification = (role) => ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(role);
@@ -51,7 +55,7 @@ export function adaptVerification(value) {
   })) : [];
   const contact = record(dto.contact);
   return {
-    key: dto.verificationId, id: dto.verificationId, reviewId: dto.verificationId, source: text(dto.sourceType), sourceId: text(dto.sourceId), entityId: text(dto.entityId),
+    key: dto.verificationId, id: dto.verificationId, reviewId: dto.verificationId, caseId: text(dto.caseId), source: text(dto.sourceType), sourceId: text(dto.sourceId), entityId: text(dto.entityId), verificationTypeCode: text(dto.verificationType),
     entityName: name, initials: name === '—' ? '—' : name.split(/\s+/).slice(0, 2).map((p) => p[0]).join(''),
     entityType: ENTITIES[dto.entityType] || '—', regNo: display(dto.registrationNumber), type: TYPES[dto.verificationType] || '—',
     statusCode: text(dto.status), status: STATUS[dto.status] || '—', riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(dto.riskLevel) ? label(dto.riskLevel) : '—',
@@ -96,6 +100,24 @@ async function readDetail(baseQuery, id) {
   if (result.error) return result;
   const dto = record(unwrapApiResponseData(result.data));
   return dto.verificationId === id ? { data: adaptVerification(dto) } : failure('The response does not identify the selected verification.');
+}
+async function confirmCreatedVerification(baseQuery, response, body) {
+  const dto = record(unwrapApiResponseData(response)), id = text(dto.verificationId), caseId = text(dto.caseId), version = count(dto.version);
+  if (!id || !caseId || version == null) return failure('The case request was submitted, but its saved identifiers and version could not be confirmed. Refresh before trying again.');
+  const matches = value => value.id === id && value.caseId === caseId && value.version === version && Object.hasOwn(STATUS, value.statusCode)
+    && (value.sourceId || value.entityId) === body.entityId && value.verificationTypeCode === body.verificationType
+    && (!body.priority || value.priorityCode === body.priority)
+    && (!body.assignedAdminId || value.assignedAdminId === body.assignedAdminId)
+    && (!body.dueDate || new Date(value.dueDateRaw).getTime() === new Date(body.dueDate).getTime())
+    && (!body.documentIds || value.documentIds?.length === body.documentIds.length && body.documentIds.every(documentId => value.documentIds.includes(documentId)));
+  let saved = adaptVerification(dto);
+  if (!matches(saved)) {
+    const detail = await readDetail(baseQuery, id);
+    if (detail.error) return failure('The case request was submitted, but its saved details could not be confirmed. Refresh before trying again.');
+    saved = detail.data;
+  }
+  return matches(saved) ? { data: { accepted: true, verificationId: id, caseId, version } }
+    : failure('The case request was submitted, but its saved fields could not be confirmed. Refresh before trying again.');
 }
 async function pages(baseQuery, api, url, select, identity, filters = {}) {
   const rows = [], seen = new Set(), owner = api.getState().auth.admin?.id;
@@ -167,8 +189,11 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
       serializeQueryArgs: serializeVerificationQuery,
       async queryFn(args, api, _options, baseQuery) {
         baseQuery = scopedQuery(baseQuery, api, args);
-        const filters = args?.range ? verificationDateParams(args.range) : {};
-        if (!filters) return failure('Choose a valid verification date range.');
+        const dates = args?.range ? verificationDateParams(args.range) : {};
+        if (!dates) return failure('Choose a valid verification date range.');
+        if (args?.entityType != null && ![...Object.keys(ENTITIES), ...Object.values(FILTERS.entityType)].includes(args.entityType)
+          || args?.verificationType != null && ![...Object.keys(TYPES), ...Object.values(FILTERS.verificationType), 'FORWARDER'].includes(args.verificationType)) return failure('Choose a supported verification filter.');
+        const filters = { ...dates, ...(args?.entityType ? { entityType: args.entityType } : {}), ...(args?.verificationType ? { verificationType: args.verificationType } : {}) };
         const result = await pages(baseQuery, api, '/admin/verification', (dto) => dto.verifications, (dto) => text(dto?.verificationId), filters);
         return result.error ? result : { data: result.data.map(adaptVerification) };
       }, providesTags: ['AdminVerificationDirectory'],
@@ -243,21 +268,8 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
             && saved.author?.id === owner && saved.author?.role === role && verificationDate(saved.createdAt, true) !== '—'
             ? { data: { accepted: true } } : failure('The entry was submitted, but its saved body and author could not be confirmed. Refresh before trying again.');
         }
-        // Creation has no saved-case response schema. Confirm the case through
-        // the documented directory and detail instead of assuming it was saved.
         if (action === 'create') {
-          const directory = await pages(baseQuery, api, '/admin/verification', dto => dto.verifications, dto => text(dto?.verificationId), { verificationType: body.verificationType });
-          if (directory.error) return failure('The case request was submitted, but its saved result could not be confirmed. Refresh before trying again.');
-          const matches = directory.data.filter(row => row.sourceId === body.entityId && row.verificationType === body.verificationType);
-          if (matches.length !== 1 || !text(matches[0].caseId)) return failure('The case request was submitted, but its case ID could not be confirmed. Refresh before trying again.');
-          const saved = await readDetail(baseQuery, matches[0].verificationId);
-          if (saved.error) return failure('The case request was submitted, but its saved details could not be confirmed. Refresh before trying again.');
-          const v = saved.data;
-          const valid = v.version != null && (!body.priority || v.priorityCode === body.priority)
-            && (!body.assignedAdminId || v.assignedAdminId === body.assignedAdminId)
-            && (!body.dueDate || new Date(v.dueDateRaw).getTime() === new Date(body.dueDate).getTime())
-            && (!body.documentIds || v.documentIds?.length === body.documentIds.length && body.documentIds.every(documentId => v.documentIds.includes(documentId)));
-          return valid ? { data: { accepted: true } } : failure('The case request was submitted, but its saved fields could not be confirmed. Refresh before trying again.');
+          return confirmCreatedVerification(baseQuery, result.data, body);
         }
         const confirmed = await readDetail(baseQuery, id); if (confirmed.error) return failure('The update was submitted, but could not be refreshed. Refresh before trying again.');
         const v = confirmed.data;

@@ -55,7 +55,7 @@ export function adaptAdminPricingService(value) {
     id: text(dto.id), entity: 'services', service: text(dto.name) || '—', route: routeLabel(dto),
     coverage: coverageLabel(dto.coverage) || text(dto.destinationState) || '—', truckType: vehicle || '—', currency: currencyLabels[dto.currency] || text(dto.currency) || '—',
     unit: unitLabels[dto.unit] || label(dto.unit), basePrice: number(dto.basePrice),
-    // A rate card is not a quote. Surcharges and totals depend on a particular job.
+    // Use the documented service totals; job quote totals have a different scope.
     surcharge: number(dto.surchargeTotal), surchargePct: number(dto.surchargePercent) == null ? '—' : `${number(dto.surchargePercent)}%`, totalPrice: number(dto.totalPrice),
     statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status),
     updated: dates.updated, updatedTime: dates.time,
@@ -78,7 +78,7 @@ function adaptSurcharge(value) {
   const scope = scopeLabels.length ? scopeLabels.join(' / ') : legacyScope.join(' / ');
   return { id: text(dto.id), entity: 'surcharges', source: 'surcharge', name: text(dto.name) || '—', service: text(dto.name) || '—',
     description: text(dto.description) || label(dto.kind), appliesTo: scope || '—', rate: unit ? format(parsed, unit) : '—',
-    unit: unit || '—', value: parsed, min: 0, effectiveFrom: dateParts(dto.effectiveFrom).updated,
+    unit: unit || '—', calc: text(dto.calc), value: parsed, min: 0, effectiveFrom: dateParts(dto.effectiveFrom).updated,
     statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), editable: dto.status === 'DRAFT' && parsed != null && unit != null,
     icon: 'badge-percent', iconTint: 'amber', route: scope || routeLabel(dto), requestedBy: submittedBy.name,
     requesterId: submittedBy.id, standardPrice: null, exceptionPrice: null, submitted: dateParts(dto.submittedAt).updated };
@@ -128,10 +128,11 @@ async function pricingCollection(entity, baseQuery, signal, params = {}, complet
   } catch (error) { return { error: { status: 'CUSTOM_ERROR', error: error.message } }; }
 }
 async function pricingRecordSnapshot(entity, id, baseQuery, signal) {
-  const snapshot = await pricingCollection(entity, baseQuery, signal);
-  if (snapshot.error) return snapshot;
-  const row = snapshot.data.rows.find((item) => item.id === id);
-  return row ? { data: row } : { error: { status: 'CUSTOM_ERROR', error: 'The pricing record is no longer available. Refresh before continuing.' } };
+  if (signal.aborted) return { error: { status: 'CUSTOM_ERROR', error: 'Pricing request cancelled.' } };
+  const result = await baseQuery({ url: '/admin/pricing/' + entity + '/' + encodeURIComponent(id) });
+  if (result.error) return result;
+  const dto = pricingRecord(result.data, entity);
+  return dto.id === id ? { data: adapters[entity](dto) } : { error: { status: 'CUSTOM_ERROR', error: 'The pricing detail response did not identify this record. Refresh before continuing.' } };
 }
 
 const pricingReviewerRoles = new Set(['SUPER_ADMIN', 'FINANCE_ADMIN']);
@@ -167,11 +168,12 @@ async function changePricingRecord({ row, action }, api, baseQuery) {
   if (result.error) return result;
   const savedDto = pricingRecord(result.data, row.entity), id = action === 'duplicate' ? text(savedDto.id) : row.id;
   const unconfirmed = () => ({ error: { status: 'CUSTOM_ERROR', error: 'The pricing change was sent but could not be confirmed. Refresh before trying again.' } });
-  if (!sameSession() || !id || action === 'duplicate' && id === row.id) return unconfirmed();
+  const status = { duplicate: 'DRAFT', activate: 'ACTIVE', deactivate: 'INACTIVE', approve: 'APPROVED' }[action];
+  const responseRow = adapters[row.entity](savedDto);
+  if (!sameSession() || !id || savedDto.id !== id || responseRow.statusCode !== status || comparable.some((key) => responseRow[key] !== current[key]) || action === 'duplicate' && (id === row.id || !text(savedDto.code))) return unconfirmed();
   const confirmation = await pricingRecordSnapshot(row.entity, id, baseQuery, api.signal);
   if (confirmation.error || !sameSession()) return unconfirmed();
   const saved = confirmation.data;
-  const status = { duplicate: 'DRAFT', activate: 'ACTIVE', deactivate: 'INACTIVE', approve: 'APPROVED' }[action];
   if (saved.id !== id || saved.statusCode !== status || comparable.some((key) => saved[key] !== current[key])) return unconfirmed();
   return { data: saved };
 }
@@ -265,7 +267,58 @@ function validateValue(field, value) {
   if (parsed == null || parsed < field.min || (field.max != null && parsed > field.max)) throw new Error('Enter a valid value within the allowed range.');
   return parsed;
 }
-export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing'] }).injectEndpoints({
+async function savePricingSetting(source, args, api, baseQuery) {
+  const failed = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
+  const unconfirmed = () => failed('The pricing save was sent but its saved value could not be confirmed. Refresh before trying again.');
+  try {
+    const admin = api.getState().auth.admin;
+    const check = () => {
+      const auth = api.getState().auth;
+      if (api.signal.aborted || !admin?.id || !auth.accessToken || auth.admin?.id !== admin.id || auth.admin?.role !== admin.role) throw new Error('The session changed. Refresh before continuing.');
+    };
+    check();
+    if (source === 'config' && admin.role !== 'SUPER_ADMIN') return failed('Only Super Admins can change platform pricing settings.');
+    const { id, portId, key, expectedValue, calc } = args;
+    const field = source === 'config' ? fields.find((item) => item.key === key) : { min: 0 };
+    const value = validateValue(field, args.value);
+    const previous = validateValue(field, expectedValue);
+    if (source === 'terminal' && (!text(id) || !text(portId) || !['handlingFee', 'baseFeePerKm'].includes(key))) return failed('Unsupported terminal pricing setting.');
+    if (source === 'surcharge' && (!text(id) || args.status !== 'DRAFT' || !['PERCENT_OF_BASE', 'FIXED_PER_TRUCK', 'PER_KM'].includes(calc))) return failed('Only confirmed draft surcharges can be edited.');
+    const readUrl = source === 'config' ? '/admin/config' : source === 'terminal' ? '/admin/reference/ports/' + encodeURIComponent(portId) + '/terminals' : '/admin/pricing/surcharges/' + encodeURIComponent(id);
+    const decode = (dto) => {
+      if (source === 'config') {
+        const raw = field.path.reduce((current, part) => current?.[part], record(dto.config));
+        return { value: field.options ? text(raw) : number(raw) };
+      }
+      if (source === 'terminal') {
+        const matches = Array.isArray(dto.terminals) ? dto.terminals.filter((item) => item?.id === id && item.portId === portId) : [];
+        return { value: matches.length === 1 ? number(matches[0][key]) : null };
+      }
+      const saved = pricingRecord(dto, 'surcharges');
+      return { value: saved.id === id && saved.status === 'DRAFT' && saved.calc === calc ? number(saved.value) : null };
+    };
+    const before = await baseQuery({ url: readUrl }); check(); if (before.error) return before;
+    if (decode(record(unwrapApiResponseData(before.data))).value !== previous) return failed('This pricing value or status changed. Refresh before saving.');
+    const write = source === 'config' ? { url: '/admin/config', method: 'POST', body: { [key]: value } } : source === 'terminal' ? { url: '/admin/reference/terminals/' + encodeURIComponent(id), method: 'PATCH', body: { [key]: value } } : { url: readUrl, method: 'PATCH', body: { value } };
+    check();
+    const result = await baseQuery(write); check(); if (result.error) return result;
+    const dto = record(unwrapApiResponseData(result.data));
+    let confirmed;
+    if (source === 'config') {
+      const raw = record(dto.updates)[key];
+      confirmed = (field.options ? text(raw) : number(raw)) === value;
+    } else if (source === 'terminal') {
+      const saved = record(dto.terminal);
+      confirmed = saved.id === id && saved.portId === portId && number(saved[key]) === value;
+    } else confirmed = decode(dto).value === value;
+    // Re-read once to confirm the result; never replay a write for verification.
+    const after = await baseQuery({ url: readUrl }); check();
+    if (!confirmed || after.error || decode(record(unwrapApiResponseData(after.data))).value !== value) return unconfirmed();
+    return { data: { value } };
+  } catch (error) { return failed(error.message); }
+}
+const pricingConfigTags = ['AdminPricingConfig', 'AdminPricing', 'AdminSettings', 'AdminSettingsStatus'];
+export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing', 'AdminSettings', 'AdminSettingsStatus'] }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminPricingSummary: builder.query({
@@ -314,7 +367,7 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
             if (terminalResult.error || !Array.isArray(terminals) || terminals.some((terminal) => !text(terminal?.id))) { warnings.push(text(port.name) || port.id); continue; }
             for (const terminal of terminals) for (const [key, title, unit] of [['handlingFee', 'Terminal Handling Fee', 'NGN'], ['baseFeePerKm', 'Recommended Fare per km', 'NGN/km']]) {
               const value = number(terminal[key]);
-              rows.push({ id: `terminal:${terminal.id}:${key}`, terminalId: terminal.id, key, name: `${title} · ${text(terminal.name) || 'Terminal'}`, description: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, appliesTo: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, source: 'terminal', value, unit, min: 0, rate: format(value, unit), effectiveFrom: dateParts(record(terminal.effectiveFrom)[key]).updated, lastUpdated: dateParts(terminal.updatedAt).updated, status: terminal.isActive === true && port.isActive === true ? 'Active Terminal' : terminal.isActive === false || port.isActive === false ? 'Inactive Terminal / Port' : '—', icon: 'anchor', iconTint: 'blue', editable: value != null });
+              rows.push({ id: `terminal:${terminal.id}:${key}`, terminalId: terminal.id, portId: port.id, key, name: `${title} · ${text(terminal.name) || 'Terminal'}`, description: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, appliesTo: `${text(port.name) || 'Port'} / ${text(terminal.name) || 'Terminal'}`, source: 'terminal', value, unit, min: 0, rate: format(value, unit), effectiveFrom: dateParts(record(terminal.effectiveFrom)[key]).updated, lastUpdated: dateParts(terminal.updatedAt).updated, status: terminal.isActive === true && port.isActive === true ? 'Active Terminal' : terminal.isActive === false || port.isActive === false ? 'Inactive Terminal / Port' : '—', icon: 'anchor', iconTint: 'blue', editable: value != null });
             }
           }
         }
@@ -322,20 +375,16 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
       }, providesTags: ['AdminTerminalRates'],
     }),
     updateAdminPricingConfig: builder.mutation({
-      query: ({ key, value }) => ({ url: '/admin/config', method: 'POST', body: { [key]: validateValue(fields.find((field) => field.key === key), value) } }),
-      invalidatesTags: (_result, error) => error ? [] : ['AdminPricingConfig', 'AdminPricing'],
+      queryFn: (args, api, _options, baseQuery) => savePricingSetting('config', args, api, baseQuery),
+      invalidatesTags: pricingConfigTags,
     }),
     updateAdminPricingTerminalRate: builder.mutation({
-      query: ({ id, key, value }) => {
-        if (!text(id) || !['handlingFee', 'baseFeePerKm'].includes(key)) throw new Error('Unsupported terminal pricing setting.');
-        return { url: `/admin/reference/terminals/${encodeURIComponent(id)}`, method: 'PATCH', body: { [key]: validateValue({ min: 0 }, value) } };
-      }, invalidatesTags: (_result, error) => error ? [] : ['AdminTerminalRates', 'AdminPricing'],
+      queryFn: (args, api, _options, baseQuery) => savePricingSetting('terminal', args, api, baseQuery),
+      invalidatesTags: ['AdminTerminalRates', 'AdminPricing'],
     }),
     updateAdminPricingSurcharge: builder.mutation({
-      query: ({ id, status, value }) => {
-        if (!text(id) || status !== 'DRAFT') throw new Error('Only draft surcharges can be edited.');
-        return { url: `/admin/pricing/surcharges/${encodeURIComponent(id)}`, method: 'PATCH', body: { value: validateValue({ min: 0 }, value) } };
-      }, invalidatesTags: (_result, error) => error ? [] : ['AdminPricing'],
+      queryFn: (args, api, _options, baseQuery) => savePricingSetting('surcharge', args, api, baseQuery),
+      invalidatesTags: ['AdminPricing'],
     }),
   }),
 });

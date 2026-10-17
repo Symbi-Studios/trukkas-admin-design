@@ -1164,7 +1164,7 @@ export function PricingManagement() {
           </SectionCard>
 
           <SectionCard title="Price Approval Summary">
-            <p className="tk-meta">Approved and rejected totals are unavailable.</p>
+            <p className="tk-meta">Approval totals across all pricing types</p>
             <div
               style={{
                 display: "grid",

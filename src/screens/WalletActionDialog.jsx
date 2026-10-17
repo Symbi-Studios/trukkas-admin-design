@@ -25,7 +25,7 @@ export function WalletActionDialog({ kind, record, owner, role, onClose }) {
   const validRefund = refund.trim() !== '' && Number.isFinite(Number(refund)) && Number(refund) >= 0 && (unpaid == null || Number(refund) <= unpaid);
   const valid = reason.trim() && (kind !== 'open' || reason.trim().length <= 200 && description.trim().length <= 2000)
     && (kind !== 'resolve' || options.some(option => option.value === type)) && (!partial || validRefund)
-    && (kind !== 'release' || canMoveMoney);
+    && (kind !== 'release' || canMoveMoney && reason.trim().length <= 500);
   const title = kind === 'release' ? 'Release Funds' : kind === 'open' ? 'Open a Dispute' : 'Resolve Dispute';
   const close = () => { if (!running.current) onClose(); };
   async function submit() {
@@ -47,7 +47,7 @@ export function WalletActionDialog({ kind, record, owner, role, onClose }) {
     <div style={{ display:'grid', gap:16 }}>
       {error && <Banner tone="danger" title="Unable to complete action">{walletActionError(error)}</Banner>}
       {kind === 'resolve' && <Select label="Resolution" value={type} disabled={busy || requiresRefresh} onChange={event => setType(event.target.value)} placeholder="Select resolution" options={options} />}
-      <Textarea label="Reason" required rows={4} maxLength={kind === 'open' ? 200 : undefined} value={reason} disabled={busy || requiresRefresh} onChange={event => setReason(event.target.value)} />
+      <Textarea label="Reason" required rows={4} maxLength={kind === 'open' ? 200 : kind === 'release' ? 500 : undefined} value={reason} disabled={busy || requiresRefresh} onChange={event => setReason(event.target.value)} />
       {kind === 'open' && <><Textarea label="Description (optional)" rows={4} maxLength={2000} value={description} disabled={busy || requiresRefresh} onChange={event => setDescription(event.target.value)} /><Select label="On behalf of" value={onBehalfOf} disabled={busy || requiresRefresh} onChange={event => setOnBehalfOf(event.target.value)} options={[{ value:'FORWARDER',label:'Forwarder' },{ value:'TRUCKER',label:'Trucker' }]} /></>}
       {partial && <>{holdQuery.isFetching && <DriverTableLoading columns={2} label="Loading unpaid escrow balance" />}<TextField label="Refund amount (₦)" required type="number" min={0} max={unpaid ?? undefined} step="0.01" value={refund} disabled={busy || requiresRefresh} onChange={event => setRefund(event.target.value)} /></>}
     </div>

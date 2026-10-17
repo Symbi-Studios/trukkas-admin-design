@@ -53,9 +53,11 @@ function VerificationScreen() {
   const navigate = useNavigate();
   const operations = useVerificationOperations();
   const [range, setRange] = useState(null);
+  const [entityType, setEntityType] = useState('All Types');
+  const [verType, setVerType] = useState('All Types');
   const [dateDialog, setDateDialog] = useState(false);
   const allTime = useGetAdminVerificationSummaryQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
-  const query = useGetAdminVerificationDirectoryQuery({ owner: operations.owner, role: operations.role, ...(range ? { range } : {}) }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
+  const query = useGetAdminVerificationDirectoryQuery({ owner: operations.owner, role: operations.role, entityType: verificationFilterValue('entityType', entityType), verificationType: verificationFilterValue('verificationType', verType), ...(range ? { range } : {}) }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
   const [dialog, setDialog] = useState(null);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   useEffect(() => { setDialog(null); }, [operations.owner]);
@@ -71,8 +73,6 @@ function VerificationScreen() {
   const unavailable = (action) => window.alert(`${action} is not available in the documented verification API.`);
   const [tab, setTab] = useState('All Verifications');
   const [q, setQ] = useState('');
-  const [entityType, setEntityType] = useState('All Types');
-  const [verType, setVerType] = useState('All Types');
   const [status, setStatus] = useState('All Statuses');
   const [riskLevel, setRiskLevel] = useState('All Levels');
   const [page, setPage] = useState(1);
@@ -80,12 +80,10 @@ function VerificationScreen() {
 
   const filtered = useMemo(() => verifications.filter((v) => (
     (tab === 'All Verifications' || (tab === 'Expiring Soon' ? v.expiringSoon === true : v.status === tab)) &&
-    (entityType === 'All Types' || v.entityType === entityType) &&
-    (verType === 'All Types' || v.type === verType) &&
     (status === 'All Statuses' || v.status === status) &&
     (riskLevel === 'All Levels' || v.riskLevel === riskLevel) &&
     (!q || [v.id, v.reviewId, v.entityName, v.regNo].some((s) => s && s.toLowerCase().includes(q.toLowerCase())))
-  )), [verifications, tab, entityType, verType, status, riskLevel, q]);
+  )), [verifications, tab, status, riskLevel, q]);
 
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
   useEffect(() => setPage((current) => Math.min(current, Math.max(1, Math.ceil(filtered.length / pageSize)))), [filtered.length, pageSize]);

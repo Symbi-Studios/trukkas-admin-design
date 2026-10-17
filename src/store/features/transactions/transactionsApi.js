@@ -236,6 +236,27 @@ async function transactionPdf(baseQuery, args, kind) {
   if (!await isPdfAttachment(file)) return { error: { status: 'CUSTOM_ERROR', error: 'The server did not return a valid PDF document.' } };
   return { data: { url: URL.createObjectURL(file), name: pdfAttachmentFilename(result.meta?.response?.headers, 'transaction-' + kind + '-' + id + '.pdf') } };
 }
+async function transactionReportPdf(baseQuery, api, { from, to, owner } = {}) {
+  const admin = api.getState().auth.admin;
+  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && admin?.id === owner && api.getState().auth.admin?.id === owner;
+  if (!owner || !sameSession()) return actionError('Sign in before downloading a transaction report.');
+  // Omitted dates default to 30 days on this endpoint. Require explicit bounds
+  // so an All Dates/open-ended summary never downloads a different period.
+  if (!from || !to) return actionError('Select both a start and end date for the transaction report.');
+  let params;
+  try { params = { ...statsRange({ from, to }), format: 'pdf' }; }
+  catch (error) { return actionError(error.message); }
+  const result = await baseQuery({ url: '/admin/payments/transactions/report', params, headers: { Accept: 'application/pdf' }, responseHandler: async response => {
+    if (response.ok) return response.blob();
+    const body = await response.text();
+    try { return JSON.parse(body); } catch { return { message: 'Unable to download the transaction report.' }; }
+  } });
+  if (result.error) return { error: result.error };
+  if (!sameSession()) return actionError('The session changed. Sign in before downloading the report.');
+  if (!await isPdfAttachment(result.data)) return actionError('The server did not return a valid PDF report.');
+  if (!sameSession()) return actionError('The session changed. Sign in before downloading the report.');
+  return { data: { url: URL.createObjectURL(result.data), name: pdfAttachmentFilename(result.meta?.response?.headers, 'transactions-report-' + from + '-' + to + '.pdf') } };
+}
 export function downloadTransactionPdf(file) {
   const anchor = document.createElement('a'); anchor.href = file.url; anchor.download = file.name;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
@@ -309,6 +330,7 @@ export const transactionsApi = baseApi.enhanceEndpoints({ addTagTypes: financial
     }),
     getAdminTransactionReceipt: builder.query({ queryFn: (id, _api, _options, baseQuery) => transactionPdf(baseQuery, id, 'receipt'), keepUnusedDataFor: 0 }),
     getAdminTransactionStatement: builder.query({ queryFn: (args, _api, _options, baseQuery) => transactionPdf(baseQuery, args, 'statement'), keepUnusedDataFor: 0 }),
+    getAdminTransactionReport: builder.query({ queryFn: (args, api, _options, baseQuery) => transactionReportPdf(baseQuery, api, args), keepUnusedDataFor: 0 }),
     retryAdminTransaction: builder.mutation({
       queryFn: (id, api, _options, baseQuery) => performPaymentAction(baseQuery, api, id, 'retry'),
       invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? financialTags : [],
@@ -335,4 +357,4 @@ export const transactionsApi = baseApi.enhanceEndpoints({ addTagTypes: financial
 
 export const { useGetAdminTransactionLedgerQuery, useGetAdminTransactionStatsQuery, useGetAdminTransactionDetailQuery, useLazyGetAdminTransactionDetailQuery,
   useLazyGetAdminTransactionReceiptQuery, useLazyGetAdminTransactionStatementQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
-  useRefundAdminTransactionMutation, useReportAdminTransactionIssueMutation } = transactionsApi;
+  useLazyGetAdminTransactionReportQuery, useRefundAdminTransactionMutation, useReportAdminTransactionIssueMutation } = transactionsApi;

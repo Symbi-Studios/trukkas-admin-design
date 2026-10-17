@@ -19,9 +19,9 @@ export function PricingSettingModal({ row, onClose, onDone, writesUnavailable = 
     if (!valid || !changed || busy || writesUnavailable) return;
     setError(null);
     try {
-      if (row.source === 'config') await updateConfig({ key: row.key, value: row.options ? value : parsed }).unwrap();
-      else if (row.source === 'terminal') await updateTerminal({ id: row.terminalId, key: row.key, value: parsed }).unwrap();
-      else await updateSurcharge({ id: row.id, status: row.statusCode, value: parsed }).unwrap();
+      if (row.source === 'config') await updateConfig({ key: row.key, value: row.options ? value : parsed, expectedValue: row.value }).unwrap();
+      else if (row.source === 'terminal') await updateTerminal({ id: row.terminalId, portId: row.portId, key: row.key, value: parsed, expectedValue: row.value }).unwrap();
+      else await updateSurcharge({ id: row.id, status: row.statusCode, calc: row.calc, value: parsed, expectedValue: row.value }).unwrap();
       onDone?.(`${row.name} updated.`); onClose();
     } catch (requestError) { setError(pricingError(requestError)); }
   }

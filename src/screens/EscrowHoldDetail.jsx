@@ -52,10 +52,10 @@ function EscrowDetailScreen() {
   const busy = false;
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
-  const selectedQuery = useGetAdminEscrowHoldQuery({ holdId, owner, role }, { skip: !authenticated || !holdId });
+  const selectedQuery = useGetAdminEscrowHoldQuery({ holdId, owner, role }, { skip: !authenticated || !holdId, refetchOnMountOrArgChange: true });
   const hold = authenticated && !selectedQuery.error ? selectedQuery.currentData : null;
   const r = hold || { holdId: holdId || '—', jobId: '—', customer: '—', route: '—', amount: null, heldOn: '—', heldTime: '—', releaseBy: '—', status: '—' };
-  const releasesQuery = useGetAdminEscrowReleasesQuery({ escrowId: holdId, owner, role }, { skip: !hold });
+  const releasesQuery = useGetAdminEscrowReleasesQuery({ escrowId: holdId, owner, role }, { skip: !hold, refetchOnMountOrArgChange: true });
   const releases = hold && !releasesQuery.error ? releasesQuery.currentData || [] : [];
   const release = releases.filter((row) => row.statusCode === 'COMPLETED').sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))[0];
   const released = ['RELEASED', 'COMPLETED'].includes(r.statusCode);

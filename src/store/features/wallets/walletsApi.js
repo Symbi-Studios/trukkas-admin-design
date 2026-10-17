@@ -1,8 +1,9 @@
+import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
-const number = (value) => (typeof value === 'number' || (typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value.trim()))) && Number.isFinite(Number(value)) ? Number(value) : null;
+const number = (value) => (typeof value === 'number' || (typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value.trim()))) && Number.isFinite(Number(value)) && Math.abs(Number(value)) <= Number.MAX_SAFE_INTEGER ? Number(value) : null;
 const count = (value) => Number.isSafeInteger(number(value)) && number(value) >= 0 ? number(value) : null;
 const naira = (value, currency) => currency === 'NGN' ? number(value) : null;
 const display = (value) => text(value) ?? '—';
@@ -83,18 +84,18 @@ export const unavailableEscrowWeeklyActivity = Object.fromEntries(['fundsHeld', 
 
 export const emptyEscrowOverview = adaptEscrowOverview(null);
 
-// These are the existing rule rows. Hours and minutes are alternative policy
-// settings (minutes can override hours), not additive duration components.
+// Minutes are the documented live override; hours are the production default.
+// They are alternative policy settings, not additive duration components.
 export function adaptEscrowRules(response) {
   const config = record(unwrapApiResponseData(response)?.config), escrow = record(config.escrow);
   const fee = number(config.pricing?.platformFee), duration = record(escrow.standardHoldDuration);
   const hours = number(duration.hours), minutes = number(duration.minutes);
-  const confirmedDuration = hours != null && hours >= 0 && Number.isFinite(hours * 60) && minutes != null && minutes >= 0
-    && Math.abs(hours * 60 - minutes) <= Math.max(1, minutes, hours * 60) * Number.EPSILON * 8;
-  const hold = confirmedDuration ? minutes % 60 === 0 ? (minutes / 60).toLocaleString('en-NG') + ' hrs' : minutes.toLocaleString('en-NG') + ' mins' : '—';
+  const effectiveMinutes = Object.hasOwn(duration, 'minutes') ? minutes != null && minutes >= 0 ? minutes : null
+    : hours != null && hours >= 0 && Number.isFinite(hours * 60) ? hours * 60 : null;
+  const hold = effectiveMinutes == null ? '—' : effectiveMinutes % 60 === 0 ? (effectiveMinutes / 60).toLocaleString('en-NG') + ' hrs' : effectiveMinutes.toLocaleString('en-NG') + ' mins';
   const enabled = value => typeof value === 'boolean' ? value ? 'Enabled' : 'Disabled' : '—';
   return [
-    { id: 'ESR-001', icon: 'lock', iconTint: 'blue', name: 'Standard Hold Period', description: 'Funds held until delivery confirmation + 48 hours', value: hold },
+    { id: 'ESR-001', icon: 'lock', iconTint: 'blue', name: 'Standard Hold Period', description: display(duration.description), value: hold },
     { id: 'ESR-002', icon: 'shield-check', iconTint: 'green', name: 'Auto-Release on Confirmation', description: 'Releases automatically when customer confirms delivery', value: enabled(escrow.autoRelease?.enabled) },
     { id: 'ESR-003', icon: 'circle-alert', iconTint: 'red', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', value: enabled(escrow.disputeFreeze?.enabled) },
     { id: 'ESR-004', icon: 'percent', iconTint: 'purple', name: 'Platform Fee Deduction', description: 'Deducted from held amount before release', value: escrowMoney(fee) },
@@ -102,6 +103,19 @@ export function adaptEscrowRules(response) {
 }
 
 const invalid = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
+const serializeWalletQuery = args => defaultSerializeQueryArgs(args) + ':v2';
+function scopedWalletQuery(baseQuery, api, args = {}) {
+  const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
+  const current = () => {
+    const next = api.getState().auth;
+    return !api.signal.aborted && Boolean(next.accessToken && owner) && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
+  };
+  return async request => {
+    if (!current()) return invalid('Your session changed. Reopen Wallets before continuing.');
+    const result = await baseQuery(request);
+    return current() ? result : invalid('Your session changed. Reopen Wallets before continuing.');
+  };
+}
 // The UI has no pagination controls. Read every documented page, and never
 // silently publish an incomplete list following a failed or malformed page.
 async function readAll(baseQuery, api, url, key, filters = {}) {
@@ -205,19 +219,29 @@ function adaptDispute(row, detail) {
 }
 
 export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowOverview', 'AdminEscrowLedger', 'AdminEscrowDisputes', 'AdminEscrowActivity', 'AdminEscrowHolds', 'AdminEscrowReleases', 'AdminEscrowAccounts', 'AdminEscrowAlerts'] }).injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminEscrowOverview: builder.query({
-      query: () => ({ url: '/admin/payments/overview', params: { period: 'all' } }),
-      transformResponse: adaptEscrowOverview, providesTags: ['AdminEscrowOverview'],
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        const result = await scopedWalletQuery(baseQuery, api, args)({ url: '/admin/payments/overview', params: { period: 'all' } });
+        return result.error ? result : { data: adaptEscrowOverview(result.data) };
+      }, providesTags: ['AdminEscrowOverview'],
     }),
     getAdminEscrowRegister: builder.query({
-      async queryFn(_args, api, _options, baseQuery) {
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedWalletQuery(baseQuery, api, args);
         const result = await readAll(baseQuery, api, '/admin/escrow/holds', 'holds', { status: 'ACTIVE' });
         return result.error ? result : { data: result.data.map(adaptEscrowHold) };
       }, providesTags: ['AdminEscrowHolds'],
     }),
     getAdminEscrowHold: builder.query({
-      async queryFn({ holdId }, _api, _options, baseQuery) {
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedWalletQuery(baseQuery, api, args);
+        const { holdId } = args;
+        if (!text(holdId)) return invalid('A selected escrow ID is required.');
         const result = await baseQuery({ url: '/admin/escrow/holds/' + encodeURIComponent(holdId) });
         if (result.error) return result;
         const dto = record(unwrapApiResponseData(result.data));
@@ -226,7 +250,10 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
       }, providesTags: ['AdminEscrowHolds'],
     }),
     getAdminEscrowReleases: builder.query({
-      async queryFn({ escrowId } = {}, api, _options, baseQuery) {
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args = {}, api, _options, baseQuery) {
+        baseQuery = scopedWalletQuery(baseQuery, api, args);
+        const { escrowId } = args;
         const result = await readAll(baseQuery, api, '/admin/escrow/releases', 'releases', escrowId ? { escrowId } : {});
         if (result.error) return result;
         if (escrowId && result.data.some((row) => row.escrowId !== escrowId)) return invalid('The response contains releases for another escrow.');
@@ -234,25 +261,31 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
       }, providesTags: ['AdminEscrowReleases'],
     }),
     getAdminEscrowAccounts: builder.query({
-      queryFn: (_args, _api, _options, baseQuery) => readCollection(baseQuery, '/admin/escrow/accounts', 'accounts', (row) => ({
+      serializeQueryArgs: serializeWalletQuery,
+      queryFn: (args, api, _options, baseQuery) => readCollection(scopedWalletQuery(baseQuery, api, args), '/admin/escrow/accounts', 'accounts', (row) => ({
         id: row.id, name: display(row.name), balance: naira(row.balance, row.currency), status: status(row.status),
       })), providesTags: ['AdminEscrowAccounts'],
     }),
     getAdminEscrowAlerts: builder.query({
-      queryFn: (_args, _api, _options, baseQuery) => readCollection(baseQuery, '/admin/escrow/alerts', 'alerts', (row) => ({
+      serializeQueryArgs: serializeWalletQuery,
+      queryFn: (args, api, _options, baseQuery) => readCollection(scopedWalletQuery(baseQuery, api, args), '/admin/escrow/alerts', 'alerts', (row) => ({
         id: row.id, title: display(row.title), description: display(row.description),
         time: dateTime(row.occurredAt),
         icon: 'triangle-alert', tone: row.severity === 'CRITICAL' || row.severity === 'ERROR' ? 'danger' : row.severity === 'INFO' ? 'info' : 'warning',
       })), providesTags: ['AdminEscrowAlerts'],
     }),
     getAdminEscrowLedger: builder.query({
-      async queryFn(_args, api, _options, baseQuery) {
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedWalletQuery(baseQuery, api, args);
         const result = await readAll(baseQuery, api, '/admin/payments/transactions', 'rows', { tab: 'escrow' });
         return result.error ? result : { data: result.data.map(adaptEscrowTransaction) };
       }, providesTags: ['AdminEscrowLedger'],
     }),
     getAdminEscrowDisputes: builder.query({
-      async queryFn(_args, api, _options, baseQuery) {
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedWalletQuery(baseQuery, api, args);
         const result = await readAll(baseQuery, api, '/admin/disputes', 'disputes');
         if (result.error) return result;
         const rows = [];
@@ -260,7 +293,7 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
           if (api.signal.aborted) return invalid('The request was cancelled.');
           const details = await Promise.all(result.data.slice(start, start + 4).map(async (row) => ({ row, result: await baseQuery({ url: `/admin/disputes/${encodeURIComponent(row.id)}` }) })));
           for (const { row, result: detail } of details) {
-            if ([401, 403].includes(detail.error?.status)) return { error: detail.error };
+            if ([401, 403, 'CUSTOM_ERROR'].includes(detail.error?.status)) return { error: detail.error };
             const dto = detail.error ? null : record(unwrapApiResponseData(detail.data));
             if (dto && (dto.id !== row.id || dto.jobId !== row.jobId)) return invalid('The response does not belong to the selected dispute.');
             rows.push(adaptDispute(row, dto));
@@ -269,9 +302,17 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
         return { data: rows };
       }, providesTags: ['AdminEscrowDisputes'],
     }),
-    getAdminEscrowRules: builder.query({ query: () => ({ url: '/admin/config' }), transformResponse: adaptEscrowRules, providesTags: ['AdminPricingConfig'] }),
+    getAdminEscrowRules: builder.query({
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        const result = await scopedWalletQuery(baseQuery, api, args)({ url: '/admin/config' });
+        return result.error ? result : { data: adaptEscrowRules(result.data) };
+      }, providesTags: ['AdminPricingConfig'],
+    }),
     getAdminEscrowActivity: builder.query({
-      async queryFn(_args, api, _options, baseQuery) {
+      serializeQueryArgs: serializeWalletQuery,
+      async queryFn(args, api, _options, baseQuery) {
+        baseQuery = scopedWalletQuery(baseQuery, api, args);
         const result = await readAll(baseQuery, api, '/admin/escrow/activity', 'events');
         return result.error ? result : { data: result.data.map(adaptActivity) };
       }, providesTags: ['AdminEscrowActivity'],

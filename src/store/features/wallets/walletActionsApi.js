@@ -2,7 +2,7 @@ import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import './walletsApi.js';
 
 const text = value => typeof value === 'string' && value.trim() ? value.trim() : null;
-const amount = value => (typeof value === 'number' || typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value.trim())) && Number.isFinite(Number(value)) ? Number(value) : null;
+const amount = value => (typeof value === 'number' || typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value.trim())) && Number.isFinite(Number(value)) && Math.abs(Number(value)) <= Number.MAX_SAFE_INTEGER ? Number(value) : null;
 const failure = error => ({ status: 'CUSTOM_ERROR', error });
 const adminRoles = ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'];
 export const escrowMoneyRoles = ['SUPER_ADMIN', 'FINANCE_ADMIN'];
@@ -21,7 +21,7 @@ export function walletActionError(error) {
 }
 function inSession(api, args) {
   const auth = api.getState().auth;
-  return !api.signal.aborted && Boolean(auth.accessToken) && auth.admin?.id === args.owner && auth.admin?.role === args.role && adminRoles.includes(args.role);
+  return !api.signal.aborted && Boolean(auth.accessToken && text(args.owner)) && auth.admin?.id === args.owner && auth.admin?.role === args.role && adminRoles.includes(args.role);
 }
 function transport(api, baseQuery, args) {
   return async request => {
@@ -39,12 +39,14 @@ function reported(error, sent) {
 }
 const tags = ['AdminEscrowOverview','AdminEscrowLedger','AdminEscrowDisputes','AdminEscrowActivity','AdminEscrowHolds','AdminEscrowReleases','AdminEscrowAccounts','AdminEscrowAlerts','AdminJobs','AdminTrips','AdminCompanies','AdminDrivers','AdminForwarders','AdminPayoutDirectory','AdminPayoutWithdrawalStats','AdminTransactions'];
 export const walletActionsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPayoutDirectory','AdminPayoutWithdrawalStats','AdminTransactions'] }).injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: builder => ({
     releaseAdminEscrowFunds: builder.mutation({
       async queryFn(args,api,_options,baseQuery) {
         let sent = false;
         try {
           if (!text(args.holdId) || !text(args.jobId) || !text(args.reason)) throw failure('A selected escrow, job and release reason are required.');
+          if (args.reason.trim().length > 500) throw failure('The release reason must be at most 500 characters.');
           if (!escrowMoneyRoles.includes(args.role)) throw failure('Only Super Admin and Finance Admin can release funds.');
           const run = transport(api,baseQuery,args), url = '/admin/escrow/holds/'+encodeURIComponent(args.holdId);
           const hold = await run({ url });
