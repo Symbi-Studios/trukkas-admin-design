@@ -1,3 +1,4 @@
+import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { adaptAdminDriver } from '../drivers/driversApi.js';
 import { companyCardComparison, companyPerformancePage, companyPayoutAllocation } from './companyUpdateContracts.js';
@@ -8,6 +9,7 @@ const truckNumber = (value) => typeof value === 'string' && /^\d+(?:\.\d+)?$/.te
 const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
 const boolean = (value) => typeof value === 'boolean' ? value : null;
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+const serializeCompanyQuery = args => defaultSerializeQueryArgs(args) + ':v2';
 const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) || null;
 const named = (value) => text(typeof value === 'object' && value ? value.name : value);
 export const companyDate = (value) => {
@@ -80,8 +82,10 @@ function companyMonthlyComparison(value) {
     && currentFrom <= currentTo && previousFrom <= previousTo && previousTo <= currentFrom;
   return Object.fromEntries(['fleetSize', 'totalDrivers', 'activeDrivers', 'inactiveDrivers', 'completedJobs'].map(key => {
     const current = count(period[key]?.current), previous = count(period[key]?.previous), rawChange = number(period[key]?.changePercent);
-    const changePercent = knownPeriod && current != null && previous != null && rawChange != null
-      && (previous > 0 || current === 0 && rawChange === 0) ? rawChange : null;
+    const source = period[key], historical = ['activeDrivers', 'inactiveDrivers'].includes(key);
+    const direction = rawChange === 0 ? 'FLAT' : rawChange > 0 ? 'UP' : 'DOWN';
+    const knownSnapshot = !historical || source?.basis === 'SNAPSHOT' && at(source.previousAsOf) != null && source.direction === direction;
+    const changePercent = knownPeriod && knownSnapshot && source?.basis !== 'NO_SNAPSHOT_YET' && current != null && previous != null && previous > 0 && rawChange != null ? rawChange : null;
     return [key, { current, previous, changePercent,
       delta: changePercent == null ? '—' : (changePercent > 0 ? '+' : '') + changePercent.toLocaleString('en-NG', { maximumFractionDigits: 2 }) + '%',
       direction: changePercent == null || changePercent === 0 ? null : changePercent > 0 ? 'up' : 'down' }];
@@ -159,6 +163,7 @@ export function companyFormBody(form, original) {
 }
 
 export const companiesApi = baseApi.injectEndpoints({
+  overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminCompanies: builder.query({
       async queryFn(_args, _api, _options, baseQuery) {
@@ -177,6 +182,7 @@ export const companiesApi = baseApi.injectEndpoints({
       providesTags: ['AdminCompanies'],
     }),
     getAdminCompanyStats: builder.query({
+      serializeQueryArgs: serializeCompanyQuery,
       query: () => ({ url: '/admin/users/truckers/stats', params: { truckerType: 'COMPANY' } }),
       transformResponse: response => {
         const data = unwrapApiResponseData(response) || {}, cards = data.cards || {};
@@ -192,6 +198,7 @@ export const companiesApi = baseApi.injectEndpoints({
       providesTags: ['AdminCompanies'],
     }),
     getAdminCompanyPerformance: builder.query({
+      serializeQueryArgs: serializeCompanyQuery,
       async queryFn({ owner, role, all = false }, api, _options, baseQuery) {
         const current = () => !api.signal.aborted && Boolean(owner && api.getState().auth.accessToken) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
         const rows = [], seen = new Set(), limit = all ? 100 : 5;
@@ -218,6 +225,7 @@ export const companiesApi = baseApi.injectEndpoints({
       providesTags: ['AdminCompanies'],
     }),
     getAdminCompanyProfile: builder.query({
+      serializeQueryArgs: serializeCompanyQuery,
       query: ({ id }) => ({ url: `/admin/users/${encodeURIComponent(id)}/profile` }),
       transformResponse: (response, _meta, { id }) => { const company = adaptAdminCompanyProfile(response); if (company?.id !== id) throw new Error('The company API returned a different profile.'); return company; },
       providesTags: ['AdminCompanies'],
@@ -247,13 +255,14 @@ export const companiesApi = baseApi.injectEndpoints({
       providesTags: ['AdminJobs', 'AdminCompanies'],
     }),
     getAdminCompanyPayouts: builder.query({
+      serializeQueryArgs: serializeCompanyQuery,
       async queryFn({ id }, _api, _options, baseQuery) {
         const result = await readAllPages(baseQuery, '/admin/payout-requests', 'requests', { userId: id });
         if (result.error) return result;
         if (result.data.some(row => row.beneficiary?.id !== id)) return failure('The payout response included another beneficiary.');
         return { data: result.data.map(dto => {
           const valid= dto.currency === 'NGN';
-          const deductions=Array.isArray(dto.deductions)&&dto.deductions.every(d=>number(d?.amount)!=null)?dto.deductions.reduce((sum,d)=>sum+d.amount,0):null;
+          const deductions=Array.isArray(dto.deductions)&&dto.deductions.every(d=>number(d?.amount)!=null)?dto.deductions.reduce((sum,d)=>sum+number(d.amount),0):null;
           const status=dto.payoutStatus==='PAID'?'Completed':dto.payoutStatus==='PROCESSING'?'Processing':dto.payoutStatus==='FAILED'?'Failed':dto.payoutStatus==='REVERSED'?'Reversed':dto.reviewStatus==='REJECTED'?'Rejected':dto.reviewStatus==='APPROVED'?'Approved':dto.reviewStatus==='PENDING_REVIEW'?'Pending Review':null;
           return { id:text(dto.id),source:text(dto.source),payoutId:text(dto.id),companyId:id,reference:text(dto.reference),...companyPayoutAllocation(dto),
             grossAmount:valid?number(dto.grossAmount):null,deductions:valid?deductions:null,netAmount:valid?number(dto.netAmount):null,amount:valid?number(dto.netAmount):null,

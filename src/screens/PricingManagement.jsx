@@ -21,8 +21,6 @@ import {
   Icon,
   ListRow,
   Modal,
-  TextField,
-  Select,
   EmptyState, Banner,
 } from "../ds.js";
 import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation,
@@ -31,6 +29,7 @@ import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetail
   useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery,
 } from '../store/features/pricing/pricingApi.js';
 import { PricingLoading, PricingSettingModal } from './PricingSettings.jsx';
+import { PricingServiceForm } from './PricingServiceForm.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import './PricingManagement.css';
 
@@ -214,17 +213,8 @@ export function PricingManagement() {
   const [view, setView] = useState("list");
   const [menuFor, setMenuFor] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [editServiceId, setEditServiceId] = useState(null);
   const [exportOpen, setExportOpen] = useState(false);
-  const [draft, setDraft] = useState({
-    service: "",
-    route: "",
-    coverage: "",
-    truckType: "",
-    unit: "Per Trip",
-    basePrice: "",
-    surcharge: "",
-  });
-  const busy = false;
   const [changeRecord, { isLoading: pricingChanging }] = useChangeAdminPricingRecordMutation();
   const [exportPricingPdf] = useExportAdminPricingServicesMutation();
   const changeLock = useRef(false);
@@ -278,9 +268,6 @@ export function PricingManagement() {
   }
 
   function unavailable(message) { setActionError({ error: message }); setMenuFor(null); setExportOpen(false); }
-  function submitAdd() {
-    unavailable('The existing form uses unsupported pricing units, free-text routes and an inline surcharge. Add Pricing is unavailable with this form.');
-  }
   async function changePricing(row, action) {
     setMenuFor(null);
     if (changeLock.current) return;
@@ -288,7 +275,7 @@ export function PricingManagement() {
     changeLock.current = true; setActionError(null);
     try {
       const saved = await changeRecord({ row, action }).unwrap();
-      setNotice(action === 'duplicate' ? 'Draft pricing version created.' : action === 'deactivate' ? 'Pricing deactivated.' : 'Pricing approved and activated.');
+      setNotice(action === 'duplicate' ? 'Draft pricing version created.' : action === 'submit' ? 'Pricing submitted for approval.' : action === 'deactivate' ? 'Pricing deactivated.' : 'Pricing approved and activated.');
       if (action === 'duplicate' && saved.entity === 'services') navigate(pricingDetailUrl(saved.id));
     } catch (error) { setActionError(error); }
     finally { changeLock.current = false; }
@@ -323,7 +310,7 @@ export function PricingManagement() {
             <Button variant="outline" icon="filter">
               Filters
             </Button>
-            <Button icon="plus" onClick={() => setAddOpen(true)}>
+            <Button icon="plus" onClick={() => { setEditServiceId(null); setAddOpen(true); }}>
               Add Pricing
             </Button>
           </>
@@ -663,13 +650,15 @@ export function PricingManagement() {
                             {
                               label: "Edit Pricing",
                               icon: "pencil",
-                              onClick: () => unavailable('The existing form cannot safely edit the API rate card fields.'),
+                              disabled: r.statusCode !== 'DRAFT',
+                              onClick: () => { setMenuFor(null); setEditServiceId(r.id); setAddOpen(true); },
                             },
                             {
                               label: "Duplicate",
                               icon: "copy",
                               onClick: () => void changePricing(r, 'duplicate'),
                             },
+                            { label: 'Submit for Approval', icon: 'send', disabled: !canChangePricing(r, 'submit', admin), onClick: () => void changePricing(r, 'submit') },
                             { divider: true },
                             {
                               label:
@@ -1193,97 +1182,7 @@ export function PricingManagement() {
       </div>
 
       {setting && <PricingSettingModal key={setting.id} row={setting} writesUnavailable={setting.source === 'config' && !canEditConfig} onClose={() => setSetting(null)} onDone={setNotice} />}
-      <Modal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        title="Add Pricing"
-        description="Adding pricing is currently unavailable."
-        width={560}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                true
-              }
-              title="The current form cannot supply the API's supported rate units and route fields."
-              onClick={submitAdd}
-            >
-              {busy ? "Saving…" : "Add Pricing"}
-            </Button>
-          </>
-        }
-      >
-        <div style={{ display: "grid", gap: 14 }}>
-          <TextField
-            label="Service"
-            required
-            placeholder="e.g. Import (Container)"
-            value={draft.service}
-            onChange={(e) => setDraft({ ...draft, service: e.target.value })}
-          />
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <TextField
-              label="Route"
-              required
-              placeholder="e.g. Apapa Port → Ikeja"
-              value={draft.route}
-              onChange={(e) => setDraft({ ...draft, route: e.target.value })}
-            />
-            <TextField
-              label="Coverage"
-              placeholder="e.g. Lagos"
-              value={draft.coverage}
-              onChange={(e) => setDraft({ ...draft, coverage: e.target.value })}
-            />
-          </div>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <TextField
-              label="Truck Type / Container"
-              placeholder="e.g. 40FT HC"
-              value={draft.truckType}
-              onChange={(e) =>
-                setDraft({ ...draft, truckType: e.target.value })
-              }
-            />
-            <Select
-              label="Unit"
-              options={["Per Trip", "Per Day"]}
-              value={draft.unit}
-              onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
-            />
-          </div>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <TextField
-              label="Base Price (₦)"
-              required
-              type="number"
-              placeholder="350000"
-              value={draft.basePrice}
-              onChange={(e) =>
-                setDraft({ ...draft, basePrice: e.target.value })
-              }
-            />
-            <TextField
-              label="Surcharge (₦)"
-              type="number"
-              placeholder="20000"
-              value={draft.surcharge}
-              onChange={(e) =>
-                setDraft({ ...draft, surcharge: e.target.value })
-              }
-            />
-          </div>
-        </div>
-      </Modal>
+      {addOpen && <PricingServiceForm id={editServiceId} onClose={() => setAddOpen(false)} onDone={saved => { setAddOpen(false); setNotice(editServiceId ? 'Draft pricing updated.' : 'Draft pricing created.'); navigate(pricingDetailUrl(saved.id)); }} />}
     </>
   );
 }

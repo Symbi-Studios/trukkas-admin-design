@@ -9,11 +9,12 @@ const labelKey = (value) => text(value)?.toLowerCase().replace(/\s+/g, ' ');
 export function timestamp(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? value : null; }
 export const sectionVersion = (value) => value === 'initial' ? value : timestamp(value);
 export function dateLabel(value) { return timestamp(value) ? new Date(value).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; }
-const aliases = { defaultLanguage: 'platformLanguage', commissionRate: 'commissionPercent', vatRate: 'vatPercent', autoCompleteTrips: 'autoCompleteTripsOnPod' };
+const aliases = { defaultLanguage: 'platformLanguage', commissionRate: 'commissionPercent', vatRate: 'vatPercent', autoCompleteTrips: 'autoCompleteTripsOnPod', terminateAllSessionsOnPasswordChange: 'terminateSessionsOnPasswordChange' };
 const displayCodes = {
   defaultLanguage: { en: 'English (EN)', fr: 'French (FR)', pt: 'Portuguese (PT)' },
   defaultCurrency: { NGN: 'Nigerian Naira (NGN)', USD: 'US Dollar (USD)' },
   timezone: { 'Africa/Lagos': '(GMT+01:00) Lagos, Nigeria' },
+  distanceUnit: { km: 'Kilometers (km)' },
 };
 export const editableRoles = (section) => section === 'finance' ? ['SUPER_ADMIN', 'FINANCE_ADMIN'] : ['general', 'operations', 'fleet'].includes(section) ? ['SUPER_ADMIN', 'OPS_ADMIN'] : section === 'data-protection' ? ['SUPER_ADMIN'] : [];
 export const canEditSettings = (section, role) => section === 'notifications' ? ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(role) : editableRoles(section).includes(role);
@@ -34,7 +35,7 @@ function decode(control, descriptor, value) {
   return typeof value === 'string' ? value : null;
 }
 function matchDescriptor(control, descriptors) {
-  const keys = [control.field, aliases[control.field]].filter(Boolean);
+  const keys = [control.field, aliases[control.field], control.page === 'finance' && control.field === 'defaultCurrency' ? 'currency' : null].filter(Boolean);
   const byKey = descriptors.filter((field) => keys.includes(field.key));
   if (byKey.length === 1) return byKey[0];
   const byLabel = descriptors.filter((field) => labelKey(field.label) === labelKey(control.label));
@@ -48,13 +49,13 @@ export function adaptSection(response, page) {
   for (const control of settingsControls.filter((field) => field.page === page)) {
     values[control.group] ||= {};
     const descriptor = matchDescriptor(control, descriptors);
-    // Fixed string facts (for example timezone) still fit the screen's existing
-    // select when their value has an exact supported display label.
-    const compatible = descriptor && (descriptor.type === control.type || (control.type === 'enum' && descriptor.type === 'string' && descriptor.editable === false));
+    // String facts may fit an existing select. Editing still requires explicit
+    // backend options so the control cannot invent wire values.
+    const compatible = descriptor && (descriptor.type === control.type || (control.type === 'enum' && descriptor.type === 'string'));
     const raw = descriptor && Object.hasOwn(flat, descriptor.key) ? flat[descriptor.key] : descriptor?.value;
     values[control.group][control.field] = compatible ? decode(control, descriptor, raw) : null;
     if (compatible) contracts[control.group + '.' + control.field] = {
-      key: descriptor.key, type: descriptor.type, editable: descriptor.editable === true,
+      key: descriptor.key, type: descriptor.type, editable: descriptor.editable === true && (control.type !== 'enum' || enumChoices(control, descriptor).length > 0),
       enforced: descriptor.enforced === true, description: text(descriptor.description),
       min: numeric(descriptor.min), max: numeric(descriptor.max), choices: enumChoices(control, descriptor),
       defaultValue: decode(control, descriptor, descriptor.default),
@@ -107,17 +108,46 @@ export function adaptPreferences(response) {
   }
   values.settingsQuietHours ||= {};
   values.settingsQuietHours.timeZone = dto.timeZone === 'Africa/Lagos' ? '(GMT+01:00) Lagos, Nigeria' : null;
-  return { page: 'notifications', values, contracts, version: timestamp(dto.version), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: '—' } };
+  return { page: 'notifications', values, contracts, version: timestamp(dto.version), events: settingsEventRows(dto.eventPreferences), eventVersion: sectionVersion(dto.eventPreferencesVersion), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: '—' } };
+}
+export const eventFrequencies = { INSTANT: 'Instant', HOURLY: 'Hourly Digest', DAILY: 'Daily Digest', OFF: 'Off' };
+function settingsEventRows(raw) {
+  if (!Array.isArray(raw) || raw.some(row => !safeKey(row?.key)) || new Set(raw.map(row => row.key)).size !== raw.length) return null;
+  return raw.map(row => ({ key: row.key, label: text(row.label), ...Object.fromEntries(['inApp', 'email', 'sms'].map(channel => [channel, typeof row[channel] === 'boolean' ? row[channel] : null])), frequency: Object.hasOwn(eventFrequencies, row.frequency) ? row.frequency : null }));
+}
+export function adaptSecurityAlertEvents(response) {
+  const dto = record(unwrapApiResponseData(response));
+  return { events: settingsEventRows(dto.events), eventVersion: sectionVersion(dto.version),
+    editable: Array.isArray(dto.editableBy) && dto.editableBy.includes('SUPER_ADMIN'), enforced: dto.enforced === true };
+}
+export function settingsEventForTemplate(rows, key, label) {
+  const matches = rows?.filter(row => row.key === key || labelKey(row.label) === labelKey(label)) || [];
+  return matches.length === 1 ? matches[0] : null;
+}
+export function settingsEventChanges(rows, changes, security = false) {
+  if (!Array.isArray(changes) || changes.length === 0 || new Set(changes.map(row => row?.key)).size !== changes.length) throw new Error('Choose valid event preference changes.');
+  return changes.map(change => {
+    if (!rows?.some(row => row.key === change.key)) throw new Error('This event has no matching backend setting.');
+    const fields = record(change.changes), keys = Object.keys(fields);
+    if (!keys.length || keys.some(key => !(security ? ['inApp', 'email', 'sms'] : ['email', 'sms', 'frequency']).includes(key))) throw new Error('This event control is fixed or unsupported.');
+    for (const key of keys) if (key === 'frequency' ? !Object.hasOwn(eventFrequencies, fields[key]) : typeof fields[key] !== 'boolean') throw new Error('Choose a supported event preference.');
+    return { key: change.key, ...fields };
+  });
+}
+export function settingsEventsMatch(rows, submitted) {
+  return submitted.every(({ key, ...fields }) => rows?.filter(row => row.key === key).length === 1 && Object.entries(fields).every(([field, value]) => rows.find(row => row.key === key)[field] === value));
 }
 export function adaptStatus(response) {
   const dto = record(unwrapApiResponseData(response));
   return { headline: text(dto.headline) || '—', caption: text(dto.caption) || '—', lastChecked: dateLabel(dto.checkedAt), items: Array.isArray(dto.items) ? dto.items.map((item) => ({ key: text(item?.key), label: text(item?.label), status: ['ACTIVE', 'FIXED', 'NOT_ENFORCED'].includes(item?.status) ? item.status : '—' })) : [] };
 }
 export function statusForTemplate(status, template) {
-  return { headline: status?.headline || '—', caption: status?.caption || '—', lastChecked: status?.lastChecked || '—', items: (template.items || []).map(({ label }) => {
+  const items = (template.items || []).map(({ label }) => {
     const matches = status?.items?.filter((item) => labelKey(item.label) === labelKey(label)) || [];
     return { label, status: matches.length === 1 ? matches[0].status : '—' };
-  }) };
+  });
+  const applicable = items.length === 0 || items.some(item => item.status !== '—');
+  return { headline: applicable ? status?.headline || '—' : '—', caption: applicable ? status?.caption || '—' : '—', lastChecked: applicable ? status?.lastChecked || '—' : '—', items };
 }
 export function collection(response, key) {
   const dto = record(unwrapApiResponseData(response));

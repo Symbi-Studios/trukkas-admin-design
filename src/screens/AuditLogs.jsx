@@ -7,7 +7,7 @@ import {
   PageHeader, StatCard, Card, Tabs, SearchField, FilterSelect, DropdownMenu,
   Button, DataTable, Pagination, Badge, Avatar, Icon, IconButton, EmptyState, Skeleton,
 } from '../ds.js';
-import { useGetAdminAuditDirectoryQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery, auditPeriod, auditMatchesTab, auditTabAvailable, auditCsv, AUDIT_DATE_OPTIONS } from '../store/features/audit/auditApi.js';
+import { useGetAdminAuditDirectoryQuery, useGetAdminSystemEventsQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery, auditPeriod, auditMatchesTab, auditTabAvailable, auditCsv, AUDIT_DATE_OPTIONS } from '../store/features/audit/auditApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
 import './AuditLogs.css';
@@ -88,7 +88,10 @@ function AuditLogsScreen() {
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null), initialDrawer = useRef(false), active = useRef(true);
   const period = useMemo(() => auditPeriod(filters.date), [filters.date]);
-  const logsQuery = useGetAdminAuditDirectoryQuery({ ...period, owner, role }, { skip: !canView, refetchOnMountOrArgChange: true });
+  const systemEvents = tab === 'System Events';
+  const adminLogsQuery = useGetAdminAuditDirectoryQuery({ ...period, owner, role }, { skip: !canView || systemEvents, refetchOnMountOrArgChange: true });
+  const systemEventsQuery = useGetAdminSystemEventsQuery({ ...period, owner, role }, { skip: !canView || !systemEvents, refetchOnMountOrArgChange: true });
+  const logsQuery = systemEvents ? systemEventsQuery : adminLogsQuery;
   const summaryQuery = useGetAdminAuditScreenSummaryQuery({ owner, role }, { skip: !canView, refetchOnMountOrArgChange: true });
   const error = role && !canView ? { status: 403, data: { message: 'Only Super Admins can view audit logs.' } } : logsQuery.error;
   const audits = !canView || logsQuery.error ? EMPTY_ROWS : logsQuery.currentData?.rows || EMPTY_ROWS;
@@ -100,10 +103,10 @@ function AuditLogsScreen() {
   const delta = (key) => comparison(key)?.percent == null ? '—' : `${comparison(key).percent}%`;
   const direction = (key) => comparison(key)?.direction ?? null;
   const selectedAuditRow = audits.find((row) => row.id === selectedAuditId) || null;
-  const detailQuery = useGetAdminAuditDetailQuery({ id: selectedAuditId, owner, role }, { skip: !canView || !selectedAuditRow, refetchOnMountOrArgChange: true });
-  const selectedAudit = selectedAuditRow && !detailQuery.error && detailQuery.currentData?.id === selectedAuditId ? detailQuery.currentData : selectedAuditRow;
-  const detailLoading = detailQuery.isLoading || (detailQuery.isFetching && !detailQuery.currentData);
-  const selectAudit = (row) => { if (row.id === selectedAuditId && detailQuery.error) detailQuery.refetch(); setSelectedAuditId(row.id); };
+  const detailQuery = useGetAdminAuditDetailQuery({ id: selectedAuditId, owner, role }, { skip: !canView || !selectedAuditRow || systemEvents, refetchOnMountOrArgChange: true });
+  const selectedAudit = systemEvents ? selectedAuditRow : selectedAuditRow && !detailQuery.error && detailQuery.currentData?.id === selectedAuditId ? detailQuery.currentData : selectedAuditRow;
+  const detailLoading = !systemEvents && (detailQuery.isLoading || (detailQuery.isFetching && !detailQuery.currentData));
+  const selectAudit = (row) => { if (!systemEvents && row.id === selectedAuditId && detailQuery.error) detailQuery.refetch(); setSelectedAuditId(row.id); };
 
   const users = ['All Users', ...new Set(audits.map((row) => row.user).filter((value) => value !== '—'))];
   const modules = ['All Modules', ...new Set(audits.map((row) => row.module).filter((value) => value !== '—'))];
@@ -124,7 +127,7 @@ function AuditLogsScreen() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
   useEffect(() => { active.current = true; return () => { active.current = false; window.clearTimeout(toastTimer.current); }; }, []);
-  useEffect(() => { if (detailQuery.error && selectedAuditRow) notify(getApiErrorMessage(detailQuery.error)); }, [detailQuery.error, selectedAuditId]);
+  useEffect(() => { if (!systemEvents && detailQuery.error && selectedAuditRow) notify(getApiErrorMessage(detailQuery.error)); }, [detailQuery.error, selectedAuditId, systemEvents]);
   useEffect(() => {
     setPage((current) => Math.max(1, Math.min(current, pageCount)));
     setSelectedRows((current) => current.filter((id) => filtered.some((row) => row.id === id)));
@@ -162,7 +165,7 @@ function AuditLogsScreen() {
     <PageHeader title="Audit Logs" description="Track all system activities, user actions, and changes across Trukkas." actions={<Button variant="outline" icon="download" onClick={exportRows}>Export Logs</Button>} />
     <div className="audit-stats"><StatCard icon="files" tint="blue" label="Total Logs" value={metric(summary?.totalLogs)} delta={delta('totalLogs')} direction={direction('totalLogs')} caption="vs last month" /><StatCard icon="users" tint="navy" label="Active Users" value={metric(summary?.activeUsers)} delta={delta('activeUsers')} direction={direction('activeUsers')} caption="vs last month" /><StatCard icon="shield-alert" tint="red" label="Security Events" value={metric(summary?.securityEvents)} delta={delta('securityEvents')} direction={direction('securityEvents')} caption="vs last month" /><StatCard icon="triangle-alert" tint="amber" label="Failed Actions" value={metric(summary?.failedActions)} delta={delta('failedActions')} direction={direction('failedActions')} caption="vs last month" /></div>
     <Card pad="none" style={{ minWidth: 0 }}>
-      <Tabs value={tab} onChange={(value) => { setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
+      <Tabs value={tab} onChange={(value) => { if ((value === 'System Events') !== systemEvents) { setSelectedAuditId(null); setSelectedRows([]); } setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
       <div className="audit-filter-row">
         <MenuFilter value={draft.date} options={DATE_OPTIONS} icon="calendar-days" onChange={(date) => setDraft((old) => ({ ...old, date }))} />
         <MenuFilter value={draft.user} options={users} onChange={(user) => setDraft((old) => ({ ...old, user }))} />

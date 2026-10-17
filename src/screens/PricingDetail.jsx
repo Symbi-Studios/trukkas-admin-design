@@ -9,6 +9,7 @@ import {
 } from '../ds.js';
 import { pricingError, pricingMoney as formatNaira, downloadPricingCsv, useGetAdminPricingServiceQuery, useChangeAdminPricingRecordMutation, canChangePricing } from '../store/features/pricing/pricingApi.js';
 import { DriverLoadingNotice } from './DriversLoading.jsx';
+import { PricingServiceForm } from './PricingServiceForm.jsx';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
   const TINT = {
@@ -40,9 +41,10 @@ export function PricingDetail() {
   const [changeRecord, { isLoading: changing }] = useChangeAdminPricingRecordMutation();
   const changeLock = useRef(false);
   const admin = useSelector((state) => state.auth.admin);
-  useEffect(() => { setActionError(null); }, [priceId]);
   const r = pricingQuery.error || actionError ? null : pricingQuery.currentData;
   const [menu, setMenu] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  useEffect(() => { setActionError(null); setEditOpen(false); }, [priceId]);
   async function change(action) {
     setMenu(false);
     if (changeLock.current || !canChangePricing(r, action, admin)) return;
@@ -75,7 +77,8 @@ export function PricingDetail() {
         description="Detailed view of this service pricing entry."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/pricing')}>Back</Button>
-          <Button variant="outline" icon="pencil" disabled title="The existing pricing form cannot safely edit these rate card fields.">Edit Pricing</Button>
+          <Button variant="outline" icon="pencil" disabled={r.statusCode !== 'DRAFT' || changing} onClick={() => setEditOpen(true)}>Edit Pricing</Button>
+          {r.statusCode === 'DRAFT' && <Button icon="send" disabled={changing || !canChangePricing(r, 'submit', admin)} onClick={() => void change('submit')}>Submit for Approval</Button>}
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
@@ -154,6 +157,7 @@ export function PricingDetail() {
           </div>
         </div>
       </div>
+      {editOpen && <PricingServiceForm id={r.id} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); pricingQuery.refetch(); }} />}
     </>
   );
 }

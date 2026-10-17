@@ -1,6 +1,6 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { clearSession } from '../auth/authSlice.js';
-import { adaptSection, adaptPreferences, adaptStatus, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp, sectionVersion } from './settingsContracts.js';
+import { adaptSection, adaptPreferences, adaptSecurityAlertEvents, settingsEventChanges, settingsEventsMatch, adaptStatus, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp, sectionVersion } from './settingsContracts.js';
 export { findSettingsField, preferenceFields } from './settingsContracts.js';
 const failure = (message, status = 'CUSTOM_ERROR') => ({ error: { status, error: message, data: { message } } });
 const sections = ['general', 'operations', 'finance', 'fleet', 'security', 'passwords', 'security-alerts', 'data-protection'];
@@ -38,7 +38,7 @@ const readQuery = (url, adapter) => async (args, api, _options, baseQuery) => {
     return { data: adapter(result.data, args) };
   } catch (error) { return failure(error.message); }
 };
-const settingsTags = ['AdminSettings', 'AdminSettingsStatus', 'AdminAuditLogs', 'AdminPricingConfig', 'AdminPricing', 'AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
+const settingsTags = ['AdminSettings', 'AdminSettingsStatus', 'AdminSettingsSecurityEvents', 'AdminAuditLogs', 'AdminPricingConfig', 'AdminPricing', 'AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
 export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsTags, 'AdminSettingsSessions', 'AdminSettingsEvents', 'AdminSettingsChannels'] }).injectEndpoints({
   endpoints: (builder) => ({
     getAdminSystemSettings: builder.query({
@@ -46,6 +46,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
       providesTags: ['AdminSettings'],
     }),
     getAdminSettingsPreferences: builder.query({ queryFn: readQuery('/admin/notifications/settings', adaptPreferences), providesTags: ['AdminNotificationSettings'] }),
+    getAdminSettingsSecurityEvents: builder.query({ queryFn: readQuery('/admin/settings/security-alerts/events', adaptSecurityAlertEvents), providesTags: ['AdminSettingsSecurityEvents'] }),
     getAdminSettingsStatus: builder.query({ queryFn: readQuery(({ page }) => ({ url: '/admin/settings/status', params: { section: page } }), adaptStatus), providesTags: ['AdminSettingsStatus'] }),
     getAdminSettingsVersion: builder.query({ queryFn: readQuery('/admin/platform/version', adaptVersion) }),
     getAdminSettingsChannels: builder.query({ queryFn: readQuery('/admin/settings/notifications/channels', adaptChannels), providesTags: ['AdminSettingsChannels'] }),
@@ -57,11 +58,12 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
       queryFn: readQuery(({ page = 1, limit = 5, type }) => ({ url: '/admin/security/events', params: { page, limit, scope: 'me', ...(type ? { type } : {}) } }), adaptEvents), providesTags: ['AdminSettingsEvents'],
     }),
     saveAdminSettingsSection: builder.mutation({
-      async queryFn({ page, changes, owner, expectedVersion }, api, _options, baseQuery) {
+      async queryFn({ page, changes, eventChanges = [], owner, expectedVersion, expectedEventVersion }, api, _options, baseQuery) {
         try {
           const check = sessionGuard(api, owner), role = api.getState().auth.admin.role, personal = page === 'notifications';
           if (!canEditSettings(page, role)) return failure('Your admin access level cannot change this settings section.', 403);
-          if (!Array.isArray(changes) || !changes.length) return failure('There are no supported settings to save.');
+          if (!Array.isArray(changes) || !Array.isArray(eventChanges) || !changes.length && !eventChanges.length) return failure('There are no supported settings to save.');
+          if (eventChanges.length && !personal) return failure('Use the security-alert event operation for these preferences.');
           const url = personal ? '/admin/notifications/settings' : '/admin/settings/' + encodeURIComponent(page);
           const read = await baseQuery({ url }); check(); if (read.error) return read;
           const before = personal ? adaptPreferences(read.data) : adaptSection(read.data, page);
@@ -73,6 +75,11 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
             const value = personal ? encodePreference(contract, change.value) : encodeSetting(control, contract, change.value);
             if (Object.hasOwn(body, contract.key) && body[contract.key] !== value) return failure('Conflicting values were entered for the same setting.');
             body[contract.key] = value; submitted.push({ control, contract, value });
+          }
+          const submittedEvents = eventChanges.length ? settingsEventChanges(before.events, eventChanges) : [];
+          if (submittedEvents.length) {
+            if (!sectionVersion(expectedEventVersion) || before.eventVersion !== expectedEventVersion) return failure('Event preferences changed. Reload before saving.', 409);
+            body.eventPreferences = submittedEvents; body.expectedEventPreferencesVersion = expectedEventVersion;
           }
           if (!personal) body.expectedVersion = expectedVersion;
           check();
@@ -87,12 +94,31 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
             if (!savedContract || savedContract.key !== contract.key) return false;
             try { return (personal ? encodePreference(savedContract, after.values[control.group]?.[control.field]) : encodeSetting(control, savedContract, after.values[control.group]?.[control.field])) === value; } catch { return false; }
           });
-          if (!matches || (!personal && !after.version)) return failure('The save was sent, but the saved values could not be confirmed. Reload before trying again.');
+          if (!matches || (!personal && !after.version) || submittedEvents.length && (!after.eventVersion || after.eventVersion === expectedEventVersion || !settingsEventsMatch(after.events, submittedEvents))) return failure('The save was sent, but the saved values could not be confirmed. Reload before trying again.');
           api.dispatch(settingsApi.util.updateQueryData(personal ? 'getAdminSettingsPreferences' : 'getAdminSystemSettings', personal ? { owner } : { page, owner }, () => after));
-          return { data: { section: after, savedOnly: submitted.some(({ contract }) => !contract.enforced) } };
+          return { data: { section: after, savedOnly: submittedEvents.length > 0 || submitted.some(({ contract }) => !contract.enforced) } };
         } catch (error) { return failure(error.message); }
       },
       invalidatesTags: (_result, _error, args) => args.page === 'notifications' ? ['AdminNotificationSettings', 'AdminSettingsEvents'] : settingsTags,
+    }),
+    saveAdminSettingsSecurityEvents: builder.mutation({
+      async queryFn({ owner, changes, expectedVersion }, api, _options, baseQuery) {
+        try {
+          const check = sessionGuard(api, owner), url = '/admin/settings/security-alerts/events';
+          if (api.getState().auth.admin.role !== 'SUPER_ADMIN') return failure('Only Super Admins can change security-alert event preferences.', 403);
+          const read = await baseQuery({ url }); check(); if (read.error) return read;
+          const before = adaptSecurityAlertEvents(read.data);
+          if (!before.editable || !sectionVersion(expectedVersion) || before.eventVersion !== expectedVersion) return failure('Security-alert preferences changed or cannot be edited. Reload before saving.', 409);
+          const events = settingsEventChanges(before.events, changes, true);
+          const result = await baseQuery({ url, method: 'PATCH', body: { events, expectedVersion } }); check(); if (result.error) return settingsError(result);
+          const reread = await baseQuery({ url }); check();
+          if (reread.error) return failure('The save was sent, but its result could not be confirmed. Reload before trying again.');
+          const after = adaptSecurityAlertEvents(reread.data);
+          if (!after.eventVersion || after.eventVersion === expectedVersion || !settingsEventsMatch(after.events, events)) return failure('The saved security-alert values could not be confirmed. Reload before trying again.');
+          api.dispatch(settingsApi.util.updateQueryData('getAdminSettingsSecurityEvents', { owner }, () => after));
+          return { data: { savedOnly: !after.enforced } };
+        } catch (error) { return failure(error.message); }
+      }, invalidatesTags: ['AdminSettingsSecurityEvents', 'AdminSettingsStatus'],
     }),
     resetAdminSettingsSection: builder.mutation({
       async queryFn({ page, owner, expectedVersion }, api, _options, baseQuery) {
@@ -203,4 +229,4 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
     }),
   }),
 });
-export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;
+export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;

@@ -1,4 +1,6 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { serviceCore, serviceBody, pricingServiceRoles } from './pricingServiceContracts.js';
+import { adaptPricingFormOptions } from './pricingFormOptions.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const number = (value) => (typeof value === 'number' || (typeof value === 'string' && value.trim())) && Number.isFinite(Number(value)) ? Number(value) : null;
@@ -52,7 +54,7 @@ export function adaptAdminPricingService(value) {
   const dto = record(value), dates = dateParts(dto.updatedAt);
   const vehicle = vehicleContainerLabel(dto), submittedBy = submitter(dto.submittedBy);
   return {
-    id: text(dto.id), entity: 'services', service: text(dto.name) || '—', route: routeLabel(dto),
+    id: text(dto.id), entity: 'services', code: text(dto.code), core: serviceCore(dto), updatedAt: text(dto.updatedAt), service: text(dto.name) || '—', route: routeLabel(dto),
     coverage: coverageLabel(dto.coverage) || text(dto.destinationState) || '—', truckType: vehicle || '—', currency: currencyLabels[dto.currency] || text(dto.currency) || '—',
     unit: unitLabels[dto.unit] || label(dto.unit), basePrice: number(dto.basePrice),
     // Use the documented service totals; job quote totals have a different scope.
@@ -142,6 +144,7 @@ export function canChangePricing(row, action, admin) {
   const rates = row.entity === 'services' ? [row.basePrice] : row.entity === 'surcharges' ? [row.value] : row.entity === 'exceptions' ? [row.standardPrice, row.exceptionPrice] : [];
   if (!rates.every((value) => Number.isFinite(value) && value >= 0)) return false;
   if (action === 'duplicate') return row.entity !== 'exceptions' && ['DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'INACTIVE'].includes(row.statusCode);
+  if (action === 'submit') return row.entity === 'services' && row.statusCode === 'DRAFT' && pricingServiceRoles.has(admin.role);
   if (!pricingReviewerRoles.has(admin.role)) return false;
   if (action === 'deactivate') return row.entity !== 'exceptions' && row.statusCode === 'ACTIVE';
   if (action === 'activate') return row.entity !== 'exceptions' && row.statusCode === 'PENDING_APPROVAL';
@@ -164,17 +167,19 @@ async function changePricingRecord({ row, action }, api, baseQuery) {
   // Approve the same displayed rate the admin reviewed.
   const comparable = row.entity === 'services' ? ['basePrice'] : row.entity === 'surcharges' ? ['value'] : row.entity === 'exceptions' ? ['standardPrice', 'exceptionPrice'] : [];
   if (comparable.some((key) => row[key] == null || current[key] !== row[key])) return { error: { status: 'CUSTOM_ERROR', error: 'The rate changed. Refresh before continuing.' } };
-  const result = await baseQuery({ url: path + '/' + action, method: 'POST', ...(action !== 'duplicate' ? { body: {} } : {}) });
+  if (action === 'submit' && (!row.updatedAt || current.updatedAt !== row.updatedAt)) return { error: { status: 'CUSTOM_ERROR', error: 'The draft changed. Refresh before submitting.' } };
+  const result = await baseQuery({ url: path + '/' + action, method: 'POST', ...(!['duplicate', 'submit'].includes(action) ? { body: {} } : {}) });
   if (result.error) return result;
   const savedDto = pricingRecord(result.data, row.entity), id = action === 'duplicate' ? text(savedDto.id) : row.id;
   const unconfirmed = () => ({ error: { status: 'CUSTOM_ERROR', error: 'The pricing change was sent but could not be confirmed. Refresh before trying again.' } });
-  const status = { duplicate: 'DRAFT', activate: 'ACTIVE', deactivate: 'INACTIVE', approve: 'APPROVED' }[action];
+  const status = { duplicate: 'DRAFT', submit: 'PENDING_APPROVAL', activate: 'ACTIVE', deactivate: 'INACTIVE', approve: 'APPROVED' }[action];
   const responseRow = adapters[row.entity](savedDto);
   if (!sameSession() || !id || savedDto.id !== id || responseRow.statusCode !== status || comparable.some((key) => responseRow[key] !== current[key]) || action === 'duplicate' && (id === row.id || !text(savedDto.code))) return unconfirmed();
   const confirmation = await pricingRecordSnapshot(row.entity, id, baseQuery, api.signal);
   if (confirmation.error || !sameSession()) return unconfirmed();
   const saved = confirmation.data;
   if (saved.id !== id || saved.statusCode !== status || comparable.some((key) => saved[key] !== current[key])) return unconfirmed();
+  if (action === 'submit' && saved.requesterId !== admin.id) return unconfirmed();
   return { data: saved };
 }
 
@@ -346,6 +351,57 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
         return adaptAdminPricingService(dto);
       }, providesTags: ['AdminPricing'],
     }),
+    getAdminPricingServiceFormOptions: builder.query({
+      async queryFn({ owner, role }, api, _options, baseQuery) {
+        const current = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken && owner) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        try {
+          if (!current()) throw new Error('The session changed. Reopen Pricing before continuing.');
+          const result = await baseQuery({ url: '/admin/pricing/options' });
+          if (!current()) throw new Error('The session changed. Reopen Pricing before continuing.');
+          if (result.error) return result;
+          return { data: adaptPricingFormOptions(unwrapApiResponseData(result.data)) };
+        } catch (error) { return { error: { status: 'CUSTOM_ERROR', error: error.message } }; }
+      },
+    }),
+    saveAdminPricingService: builder.mutation({
+      async queryFn({ owner, role, id, fields, expectedUpdatedAt }, api, _options, baseQuery) {
+        const current = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken && owner) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const fail = error => ({ error: { status: 'CUSTOM_ERROR', error } });
+        try {
+          if (!current() || !pricingServiceRoles.has(role)) return fail('Your session or admin role cannot save service pricing.');
+          const body = serviceBody(fields, !id), root = '/admin/pricing/services';
+          if (id) {
+            const before = await baseQuery({ url: root + '/' + encodeURIComponent(id) });
+            if (!current()) return fail('The session changed. Reload before continuing.');
+            if (before.error) return before;
+            const dto = pricingRecord(before.data, 'services');
+            if (dto.id !== id || dto.status !== 'DRAFT' || !text(expectedUpdatedAt) || !Number.isFinite(Date.parse(expectedUpdatedAt)) || dto.updatedAt !== expectedUpdatedAt) return fail('Only an unchanged draft can be edited. Reload before saving.');
+            if (body.cargoType && dto.cargoType !== body.cargoType) {
+              const incompatible = body.cargoType === 'CONTAINER' ? ['truckTypeId'] : ['containerSizeId', 'containerTypeId'];
+              if (incompatible.some(key => !Object.hasOwn(dto, key) || dto[key] !== null)) return fail('The existing equipment criteria cannot be safely cleared when changing cargo type. Keep the current cargo type or create a separate draft.');
+            }
+          }
+          const result = await baseQuery({ url: root + (id ? '/' + encodeURIComponent(id) : ''), method: id ? 'PATCH' : 'POST', body });
+          if (!current()) return fail('The session changed. Refresh before trying again.');
+          if (result.error) return result;
+          const dto = pricingRecord(result.data, 'services'), savedId = id || text(dto.id);
+          if (!savedId || dto.id !== savedId) return fail('The save returned no confirmed service ID. Refresh before trying again.');
+          const matches = raw => {
+            const core = serviceCore(raw);
+            return raw.id === savedId && text(raw.code) && raw.status === 'DRAFT' && raw.currency === 'NGN'
+              && Object.entries(body).every(([key, value]) => Object.hasOwn(core, key) && core[key] === value);
+          };
+          let saved = dto;
+          if (!matches(saved)) {
+            const reread = await baseQuery({ url: root + '/' + encodeURIComponent(savedId) });
+            if (!current()) return fail('The session changed. Refresh before trying again.');
+            if (reread.error) return fail('The save was sent, but its saved fields could not be confirmed. Refresh before trying again.');
+            saved = pricingRecord(reread.data, 'services');
+          }
+          return matches(saved) ? { data: adaptAdminPricingService(saved) } : fail('The save was sent, but its saved fields could not be confirmed. Refresh before trying again.');
+        } catch (error) { return fail(error.message); }
+      }, invalidatesTags: ['AdminPricing'],
+    }),
     changeAdminPricingRecord: builder.mutation({
       queryFn: (args, api, _options, baseQuery) => changePricingRecord(args, api, baseQuery),
       invalidatesTags: ['AdminPricing'],
@@ -390,4 +446,4 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
 });
 export const { useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useUpdateAdminPricingConfigMutation, useUpdateAdminPricingTerminalRateMutation, useUpdateAdminPricingSurchargeMutation,
   useGetAdminPricingSummaryQuery, useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
-  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery, useGetAdminPricingServiceQuery, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation } = pricingApi;
+  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery, useGetAdminPricingServiceQuery, useGetAdminPricingServiceFormOptionsQuery, useSaveAdminPricingServiceMutation, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation } = pricingApi;

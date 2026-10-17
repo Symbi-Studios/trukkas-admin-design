@@ -87,7 +87,7 @@ export function Forwarders() {
   async function exportReport() {
     if (reportState.isLoading) return;
     try {
-      const file = await downloadReport().unwrap(), link = document.createElement('a');
+      const file = await downloadReport({ owner }).unwrap(), link = document.createElement('a');
       link.href = file.url; link.download = file.name; document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(file.url), 1000);
       if (typeof STATS.total === 'number' && STATS.total > 1000) setNotice({ tone: 'info', text: 'The PDF report includes the newest 1,000 forwarders.' });

@@ -20,7 +20,7 @@ export function auditPeriod(value, now = new Date()) {
   start.setUTCDate(start.getUTCDate() - (value === 'Last 30 Days' ? 29 : 6));
   return { dateFrom: value === 'This Month' ? dateTo.slice(0, 8) + '01' : start.toISOString().slice(0, 10), dateTo };
 }
-const serializeAuditQuery = args => defaultSerializeQueryArgs(args) + ':v2';
+const serializeAuditQuery = args => defaultSerializeQueryArgs(args) + ':v3';
 function scopedAuditQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
@@ -34,13 +34,14 @@ function scopedAuditQuery(baseQuery, api, args = {}) {
   };
 }
 export function auditTabAvailable(tab, rows = []) {
-  if (!['All Logs', 'User Actions', 'Data Changes', 'Security Events', 'Login History'].includes(tab)) return false;
+  if (!['All Logs', 'User Actions', 'System Events', 'Data Changes', 'Security Events', 'Login History'].includes(tab)) return false;
   if (['Data Changes', 'Security Events', 'Login History'].includes(tab) && rows.some((row) => row.categories == null)) return false;
   if (tab === 'Login History' && rows.some((row) => row.categories?.includes('SECURITY') && row.moduleCode == null)) return false;
   return true;
 }
 export function auditMatchesTab(row, tab) {
   if (tab === 'All Logs') return true;
+  if (tab === 'System Events') return row.isSystemEvent === true;
   if (tab === 'User Actions') return row.isUserAction;
   if (tab === 'Data Changes') return row.categories?.includes('DATA_CHANGE');
   if (tab === 'Security Events') return row.categories?.includes('SECURITY');
@@ -90,6 +91,7 @@ function relatedRecord(dto, index = 0) {
     DRIVER: { icon: 'user', label: 'Driver', path: `/drivers/detail?id=${encoded}` },
     COMPANY: { icon: 'building-2', label: 'Company', path: `/companies/detail?id=${encoded}` },
     FORWARDER: { icon: 'user', label: 'Forwarder', path: `/forwarders/detail?id=${encoded}` },
+    ANNOUNCEMENT: { icon: 'file-text', label: 'Announcement', path: `/announcements/detail?announcementId=${encoded}` },
     MAINTENANCE: { icon: 'file-text', label: 'Maintenance', path: `/maintenance/detail?id=${encoded}` },
   };
   let target = targets[type];
@@ -133,28 +135,37 @@ export function adaptAdminAudit(source, { detail = false } = {}) {
     related: detail ? validRelated ? dto.relatedRecords.map(relatedRecord) : null : primary ? [primary] : null,
   };
 }
-function readPage(response, requestedPage) {
+export function adaptSystemEvent(source) {
+  const dto = record(source);
+  const row = adaptAdminAudit({ id: dto.id, createdAt: dto.timestamp, action: dto.action, actionCode: dto.actionCode,
+    module: dto.module, description: dto.description, result: dto.result, relatedRecords: dto.relatedRecords }, { detail: true });
+  // This endpoint contains SYSTEM actors only. It supplies no admin identity,
+  // browser session, IP, location or before/after snapshots.
+  return { ...row, isSystemEvent: true, user: 'System', reference: text(dto.reference) || '—' };
+}
+function readPage(response, requestedPage, systemEvents = false) {
   const dto = record(unwrapApiResponseData(response)), pagination = record(dto.pagination);
-  if (!Array.isArray(dto.logs) || pagination.page !== requestedPage || count(pagination.total) == null
+  const entries = systemEvents ? dto.events : dto.logs;
+  if (!Array.isArray(entries) || pagination.page !== requestedPage || count(pagination.total) == null
     || count(pagination.totalPages) == null || (pagination.total > 0 && pagination.totalPages === 0)) {
     return failure('The audit API response is missing the logs or pagination needed to load all records.');
   }
   const size = count(pagination.limit);
-  if (!size || size > 100 || pagination.totalPages > 500 || Math.max(1, pagination.totalPages) !== Math.max(1, Math.ceil(pagination.total / size)) || dto.logs.length !== Math.max(0, Math.min(size, pagination.total - (requestedPage - 1) * size))) return failure('The audit API returned an incomplete page or inconsistent pagination.');
-  const ids = dto.logs.map((row) => text(row?.id));
-  if (dto.logs.length > pagination.total || (pagination.total === 0 && pagination.totalPages > 1)
+  if (!size || size > 100 || pagination.totalPages > 500 || Math.max(1, pagination.totalPages) !== Math.max(1, Math.ceil(pagination.total / size)) || entries.length !== Math.max(0, Math.min(size, pagination.total - (requestedPage - 1) * size))) return failure('The audit API returned an incomplete page or inconsistent pagination.');
+  const ids = entries.map((row) => text(row?.id));
+  if (entries.length > pagination.total || (pagination.total === 0 && pagination.totalPages > 1)
     || requestedPage > Math.max(1, pagination.totalPages)) return failure('The audit API returned inconsistent pagination.');
   if (ids.some((id) => !id) || new Set(ids).size !== ids.length) return failure('The audit API returned missing or duplicate audit IDs.');
-  return { data: { rows: dto.logs.map((row) => adaptAdminAudit(row)), total: pagination.total, totalPages: Math.max(1, pagination.totalPages) } };
+  return { data: { rows: entries.map((row) => systemEvents ? adaptSystemEvent(row) : adaptAdminAudit(row)), total: pagination.total, totalPages: Math.max(1, pagination.totalPages) } };
 }
-async function readAuditDirectory(baseQuery, params, api) {
+async function readAuditDirectory(baseQuery, params, api, systemEvents = false) {
   const rows = [], seen = new Set();
   let page = 1, total = null, totalPages = 1;
   do {
     if (api.signal.aborted || page > 500) return failure('The audit request was cancelled.');
-    const result = await baseQuery({ url: '/admin/audit-logs', params: { ...params, page, limit: 100, sort: '-createdAt' } });
+    const result = await baseQuery({ url: systemEvents ? '/admin/system-events' : '/admin/audit-logs', params: { ...params, page, limit: 100, ...(!systemEvents ? { sort: '-createdAt' } : {}) } });
     if (result.error) return result;
-    const parsed = readPage(result.data, page);
+    const parsed = readPage(result.data, page, systemEvents);
     if (parsed.error) return parsed;
     const data = parsed.data;
     if (total != null && (data.total !== total || data.totalPages !== totalPages)) return failure('The audit log collection changed while loading. Refresh before filtering or exporting.');
@@ -183,13 +194,12 @@ function adaptSummary(response) {
   const dto = record(unwrapApiResponseData(response)), values = {}, comparisons = {};
   for (const key of ['totalLogs', 'activeUsers', 'securityEvents', 'failedActions']) {
     const metric = record(dto[key]);
-    // The docs name these metrics and comparison fields but omit a 200 schema.
-    // Accept a numeric metric or its explicit value; never invent a count.
-    values[key] = count(typeof dto[key] === 'number' ? dto[key] : metric.value);
+    values[key] = count(metric.value);
     const previous = count(metric.previous), change = number(metric.changePercent);
     const direction = ['UP', 'DOWN', 'FLAT'].includes(metric.direction) ? metric.direction : null;
-    const consistent = change != null && ((change > 0 && direction === 'UP') || (change < 0 && direction === 'DOWN') || (change === 0 && direction === 'FLAT'));
-    comparisons[key] = values[key] != null && previous != null && previous > 0 && consistent
+    const expectedDirection = values[key] == null || previous == null ? null : values[key] > previous ? 'UP' : values[key] < previous ? 'DOWN' : 'FLAT';
+    const consistent = direction === expectedDirection && change != null && (change === 0 || change > 0 && direction === 'UP' || change < 0 && direction === 'DOWN');
+    comparisons[key] = values[key] != null && previous != null && (previous > 0 || values[key] === 0) && consistent
       ? { percent: Math.abs(change), direction: direction === 'FLAT' ? null : direction.toLowerCase() }
       : { percent: null, direction: null };
   }
@@ -204,6 +214,14 @@ export const auditApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminAuditLogs
         baseQuery = scopedAuditQuery(baseQuery, api, params);
         if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return permissionError();
         return readAuditDirectory(baseQuery, { ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}), ...(params.dateTo ? { dateTo: params.dateTo } : {}) }, api);
+      }, providesTags: ['AdminAuditLogs'],
+    }),
+    getAdminSystemEvents: builder.query({
+      serializeQueryArgs: serializeAuditQuery,
+      queryFn(params = {}, api, _options, baseQuery) {
+        baseQuery = scopedAuditQuery(baseQuery, api, params);
+        if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return permissionError();
+        return readAuditDirectory(baseQuery, { ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}), ...(params.dateTo ? { dateTo: params.dateTo } : {}) }, api, true);
       }, providesTags: ['AdminAuditLogs'],
     }),
     getAdminAuditScreenSummary: builder.query({
@@ -232,4 +250,4 @@ export const auditApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminAuditLogs
     }),
   }),
 });
-export const { useGetAdminAuditDirectoryQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery } = auditApi;
+export const { useGetAdminAuditDirectoryQuery, useGetAdminSystemEventsQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery } = auditApi;

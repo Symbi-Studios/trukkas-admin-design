@@ -40,14 +40,14 @@ export function SettingsSecurityAlerts() {
   const editor = useSettingsEditor('security-alerts');
   const [dialog, setDialog] = useState(null);
   const openEvents = (type) => setDialog({ admin: editor.admin, kind: 'events', type });
-  const toggleSecurityAlertChannel = () => editor.unavailable('Toggle Security Alert Channel');
+  const toggleSecurityAlertChannel = (key, channel, value) => editor.changeEvent(securityAlertControls.find(event => event.key === key), channel, value);
   const updateAlertDelivery = editor.change('settingsAlertDelivery');
   const updateSecurityAlertsQuietHours = editor.change('settingsSecurityAlertsQuietHours');
   const saveSecurityAlertsSettings = () => editor.save();
   const resetSecurityAlertsSettings = () => editor.unavailable('Reset Security Alerts Settings');
   const securityAlertsStatus = editor.status(securityAlertsStatusTemplate);
   const recentSecurityAlerts = editor.events;
-  const events = securityAlertControls.map(({ key, icon, label, description }) => ({ key, icon, label, description, inApp: null, email: null, sms: null }));
+  const events = securityAlertControls.map(({ key, icon, label, description }) => ({ key, icon, label, description, ...editor.event({ key, label }) }));
   const delivery = editor.group('settingsAlertDelivery');
   const quiet = editor.group('settingsSecurityAlertsQuietHours');
   const meta = editor.group('settingsMeta');

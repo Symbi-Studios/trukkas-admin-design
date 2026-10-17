@@ -232,12 +232,12 @@ function TripAllocation({ payout }) {
   return (
     <SectionCard
       title={`Trip Allocation (${payout.allocations?.length ?? "—"})`}
-      description="The company is paid once for the job, with the gross amount allocated across its truck trips."
+      description="This wallet payout is attributed to job earnings oldest-first (FIFO); each allocation belongs to a job."
     >
       <div style={{ display: "grid", gap: "var(--tk-space-2)" }}>
         {(payout.allocations || []).map((allocation) => (
           <div
-            key={allocation.tripId}
+            key={allocation.key}
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(120px,1fr) minmax(110px,1fr) auto",
@@ -253,8 +253,8 @@ function TripAllocation({ payout }) {
                 to={`${payoutJobUrl(allocation.jobId || payout.jobId)}${allocation.tripId ? `&tripId=${encodeURIComponent(allocation.tripId)}` : ""}`}
                 className="tk-mono"
               >
-                {allocation.tripId ?? "—"}
-              </Link> : <span className="tk-mono">{allocation.tripId ?? "—"}</span>}
+                {allocation.tripLabel ?? allocation.tripId ?? "—"}
+              </Link> : <span className="tk-mono">{allocation.tripLabel ?? allocation.tripId ?? "—"}</span>}
               <span className="tk-meta" style={{ display: "block" }}>
                 {allocation.trip?.truckPlate ?? "—"}
               </span>
@@ -282,8 +282,8 @@ function TripAllocation({ payout }) {
         }
       >
         {payout.reconciliation?.ok == null ? "—" : payout.reconciliation.ok
-          ? "Gross allocations and net payout reconcile."
-          : payout.reconciliation?.issues?.join(" ")}
+          ? "The job earnings allocations cover the gross wallet payout."
+          : (payout.reconciliation?.issues?.join(" ") || "Some payout funds are not attributable to job earnings.")}
       </Banner>
     </SectionCard>
   );
@@ -1421,7 +1421,7 @@ export function PayoutDetail() {
                 </Button>
                 {r.approvalReady === false && r.partyType === "company" && (
                   <span className="tk-meta">
-                    Complete and reconcile every included trip before approving
+                    Review bank details, reserved wallet funds and open issues before approving
                     this payout.
                   </span>
                 )}

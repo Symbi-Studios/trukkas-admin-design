@@ -1,8 +1,9 @@
+import { payoutAllocationContext } from '../payouts/payoutAllocationContracts.js';
+
 const text = value => typeof value === 'string' && value.trim() ? value.trim() : null;
 const number = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
 const amount = value => number(value) != null && value >= 0 ? value : null;
-const close = (left, right) => Math.abs(left - right) <= 0.01;
 
 export function companyCardComparison(raw, current, validDate) {
   const previous = amount(raw?.previous), change = number(raw?.changePercent);
@@ -15,7 +16,7 @@ export function companyCardComparison(raw, current, validDate) {
 
 export function companyPerformancePage(dto, page, limit) {
   const pagination = dto?.pagination;
-  if (!Array.isArray(dto?.rankings) || count(pagination?.page) !== page || pagination?.limit !== limit
+  if (dto?.metric !== 'performance' || dto.period !== 'thisMonth' || !Array.isArray(dto?.rankings) || count(pagination?.page) !== page || pagination?.limit !== limit
     || count(pagination.total) == null || count(pagination.totalPages) == null
     || pagination.totalPages !== Math.ceil(pagination.total / limit) && !(pagination.total === 0 && pagination.totalPages === 1)
     || dto.rankings.length !== Math.min(limit, Math.max(0, pagination.total - (page - 1) * limit))) throw new Error('The company performance response is missing the requested rankings or pagination.');
@@ -29,18 +30,6 @@ export function companyPerformancePage(dto, page, limit) {
 }
 
 export function companyPayoutAllocation(dto) {
-  const empty = { jobId: '—', jobDatabaseId: null, tripIds: null, tripCount: null, reconciliation: { ok: null } };
-  if (dto?.currency !== 'NGN' || dto.allocationMethod !== 'FIFO' || !Array.isArray(dto.allocations)) return empty;
-  const allocations = dto.allocations;
-  if (allocations.some(row => !text(row?.jobId) || amount(row?.amount) == null)) return empty;
-  const allocated = amount(dto.allocatedAmount), unallocated = amount(dto.unallocatedAmount), gross = amount(dto.grossAmount);
-  if (allocated == null || unallocated == null || gross == null
-    || !close(allocations.reduce((sum, row) => sum + row.amount, 0), allocated) || !close(allocated + unallocated, gross)) return empty;
-  const jobs = new Map(allocations.map(row => [row.jobId, text(row.jobNumber) || row.jobId]));
-  const tookNoMoney = ['REJECTED', 'FAILED', 'REVERSED'].includes(dto.payoutStatus) || dto.reviewStatus === 'REJECTED';
-  const balanced = !tookNoMoney && typeof dto.balanced === 'boolean' && dto.balanced === (unallocated === 0) ? dto.balanced : null;
-  const truckTrips = count(dto.truckTripsIncluded);
-  return { jobId: jobs.size ? [...jobs.values()].join(', ') : '—', jobDatabaseId: jobs.size === 1 ? [...jobs.keys()][0] : null,
-    // Backend defines one truck trip per allocated job; tripIds are container IDs.
-    tripIds: null, tripCount: truckTrips != null && truckTrips === jobs.size ? truckTrips : null, reconciliation: { ok: balanced } };
+  const context = payoutAllocationContext(dto);
+  return { jobId: context.jobLabel, jobDatabaseId: context.jobId, tripIds: context.tripIds, tripCount: context.truckTripCount, reconciliation: context.reconciliation };
 }

@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js';
 import { forwarderJobBody } from './forwarderJobContracts.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -101,6 +102,29 @@ function editableProfile(dto) {
     servicesOffered: strings(b.servicesOffered), coverageArea: strings(b.coverageArea), preferredCargoTypes: strings(b.preferredCargoTypes), preferredRoutes: strings(b.preferredRoutes), partnerNetwork: strings(b.partnerNetwork),
     otherInformation: text(b.otherInformation), emergencyContactName: text(dto.emergencyContact?.name), emergencyContactPhone: text(dto.emergencyContact?.phone) };
 }
+const profileFieldPaths = {
+  ...Object.fromEntries(['firstName', 'middleName', 'lastName', 'dateOfBirth', 'gender', 'nationality', 'alternatePhone', 'languages'].map(key => [key, ['details', 'personal', key]])),
+  ...Object.fromEntries(['businessName', 'cacNumber', 'taxId', 'website', 'businessType', 'yearsExperience', 'servicesOffered', 'coverageArea', 'preferredCargoTypes', 'preferredRoutes', 'partnerNetwork', 'otherInformation'].map(key => [key, ['business', key]])),
+  businessAddress: ['business', 'address'], forwardingLicenseNumber: ['business', 'forwardingLicense', 'number'], forwardingLicenseExpiry: ['business', 'forwardingLicense', 'expiresAt'],
+  exportLicenseNumber: ['business', 'exportLicense', 'number'], exportLicenseExpiry: ['business', 'exportLicense', 'expiresAt'],
+  emergencyContactName: ['emergencyContact', 'name'], emergencyContactPhone: ['emergencyContact', 'phone'],
+};
+function confirmedProfileUpdate(dto, id, changes, expectedVersion) {
+  const profile = dto?.profile, keys = Object.keys(changes);
+  if (profile?.id !== id || profile.role !== 'FORWARDER' || !timestamp(profile.version) || profile.version === expectedVersion
+    || !Array.isArray(dto.changedFields) || !dto.changedFields.every(key => text(key)) || new Set(dto.changedFields).size !== dto.changedFields.length
+    || !keys.every(key => dto.changedFields.includes(key))) return false;
+  const saved = editableProfile(profile);
+  return keys.every(key => {
+    let value = profile;
+    for (const part of profileFieldPaths[key]) {
+      if (!value || typeof value !== 'object' || !Object.hasOwn(value, part)) return false;
+      value = value[part];
+    }
+    const expected = changes[key] == null && arrayForwarderFields.has(key) ? [] : changes[key];
+    return JSON.stringify(saved[key]) === JSON.stringify(expected);
+  });
+}
 const unconfirmed = message => ({ error: { status: 'CUSTOM_ERROR', error: message, saveUnconfirmed: true } });
 async function writeForwarder(baseQuery, api, request, confirm) {
   const auth = api.getState().auth, owner = auth.admin?.id;
@@ -114,16 +138,38 @@ async function writeForwarder(baseQuery, api, request, confirm) {
   const dto = unwrapApiResponseData(result.data);
   return confirm(dto) ? { data: dto } : unconfirmed('The request was sent, but the saved result could not be confirmed. Close this form and refresh before trying again.');
 }
-function documentedPage(response, matchesRow, description) {
+function documentedPage(response, collection, matchesRow, description) {
   const dto = unwrapApiResponseData(response);
   if (!dto || typeof dto !== 'object' || Array.isArray(dto)) throw new Error(description + ' could not be loaded. Please try again.');
-  // The new routes document row fields but not collection wrappers. Read only
-  // one unambiguous collection and one complete pagination object.
-  const collections = Object.values(dto).filter(value => Array.isArray(value) && value.every(matchesRow));
-  const pages = Object.values(dto).filter(value => value && typeof value === 'object' && !Array.isArray(value)
-    && ['page', 'limit', 'total', 'totalPages'].every(key => count(value[key]) != null));
-  if (collections.length !== 1 || pages.length !== 1) throw new Error(description + ' returned an incomplete response. Please try again.');
-  return { rows: collections[0], pagination: pages[0] };
+  const rows = dto[collection], pagination = dto.pagination;
+  if (!Array.isArray(rows) || !rows.every(matchesRow) || !pagination || Array.isArray(pagination)
+    || !['page', 'limit', 'total', 'totalPages'].every(key => count(pagination[key]) != null)
+    || pagination.limit < 1 || pagination.limit > 100) throw new Error(description + ' returned an incomplete response. Please try again.');
+  return { rows, pagination };
+}
+function confirmedInvitation(dto) {
+  const invitation = dto?.invitation;
+  if (!text(dto?.id) || dto.status !== 'PENDING_PROFILE' || typeof invitation?.sent !== 'boolean') return false;
+  if (!invitation.sent) return Boolean(text(invitation.error));
+  return typeof invitation.sentVia?.sms === 'boolean' && typeof invitation.sentVia?.email === 'boolean'
+    && (invitation.sentVia.sms || invitation.sentVia.email) && Boolean(timestamp(invitation.expiresAt));
+}
+function confirmedBulkVerification(dto, userIds) {
+  if (!Array.isArray(dto?.results) || dto.results.length !== userIds.length
+    || new Set(dto.results.map(row => row?.userId)).size !== userIds.length) return false;
+  const outcomes = { VERIFIED: 0, NOTHING_TO_VERIFY: 0, FAILED: 0 };
+  for (const row of dto.results) {
+    if (!userIds.includes(row?.userId) || !Object.hasOwn(outcomes, row.outcome) || !Array.isArray(row.approved)
+      || new Set(row.approved).size !== row.approved.length || row.approved.some(check => !['EXPORT_LICENSE', 'ADDRESS'].includes(check))) return false;
+    if (row.outcome === 'FAILED') { if (!text(row.error) || row.approved.length) return false; }
+    else {
+      if (!['kycStatus', 'exporterLicenseStatus', 'addressVerificationStatus', 'ninVerificationStatus', 'bvnVerificationStatus'].every(key => text(row.verification?.[key]))) return false;
+      if (row.outcome === 'VERIFIED' ? !row.approved.length : row.approved.length || !text(row.note)) return false;
+    }
+    outcomes[row.outcome] += 1;
+  }
+  return dto.totals?.requested === userIds.length && dto.totals.verified === outcomes.VERIFIED
+    && dto.totals.nothingToVerify === outcomes.NOTHING_TO_VERIFY && dto.totals.failed === outcomes.FAILED;
 }
 async function readAllPages(baseQuery, url, collection, params = {}, signal) {
   const rows = [], seen = new Set();
@@ -181,31 +227,37 @@ export const forwardersApi = baseApi.injectEndpoints({
       }, providesTags: ['AdminForwarders'],
     }),
     downloadAdminForwarderReport: builder.query({
-      async queryFn(_args, _api, _options, baseQuery) {
+      async queryFn({ owner } = {}, api, _options, baseQuery) {
+        const sameSession = () => !api.signal.aborted && owner && api.getState().auth.admin?.id === owner && api.getState().auth.accessToken;
+        if (!sameSession()) return failure('Sign in before downloading the forwarders report.');
         const result = await baseQuery({ url: '/admin/users/forwarders/report', params: { format: 'pdf' }, headers: { Accept: 'application/pdf' }, responseHandler: async response => {
           if (response.ok) return response.blob();
           const body = await response.text();
           try { return JSON.parse(body); } catch { return { message: 'Unable to download the forwarders report.' }; }
         } });
         if (result.error) return result;
-        if (!(result.data instanceof Blob) || await result.data.slice(0, 5).text() !== '%PDF-') return failure('The server did not return a valid forwarders PDF report.');
-        return { data: { url: URL.createObjectURL(result.data), name: 'forwarders-report.pdf' } };
+        if (!sameSession()) return failure('The session changed. Sign in before downloading the report.');
+        if (!await isPdfAttachment(result.data)) return failure('The server did not return a valid forwarders PDF report.');
+        if (!sameSession()) return failure('The session changed. Sign in before downloading the report.');
+        const headers = result.meta?.response?.headers, serverDate = headers?.get('date');
+        const reportDate = serverDate && Number.isFinite(Date.parse(serverDate)) ? new Date(serverDate) : new Date();
+        return { data: { url: URL.createObjectURL(result.data), name: pdfAttachmentFilename(headers, 'forwarders-' + reportDate.toISOString().slice(0, 10) + '.pdf') } };
       }, keepUnusedDataFor: 0,
     }),
     getAdminForwarderRankings: builder.query({
       query: ({ page = 1, limit = 20 } = {}) => ({ url: '/admin/users/forwarders/rankings', params: { page, limit, sort: 'spend' } }),
       transformResponse: (response, _meta, { page = 1 } = {}) => {
-        const dto = documentedPage(response, row => text(row?.forwarderId) && count(row.rank) > 0, 'Spending rankings');
+        const dto = documentedPage(response, 'rankings', row => text(row?.forwarderId) && count(row.rank) > 0, 'Spending rankings');
         const rows = dto.rows.map(row => ({ ...row, id: row.forwarderId }));
-        if (!validPage({ rankings: rows, pagination: dto.pagination }, 'rankings', page) || new Set(rows.map(row => row.rank)).size !== rows.length) throw new Error('The rankings response has invalid records or pagination.');
+        if (!validPage({ rankings: rows, pagination: dto.pagination }, 'rankings', page) || rows.length !== Math.max(0, Math.min(dto.pagination.limit, dto.pagination.total - (page - 1) * dto.pagination.limit)) || new Set(rows.map(row => row.rank)).size !== rows.length) throw new Error('The rankings response has invalid records or pagination.');
         return { rows: rows.map(row => ({ id: row.id, rank: row.rank, name: text(row.name) || '—', spend: row.currency === 'NGN' ? nonNegative(row.totalSpend) : null })), pagination: dto.pagination };
       }, providesTags: ['AdminForwarders'],
     }),
     getAdminForwarderNotes: builder.query({
       query: ({ id, page = 1, limit = 20 }) => ({ url: userPath(id) + '/notes', params: { page, limit } }),
       transformResponse: (response, _meta, { page = 1 }) => {
-        const dto = documentedPage(response, row => text(row?.id) && Object.hasOwn(row, 'body') && Object.hasOwn(row, 'createdAt'), 'Forwarder notes');
-        if (!validPage({ notes: dto.rows, pagination: dto.pagination }, 'notes', page)) throw new Error('The notes response has invalid records or pagination.');
+        const dto = documentedPage(response, 'notes', row => text(row?.id) && Object.hasOwn(row, 'body') && Object.hasOwn(row, 'createdAt'), 'Forwarder notes');
+        if (!validPage({ notes: dto.rows, pagination: dto.pagination }, 'notes', page) || dto.rows.length !== Math.max(0, Math.min(dto.pagination.limit, dto.pagination.total - (page - 1) * dto.pagination.limit))) throw new Error('The notes response has invalid records or pagination.');
         return { rows: dto.rows.map(row => ({ id: row.id, body: text(row.body) || '—', admin: text(row.admin?.name) || '—', createdAt: forwarderDate(row.createdAt), updatedAt: forwarderDate(row.updatedAt) })), pagination: dto.pagination };
       }, providesTags: ['AdminForwarders'],
     }),
@@ -221,8 +273,7 @@ export const forwardersApi = baseApi.injectEndpoints({
         if (!body.firstName || !body.lastName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email || '') || !body.phone || !body.dateOfBirth || forwarderDate(body.dateOfBirth) === '—') return failure('Enter a name, valid email, phone number and date of birth.');
         const cutoff = new Date(); cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 18);
         if (Date.parse(body.dateOfBirth) > cutoff.getTime()) return failure('The forwarder must be at least 18 years old.');
-        return writeForwarder(baseQuery, api, { url: '/admin/users/forwarders', method: 'POST', body }, dto => text(dto?.id) && dto.status === 'PENDING_PROFILE' && typeof dto.invitation?.sent === 'boolean'
-          );
+        return writeForwarder(baseQuery, api, { url: '/admin/users/forwarders', method: 'POST', body }, confirmedInvitation);
       }, invalidatesTags: ['AdminForwarders'],
     }),
     updateAdminForwarder: builder.mutation({
@@ -237,22 +288,20 @@ export const forwardersApi = baseApi.injectEndpoints({
           if ((key === 'dateOfBirth' || key.endsWith('Expiry')) && body[key] != null && forwarderDate(body[key]) === '—') return failure('Enter valid dates.');
         }
         body.expectedVersion = expectedVersion;
-        return writeForwarder(baseQuery, api, { url: userPath(id) + '/forwarder', method: 'PATCH', body }, dto => dto?.profile?.id === id && dto.profile.role === 'FORWARDER' && timestamp(dto.profile.version)
-          && dto.profile.version !== expectedVersion && Array.isArray(dto.changedFields) && Object.keys(changes).every(key => dto.changedFields.includes(key)));
+        const savedFields = { ...body }; delete savedFields.expectedVersion;
+        return writeForwarder(baseQuery, api, { url: userPath(id) + '/forwarder', method: 'PATCH', body }, dto => confirmedProfileUpdate(dto, id, savedFields, expectedVersion));
       }, invalidatesTags: ['AdminForwarders'],
     }),
     verifyAdminForwarders: builder.mutation({
       async queryFn({ userIds, reason, idempotencyKey }, api, _options, baseQuery) {
         if (!Array.isArray(userIds) || !userIds.length || userIds.length > 100 || userIds.some(id => !text(id)) || new Set(userIds).size !== userIds.length || !text(idempotencyKey)) return failure('Select 1–100 forwarders.');
-        return writeForwarder(baseQuery, api, { url: '/admin/users/forwarders/verify-bulk', method: 'POST', body: { userIds, ...(text(reason) ? { reason: reason.trim() } : {}), idempotencyKey } }, dto => Array.isArray(dto?.results)
-          && dto.results.length === userIds.length && new Set(dto.results.map(row => row.userId)).size === userIds.length
-          && dto.results.every(row => userIds.includes(row.userId) && ['VERIFIED', 'NOTHING_TO_VERIFY', 'FAILED'].includes(row.outcome)));
+        return writeForwarder(baseQuery, api, { url: '/admin/users/forwarders/verify-bulk', method: 'POST', body: { userIds, ...(text(reason) ? { reason: reason.trim() } : {}), idempotencyKey } }, dto => confirmedBulkVerification(dto, userIds));
       }, invalidatesTags: ['AdminForwarders'],
     }),
     requestAdminForwarderVerification: builder.mutation({
       async queryFn({ id, checkType, reason }, api, _options, baseQuery) {
         if (!text(id) || !['NATIONAL_ID', 'ADDRESS', 'EXPORT_LICENSE'].includes(checkType) || !text(reason)) return failure('Select a supported verification check and enter a reason.');
-        return writeForwarder(baseQuery, api, { url: userPath(id) + '/verification-requests', method: 'POST', body: { checkType, reason: reason.trim() } }, dto => text(dto?.id) && dto.userId === id && dto.checkType === checkType && dto.status === 'REQUESTED' && timestamp(dto.createdAt));
+        return writeForwarder(baseQuery, api, { url: userPath(id) + '/verification-requests', method: 'POST', body: { checkType, reason: reason.trim() } }, dto => text(dto?.id) && dto.userId === id && dto.checkType === checkType && dto.status === 'REQUESTED' && dto.reason === reason.trim() && text(dto.caseId) && timestamp(dto.createdAt));
       }, invalidatesTags: ['AdminForwarders'],
     }),
     getAdminForwarderJobOptions: builder.query({
@@ -288,7 +337,8 @@ export const forwardersApi = baseApi.injectEndpoints({
         if (api.getState().auth.admin?.id !== owner) return failure('The session changed. Reopen the form.');
         if (dto?.id !== body.forwarderId || dto.role !== 'FORWARDER' || dto.status !== 'ACTIVE') return failure('Jobs can only be created for an active forwarder.');
         if (body.movementType === 'EXPORT' && dto.details?.exporterLicense?.status !== 'VERIFIED' && dto.exporterLicenseStatus !== 'VERIFIED') return failure('Export jobs require an approved exporter license.');
-        return writeForwarder(baseQuery, api, { url: '/admin/jobs', method: 'POST', body }, saved => text(saved?.id) && text(saved.jobNumber) && text(saved.status));
+        return writeForwarder(baseQuery, api, { url: '/admin/jobs', method: 'POST', body }, saved => text(saved?.id) && text(saved.jobNumber) && text(saved.status)
+          && saved.forwarderId === body.forwarderId && saved.createdByAdminId === owner && saved.job?.id === saved.id && saved.job.jobNumber === saved.jobNumber && saved.job.status === saved.status);
       }, invalidatesTags: ['AdminForwarders', 'AdminJobs'],
     }),
     getAdminForwarderProfile: builder.query({

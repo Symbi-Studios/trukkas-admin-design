@@ -1,3 +1,5 @@
+import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
+import { payoutAllocationContext } from './payoutAllocationContracts.js';
 import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
@@ -88,6 +90,16 @@ function requestFields(value) {
   };
 }
 
+function allocationTripDetails(dto, allocation) {
+  const job = records(dto.jobs).find(row => text(row.jobId) === allocation.jobId);
+  const tripIds = allocation.tripIds;
+  if (!tripIds?.length) return { truckPlate: '—', driverName: '—', status: '—' };
+  const trips = records(job?.trips).filter(row => tripIds.includes(text(row.tripId)));
+  const complete = trips.length === tripIds.length && new Set(trips.map(row => row.tripId)).size === tripIds.length;
+  const shared = key => complete && trips.every(row => text(row[key]) && text(row[key]) === text(trips[0][key])) ? text(trips[0][key]) : null;
+  return { truckPlate: shared('truckPlate') || '—', driverName: shared('driverName') || '—', status: label(shared('status')) };
+}
+
 export function adaptAdminPayout(dto, profile = {}) {
   dto = requestFields(dto);
   profile = record(profile);
@@ -102,7 +114,7 @@ export function adaptAdminPayout(dto, profile = {}) {
   const awaitingReview = dto.source === 'user_withdrawal' && rawStatus === 'PENDING';
   const canReview = awaitingReview;
   const job = record(dto.job), jobId = text(dto.jobId);
-  const reconciliation = record(dto.reconciliation);
+  const reconciliation = record(dto.reconciliation), allocationContext = payoutAllocationContext(dto);
   const approvedOn = text(dto.approvedOn) || text(dto.approvedAt);
   const processedOn = text(dto.processedOn) || text(dto.processedAt);
   return {
@@ -127,15 +139,15 @@ export function adaptAdminPayout(dto, profile = {}) {
       company: text(requester.company) || (companyId ? partyName : text(confirmedProfile.linkedCompany?.name)) || '—',
     },
     jobId, jobIds: Array.isArray(dto.jobIds) ? dto.jobIds.filter((id) => text(id)) : jobId ? [jobId] : null,
-    tripIds: Array.isArray(dto.tripIds) ? dto.tripIds.filter((id) => text(id)) : null,
+    tripIds: allocationContext.tripIds, truckTripCount: allocationContext.truckTripCount,
     route: text(dto.route) || text(job.route) || '—',
     job: Object.fromEntries(['jobId', 'tripId', 'route', 'truck', 'customer', 'cargoType', 'tripDates', 'status'].map((field) => [field, text(job[field]) || (field === 'jobId' ? jobId : null) || '—'])),
-    allocations: Array.isArray(dto.allocations) ? records(dto.allocations).map((entry) => ({
-      jobId: text(entry.jobId), tripId: text(entry.tripId), amount: number(entry.amount),
-      trip: { truckPlate: text(entry.trip?.truckPlate) || '—', driverName: text(entry.trip?.driverName) || '—', status: label(entry.trip?.status) },
-    })) : null,
+    allocations: allocationContext.allocations?.map(entry => ({ key: entry.key, jobId: entry.jobId,
+      tripId: entry.tripIds?.length === 1 ? entry.tripIds[0] : null, tripLabel: entry.tripIds?.length ? entry.tripIds.join(', ') : null, amount: entry.amount,
+      trip: allocationTripDetails(dto, entry),
+    })) ?? null,
     eligibility: text(dto.eligibility) || '—', approvalReady: bool(dto.approvalReady),
-    reconciliation: { ok: bool(reconciliation.ok), issues: Array.isArray(reconciliation.issues) ? reconciliation.issues.filter((issue) => text(issue)) : [] },
+    reconciliation: { ok: allocationContext.reconciliation.ok, issues: Array.isArray(reconciliation.issues) ? reconciliation.issues.filter((issue) => text(issue)) : [] },
     canReview, canApprove: dto.canApprove === true, canReject: dto.canReject === true,
     reviewStatus: dto.reviewStatus, payoutStatus: dto.payoutStatus, eligibilityReasons: dto.eligibilityReasons,
     relatedSettlement: text(dto.relatedSettlement), relatedTransaction: text(dto.relatedTransaction), escrowId: text(dto.escrowId),
@@ -332,11 +344,12 @@ export function downloadPayoutFile(file) {
   setTimeout(() => URL.revokeObjectURL(file.url), 1000);
 }
 
+const serializePayoutQuery = args => defaultSerializeQueryArgs(args) + ':v2';
 const payoutTags = ['AdminPayoutDirectory', 'AdminPayoutSummary', 'AdminTransactions', 'AdminCompanies', 'AdminDrivers', 'AdminForwarders'];
 export const payoutsApi = baseApi.enhanceEndpoints({ addTagTypes: payoutTags }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
-    getAdminPayoutDirectory: builder.query({ queryFn: (_args, api, _options, baseQuery) => payoutDirectory(baseQuery, api), providesTags: payoutTags }),
+    getAdminPayoutDirectory: builder.query({ serializeQueryArgs: serializePayoutQuery, queryFn: (_args, api, _options, baseQuery) => payoutDirectory(baseQuery, api), providesTags: payoutTags }),
     getAdminPayoutSummary: builder.query({
       query: () => ({ url: '/admin/payouts/summary' }),
       transformResponse: (response) => {
@@ -347,7 +360,7 @@ export const payoutsApi = baseApi.enhanceEndpoints({ addTagTypes: payoutTags }).
           totalRequestedAmount: money(dto.totalRequestedAmount), companyHeld: money(dto.companyHeld), companyPaid: money(dto.companyPaid) };
       }, providesTags: ['AdminPayoutSummary'],
     }),
-    getAdminPayoutDetail: builder.query({ queryFn: (args, api, _options, baseQuery) => payoutDetail(baseQuery, api, args), providesTags: payoutTags }),
+    getAdminPayoutDetail: builder.query({ serializeQueryArgs: serializePayoutQuery, queryFn: (args, api, _options, baseQuery) => payoutDetail(baseQuery, api, args), providesTags: payoutTags }),
     getAdminPayoutDocuments: builder.query({ queryFn: (args, _api, _options, baseQuery) => payoutDocuments(baseQuery, args), providesTags: ['AdminPayoutDirectory'] }),
     getAdminPayoutStatement: builder.query({ queryFn: (args, _api, _options, baseQuery) => payoutPdf(baseQuery, args) }),
     getAdminPayoutDocument: builder.query({ queryFn: ({ url, ...args }, _api, _options, baseQuery) => text(url) ? payoutPdf(baseQuery, args, url) : apiError('This payout document has no download URL.') }),

@@ -401,7 +401,7 @@ export function RequestedPayouts() {
                         {r.jobId}
                       </Link> : <span className="tk-mono">—</span>}
                       <span className="tk-meta">{r.route}</span>
-                      <span className="tk-meta">{r.tripIds?.length ?? "—"} trip{r.tripIds?.length === 1 ? "" : "s"}</span>
+                      <span className="tk-meta">{r.truckTripCount ?? "—"} trip{r.truckTripCount === 1 ? "" : "s"}</span>
                     </span>
                   ),
                 },
