@@ -305,7 +305,7 @@ export function saveFeeDocument(document, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 const feeTags = ['AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
-const changedTags = [...feeTags, 'AdminPricingConfig', 'AdminTerminalRates', 'AdminEscrowOverview'];
+const changedTags = [...feeTags, 'AdminPricingConfig', 'AdminTerminalRates', 'AdminEscrowOverview', 'AdminAuditLogs'];
 export const feesApi = baseApi.enhanceEndpoints({ addTagTypes: changedTags }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({

@@ -1,5 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
-import { serviceCore, serviceBody, pricingServiceRoles } from './pricingServiceContracts.js';
+import { serviceCore, serviceBody, assertServiceEquipment, pricingServiceRoles } from './pricingServiceContracts.js';
 import { adaptPricingFormOptions } from './pricingFormOptions.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -376,10 +376,7 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
             if (before.error) return before;
             const dto = pricingRecord(before.data, 'services');
             if (dto.id !== id || dto.status !== 'DRAFT' || !text(expectedUpdatedAt) || !Number.isFinite(Date.parse(expectedUpdatedAt)) || dto.updatedAt !== expectedUpdatedAt) return fail('Only an unchanged draft can be edited. Reload before saving.');
-            if (body.cargoType && dto.cargoType !== body.cargoType) {
-              const incompatible = body.cargoType === 'CONTAINER' ? ['truckTypeId'] : ['containerSizeId', 'containerTypeId'];
-              if (incompatible.some(key => !Object.hasOwn(dto, key) || dto[key] !== null)) return fail('The existing equipment criteria cannot be safely cleared when changing cargo type. Keep the current cargo type or create a separate draft.');
-            }
+            assertServiceEquipment(body, dto);
           }
           const result = await baseQuery({ url: root + (id ? '/' + encodeURIComponent(id) : ''), method: id ? 'PATCH' : 'POST', body });
           if (!current()) return fail('The session changed. Refresh before trying again.');
@@ -388,7 +385,7 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
           if (!savedId || dto.id !== savedId) return fail('The save returned no confirmed service ID. Refresh before trying again.');
           const matches = raw => {
             const core = serviceCore(raw);
-            return raw.id === savedId && text(raw.code) && raw.status === 'DRAFT' && raw.currency === 'NGN'
+            return raw.id === savedId && text(raw.code) && raw.status === 'DRAFT' && raw.currency === 'NGN' && text(raw.updatedAt) && Number.isFinite(Date.parse(raw.updatedAt))
               && Object.entries(body).every(([key, value]) => Object.hasOwn(core, key) && core[key] === value);
           };
           let saved = dto;

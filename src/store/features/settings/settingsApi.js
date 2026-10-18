@@ -1,6 +1,6 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { clearSession } from '../auth/authSlice.js';
-import { adaptSection, adaptPreferences, adaptSecurityAlertEvents, settingsEventChanges, settingsEventsMatch, adaptStatus, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp, sectionVersion } from './settingsContracts.js';
+import { adaptSection, adaptPreferences, adaptSecurityAlertEvents, settingsEventChanges, settingsEventsMatch, adaptStatus, adaptIntegrations, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp, sectionVersion } from './settingsContracts.js';
 export { findSettingsField, preferenceFields } from './settingsContracts.js';
 const failure = (message, status = 'CUSTOM_ERROR') => ({ error: { status, error: message, data: { message } } });
 const sections = ['general', 'operations', 'finance', 'fleet', 'security', 'passwords', 'security-alerts', 'data-protection'];
@@ -50,6 +50,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
     getAdminSettingsStatus: builder.query({ queryFn: readQuery(({ page }) => ({ url: '/admin/settings/status', params: { section: page } }), adaptStatus), providesTags: ['AdminSettingsStatus'] }),
     getAdminSettingsVersion: builder.query({ queryFn: readQuery('/admin/platform/version', adaptVersion) }),
     getAdminSettingsChannels: builder.query({ queryFn: readQuery('/admin/settings/notifications/channels', adaptChannels), providesTags: ['AdminSettingsChannels'] }),
+    getAdminSettingsIntegrations: builder.query({ queryFn: readQuery('/admin/settings/integrations', adaptIntegrations) }),
     getAdminSettingsProcessors: builder.query({ queryFn: readQuery('/admin/data-protection/processors', adaptProcessors) }),
     getAdminSettingsSessions: builder.query({
       queryFn: readQuery(({ page = 1, limit = 5 }) => ({ url: '/admin/sessions', params: { page, limit, status: 'active' } }), adaptSessions), providesTags: ['AdminSettingsSessions'],
@@ -229,4 +230,4 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
     }),
   }),
 });
-export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;
+export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsIntegrationsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;

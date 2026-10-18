@@ -35,6 +35,7 @@ import {
 import { DriverTableLoading } from './DriversLoading.jsx';
 import { useFeeOperations } from '../store/features/fees/useFeeOperations.js';
 import { FeeRuleEditDialog, FeeRulesBulkDialog } from './FeeRuleDialogs.jsx';
+import { FeeRecordsTab, FeeAnalyticsTab, FeeAuditTab } from './FeeTabs.jsx';
 
 const TABS = [
   "Fee Rules",
@@ -501,6 +502,12 @@ export function FeesCommission() {
                 onPageSize={(size) => { if (Number.isSafeInteger(size) && size > 0) { setPageSize(size); setPage(1); } }}
               />
             </>
+          ) : tab === 'Deductions' || tab === 'Transactions' ? (
+            <FeeRecordsTab key={tab + ':' + operations.owner} kind={tab === 'Deductions' ? 'deductions' : 'transactions'} rules={rules} />
+          ) : tab === 'Analytics' ? (
+            <FeeAnalyticsTab period={summaryPeriod} onPeriod={setSummaryPeriod} />
+          ) : tab === 'Audit Log' ? (
+            <FeeAuditTab key={operations.owner} />
           ) : (
             <Card
               pad="none"

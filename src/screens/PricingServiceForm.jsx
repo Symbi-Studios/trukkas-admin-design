@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import { Banner, Button, Modal, Select, TextField } from '../ds.js';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import { pricingError, useGetAdminPricingServiceQuery, useGetAdminPricingServiceFormOptionsQuery, useSaveAdminPricingServiceMutation } from '../store/features/pricing/pricingApi.js';
-import { SERVICE_MOVEMENTS, SERVICE_CRITERIA, pricingServiceRoles } from '../store/features/pricing/pricingServiceContracts.js';
+import { SERVICE_MOVEMENTS, SERVICE_CRITERIA, serviceFormFields, pricingServiceRoles } from '../store/features/pricing/pricingServiceContracts.js';
 
 export function PricingServiceForm({ id, onClose, onDone }) {
   const admin = useSelector(state => state.auth.admin), authenticated = useSelector(state => Boolean(state.auth.accessToken));
@@ -32,22 +32,16 @@ function PricingServiceEditor({ id, admin, authenticated, onClose, onDone }) {
   const readError = catalogue.error || editing && detail.error;
   const ready = authenticated && pricingServiceRoles.has(role) && Boolean(catalogue.currentData) && !readError && !loading && (!editing || initialized.current && model?.statusCode === 'DRAFT');
   const busy = saving.isLoading;
-  const valid = ready && draft.name.trim() && draft.name.trim().length <= 120 && catalogue.currentData.units.some(option => option.value === draft.unit) && (!draft.cargoType || catalogue.currentData.cargoTypes.some(option => option.value === draft.cargoType)) && draft.basePrice.trim() !== '' && Number.isFinite(Number(draft.basePrice)) && Number(draft.basePrice) >= 0;
-  const fields = () => {
-    const values = { name: draft.name.trim(), unit: draft.unit, basePrice: Number(draft.basePrice) };
-    for (const key of SERVICE_CRITERIA) {
-      if (draft.cargoType === 'CONTAINER' && key === 'truckTypeId' || draft.cargoType === 'BULK_BREAK' && ['containerSizeId', 'containerTypeId'].includes(key)) continue;
-      if (draft[key]) values[key] = draft[key];
-    }
-    return editing ? Object.fromEntries(Object.entries(values).filter(([key, value]) => baseline.current?.core[key] !== value)) : values;
-  };
+  const valid = ready && draft.name.trim() && draft.name.trim().length <= 120 && catalogue.currentData.units.some(option => option.value === draft.unit) && catalogue.currentData.cargoTypes.some(option => option.value === draft.cargoType) && draft.basePrice.trim() !== '' && Number.isFinite(Number(draft.basePrice)) && Number(draft.basePrice) >= 0;
+  const fields = () => serviceFormFields(draft, editing ? baseline.current?.core : null);
   const changed = !editing || Object.keys(fields()).length > 0;
   const change = key => event => setDraft(current => ({ ...current, [key]: event.target.value }));
   function selector(key, label, options = [], required = false) {
     const value = draft[key];
     const current = value && !options.some(option => option.value === value) ? [{ value, label: '—' }] : [];
-    const optional = !required && value && (editing || key !== 'cargoType') ? [{ value: '', label: editing ? 'Keep current' : 'Any' }] : [];
-    return <Select label={label} value={value} options={[...optional, ...current, ...options]} placeholder={required ? 'Select unit' : editing ? '— (keep current)' : 'Any'} disabled={!ready || busy} onChange={change(key)} />;
+    const optional = !required && value ? [{ value: '', label: 'Any' }] : [];
+    const unknown = editing && baseline.current?.core[key] === undefined && !value;
+    return <Select label={label} value={value} options={[...optional, ...current, ...options]} placeholder={required ? key === 'unit' ? 'Select unit' : 'Select cargo type' : unknown ? '—' : 'Any'} disabled={!ready || busy} onChange={change(key)} />;
   }
   async function save() {
     if (!valid || !changed || pending.current) return;
@@ -60,7 +54,7 @@ function PricingServiceEditor({ id, admin, authenticated, onClose, onDone }) {
   }
   const options = catalogue.currentData || {};
   return <Modal open width={680} title={editing ? 'Edit Pricing' : 'Add Pricing'}
-    description={editing ? 'Update this draft. Leave an optional selector unchanged to preserve its current criterion.' : 'Create a draft service rate. Any optional criterion left blank matches all values.'}
+    description={editing ? 'Update this draft. Choose Any to clear an optional criterion. Changing cargo type clears incompatible equipment criteria.' : 'Create a draft service rate. Any optional criterion left blank matches all values.'}
     onClose={() => { if (!pending.current) onClose(); }}
     footer={<><Button variant="outline" disabled={busy} onClick={() => { if (!pending.current) onClose(); }}>Cancel</Button><Button disabled={!valid || !changed || busy} onClick={save}>{busy ? 'Saving…' : editing ? 'Save Changes' : 'Save Draft'}</Button></>}>
     <div style={{ display: 'grid', gap: 14 }}>
@@ -69,7 +63,7 @@ function PricingServiceEditor({ id, admin, authenticated, onClose, onDone }) {
       {loading ? <><DriverLoadingNotice>Loading pricing fields…</DriverLoadingNotice><DriverTableLoading columns={2} label="Loading pricing fields" /></> : <>
         <TextField label="Service" required maxLength={120} placeholder={editing && model?.core.name == null ? '—' : 'e.g. Apapa to Ogun 40ft'} value={draft.name} disabled={!ready || busy} onChange={change('name')} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-          {selector('cargoType', 'Cargo Type', options.cargoTypes)}
+          {selector('cargoType', 'Cargo Type', options.cargoTypes, true)}
           {selector('movementType', 'Movement Type', SERVICE_MOVEMENTS)}
           {selector('originPortId', 'Origin Port', options.ports)}
           {selector('originState', 'Origin State', options.states)}

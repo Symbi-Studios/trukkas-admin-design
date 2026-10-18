@@ -137,17 +137,39 @@ export function settingsEventChanges(rows, changes, security = false) {
 export function settingsEventsMatch(rows, submitted) {
   return submitted.every(({ key, ...fields }) => rows?.filter(row => row.key === key).length === 1 && Object.entries(fields).every(([field, value]) => rows.find(row => row.key === key)[field] === value));
 }
-export function adaptStatus(response) {
+export function adaptStatus(response, { page } = {}) {
   const dto = record(unwrapApiResponseData(response));
-  return { headline: text(dto.headline) || '—', caption: text(dto.caption) || '—', lastChecked: dateLabel(dto.checkedAt), items: Array.isArray(dto.items) ? dto.items.map((item) => ({ key: text(item?.key), label: text(item?.label), status: ['ACTIVE', 'FIXED', 'NOT_ENFORCED'].includes(item?.status) ? item.status : '—' })) : [] };
+  if (dto.section && dto.section !== page) throw new Error('The status response belongs to a different settings section.');
+  return { page, headline: text(dto.headline) || '—', caption: text(dto.caption) || '—', lastChecked: dateLabel(dto.checkedAt), items: Array.isArray(dto.items) ? dto.items.map((item) => ({
+    key: text(item?.key), label: text(item?.label), kind: text(item?.kind), group: text(item?.group),
+    value: ['string', 'boolean'].includes(typeof item?.value) || typeof item?.value === 'number' && Number.isFinite(item.value) ? item.value : null,
+    status: ['ACTIVE', 'FIXED', 'NOT_ENFORCED', 'OPERATIONAL', 'NOT_CONFIGURED'].includes(item?.status) ? item.status : '—',
+  })) : [] };
 }
+// These are the documented processor IDs and purposes. A settings group's
+// active/fixed counts cannot stand in for one of the screen's grouped statuses.
+const serviceStatusKeys = { Database: 'neon', 'Payment Services': 'embedly', 'SMS Gateway': 'termii', 'Email Service': 'sender' };
 export function statusForTemplate(status, template) {
   const items = (template.items || []).map(({ label }) => {
-    const matches = status?.items?.filter((item) => labelKey(item.label) === labelKey(label)) || [];
+    const serviceKey = status?.page === 'general' ? serviceStatusKeys[label] : null;
+    const exact = status?.items?.filter(item => labelKey(item.label) === labelKey(label)) || [];
+    const matches = exact.length ? exact : status?.items?.filter(item => serviceKey && item.kind === 'SERVICE' && item.key === serviceKey) || [];
     return { label, status: matches.length === 1 ? matches[0].status : '—' };
   });
   const applicable = items.length === 0 || items.some(item => item.status !== '—');
-  return { headline: applicable ? status?.headline || '—' : '—', caption: applicable ? status?.caption || '—' : '—', lastChecked: applicable ? status?.lastChecked || '—' : '—', items };
+  // The general endpoint's headline counts settings; it does not report overall
+  // service health. Keep that unrelated headline out of the System Status card.
+  return { headline: applicable && status?.page !== 'general' ? status?.headline || '—' : '—', caption: applicable ? status?.caption || '—' : '—', lastChecked: applicable ? status?.lastChecked || '—' : '—', items };
+}
+export function adaptIntegrations(response) {
+  const dto = record(unwrapApiResponseData(response)), rows = dto.integrations;
+  if (!Array.isArray(rows) || rows.some(row => !text(row?.id)) || new Set(rows.map(row => row.id)).size !== rows.length) throw new Error('The integrations response is missing a valid integrations collection.');
+  return rows.map(row => ({ id: row.id, name: text(row.name) || '—', category: text(row.category), purpose: text(row.purpose) || '—',
+    status: ['CONNECTED', 'NOT_CONFIGURED'].includes(row.status) ? row.status : null,
+    statusLabel: row.status === 'CONNECTED' ? 'Connected' : row.status === 'NOT_CONFIGURED' ? 'Not configured' : '—',
+    statusTone: row.status === 'CONNECTED' ? 'success' : 'neutral',
+    configured: typeof row.configured === 'boolean' ? row.configured : null,
+  }));
 }
 export function collection(response, key) {
   const dto = record(unwrapApiResponseData(response));

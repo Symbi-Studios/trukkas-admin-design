@@ -20,7 +20,7 @@ export function auditPeriod(value, now = new Date()) {
   start.setUTCDate(start.getUTCDate() - (value === 'Last 30 Days' ? 29 : 6));
   return { dateFrom: value === 'This Month' ? dateTo.slice(0, 8) + '01' : start.toISOString().slice(0, 10), dateTo };
 }
-const serializeAuditQuery = args => defaultSerializeQueryArgs(args) + ':v3';
+const serializeAuditQuery = args => defaultSerializeQueryArgs(args) + ':v4';
 function scopedAuditQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
@@ -138,9 +138,10 @@ export function adaptAdminAudit(source, { detail = false } = {}) {
 export function adaptSystemEvent(source) {
   const dto = record(source);
   const row = adaptAdminAudit({ id: dto.id, createdAt: dto.timestamp, action: dto.action, actionCode: dto.actionCode,
-    module: dto.module, description: dto.description, result: dto.result, relatedRecords: dto.relatedRecords }, { detail: true });
+    module: dto.module, description: dto.description, result: dto.result, relatedRecords: dto.relatedRecords,
+    before: dto.before, after: dto.after, ipAddress: dto.ipAddress, sessionId: dto.sessionId }, { detail: true });
   // This endpoint contains SYSTEM actors only. It supplies no admin identity,
-  // browser session, IP, location or before/after snapshots.
+  // and scheduled jobs have null request context. Keep unavailable facts unknown.
   return { ...row, isSystemEvent: true, user: 'System', reference: text(dto.reference) || '—' };
 }
 function readPage(response, requestedPage, systemEvents = false) {
@@ -226,10 +227,12 @@ export const auditApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminAuditLogs
     }),
     getAdminAuditScreenSummary: builder.query({
       serializeQueryArgs: serializeAuditQuery,
-      async queryFn(args, api, _options, baseQuery) {
+      async queryFn(args = {}, api, _options, baseQuery) {
         baseQuery = scopedAuditQuery(baseQuery, api, args);
         if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return permissionError();
-        const result = await baseQuery({ url: '/admin/audit-logs/summary' });
+        const scope = args.scope ?? 'admin';
+        if (!['admin', 'system', 'all'].includes(scope)) return failure('Choose a supported audit summary scope.');
+        const result = await baseQuery({ url: '/admin/audit-logs/summary', params: { scope } });
         if (result.error) return result;
         return { data: adaptSummary(result.data) };
       }, providesTags: ['AdminAuditLogs'],

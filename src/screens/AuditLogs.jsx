@@ -92,7 +92,8 @@ function AuditLogsScreen() {
   const adminLogsQuery = useGetAdminAuditDirectoryQuery({ ...period, owner, role }, { skip: !canView || systemEvents, refetchOnMountOrArgChange: true });
   const systemEventsQuery = useGetAdminSystemEventsQuery({ ...period, owner, role }, { skip: !canView || !systemEvents, refetchOnMountOrArgChange: true });
   const logsQuery = systemEvents ? systemEventsQuery : adminLogsQuery;
-  const summaryQuery = useGetAdminAuditScreenSummaryQuery({ owner, role }, { skip: !canView, refetchOnMountOrArgChange: true });
+  const summaryScope = systemEvents ? 'system' : tab === 'All Logs' ? 'all' : 'admin';
+  const summaryQuery = useGetAdminAuditScreenSummaryQuery({ owner, role, scope: summaryScope }, { skip: !canView, refetchOnMountOrArgChange: true });
   const error = role && !canView ? { status: 403, data: { message: 'Only Super Admins can view audit logs.' } } : logsQuery.error;
   const audits = !canView || logsQuery.error ? EMPTY_ROWS : logsQuery.currentData?.rows || EMPTY_ROWS;
   const summary = canView && !summaryQuery.error ? summaryQuery.currentData : null;
