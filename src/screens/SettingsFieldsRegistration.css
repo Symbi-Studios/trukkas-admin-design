@@ -18,7 +18,7 @@
 /* Category rail */
 .fr-categories { position: sticky; top: 16px; }
 .fr-category {
-  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 10px; border: 0; border-radius: var(--tk-r-md);
+  box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 10px; border: 0; border-radius: var(--tk-r-md);
   background: transparent; cursor: pointer; font: 500 13px/18px var(--tk-font-sans); color: var(--tk-ink-700);
   transition: var(--tk-transition);
 }
@@ -33,6 +33,8 @@
 
 /* Table card */
 .fr-table-card { min-width: 0; overflow: visible; --tk-row-pad-y: 7px; }
+/* coloredHeader tints the column cells but not the select-all cell; tint the whole row. */
+.fr-table-card thead th { background-color: var(--tk-surface-soft) !important; }
 .fr-table-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: var(--tk-card-pad); }
 .fr-table-tools { display: flex; gap: 10px; align-items: center; }
 .fr-table-tools .tk-search-field { width: 200px; }

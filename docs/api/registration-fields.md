@@ -46,11 +46,30 @@ hard-coding them.
 ### Enums
 
 ```
-FieldType       = text | textarea | number | email | phone | date | select | multi_select | file
-FieldCategory   = personal | contact | identity | documents | vehicle | banking | business | other
-ValidationRule  = none | alphanumeric | numeric | email | phone_ng | nin | bank_account_ng
+FieldType       = text | textarea | number | email | phone | date | select | multi_select | list | file
+FieldCategory   = personal | contact | identity | business | services | licenses | documents | emergency | other
+ValidationRule  = none | alphanumeric | numeric | email | phone_ng | nin | url
                 | date_past | date_future | min_age_18
 ```
+
+`list` is a free-text, multi-value field (one entry per line), stored as `string[]` —
+e.g. the forwarder's `servicesOffered`, `coverageArea`, `languages`.
+
+### Seed data = what the profiles collect today
+
+The fixture file is not invented data: it lists the fields the existing admin
+API already reads/writes for each profile, with `key` as the snake_case form of the
+current backend property. Seeding the real table from it should be a 1:1 mapping:
+
+| Entity    | Fields (current backend property) |
+|-----------|-----------------------------------|
+| Driver    | `firstName`, `lastName`, `email`, `phone`, `registrationType`, `license.number`, `license.expiresAt`, license document |
+| Forwarder | `firstName`, `middleName`, `lastName`, `dateOfBirth`, `gender`, `nationality`, `languages`, `yearsExperience`, `email`, `phone`, `alternatePhone`, `address`, `nin`, `businessName`, `businessAddress`, `businessType`, `cacNumber`, `taxId`, `website`, `forwardingLicenseNumber`/`Expiry`, `exportLicenseNumber`/`Expiry`, `servicesOffered`, `coverageArea`, `preferredCargoTypes`, `preferredRoutes`, `partnerNetwork`, `otherInformation`, `emergencyContactName`/`Phone`, documents `PASSPORT_PHOTO`, `EXPORTER_LICENCE`, `PROOF_OF_ADDRESS` |
+| Company   | `businessName`, `cacNumber` (RC number), `businessType`, `taxId`, `website`, `contactName`, `phone`, `email`, `businessAddress` |
+
+Company KYB documents are typed document records reviewed in Verification, not
+profile fields, so they are not seeded here.
+
 
 The UI reads these lists from `src/mock/fixtures/registrationFields.js`. If the
 backend prefers to own them, add `GET /admin/settings/registration-fields/meta`
@@ -82,14 +101,14 @@ thousands), so no query params are needed.
         "label": "Driver's License Number",
         "key": "license_number",
         "type": "text",
-        "category": "identity",
+        "category": "licenses",
         "placeholder": "Enter driver's license number",
         "helpText": "Enter your valid driver's license number.",
         "required": true,
         "visible": true,
         "editable": true,
         "enabled": true,
-        "validation": "none",
+        "validation": "alphanumeric",
         "options": [],
         "order": 6,
         "updatedAt": "2026-10-14T09:30:00Z",
@@ -100,9 +119,9 @@ thousands), so no query params are needed.
 }
 ```
 
-Tab counts (`Driver Fields (18)` etc.) need all three totals on first load. Either
+Tab counts (`Driver Fields (8)` etc.) need all three totals on first load. Either
 call this endpoint once per entity, or add `GET /admin/settings/registration-fields/summary`
-→ `{ driver: 18, forwarder: 16, company: 22 }`.
+→ `{ driver: 8, forwarder: 34, company: 9 }`.
 
 ### Create field
 
@@ -188,8 +207,8 @@ Rules the server must enforce (the mock implements the same in
 ## Things the backend should decide
 
 1. **Protected / system fields.** Some keys are load-bearing for other features
-   (e.g. `phone_number` for login/OTP, `nin` / `license_number` for verification,
-   `account_number` for payouts). Suggest a read-only `system: true` flag that blocks
+   (e.g. `email` / `phone` for login/OTP, `nin` / `license_number` for verification,
+   `cac_number` for KYB). Suggest a read-only `system: true` flag that blocks
    delete, key change, type change and disabling. The UI will hide those actions when
    the flag is present.
 2. **Changing `key` or `type` after data exists.** Either forbid it once any record

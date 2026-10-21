@@ -19,7 +19,7 @@ import './SettingsFieldsRegistration.css';
 const TYPE_LABEL = Object.fromEntries(FIELD_TYPES.map((t) => [t.value, t.label]));
 const CATEGORY_LABEL = Object.fromEntries(FIELD_CATEGORIES.map((c) => [c.value, c.label]));
 const OPTION_TYPES = ['select', 'multi_select'];
-const PLACEHOLDER_TYPES = ['text', 'textarea', 'number', 'email', 'phone'];
+const PLACEHOLDER_TYPES = ['text', 'textarea', 'number', 'email', 'phone', 'list'];
 const ALL = 'all';
 const EMPTY_DRAFT = {
   label: '', key: '', type: 'text', category: 'personal', placeholder: '', required: false, visible: true,
@@ -192,6 +192,7 @@ function PreviewInput({ field }) {
   const common = { label: field.label, placeholder: field.placeholder || undefined, hint: field.helpText || undefined };
   const label = <>{field.label}{field.required && <span style={{ color: 'var(--tk-danger)' }}> *</span>}</>;
   if (field.type === 'textarea') return <Textarea {...common} label={label} rows={3} />;
+  if (field.type === 'list') return <Textarea {...common} label={label} rows={3} hint={field.helpText || 'One item per line.'} />;
   if (field.type === 'select') return <Select label={label} placeholder="Select an option" options={field.options} />;
   if (field.type === 'multi_select') {
     return (
