@@ -41,34 +41,56 @@ hard-coding them.
 | `options`     | string[]                 | Required (≥ 1) when `type` is `select` or `multi_select`; empty otherwise. |
 | `order`       | integer ≥ 1              | Position within the entity's form. Contiguous `1..n` per entity. |
 | `updatedAt`   | ISO-8601 string          | |
+| `system`      | boolean, read-only       | Set by the backend for fields the sign-up flow depends on. A system field can't be deleted, duplicated, disabled or made optional, and its `key` / `type` can't change — reject with `409`. |
 | `updatedBy`   | string                   | Admin display name. |
 
 ### Enums
 
 ```
-FieldType       = text | textarea | number | email | phone | date | select | multi_select | list | file
-FieldCategory   = personal | contact | identity | business | services | licenses | documents | emergency | other
-ValidationRule  = none | alphanumeric | numeric | email | phone_ng | nin | url
-                | date_past | date_future | min_age_18
+FieldType       = text | textarea | number | email | password | phone | date | select | multi_select
+                | list | checkbox | file
+FieldCategory   = personal | contact | identity | business | director | services | licenses
+                | documents | emergency | other
+ValidationRule  = none | alphanumeric | numeric | full_name | email | email_unique | password_strength
+                | phone_ng | phone_ng_otp | nin | bvn | bank_account_ng | year | url
+                | date_past | date_future | min_age_18 | must_accept
 ```
 
 `list` is a free-text, multi-value field (one entry per line), stored as `string[]` —
 e.g. the forwarder's `servicesOffered`, `coverageArea`, `languages`.
 
-### Seed data = what the profiles collect today
+### Seed data
 
-The fixture file is not invented data: it lists the fields the existing admin
-API already reads/writes for each profile, with `key` as the snake_case form of the
-current backend property. Seeding the real table from it should be a 1:1 mapping:
+**Driver and Forwarder** seeds list the fields the existing admin API already
+reads/writes for each profile, with `key` as the snake_case form of the current
+backend property, so seeding the real table is a 1:1 mapping:
 
 | Entity    | Fields (current backend property) |
 |-----------|-----------------------------------|
 | Driver    | `firstName`, `lastName`, `email`, `phone`, `registrationType`, `license.number`, `license.expiresAt`, license document |
 | Forwarder | `firstName`, `middleName`, `lastName`, `dateOfBirth`, `gender`, `nationality`, `languages`, `yearsExperience`, `email`, `phone`, `alternatePhone`, `address`, `nin`, `businessName`, `businessAddress`, `businessType`, `cacNumber`, `taxId`, `website`, `forwardingLicenseNumber`/`Expiry`, `exportLicenseNumber`/`Expiry`, `servicesOffered`, `coverageArea`, `preferredCargoTypes`, `preferredRoutes`, `partnerNetwork`, `otherInformation`, `emergencyContactName`/`Phone`, documents `PASSPORT_PHOTO`, `EXPORTER_LICENCE`, `PROOF_OF_ADDRESS` |
-| Company   | `businessName`, `cacNumber` (RC number), `businessType`, `taxId`, `website`, `contactName`, `phone`, `email`, `businessAddress` |
 
-Company KYB documents are typed document records reviewed in Verification, not
-profile fields, so they are not seeded here.
+**Company** seeds follow the company self-registration flow (36 fields, in form order):
+
+| Step | Fields |
+|------|--------|
+| 1. Account holder (`personal`) | `full_name`*, `work_email`* (unique; never verified), `password`* (8+ chars, strength check, confirm must match), `terms_accepted`* (terms + privacy + authorised to register), `date_of_birth`* (18+), `mobile_number`* (Nigerian, SMS-verified) |
+| 2. Company (`business`) | `company_name`*, `rc_number`*, `business_address`*, `business_type`, `year_founded`, `company_email`, `company_phone`, `state` (36 states + FCT), `fleet_size`, `operating_regions` |
+| 2. Director (`director`) | `director_full_name`*, `director_date_of_birth`*, `director_role` |
+| 3. Documents (`documents`) | `cac_certificate`* + `cac_certificate_rc_number`*, `cac_status_report`, `memorandum_of_association`, `tin_certificate`* + `tin`*, `director_government_id` + `_expiry`, `proof_of_business_address`, `corporate_bank_account` + `corporate_account_number` (masked), `git_insurance`* + `git_insurance_expiry`*, `haulage_permit` + `haulage_permit_expiry`, `director_nin`, `director_bvn` |
+
+\* required. Notes for the company flow:
+
+- **Documents step is skippable.** Required document fields are required to
+  complete verification, not to create the account. The public endpoint should
+  expose each field's step (derivable from `category`) so the app can let users
+  skip step 3 and return to it.
+- **Document extra details** (RC number, TIN, expiry dates, account number) are
+  separate fields placed directly after their document.
+- **Director's NIN / BVN** are listed on the form but can't be submitted yet
+  (number only, no file), so they're seeded disabled.
+- **System fields:** `full_name`, `work_email`, `password`, `terms_accepted`,
+  `mobile_number` are `system: true`.
 
 
 The UI reads these lists from `src/mock/fixtures/registrationFields.js`. If the
@@ -206,11 +228,10 @@ Rules the server must enforce (the mock implements the same in
 
 ## Things the backend should decide
 
-1. **Protected / system fields.** Some keys are load-bearing for other features
-   (e.g. `email` / `phone` for login/OTP, `nin` / `license_number` for verification,
-   `cac_number` for KYB). Suggest a read-only `system: true` flag that blocks
-   delete, key change, type change and disabling. The UI will hide those actions when
-   the flag is present.
+1. **Which fields are system fields.** The UI already honours `system: true`
+   (lock icon; no delete/duplicate; status, required, key and type locked). The
+   company account fields are marked; decide which driver/forwarder fields need it
+   too (e.g. `email` / `phone` for login/OTP, `license_number` for verification).
 2. **Changing `key` or `type` after data exists.** Either forbid it once any record
    has a value for the field, or migrate. Forbidding is simpler.
 3. **Audit log.** Every create / update / delete / reorder should land in the

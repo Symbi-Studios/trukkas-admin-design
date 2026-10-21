@@ -19,7 +19,7 @@ import './SettingsFieldsRegistration.css';
 const TYPE_LABEL = Object.fromEntries(FIELD_TYPES.map((t) => [t.value, t.label]));
 const CATEGORY_LABEL = Object.fromEntries(FIELD_CATEGORIES.map((c) => [c.value, c.label]));
 const OPTION_TYPES = ['select', 'multi_select'];
-const PLACEHOLDER_TYPES = ['text', 'textarea', 'number', 'email', 'phone', 'list'];
+const PLACEHOLDER_TYPES = ['text', 'textarea', 'number', 'email', 'phone', 'list', 'password'];
 const ALL = 'all';
 const EMPTY_DRAFT = {
   label: '', key: '', type: 'text', category: 'personal', placeholder: '', required: false, visible: true,
@@ -89,11 +89,10 @@ function RowMenu({ field, isFirst, isLast, onEdit, onDuplicate, onMove, onDelete
         <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setOpen(false)}>
           <DropdownMenu width={190} items={[
             { label: 'Edit Field', icon: 'pencil', onClick: close(onEdit) },
-            { label: 'Duplicate', icon: 'copy', onClick: close(onDuplicate) },
+            ...(field.system ? [] : [{ label: 'Duplicate', icon: 'copy', onClick: close(onDuplicate) }]),
             { label: 'Move Up', icon: 'arrow-up', disabled: isFirst, onClick: close(() => onMove(-1)) },
             { label: 'Move Down', icon: 'arrow-down', disabled: isLast, onClick: close(() => onMove(1)) },
-            { divider: true },
-            { label: 'Delete Field', icon: 'trash-2', tone: 'danger', onClick: close(onDelete) },
+            ...(field.system ? [] : [{ divider: true }, { label: 'Delete Field', icon: 'trash-2', tone: 'danger', onClick: close(onDelete) }]),
           ]} />
         </span>
       )}
@@ -135,10 +134,16 @@ function FieldEditor({ entity, mode, field, total, onClose, onSaved, onDelete })
 
       <TextField label="Field Label" required value={draft.label} error={errors.label}
         onChange={(e) => set({ label: e.target.value, ...(keyTouched ? {} : { key: toKey(e.target.value) }) })} />
-      <TextField label="Field Key" required value={draft.key} error={errors.key}
+      {field?.system && (
+        <div className="fr-system-note">
+          <Icon name="lock" size={14} />
+          <span>System field — the sign-up flow depends on it, so it can't be deleted, disabled or made optional, and its key and type are fixed.</span>
+        </div>
+      )}
+      <TextField label="Field Key" required value={draft.key} error={errors.key} disabled={field?.system}
         hint="Unique identifier (use lowercase and underscores)"
         onChange={(e) => { setKeyTouched(true); set({ key: e.target.value.toLowerCase() }); }} />
-      <Select label={<>Field Type <span style={{ color: 'var(--tk-danger)' }}>*</span></>} value={draft.type}
+      <Select label={<>Field Type <span style={{ color: 'var(--tk-danger)' }}>*</span></>} value={draft.type} disabled={field?.system}
         options={FIELD_TYPES.map((t) => ({ value: t.value, label: t.label }))}
         onChange={(e) => set({ type: e.target.value })} />
       <Select label="Category" value={draft.category}
@@ -157,7 +162,7 @@ function FieldEditor({ entity, mode, field, total, onClose, onSaved, onDelete })
       )}
 
       <div style={{ display: 'grid', gap: 14 }}>
-        <Switch checked={draft.required} onChange={(v) => set({ required: v })} label="Required" hint="Field must be filled during registration" />
+        <Switch checked={draft.required} disabled={field?.system} onChange={(v) => set({ required: v })} label="Required" hint="Field must be filled during registration" />
         <Switch checked={draft.visible} onChange={(v) => set({ visible: v })} label="Visible" hint="Show this field on the registration form" />
         <Switch checked={draft.editable} onChange={(v) => set({ editable: v })} label="Editable" hint="Allow users to update this field after registration" />
       </div>
@@ -177,7 +182,7 @@ function FieldEditor({ entity, mode, field, total, onClose, onSaved, onDelete })
       {errors.form && <span className="tk-meta" style={{ color: 'var(--tk-danger)' }}>{errors.form}</span>}
 
       <div className="fr-editor-footer">
-        {mode === 'edit' && (
+        {mode === 'edit' && !field?.system && (
           <Button variant="outline" icon="trash-2" className="fr-delete" onClick={() => onDelete(field)}>Delete Field</Button>
         )}
         <span style={{ flex: 1 }} />
@@ -205,6 +210,15 @@ function PreviewInput({ field }) {
       </div>
     );
   }
+  if (field.type === 'checkbox') return <Checkbox label={label} hint={field.helpText || undefined} />;
+  if (field.type === 'password') {
+    return (
+      <>
+        <TextField {...common} label={label} type="password" />
+        <TextField label={<>Confirm {field.label}{field.required && <span style={{ color: 'var(--tk-danger)' }}> *</span>}</>} type="password" />
+      </>
+    );
+  }
   if (field.type === 'file') return <TextField {...common} label={label} type="file" />;
   const inputType = { number: 'number', email: 'email', phone: 'tel', date: 'date' }[field.type] || 'text';
   return <TextField {...common} label={label} required={false} type={inputType} />;
@@ -215,7 +229,7 @@ function PreviewModal({ open, entity, fields, onClose }) {
   const shown = fields.filter((f) => f.enabled && f.visible);
   return (
     <Modal open={open} onClose={onClose} width={640} title={`${meta?.singular} Registration Form — Preview`}
-      description={`${shown.length} of ${fields.length} fields are shown to new ${meta?.singular.toLowerCase()}s. Disabled and hidden fields are left out.`}
+      description={`${shown.length} of ${fields.length} fields are shown to new ${meta?.plural}. Disabled and hidden fields are left out.`}
       footer={<Button onClick={onClose}>Close Preview</Button>}>
       <div style={{ display: 'grid', gap: 14, maxHeight: '60vh', overflowY: 'auto', paddingRight: 4 }}>
         {shown.map((f) => <PreviewInput key={f.id} field={f} />)}
@@ -299,6 +313,7 @@ export function SettingsFieldsRegistration() {
             <Icon name="grip-vertical" size={16} />
           </span>
           <span style={{ color: 'var(--tk-ink-900)', fontWeight: 500 }}>{f.label}</span>
+          {f.system && <span title="System field" className="fr-lock"><Icon name="lock" size={14} /></span>}
         </span>
       ),
     },
@@ -308,7 +323,7 @@ export function SettingsFieldsRegistration() {
     {
       key: 'enabled', header: 'Status', render: (f) => (
         <span onClick={(e) => e.stopPropagation()}>
-          <Switch checked={f.enabled} onChange={(v) => setRegistrationFieldEnabled(entity, f.id, v)} />
+          <Switch checked={f.enabled} disabled={f.system} onChange={(v) => setRegistrationFieldEnabled(entity, f.id, v)} />
         </span>
       ),
     },

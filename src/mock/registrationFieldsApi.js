@@ -56,6 +56,7 @@ export async function createRegistrationField(entity, draft) {
     visible: true, editable: true, enabled: true, required: false,
     placeholder: '', helpText: '', validation: 'none', options: [],
     ...draft,
+    system: false,
     id: `${entity}_${draft.key}`,
     entity,
     order: fieldsFor(entity).length + 1,
@@ -71,6 +72,10 @@ export async function updateRegistrationField(entity, id, changes) {
   await delay();
   const current = getRow(DOMAIN, 'id', id);
   if (!current) throw { status: 404, message: 'Field not found.' };
+  if (current.system && (changes.enabled === false || changes.required === false
+    || (changes.key && changes.key !== current.key) || (changes.type && changes.type !== current.type))) {
+    throw { status: 409, message: 'System fields cannot be disabled, made optional, or have their key or type changed.' };
+  }
   const errors = validateRegistrationField(entity, { ...current, ...changes }, { ignoreId: id });
   if (Object.keys(errors).length) throw { status: 422, message: 'Validation failed.', errors };
   const { order, ...rest } = changes;
@@ -87,6 +92,7 @@ export async function setRegistrationFieldEnabled(entity, id, enabled) {
 // DELETE /admin/settings/registration-fields/:entity/:fieldId
 export async function deleteRegistrationField(entity, id) {
   await delay();
+  if (getRow(DOMAIN, 'id', id)?.system) throw { status: 409, message: 'System fields cannot be deleted.' };
   setRows(DOMAIN, (getSnapshot(DOMAIN) || []).filter((f) => f.id !== id));
   const orderById = new Map(fieldsFor(entity).map((f, i) => [f.id, i + 1]));
   setRows(DOMAIN, (getSnapshot(DOMAIN) || []).map((f) => (orderById.has(f.id) ? { ...f, order: orderById.get(f.id) } : f)));
@@ -105,6 +111,7 @@ export async function reorderRegistrationFields(entity, fieldIds) {
 export async function duplicateRegistrationField(entity, id) {
   const source = getRow(DOMAIN, 'id', id);
   if (!source) throw { status: 404, message: 'Field not found.' };
+  if (source.system) throw { status: 409, message: 'System fields cannot be duplicated.' };
   let key = `${source.key}_copy`;
   for (let n = 2; fieldsFor(entity).some((f) => f.key === key); n++) key = `${source.key}_copy_${n}`;
   return createRegistrationField(entity, { ...source, key, label: `${source.label} (Copy)`, order: source.order + 1 });
@@ -113,7 +120,7 @@ export async function duplicateRegistrationField(entity, id) {
 // PATCH /admin/settings/registration-fields/:entity/bulk  body: { fieldIds, changes }
 export async function bulkUpdateRegistrationFields(entity, ids, changes) {
   await delay();
-  const set = new Set(ids);
+  const set = new Set(ids.filter((id) => !getRow(DOMAIN, 'id', id)?.system || (changes.enabled !== false && changes.required !== false)));
   setRows(DOMAIN, (getSnapshot(DOMAIN) || []).map((f) => (f.entity === entity && set.has(f.id) ? { ...f, ...changes, ...stamp() } : f)));
   return fieldsFor(entity).filter((f) => set.has(f.id));
 }
