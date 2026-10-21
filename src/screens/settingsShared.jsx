@@ -16,6 +16,11 @@ export const SETTINGS_TABS = [
     path: "/settings/notifications",
   },
   {
+    key: "fields-registration",
+    label: "Fields Registration",
+    path: "/settings/fields-registration",
+  },
+  {
     key: "integrations",
     label: "Integrations",
     path: "/settings/integrations",
