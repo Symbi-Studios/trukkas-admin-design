@@ -228,10 +228,12 @@ Rules the server must enforce (the mock implements the same in
 
 ## Things the backend should decide
 
-1. **Which fields are system fields.** The UI already honours `system: true`
-   (lock icon; no delete/duplicate; status, required, key and type locked). The
-   company account fields are marked; decide which driver/forwarder fields need it
-   too (e.g. `email` / `phone` for login/OTP, `license_number` for verification).
+1. **Confirm the system fields.** The UI honours `system: true` (lock icon; no
+   delete/duplicate; status, required, key and type locked). Seeded as system:
+   driver `first_name`, `last_name`, `email`, `phone`, `registration_type`,
+   `license_number`; forwarder `first_name`, `last_name`, `date_of_birth`, `email`,
+   `phone`; company `full_name`, `work_email`, `password`, `terms_accepted`,
+   `mobile_number`.
 2. **Changing `key` or `type` after data exists.** Either forbid it once any record
    has a value for the field, or migrate. Forbidding is simpler.
 3. **Audit log.** Every create / update / delete / reorder should land in the

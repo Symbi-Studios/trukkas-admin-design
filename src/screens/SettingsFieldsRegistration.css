@@ -16,16 +16,18 @@
 .fr-entity-tab.is-active { color: var(--tk-blue); font-weight: 600; border-bottom-color: var(--tk-blue); background: var(--tk-info-soft); }
 
 /* Category rail */
-.fr-categories { position: sticky; top: 16px; }
+.fr-categories { position: sticky; top: 16px; min-width: 0; }
+.fr-categories nav { grid-template-columns: minmax(0, 1fr); }
 .fr-category {
   box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 10px; border: 0; border-radius: var(--tk-r-md);
   background: transparent; cursor: pointer; font: 500 13px/18px var(--tk-font-sans); color: var(--tk-ink-700);
   transition: var(--tk-transition);
 }
 .fr-category:hover { background: var(--tk-surface-soft); }
-.fr-category-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-category-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fr-category.is-active { background: var(--tk-info-soft); color: var(--tk-blue); font-weight: 600; }
 .fr-category-count {
+  flex: 0 0 auto;
   min-width: 24px; height: 22px; padding: 0 6px; border-radius: var(--tk-r-xs); display: grid; place-items: center;
   background: var(--tk-surface-sunk); color: var(--tk-ink-500); font: 600 12px/1 var(--tk-font-sans);
 }
@@ -58,7 +60,7 @@
   .fr-layout.has-editor .fr-body { grid-template-columns: minmax(0, 1fr); }
   .fr-layout.has-editor .fr-categories { position: static; padding-block: 12px; }
   .fr-layout.has-editor .fr-categories h3 { display: none; }
-  .fr-layout.has-editor .fr-categories nav { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; }
+  .fr-layout.has-editor .fr-categories nav { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; }
 }
 @media (max-width: 1279px) {
   .fr-layout.has-editor { grid-template-columns: minmax(0, 1fr); }
@@ -67,7 +69,7 @@
 @media (max-width: 1023px) {
   .fr-body { grid-template-columns: minmax(0, 1fr); }
   .fr-categories { position: static; }
-  .fr-categories nav { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; }
+  .fr-categories nav { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; }
 }
 @media (max-width: 639px) {
   .fr-table-tools { width: 100%; }

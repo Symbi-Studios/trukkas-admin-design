@@ -85,15 +85,15 @@ function def(entity, order, label, key, type, category, extra = {}) {
 
 // Driver: admin create (POST /admin/users/drivers) + driver profile & license.
 const driverFields = [
-  def('driver', 1, 'First Name', 'first_name', 'text', 'personal', { required: true, placeholder: 'Enter first name' }),
-  def('driver', 2, 'Last Name', 'last_name', 'text', 'personal', { required: true, placeholder: 'Enter last name' }),
-  def('driver', 3, 'Email Address', 'email', 'email', 'contact', { required: true, placeholder: 'name@example.com', validation: 'email' }),
-  def('driver', 4, 'Phone Number', 'phone', 'phone', 'contact', { required: true, placeholder: '+234 800 000 0000', validation: 'phone_ng' }),
+  def('driver', 1, 'First Name', 'first_name', 'text', 'personal', { required: true, system: true, placeholder: 'Enter first name' }),
+  def('driver', 2, 'Last Name', 'last_name', 'text', 'personal', { required: true, system: true, placeholder: 'Enter last name' }),
+  def('driver', 3, 'Email Address', 'email', 'email', 'contact', { required: true, system: true, placeholder: 'name@example.com', validation: 'email' }),
+  def('driver', 4, 'Phone Number', 'phone', 'phone', 'contact', { required: true, system: true, placeholder: '+234 800 000 0000', validation: 'phone_ng' }),
   def('driver', 5, 'Account Type', 'registration_type', 'select', 'personal', {
-    required: true, options: ['Individual', 'Company'], helpText: 'Company drivers are linked to a trucking company.', editable: false,
+    required: true, system: true, options: ['Individual', 'Company'], helpText: 'Company drivers are linked to a trucking company.', editable: false,
   }),
   def('driver', 6, "Driver's License Number", 'license_number', 'text', 'licenses', {
-    required: true, placeholder: "Enter driver's license number", helpText: "Enter your valid driver's license number.", validation: 'alphanumeric',
+    required: true, system: true, placeholder: "Enter driver's license number", helpText: "Enter your valid driver's license number.", validation: 'alphanumeric',
   }),
   def('driver', 7, 'License Expiry Date', 'license_expires_at', 'date', 'licenses', { required: true, validation: 'date_future' }),
   def('driver', 8, "Driver's License Document", 'license_document', 'file', 'documents', { required: true, helpText: 'A clear photo or scan of the front of the license.' }),
@@ -101,16 +101,16 @@ const driverFields = [
 
 // Forwarder / Exporter: admin create + editable profile (ForwarderForms.jsx) + document slots.
 const forwarderFields = [
-  def('forwarder', 1, 'First Name', 'first_name', 'text', 'personal', { required: true }),
+  def('forwarder', 1, 'First Name', 'first_name', 'text', 'personal', { required: true, system: true }),
   def('forwarder', 2, 'Middle Name', 'middle_name', 'text', 'personal'),
-  def('forwarder', 3, 'Last Name', 'last_name', 'text', 'personal', { required: true }),
-  def('forwarder', 4, 'Date of Birth', 'date_of_birth', 'date', 'personal', { required: true, validation: 'min_age_18' }),
+  def('forwarder', 3, 'Last Name', 'last_name', 'text', 'personal', { required: true, system: true }),
+  def('forwarder', 4, 'Date of Birth', 'date_of_birth', 'date', 'personal', { required: true, system: true, validation: 'min_age_18' }),
   def('forwarder', 5, 'Gender', 'gender', 'select', 'personal', { options: ['Male', 'Female'], enabled: false }),
   def('forwarder', 6, 'Nationality', 'nationality', 'text', 'personal'),
   def('forwarder', 7, 'Languages', 'languages', 'list', 'personal', { helpText: 'One language per line.', enabled: false }),
   def('forwarder', 8, 'Years of Experience', 'years_experience', 'number', 'personal', { validation: 'numeric', enabled: false }),
-  def('forwarder', 9, 'Email Address', 'email', 'email', 'contact', { required: true, validation: 'email', editable: false }),
-  def('forwarder', 10, 'Phone Number', 'phone', 'phone', 'contact', { required: true, validation: 'phone_ng', editable: false }),
+  def('forwarder', 9, 'Email Address', 'email', 'email', 'contact', { required: true, system: true, validation: 'email', editable: false }),
+  def('forwarder', 10, 'Phone Number', 'phone', 'phone', 'contact', { required: true, system: true, validation: 'phone_ng', editable: false }),
   def('forwarder', 11, 'Alternate Phone', 'alternate_phone', 'phone', 'contact', { validation: 'phone_ng' }),
   def('forwarder', 12, 'Home Address', 'address', 'textarea', 'contact', { enabled: false }),
   def('forwarder', 13, 'National ID (NIN)', 'nin', 'text', 'identity', { validation: 'nin', editable: false }),
