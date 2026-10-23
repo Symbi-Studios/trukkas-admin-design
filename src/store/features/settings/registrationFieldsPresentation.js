@@ -1,0 +1,48 @@
+export const FIELD_CATEGORIES = [
+  { value: 'personal', label: 'Personal Information', icon: 'user' },
+  { value: 'contact', label: 'Contact Information', icon: 'phone' },
+  { value: 'identity', label: 'Identity & KYC', icon: 'id-card' },
+  { value: 'business', label: 'Business Information', icon: 'briefcase' },
+  { value: 'director', label: 'Director Details', icon: 'user-round-check' },
+  { value: 'services', label: 'Services & Coverage', icon: 'route' },
+  { value: 'licenses', label: 'Licenses', icon: 'badge-check' },
+  { value: 'documents', label: 'Documents', icon: 'file-text' },
+  { value: 'emergency', label: 'Emergency Contact', icon: 'siren' },
+  { value: 'other', label: 'Other', icon: 'circle-ellipsis' },
+];
+
+export const FIELD_TYPES = [
+  { value: 'text', label: 'Text', icon: 'type' },
+  { value: 'textarea', label: 'Textarea', icon: 'align-left' },
+  { value: 'number', label: 'Number', icon: 'hash' },
+  { value: 'email', label: 'Email', icon: 'mail' },
+  { value: 'password', label: 'Password', icon: 'lock' },
+  { value: 'phone', label: 'Phone', icon: 'phone' },
+  { value: 'date', label: 'Date', icon: 'calendar' },
+  { value: 'select', label: 'Select', icon: 'list' },
+  { value: 'multi_select', label: 'Multi Select', icon: 'list-checks' },
+  { value: 'list', label: 'List', icon: 'list-plus' },
+  { value: 'checkbox', label: 'Checkbox', icon: 'square-check' },
+  { value: 'file', label: 'File', icon: 'paperclip' },
+];
+
+export const VALIDATION_RULES = [
+  { value: 'none', label: 'No special validation' },
+  { value: 'alphanumeric', label: 'Letters and numbers only' },
+  { value: 'numeric', label: 'Numbers only' },
+  { value: 'full_name', label: 'First and last name' },
+  { value: 'email', label: 'Valid email address' },
+  { value: 'email_unique', label: 'Unique email address' },
+  { value: 'password_strength', label: 'Strong password (8+, confirmed)' },
+  { value: 'phone_ng', label: 'Nigerian phone number (+234)' },
+  { value: 'phone_ng_otp', label: 'Nigerian phone, SMS-verified' },
+  { value: 'nin', label: 'NIN — 11 digits' },
+  { value: 'bvn', label: 'BVN — 11 digits' },
+  { value: 'bank_account_ng', label: 'NUBAN account — 10 digits' },
+  { value: 'year', label: 'Year — 4 digits' },
+  { value: 'must_accept', label: 'Must be ticked' },
+  { value: 'url', label: 'Valid web address' },
+  { value: 'date_past', label: 'Date in the past' },
+  { value: 'date_future', label: 'Date in the future' },
+  { value: 'min_age_18', label: 'Minimum age 18' },
+];

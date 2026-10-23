@@ -1,8 +1,15 @@
 # Registration Fields API — proposed contract
 
-**Status: not built.** The admin UI at `Settings → Fields Registration`
-(`/settings/fields-registration`) runs on an in-memory mock today. This document is
-the contract the backend needs to implement so the screen can be wired to it.
+**Status: integrated.** The admin UI at `Settings → Fields Registration`
+(`/settings/fields-registration`) uses the documented admin API through
+`src/store/features/settings/registrationFieldsApi.js`. The live
+[Swagger specification](https://trukkas-backend.onrender.com/api/docs#/) is authoritative.
+
+The sections below preserve the original proposed contract and seed rationale.
+The implemented API also documents `expectedVersion` on field updates and a
+`skipped` collection for protected fields in bulk updates. Admin reads and writes
+require an authenticated admin session; writes require Super Admin. The mock API
+and fixtures are retained as reference and are not used by this screen.
 
 - UI: `src/screens/SettingsFieldsRegistration.jsx`
 - Mock API (one function per endpoint below): `src/mock/registrationFieldsApi.js`
