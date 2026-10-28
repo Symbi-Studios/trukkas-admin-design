@@ -11,6 +11,8 @@ const licenseStatusLabels = { VALID: 'Valid', VERIFIED: 'Verified', EXPIRING_SOO
 const formatEnum = (value) => cleanText(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) || null;
 const finiteNumber = (value) => (typeof value === 'number' || (typeof value === 'string' && value.trim())) && Number.isFinite(Number(value)) ? Number(value) : null;
 const count = (value) => Number.isSafeInteger(finiteNumber(value)) && finiteNumber(value) >= 0 ? finiteNumber(value) : null;
+const isIndividualTrucker = dto => dto.role === 'TRUCKER' && dto.truckerType !== 'COMPANY'
+  && (dto.accountType === 'INDIVIDUAL_TRUCKER' || dto.driverStatus === 'OWNER_OPERATOR' || dto.truckerType === 'INDIVIDUAL');
 function date(value) {
   if (!cleanText(value) || !/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value)) return null;
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);
@@ -65,6 +67,7 @@ export function adaptAdminDriver(dto = {}) {
   const rawLicense = cleanText(dto.licenseStatus)?.toUpperCase() || null;
   return {
     id: cleanText(dto.id), name: name || '—', email: cleanText(dto.email), phone: cleanText(dto.phone),
+    role: cleanText(dto.role), accountType: cleanText(dto.accountType), driverStatus: cleanText(dto.driverStatus), isOwnerOperator: isIndividualTrucker(dto),
     statusCode: rawStatus, displayStatusCode: displayStatus, isOnTrip, status: displayStatus === 'ON_TRIP' ? 'On Trip' : accountStatusLabels[displayStatus] || formatEnum(displayStatus) || '—',
     registrationType: dto.registrationType === 'COMPANY' ? 'Company Driver' : dto.registrationType === 'INDIVIDUAL' ? 'Individual Driver' : cleanText(company.id) ? 'Company Driver' : dto.linkedCompany === null ? 'Individual Driver' : '—',
     company: cleanText(company?.name), linkedCompanyId: cleanText(company?.id),
@@ -78,38 +81,49 @@ export function adaptAdminDriver(dto = {}) {
     currency: cleanText(record(dto.earnings).currency),
     isRejected: typeof dto.isRejected === 'boolean' ? dto.isRejected : null,
     rejectionReason: cleanText(dto.rejectionReason), rejectedAt: date(dto.rejectedAt),
-    canReview: rawStatus === 'PENDING_REVIEW',
+    // Account review under /admin/drivers is for DRIVER accounts only.
+    canReview: rawStatus === 'PENDING_REVIEW' && !isIndividualTrucker(dto),
     canActivate: rawStatus === 'SUSPENDED',
     canSuspend: rawStatus === 'ACTIVE' && isOnTrip === false,
   };
 }
 
-export function adaptAdminDriverProfile(response) {
+export function adaptAdminDriverProfile(response, directoryDriver = null) {
   const dto = unwrapApiResponseData(response);
   if (!dto || typeof dto !== 'object' || Array.isArray(dto)) return null;
   const account = record(record(dto.details).account);
   const stats = record(dto.stats);
-  // DRIVER profiles return one assigned truck; company profiles return trucks[].
-  const trucks = Object.hasOwn(dto, 'truck')
+  const ownerOperator = dto.role === 'TRUCKER' && directoryDriver?.id === dto.id && isIndividualTrucker(directoryDriver);
+  const assignedTruck = record(directoryDriver?.assignedTruck);
+  const drivenEarnings = record(directoryDriver?.earnings);
+  // Owner-operators use the truck identified by the Drivers directory. Other
+  // trucks owned by the account are not assignments to this driver.
+  const trucks = ownerOperator
+    ? directoryDriver.assignedTruck === null ? [] : cleanText(assignedTruck.id)
+      ? [records(dto.trucks).find(truck => truck.id === assignedTruck.id) || assignedTruck] : null
+    : Object.hasOwn(dto, 'truck')
     ? dto.truck === null ? [] : dto.truck && typeof dto.truck === 'object' && !Array.isArray(dto.truck) ? [dto.truck] : null
     : Array.isArray(dto.trucks) ? dto.trucks : null;
   const driver = adaptAdminDriver({
-    ...dto,
+    ...dto, ...(ownerOperator ? { accountType: directoryDriver.accountType, driverStatus: directoryDriver.driverStatus, registrationType: directoryDriver.registrationType,
+      isOnTrip: directoryDriver.isOnTrip, displayStatus: directoryDriver.displayStatus, linkedCompany: directoryDriver.linkedCompany } : {}),
     status: dto.status || account.accountStatus,
     joinedAt: date(dto.joinedAt) || date(account.dateJoined),
-    totalJobs: finiteNumber(stats.totalJobs?.count),
+    totalJobs: ownerOperator ? directoryDriver.totalJobs : finiteNumber(stats.totalJobs?.count),
   });
   return {
     ...driver,
     role: cleanText(dto.role),
-    registrationType: cleanText(account.accountType) || (driver.registrationType === '—' ? null : driver.registrationType),
+    registrationType: ownerOperator ? 'Individual Trucker' : cleanText(account.accountType) || (driver.registrationType === '—' ? null : driver.registrationType),
     lastLoginAt: date(dto.lastLoginAt) || date(account.lastLogin),
     registrationStatus: formatEnum(account.registrationStatus),
+    // For individual truckers, awarded jobs are self-driven. Failed jobs count
+    // only awarded jobs that ended CANCELLED, excluding disputed/unawarded jobs.
     failedJobs: count(stats.failedJobs?.count),
-    totalEarnings: finiteNumber(stats.totalEarned?.amount),
+    totalEarnings: ownerOperator ? drivenEarnings.currency === 'NGN' ? finiteNumber(drivenEarnings.completedTripValue) : null : finiteNumber(stats.totalEarned?.amount),
     walletBalance: finiteNumber(stats.walletBalance?.amount),
     jobsChangeThisWeek: finiteNumber(stats.totalJobs?.changeThisWeek),
-    earningsChangeThisWeek: finiteNumber(stats.totalEarned?.changeThisWeek),
+    earningsChangeThisWeek: ownerOperator ? null : finiteNumber(stats.totalEarned?.changeThisWeek),
     kycStatus: formatEnum(dto.verification?.kycStatus),
     trucks: trucks ? records(trucks).map((truck) => ({
       id: cleanText(truck.id), plate: cleanText(truck.plateNumber),
@@ -241,12 +255,23 @@ export const driversApi = baseApi.injectEndpoints({
       providesTags: [{ type: 'AdminDriverStats', id: 'EARNINGS' }],
     }),
     getAdminDriverProfile: builder.query({
-      async queryFn(id, _api, _options, baseQuery) {
+      async queryFn(id, api, _options, baseQuery) {
         if (!cleanText(id)) return { error: { status: 'CUSTOM_ERROR', error: 'A driver ID is required.' } };
         const result = await baseQuery({ url: '/admin/users/' + encodeURIComponent(id) + '/profile' });
         if (result.error) return result;
-        const profile = adaptAdminDriverProfile(result.data);
-        return profile?.id === id && profile.role === 'DRIVER' ? { data: profile }
+        const dto = record(unwrapApiResponseData(result.data));
+        let directoryDriver = null;
+        if (dto.id === id && dto.role === 'TRUCKER' && dto.truckerType !== 'COMPANY') {
+          // Confirm this trucker belongs to the Drivers population, then use
+          // its driver-directory totals and assigned truck for this view.
+          const email = cleanText(dto.email);
+          if (!email) return { error: { status: 'CUSTOM_ERROR', error: 'The individual trucker profile is missing the identity needed to confirm its driver totals.' } };
+          const directory = await allUsers(baseQuery, '/admin/users/drivers', { registrationType: 'individual', search: email }, api.signal);
+          if (directory.error) return directory;
+          directoryDriver = directory.data.find(driver => driver.id === id && isIndividualTrucker(driver));
+        }
+        const profile = adaptAdminDriverProfile(result.data, directoryDriver);
+        return profile?.id === id && (profile.role === 'DRIVER' || profile.isOwnerOperator && directoryDriver) ? { data: profile }
           : { error: { status: 'CUSTOM_ERROR', error: 'The profile response does not identify the requested driver.' } };
       },
       providesTags: (_result, _error, id) => [{ type: 'AdminDrivers', id }],
