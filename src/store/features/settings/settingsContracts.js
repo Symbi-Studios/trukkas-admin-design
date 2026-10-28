@@ -8,6 +8,14 @@ const safeKey = (key) => typeof key === 'string' && /^[a-zA-Z][a-zA-Z0-9_]*$/.te
 const labelKey = (value) => text(value)?.toLowerCase().replace(/\s+/g, ' ');
 export function timestamp(value) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? value : null; }
 export const sectionVersion = (value) => value === 'initial' ? value : timestamp(value);
+export function adaptSettingsSaveFeedback(response, fallbackSavedOnly = false) {
+  const dto = record(unwrapApiResponseData(response));
+  const fields = Array.isArray(dto.savedOnlyFields) && dto.savedOnlyFields.every(field => text(field))
+    ? [...new Set(dto.savedOnlyFields.map(text))] : null;
+  const warning = text(dto.warning);
+  return { savedOnlyFields: fields || [], warning, savedOnly: Boolean(warning) || (fields ? fields.length > 0 : fallbackSavedOnly) };
+}
+export const securityEventKeys = ['successfulLogin', 'failedLoginAttempts', 'newDeviceLogin', 'newIpAddress', 'passwordChanged', 'accountRecoveryRequests', 'adminRoleChanges', 'sensitiveDataAccess', 'multipleFailedAttempts', 'suspiciousActivity'];
 export function dateLabel(value) { return timestamp(value) ? new Date(value).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; }
 const aliases = { defaultLanguage: 'platformLanguage', commissionRate: 'commissionPercent', vatRate: 'vatPercent', autoCompleteTrips: 'autoCompleteTripsOnPod', terminateAllSessionsOnPasswordChange: 'terminateSessionsOnPasswordChange' };
 const displayCodes = {
@@ -42,12 +50,27 @@ function matchDescriptor(control, descriptors) {
   // Never choose arbitrarily between identically labelled fields.
   return byLabel.length === 1 ? byLabel[0] : null;
 }
-export function adaptSection(response, page) {
+// The General page repeats four Operations controls; their values and versions
+// belong to Operations. Do not alias unrelated settings across sections.
+export const relatedSettingsSections = { general: ['operations'], operations: ['general'] };
+const operationsOnGeneral = ['autoAssignJobs', 'allowPartialBids', 'autoCompleteTrips', 'enableGeofencing'];
+export function adaptSection(response, page, related = {}) {
   const dto = record(unwrapApiResponseData(response));
-  const descriptors = Array.isArray(dto.fields) ? dto.fields.filter((field) => safeKey(field?.key) && ['number', 'boolean', 'enum', 'string'].includes(field.type)) : [];
-  const flat = record(dto.values), values = {}, contracts = {};
+  if (dto.section && dto.section !== page) throw new Error('The settings response belongs to a different section.');
+  const sources = { [page]: dto };
+  for (const section of relatedSettingsSections[page] || []) {
+    const source = record(unwrapApiResponseData(related[section]));
+    if (source.section && source.section !== section) throw new Error('The settings response belongs to a different section.');
+    sources[section] = source;
+  }
+  const values = {}, contracts = {};
   for (const control of settingsControls.filter((field) => field.page === page)) {
     values[control.group] ||= {};
+    const section = page === 'general' && operationsOnGeneral.includes(control.field) ? 'operations'
+      : page === 'operations' && control.field === 'requireDocumentVerification' ? 'general' : page;
+    const source = sources[section] || {};
+    const descriptors = Array.isArray(source.fields) ? source.fields.filter((field) => safeKey(field?.key) && ['number', 'boolean', 'enum', 'string'].includes(field.type)) : [];
+    const flat = record(source.values);
     const descriptor = matchDescriptor(control, descriptors);
     // String facts may fit an existing select. Editing still requires explicit
     // backend options so the control cannot invent wire values.
@@ -55,13 +78,13 @@ export function adaptSection(response, page) {
     const raw = descriptor && Object.hasOwn(flat, descriptor.key) ? flat[descriptor.key] : descriptor?.value;
     values[control.group][control.field] = compatible ? decode(control, descriptor, raw) : null;
     if (compatible) contracts[control.group + '.' + control.field] = {
-      key: descriptor.key, type: descriptor.type, editable: descriptor.editable === true && (control.type !== 'enum' || enumChoices(control, descriptor).length > 0),
+      section, key: descriptor.key, type: descriptor.type, editable: descriptor.editable === true && (control.type !== 'enum' || enumChoices(control, descriptor).length > 0),
       enforced: descriptor.enforced === true, description: text(descriptor.description),
       min: numeric(descriptor.min), max: numeric(descriptor.max), choices: enumChoices(control, descriptor),
       defaultValue: decode(control, descriptor, descriptor.default),
     };
   }
-  return { page, values, contracts, version: sectionVersion(dto.version), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: text(record(dto.updatedBy).name) || '—' }, hasDescriptors: Array.isArray(dto.fields) };
+  return { page, values, contracts, versions: Object.fromEntries(Object.entries(sources).map(([section, source]) => [section, sectionVersion(source.version)])), version: sectionVersion(dto.version), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: text(record(dto.updatedBy).name) || '—' }, hasDescriptors: Array.isArray(dto.fields) };
 }
 export function encodeSetting(control, contract, value) {
   if (!contract?.editable || !safeKey(contract.key)) throw new Error('This setting is fixed or has no documented editable field.');
@@ -99,6 +122,26 @@ export function encodePreference(field, value) {
   }
   throw new Error('Enter a valid notification preference.');
 }
+// Use the returned uiRowMap for new event mappings. This fallback reflects the
+// documented catalogue only; never guess an event key for an existing row.
+const notificationUiRows = [
+  ['newJobAssigned', 'New job assigned', null],
+  ['jobStatusUpdated', 'Job status updated', null],
+  ['tripDelayAlerts', 'Trip delay alerts', 'JOB_DELAYED'],
+  ['tripCompletion', 'Trip completion', null],
+  ['jobCancellation', 'Job cancellation', null],
+  ['maintenanceDue', 'Maintenance due', null],
+  ['maintenanceOverdue', 'Maintenance overdue', null],
+  ['vehicleIssueReported', 'Vehicle issue reported', null],
+];
+function notificationRowMap(raw) {
+  const entries = Array.isArray(raw) ? raw.map(item => [item?.row, item?.eventKey]) : Object.entries(record(raw));
+  return Object.fromEntries(notificationUiRows.map(([key, label, documentedKey]) => {
+    const matches = entries.filter(([row]) => row === key || labelKey(row) === labelKey(label));
+    const value = matches.length === 1 ? matches[0][1] : matches.length > 1 ? null : documentedKey;
+    return [key, value === null || safeKey(value) ? value : null];
+  }));
+}
 export function adaptPreferences(response) {
   const dto = record(unwrapApiResponseData(response)), values = {}, contracts = {};
   for (const field of preferenceFields) {
@@ -108,7 +151,7 @@ export function adaptPreferences(response) {
   }
   values.settingsQuietHours ||= {};
   values.settingsQuietHours.timeZone = dto.timeZone === 'Africa/Lagos' ? '(GMT+01:00) Lagos, Nigeria' : null;
-  return { page: 'notifications', values, contracts, version: timestamp(dto.version), events: settingsEventRows(dto.eventPreferences), eventVersion: sectionVersion(dto.eventPreferencesVersion), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: '—' } };
+  return { page: 'notifications', values, contracts, version: timestamp(dto.version), events: settingsEventRows(dto.eventPreferences), uiRowMap: notificationRowMap(dto.uiRowMap), eventVersion: sectionVersion(dto.eventPreferencesVersion), meta: { lastUpdated: dateLabel(dto.updatedAt), updatedBy: '—' } };
 }
 export const eventFrequencies = { INSTANT: 'Instant', HOURLY: 'Hourly Digest', DAILY: 'Daily Digest', OFF: 'Off' };
 function settingsEventRows(raw) {
@@ -120,7 +163,12 @@ export function adaptSecurityAlertEvents(response) {
   return { events: settingsEventRows(dto.events), eventVersion: sectionVersion(dto.version),
     editable: Array.isArray(dto.editableBy) && dto.editableBy.includes('SUPER_ADMIN'), enforced: dto.enforced === true };
 }
-export function settingsEventForTemplate(rows, key, label) {
+export function settingsEventForTemplate(rows, key, label, uiRowMap) {
+  if (uiRowMap) {
+    const mappedKey = Object.hasOwn(uiRowMap, key) ? uiRowMap[key] : null;
+    const mapped = mappedKey ? rows?.filter(row => row.key === mappedKey) || [] : [];
+    return mapped.length === 1 ? mapped[0] : null;
+  }
   const matches = rows?.filter(row => row.key === key || labelKey(row.label) === labelKey(label)) || [];
   return matches.length === 1 ? matches[0] : null;
 }
@@ -137,29 +185,68 @@ export function settingsEventChanges(rows, changes, security = false) {
 export function settingsEventsMatch(rows, submitted) {
   return submitted.every(({ key, ...fields }) => rows?.filter(row => row.key === key).length === 1 && Object.entries(fields).every(([field, value]) => rows.find(row => row.key === key)[field] === value));
 }
+export function adaptSystemLogs(response, { page = 1, limit = 20 } = {}) {
+  const dto = record(unwrapApiResponseData(response)), pagination = record(dto.pagination);
+  const count = value => Number.isSafeInteger(value) && value >= 0;
+  if (!Array.isArray(dto.logs) || pagination.page !== page || pagination.limit !== limit || !count(pagination.total) || !count(pagination.totalPages)
+    || (pagination.total === 0 ? ![0, 1].includes(pagination.totalPages) : pagination.totalPages !== Math.ceil(pagination.total / limit))
+    || dto.logs.length > limit || dto.logs.length > pagination.total || page > Math.max(1, pagination.totalPages)
+    || dto.logs.some(row => !text(row?.id)) || new Set(dto.logs.map(row => row.id)).size !== dto.logs.length) throw new Error('The backend did not return a confirmed system logs page.');
+  return { rows: dto.logs.map(row => ({
+    id: row.id, time: dateLabel(row.timestamp), job: text(row.job) || '—', action: text(row.action) || '—',
+    result: ['SUCCESS', 'FAILED'].includes(row.result) ? row.result : '—', level: ['INFO', 'ERROR'].includes(row.level) ? row.level : '—',
+    message: text(row.message) || '—', entityType: text(row.entityType), entityId: text(row.entityId),
+    before: record(row.details).before ?? null, after: record(row.details).after ?? null,
+  })), total: pagination.total, pageCount: pagination.totalPages };
+}
+const settingStatuses = ['ACTIVE', 'FIXED', 'NOT_ENFORCED', 'OPERATIONAL', 'NOT_CONFIGURED', 'NOT_AVAILABLE'];
+const cardStatuses = ['OPERATIONAL', 'PARTIAL', 'NOT_AVAILABLE'];
+function statusItems(raw) {
+  return Array.isArray(raw) ? raw.map((item) => ({
+    key: text(item?.key), label: text(item?.label), kind: text(item?.kind), group: text(item?.group),
+    value: ['string', 'boolean'].includes(typeof item?.value) || typeof item?.value === 'number' && Number.isFinite(item.value) ? item.value : null,
+    status: settingStatuses.includes(item?.status) ? item.status : '—',
+  })) : [];
+}
+function statusSummary(raw) {
+  const dto = record(raw);
+  return { key: text(dto.key), label: text(dto.label), status: cardStatuses.includes(dto.status) ? dto.status : '—',
+    headline: text(dto.headline) || '—', caption: text(dto.caption) || '—', measures: text(dto.measures),
+    lastChecked: dateLabel(dto.checkedAt), items: statusItems(dto.items) };
+}
 export function adaptStatus(response, { page } = {}) {
   const dto = record(unwrapApiResponseData(response));
   if (dto.section && dto.section !== page) throw new Error('The status response belongs to a different settings section.');
-  return { page, headline: text(dto.headline) || '—', caption: text(dto.caption) || '—', lastChecked: dateLabel(dto.checkedAt), items: Array.isArray(dto.items) ? dto.items.map((item) => ({
-    key: text(item?.key), label: text(item?.label), kind: text(item?.kind), group: text(item?.group),
-    value: ['string', 'boolean'].includes(typeof item?.value) || typeof item?.value === 'number' && Number.isFinite(item.value) ? item.value : null,
-    status: ['ACTIVE', 'FIXED', 'NOT_ENFORCED', 'OPERATIONAL', 'NOT_CONFIGURED'].includes(item?.status) ? item.status : '—',
-  })) : [] };
+  return { page, headline: text(dto.headline) || '—', caption: text(dto.caption) || '—', lastChecked: dateLabel(dto.checkedAt), items: statusItems(dto.items),
+    cards: Array.isArray(dto.cards) ? dto.cards.map(statusSummary).filter(card => card.key) : [],
+    sectionStatus: statusSummary(dto.sectionStatus) };
 }
-// These are the documented processor IDs and purposes. A settings group's
-// active/fixed counts cannot stand in for one of the screen's grouped statuses.
+// Card keys and processor IDs are documented by GET settings/status. Do not
+// infer a grouped status from flat settings or provider-configuration counts.
 const serviceStatusKeys = { Database: 'neon', 'Payment Services': 'embedly', 'SMS Gateway': 'termii', 'Email Service': 'sender' };
+const statusCardKeys = {
+  general: { 'Web Application': 'web-application', 'Map & Location Services': 'map-location' },
+  operations: { 'Job Processing': 'job-processing', 'Bidding System': 'bidding-system', Dispatch: 'dispatch', 'Trip Tracking': 'trip-tracking', 'Document Verification': 'document-verification', 'Auto Notifications': 'auto-notifications' },
+  finance: { 'Currency Configuration': 'currency-configuration', 'Platform Fees': 'platform-fees', 'Escrow Rules': 'escrow-rules', 'Payout Settings': 'payout-settings', 'Invoicing & Receipts': 'invoicing-receipts', 'Tax Compliance': 'tax-compliance', 'Accounting Integration': 'accounting-integration' },
+  fleet: { 'Fleet Management': 'fleet-management', 'Maintenance Rules': 'maintenance-rules', 'Tracking & Telematics': 'tracking-telematics', 'Fuel & Cost Settings': 'fuel-cost', 'Document Management': 'document-management', 'Compliance & Inspections': 'compliance-inspections', 'Driver Assignment': 'driver-assignment', Integrations: 'integrations' },
+};
 export function statusForTemplate(status, template) {
+  const card = (key) => {
+    const matches = status?.cards?.filter(item => item.key === key) || [];
+    return matches.length === 1 ? matches[0] : null;
+  };
   const items = (template.items || []).map(({ label }) => {
+    const cardKey = statusCardKeys[status?.page]?.[label];
+    if (cardKey) return { label, status: card(cardKey)?.status || '—' };
     const serviceKey = status?.page === 'general' ? serviceStatusKeys[label] : null;
     const exact = status?.items?.filter(item => labelKey(item.label) === labelKey(label)) || [];
     const matches = exact.length ? exact : status?.items?.filter(item => serviceKey && item.kind === 'SERVICE' && item.key === serviceKey) || [];
     return { label, status: matches.length === 1 ? matches[0].status : '—' };
   });
+  const grouped = status?.page === 'general' ? card('overall-health') : statusCardKeys[status?.page] ? status?.sectionStatus : null;
+  if (statusCardKeys[status?.page]) return { headline: grouped?.headline || '—', caption: grouped?.caption || '—', lastChecked: grouped?.lastChecked && grouped.lastChecked !== '—' ? grouped.lastChecked : status?.lastChecked || '—', items };
   const applicable = items.length === 0 || items.some(item => item.status !== '—');
-  // The general endpoint's headline counts settings; it does not report overall
-  // service health. Keep that unrelated headline out of the System Status card.
-  return { headline: applicable && status?.page !== 'general' ? status?.headline || '—' : '—', caption: applicable ? status?.caption || '—' : '—', lastChecked: applicable ? status?.lastChecked || '—' : '—', items };
+  return { headline: applicable ? status?.headline || '—' : '—', caption: applicable ? status?.caption || '—' : '—', lastChecked: applicable ? status?.lastChecked || '—' : '—', items };
 }
 export function adaptIntegrations(response) {
   const dto = record(unwrapApiResponseData(response)), rows = dto.integrations;

@@ -14,6 +14,7 @@ import { clearSession } from '../store/features/auth/authSlice.js';
 import { baseApi } from '../store/api/baseApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import styles from './AuthScreens.module.css';
+import { AdminTwoFactorChallengeDialog } from './AdminTwoFactorChallengeDialog.jsx';
 
 function AuthFrame({ eyebrow, title, description, children }) {
   return (
@@ -61,6 +62,9 @@ export function LoginScreen() {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [loginAdmin, { isLoading: busy }] = useLoginAdminMutation();
+  const [challenge, setChallenge] = React.useState(null);
+  const pendingLogin = React.useRef(false), loginRequest = React.useRef(null);
+  React.useEffect(() => () => { loginRequest.current?.abort(); }, []);
   const admin = useSelector((state) => state.auth.admin);
   const [error, setError] = React.useState('');
   const [notice, setNotice] = React.useState('');
@@ -77,16 +81,21 @@ export function LoginScreen() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (pendingLogin.current || challenge) return;
     setError('');
     if (!email.trim() || !password) {
       setError('Enter your email and password.');
       return;
     }
+    pendingLogin.current = true;
+    const task = loginAdmin({ email: email.trim(), password });
+    loginRequest.current = task;
     try {
-      await loginAdmin({ email: email.trim(), password }).unwrap();
+      const result = await task.unwrap();
+      if (result.twoFactorRequired) { setPassword(''); setChallenge(result.challenge); }
     } catch (requestError) {
       setError(getApiErrorMessage(requestError));
-    }
+    } finally { task.reset(); pendingLogin.current = false; loginRequest.current = null; }
   }
 
   return (
@@ -108,7 +117,7 @@ export function LoginScreen() {
           autoFocus
           required
           aria-required="true"
-          disabled={busy}
+          disabled={busy || Boolean(challenge)}
           placeholder="admin@trukkas.com"
         />
         <TextField
@@ -120,16 +129,17 @@ export function LoginScreen() {
           autoComplete="current-password"
           required
           aria-required="true"
-          disabled={busy}
+          disabled={busy || Boolean(challenge)}
           placeholder="Enter your password"
         />
         <div className={styles.formLink}>
           <Link href="/forgot-password">Forgot password?</Link>
         </div>
-        <Button type="submit" fullWidth disabled={busy}>
+        <Button type="submit" fullWidth disabled={busy || Boolean(challenge)}>
           {busy ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
+      {challenge && <AdminTwoFactorChallengeDialog key={challenge.challengeId} challenge={challenge} onClose={() => setChallenge(null)} onComplete={() => setChallenge(null)} />}
     </AuthFrame>
   );
 }

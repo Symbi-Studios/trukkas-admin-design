@@ -5,6 +5,7 @@ import { PageHeader, Button, SectionCard, Icon, QuickActionsCard, Banner } from 
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { SettingsEventsDialog, SettingsPasswordDialog } from './SettingsActionDialogs.jsx';
+import { SettingsTwoFactorDialog } from './SettingsTwoFactorDialog.jsx';
 import { DriverDetailLoading } from './DriversLoading.jsx';
 
 import { DIGEST_FREQUENCIES, securityAlertsStatus as securityAlertsStatusTemplate, securityAlertsQuickActions, securityTip, securityAlertEvents as securityAlertControls } from '../mock/fixtures/settings.js';
@@ -44,7 +45,7 @@ export function SettingsSecurityAlerts() {
   const updateAlertDelivery = editor.change('settingsAlertDelivery');
   const updateSecurityAlertsQuietHours = editor.change('settingsSecurityAlertsQuietHours');
   const saveSecurityAlertsSettings = () => editor.save();
-  const resetSecurityAlertsSettings = () => editor.unavailable('Reset Security Alerts Settings');
+  const resetSecurityAlertsSettings = () => editor.reset();
   const securityAlertsStatus = editor.status(securityAlertsStatusTemplate);
   const recentSecurityAlerts = editor.events;
   const events = securityAlertControls.map(({ key, icon, label, description }) => ({ key, icon, label, description, ...editor.event({ key, label }) }));
@@ -168,6 +169,7 @@ export function SettingsSecurityAlerts() {
           <QuickActionsCard items={editor.quickActions(securityAlertsQuickActions, {
             'View Login History': () => openEvents('login'),
             'Update Password': () => setDialog({ admin: editor.admin, kind: 'password' }),
+            'Configure 2FA': () => setDialog({ admin: editor.admin, kind: 'two-factor' }),
           })} />
 
           <Banner tone="info" title="Security Tip">{securityTip}</Banner>
@@ -176,6 +178,7 @@ export function SettingsSecurityAlerts() {
       </div>
       {dialog && dialog.admin === editor.admin && dialog.kind === 'events' && <SettingsEventsDialog admin={editor.admin} type={dialog.type} onClose={() => setDialog(null)} />}
       {dialog && dialog.admin === editor.admin && dialog.kind === 'password' && <SettingsPasswordDialog admin={editor.admin} onClose={() => setDialog(null)} />}
+      {dialog && dialog.admin === editor.admin && dialog.kind === 'two-factor' && <SettingsTwoFactorDialog admin={editor.admin} onClose={() => setDialog(null)} />}
     </>
   );
 }

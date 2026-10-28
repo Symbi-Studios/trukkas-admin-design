@@ -3,9 +3,15 @@
 import { useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
-import { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation } from '../store/features/settings/settingsApi.js';
+import { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useResetAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation } from '../store/features/settings/settingsApi.js';
 import { canEditSettings, statusForTemplate, settingsEventForTemplate, eventFrequencies } from '../store/features/settings/settingsContracts.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+
+function savedOnlyNotice(result) {
+  if (!result.savedOnly) return null;
+  return [result.warning || 'Preferences saved. Some of these settings are stored only and do not affect platform behavior or notification delivery yet.',
+    result.savedOnlyFields?.length ? 'Saved-only fields: ' + result.savedOnlyFields.join(', ') : null].filter(Boolean).join('\n');
+}
 
 export function useSettingsEditor(page) {
   const admin = useSelector((state) => state.auth.admin);
@@ -24,6 +30,7 @@ export function useSettingsEditor(page) {
   const query = personal ? preferences : config;
   const [saveSettings, mutation] = useSaveAdminSettingsSectionMutation();
   const [saveSecurityEvents, securityMutation] = useSaveAdminSettingsSecurityEventsMutation();
+  const [resetSecurityEvents, securityResetMutation] = useResetAdminSettingsSecurityEventsMutation();
   const [resetSettings, resetMutation] = useResetAdminSettingsSectionMutation();
   const [resetAllSettings, resetAllMutation] = useResetAllAdminSettingsMutation();
   const [testNotification, testMutation] = useTestAdminSettingsNotificationMutation();
@@ -39,7 +46,7 @@ export function useSettingsEditor(page) {
   const values = draft?.baseValues || model?.values;
   const unavailable = (action) => window.alert(action + ' is not supported by the documented settings API.');
   function event(control) {
-    const row = control?.key ? settingsEventForTemplate(eventModel?.events, control.key, control.label) : null;
+    const row = control?.key ? settingsEventForTemplate(eventModel?.events, control.key, control.label, eventModel?.uiRowMap) : null;
     const values = row ? { ...row, ...eventDraft?.events[row.key] } : {};
     return { inApp: values.inApp ?? null, email: values.email ?? null, sms: values.sms ?? null, frequency: eventFrequencies[values.frequency] ?? null };
   }
@@ -48,7 +55,7 @@ export function useSettingsEditor(page) {
     if (!control?.key) { unavailable('Changing this event preference'); return; }
     if (eventQuery.error) { window.alert(getApiErrorMessage(eventQuery.error)); return; }
     if (!eventModel || eventQuery.isFetching) { window.alert('Wait for the current settings to finish loading.'); return; }
-    const row = settingsEventForTemplate(eventModel.events, control.key, control.label);
+    const row = settingsEventForTemplate(eventModel.events, control.key, control.label, eventModel.uiRowMap);
     if (!row || !eventModel.eventVersion) { unavailable('Changing this event preference'); return; }
     if (personal ? !canEditSettings(page, role) || field === 'inApp' : role !== 'SUPER_ADMIN' || !eventModel.editable) { unavailable('Changing this fixed or unavailable event preference'); return; }
     const wire = field === 'frequency' ? Object.entries(eventFrequencies).find(([, label]) => label === value)?.[0] : value;
@@ -74,7 +81,7 @@ export function useSettingsEditor(page) {
       const contracts = Object.keys(changes).map((field) => model.contracts[name + '.' + field]);
       if (contracts.some((contract) => !contract?.editable)) { unavailable('Changing this fixed or unavailable setting'); return; }
       setDraftState((current) => {
-        const prior = current?.admin === admin && current.page === page ? current : { admin, page, groups: {}, version: model.version, baseValues: model.values };
+        const prior = current?.admin === admin && current.page === page ? current : { admin, page, groups: {}, version: model.version, versions: model.versions, baseValues: model.values };
         return { ...prior, groups: { ...prior.groups, [name]: { ...prior.groups[name], ...changes } } };
       });
     };
@@ -93,31 +100,41 @@ export function useSettingsEditor(page) {
         const result = await saveSecurityEvents({ owner, changes: changedEvents, expectedVersion: eventDraft?.version }).unwrap();
         if (currentAdmin.current !== admin) return false;
         setEventDraftState(null);
-        if (result.savedOnly) window.alert('Preferences saved. Some of these settings are stored only and do not affect platform behavior or notification delivery yet.');
+        if (result.savedOnly) window.alert(savedOnlyNotice(result));
         return true;
       }
-      const result = await saveSettings({ page, changes, eventChanges: changedEvents, owner, expectedVersion: draft?.version, expectedEventVersion: eventDraft?.version }).unwrap();
+      const result = await saveSettings({ page, changes, eventChanges: changedEvents, owner, expectedVersion: draft?.version, expectedVersions: draft?.versions, expectedEventVersion: eventDraft?.version }).unwrap();
       if (currentAdmin.current !== admin) return false;
       setEventDraftState(null);
       setDraftState((current) => {
         if (current?.admin !== admin) return current;
         const groups = { ...current.groups };
         for (const change of changes) { const fields = { ...groups[change.group] }; delete fields[change.field]; groups[change.group] = fields; }
-        return { ...current, groups, version: result.section.version, baseValues: result.section.values };
+        // Keep unsaved groups tied to their original values and section
+        // versions when a different card is saved.
+        const baseValues = { ...current.baseValues }, versions = { ...current.versions };
+        for (const change of changes) {
+          baseValues[change.group] = result.section.values[change.group];
+          const section = model?.contracts[change.group + '.' + change.field]?.section || page;
+          if (result.section.versions?.[section]) versions[section] = result.section.versions[section];
+        }
+        return { ...current, groups, version: versions[page] ?? result.section.version, versions, baseValues };
       });
-      if (result.savedOnly) window.alert('Preferences saved. Some of these settings are stored only and do not affect platform behavior or notification delivery yet.');
+      if (result.savedOnly) window.alert(savedOnlyNotice(result));
       return true;
     } catch (error) { if (currentAdmin.current === admin) window.alert(getApiErrorMessage(error)); return false; }
     finally { busy.current = false; }
   }
   async function reset() {
     if (busy.current || skip) return false;
-    if (query.isFetching || query.error || !model) { window.alert(query.error ? getApiErrorMessage(query.error) : 'Wait for the current settings to finish loading.'); return false; }
+    const security = page === 'security-alerts', resetQuery = security ? securityPreferences : query, resetModel = security ? eventModel : model;
+    if (resetQuery.isFetching || resetQuery.error || !resetModel) { window.alert(resetQuery.error ? getApiErrorMessage(resetQuery.error) : 'Wait for the current settings to finish loading.'); return false; }
     busy.current = true;
     try {
-      await resetSettings({ page, owner, expectedVersion: model.version }).unwrap();
+      const result = security ? await resetSecurityEvents({ owner, expectedVersion: resetModel.eventVersion }).unwrap()
+        : await resetSettings({ page, owner, expectedVersion: resetModel.version }).unwrap();
       if (currentAdmin.current !== admin) return false;
-      setDraftState(null); setEventDraftState(null); window.alert('Settings reset to their documented defaults.'); return true;
+      setDraftState(null); setEventDraftState(null); window.alert(['Settings reset to their documented defaults.', savedOnlyNotice(result)].filter(Boolean).join('\n')); return true;
     } catch (error) { if (currentAdmin.current === admin) window.alert(getApiErrorMessage(error)); return false; }
     finally { busy.current = false; }
   }
@@ -140,7 +157,9 @@ export function useSettingsEditor(page) {
   }
   function quickActions(items, handlers = {}) {
     const destinations = { 'Set Default Pricing Rules': '/pricing', 'Configure Notifications': '/settings/notifications', 'Manage Integrations': '/settings/integrations', 'Manage User Roles': '/roles', 'Review Active Sessions': '/settings/passwords', 'View Audit Logs': '/audit' };
-    return items.map((item) => ({ ...item, onClick: () => {
+    // Show only actions with working navigation or an implemented handler.
+    const available = items.filter((item) => typeof handlers[item.label] === 'function' || Object.hasOwn(destinations, item.label) || item.label === 'Test Notification');
+    return available.map((item) => ({ ...item, onClick: () => {
       if (item.label === 'View Audit Logs' && role !== 'SUPER_ADMIN') { window.alert('Only Super Admins can view audit logs.'); return; }
       if (handlers[item.label]) { handlers[item.label](); return; }
       if (item.label === 'Test Notification') { void testEmail(); return; }
@@ -156,6 +175,6 @@ export function useSettingsEditor(page) {
     processors: processors.error ? [] : processors.currentData || [],
     events: events.error ? [] : events.currentData?.rows || [],
     loading, error: query.error || securityPreferences.error || status.error || version.error || channels.error || processors.error || events.error,
-    saving: mutation.isLoading || securityMutation.isLoading || resetMutation.isLoading || resetAllMutation.isLoading || testMutation.isLoading,
+    saving: mutation.isLoading || securityMutation.isLoading || securityResetMutation.isLoading || resetMutation.isLoading || resetAllMutation.isLoading || testMutation.isLoading,
   };
 }

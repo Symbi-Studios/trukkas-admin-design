@@ -1,6 +1,7 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { clearSession } from '../auth/authSlice.js';
-import { adaptSection, adaptPreferences, adaptSecurityAlertEvents, settingsEventChanges, settingsEventsMatch, adaptStatus, adaptIntegrations, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp, sectionVersion } from './settingsContracts.js';
+import { adaptSettingsSaveFeedback, securityEventKeys, adaptSystemLogs } from './settingsContracts.js';
+import { adaptSection, relatedSettingsSections, adaptPreferences, adaptSecurityAlertEvents, settingsEventChanges, settingsEventsMatch, adaptStatus, adaptIntegrations, adaptSessions, adaptEvents, adaptProcessors, adaptVersion, adaptChannels, canEditSettings, findSettingsField, preferenceFields, encodeSetting, encodePreference, record, text, timestamp, sectionVersion } from './settingsContracts.js';
 export { findSettingsField, preferenceFields } from './settingsContracts.js';
 const failure = (message, status = 'CUSTOM_ERROR') => ({ error: { status, error: message, data: { message } } });
 const sections = ['general', 'operations', 'finance', 'fleet', 'security', 'passwords', 'security-alerts', 'data-protection'];
@@ -38,11 +39,22 @@ const readQuery = (url, adapter) => async (args, api, _options, baseQuery) => {
     return { data: adapter(result.data, args) };
   } catch (error) { return failure(error.message); }
 };
+async function readSettingsPage(page, baseQuery, check, primaryResponse) {
+  const pages = [page, ...(relatedSettingsSections[page] || [])];
+  const results = await Promise.all(pages.map((section, index) => index === 0 && primaryResponse !== undefined ? Promise.resolve({ data: primaryResponse }) : baseQuery({ url: '/admin/settings/' + encodeURIComponent(section) })));
+  check();
+  const failed = results.find((result) => result.error);
+  if (failed) return failed;
+  return { data: adaptSection(results[0].data, page, Object.fromEntries(pages.slice(1).map((section, index) => [section, results[index + 1].data]))) };
+}
 const settingsTags = ['AdminSettings', 'AdminSettingsStatus', 'AdminSettingsSecurityEvents', 'AdminAuditLogs', 'AdminPricingConfig', 'AdminPricing', 'AdminFeeRules', 'AdminFeeHistory', 'AdminFeeSummary', 'AdminFeeRevenue'];
 export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsTags, 'AdminSettingsSessions', 'AdminSettingsEvents', 'AdminSettingsChannels'] }).injectEndpoints({
   endpoints: (builder) => ({
     getAdminSystemSettings: builder.query({
-      queryFn: readQuery(({ page }) => '/admin/settings/' + encodeURIComponent(page), (data, { page }) => adaptSection(data, page)),
+      async queryFn({ page, owner }, api, _options, baseQuery) {
+        try { return await readSettingsPage(page, baseQuery, sessionGuard(api, owner)); }
+        catch (error) { return failure(error.message); }
+      },
       providesTags: ['AdminSettings'],
     }),
     getAdminSettingsPreferences: builder.query({ queryFn: readQuery('/admin/notifications/settings', adaptPreferences), providesTags: ['AdminNotificationSettings'] }),
@@ -58,46 +70,80 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
     getAdminSettingsEvents: builder.query({
       queryFn: readQuery(({ page = 1, limit = 5, type }) => ({ url: '/admin/security/events', params: { page, limit, scope: 'me', ...(type ? { type } : {}) } }), adaptEvents), providesTags: ['AdminSettingsEvents'],
     }),
+    getAdminSettingsSystemLogs: builder.query({
+      queryFn: readQuery(({ page = 1, limit = 20 }) => ({ url: '/admin/system/logs', params: { page, limit } }), adaptSystemLogs),
+    }),
     saveAdminSettingsSection: builder.mutation({
-      async queryFn({ page, changes, eventChanges = [], owner, expectedVersion, expectedEventVersion }, api, _options, baseQuery) {
+      async queryFn({ page, changes, eventChanges = [], owner, expectedVersion, expectedVersions, expectedEventVersion }, api, _options, baseQuery) {
         try {
           const check = sessionGuard(api, owner), role = api.getState().auth.admin.role, personal = page === 'notifications';
           if (!canEditSettings(page, role)) return failure('Your admin access level cannot change this settings section.', 403);
           if (!Array.isArray(changes) || !Array.isArray(eventChanges) || !changes.length && !eventChanges.length) return failure('There are no supported settings to save.');
           if (eventChanges.length && !personal) return failure('Use the security-alert event operation for these preferences.');
           const url = personal ? '/admin/notifications/settings' : '/admin/settings/' + encodeURIComponent(page);
-          const read = await baseQuery({ url }); check(); if (read.error) return read;
-          const before = personal ? adaptPreferences(read.data) : adaptSection(read.data, page);
-          if (!personal && (!sectionVersion(expectedVersion) || before.version !== expectedVersion)) return failure('These settings changed or their version is unavailable. Reload before saving.', 409);
-          const body = {}, submitted = [];
+          const read = personal ? await baseQuery({ url }) : await readSettingsPage(page, baseQuery, check);
+          check(); if (read.error) return read;
+          const before = personal ? adaptPreferences(read.data) : read.data;
+          const plans = new Map(), submitted = [];
           for (const change of changes) {
             const control = findSettingsField(page, change.group, change.field), contract = before.contracts[change.group + '.' + change.field];
             if (!control || !contract?.editable) return failure('This setting is fixed or unsupported by the backend.');
+            const section = personal ? page : contract.section;
+            if (!canEditSettings(section, role)) return failure('Your admin access level cannot change this settings section.', 403);
             const value = personal ? encodePreference(contract, change.value) : encodeSetting(control, contract, change.value);
-            if (Object.hasOwn(body, contract.key) && body[contract.key] !== value) return failure('Conflicting values were entered for the same setting.');
-            body[contract.key] = value; submitted.push({ control, contract, value });
+            if (!plans.has(section)) plans.set(section, { section, body: {}, version: personal ? null : record(expectedVersions)[section] ?? (section === page ? expectedVersion : null) });
+            const plan = plans.get(section);
+            if (Object.hasOwn(plan.body, contract.key) && plan.body[contract.key] !== value) return failure('Conflicting values were entered for the same setting.');
+            plan.body[contract.key] = value; submitted.push({ control, contract, value });
           }
           const submittedEvents = eventChanges.length ? settingsEventChanges(before.events, eventChanges) : [];
           if (submittedEvents.length) {
             if (!sectionVersion(expectedEventVersion) || before.eventVersion !== expectedEventVersion) return failure('Event preferences changed. Reload before saving.', 409);
-            body.eventPreferences = submittedEvents; body.expectedEventPreferencesVersion = expectedEventVersion;
+            if (!plans.has(page)) plans.set(page, { section: page, body: {} });
+            Object.assign(plans.get(page).body, { eventPreferences: submittedEvents, expectedEventPreferencesVersion: expectedEventVersion });
           }
-          if (!personal) body.expectedVersion = expectedVersion;
+          // Validate every section version before sending the first write. The
+          // backend checks each section atomically; separate sections can still
+          // save independently, so report partial results without replaying them.
+          for (const plan of plans.values()) {
+            if (!personal && (!sectionVersion(plan.version) || before.versions[plan.section] !== plan.version)) return failure('These settings changed or their version is unavailable. Reload before saving.', 409);
+          }
+          let savedSections = 0;
+          const feedback = [];
+          for (const plan of plans.values()) {
+            check();
+            const body = personal ? plan.body : { ...plan.body, expectedVersion: plan.version };
+            const result = await baseQuery({ url: personal ? url : '/admin/settings/' + encodeURIComponent(plan.section), method: 'PATCH', body });
+            check();
+            if (result.error) return savedSections ? failure('Some settings were saved, but another section failed. Reload before continuing.') : settingsError(result);
+            savedSections += 1;
+            feedback.push(adaptSettingsSaveFeedback(result.data, submittedEvents.length > 0 || submitted.some(({ contract }) => (personal || contract.section === plan.section) && !contract.enforced)));
+            if (!personal) {
+              const saved = record(unwrapApiResponseData(result.data));
+              const changedKeys = submitted.filter(({ control, contract, value }) => {
+                if (contract.section !== plan.section) return false;
+                try { return encodeSetting(control, contract, before.values[control.group]?.[control.field]) !== value; } catch { return true; }
+              }).map(({ contract }) => contract.key);
+              if (saved.section !== plan.section || !sectionVersion(saved.version) || changedKeys.length > 0 && (!timestamp(saved.version) || saved.version === plan.version) || !valuesMatch(saved.values, plan.body) || !Array.isArray(saved.changedFields) || !changedKeys.every((field) => saved.changedFields.includes(field))) return failure('The save was sent, but the saved section could not be confirmed. Reload before trying again.');
+              plan.savedVersion = saved.version;
+            }
+          }
+          // Read back once; a successful HTTP response alone does not confirm
+          // that the displayed values match every submitted field.
+          const afterRead = personal ? await baseQuery({ url }) : await readSettingsPage(page, baseQuery, check);
           check();
-          const result = await baseQuery({ url, method: 'PATCH', body }); check(); if (result.error) return settingsError(result);
-          // A successful HTTP response alone is not proof that every submitted
-          // field was saved. Read back once; never replay the write.
-          const afterRead = await baseQuery({ url }); check();
           if (afterRead.error) return failure('The save was sent, but its result could not be confirmed. Reload before trying again.');
-          const after = personal ? adaptPreferences(afterRead.data) : adaptSection(afterRead.data, page);
+          const after = personal ? adaptPreferences(afterRead.data) : afterRead.data;
           const matches = submitted.every(({ control, contract, value }) => {
             const savedContract = after.contracts[control.group + '.' + control.field];
-            if (!savedContract || savedContract.key !== contract.key) return false;
+            if (!savedContract || savedContract.key !== contract.key || !personal && savedContract.section !== contract.section) return false;
             try { return (personal ? encodePreference(savedContract, after.values[control.group]?.[control.field]) : encodeSetting(control, savedContract, after.values[control.group]?.[control.field])) === value; } catch { return false; }
           });
-          if (!matches || (!personal && !after.version) || submittedEvents.length && (!after.eventVersion || after.eventVersion === expectedEventVersion || !settingsEventsMatch(after.events, submittedEvents))) return failure('The save was sent, but the saved values could not be confirmed. Reload before trying again.');
+          if (!matches || !personal && [...plans.values()].some((plan) => after.versions[plan.section] !== plan.savedVersion) || submittedEvents.length && (!after.eventVersion || after.eventVersion === expectedEventVersion || !settingsEventsMatch(after.events, submittedEvents))) return failure('The save was sent, but the saved values could not be confirmed. Reload before trying again.');
           api.dispatch(settingsApi.util.updateQueryData(personal ? 'getAdminSettingsPreferences' : 'getAdminSystemSettings', personal ? { owner } : { page, owner }, () => after));
-          return { data: { section: after, savedOnly: submittedEvents.length > 0 || submitted.some(({ contract }) => !contract.enforced) } };
+          return { data: { section: after, savedOnly: feedback.some(item => item.savedOnly),
+            savedOnlyFields: [...new Set(feedback.flatMap(item => item.savedOnlyFields))],
+            warning: [...new Set(feedback.map(item => item.warning).filter(Boolean))].join('\n') || null } };
         } catch (error) { return failure(error.message); }
       },
       invalidatesTags: (_result, _error, args) => args.page === 'notifications' ? ['AdminNotificationSettings', 'AdminSettingsEvents'] : settingsTags,
@@ -117,9 +163,31 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const after = adaptSecurityAlertEvents(reread.data);
           if (!after.eventVersion || after.eventVersion === expectedVersion || !settingsEventsMatch(after.events, events)) return failure('The saved security-alert values could not be confirmed. Reload before trying again.');
           api.dispatch(settingsApi.util.updateQueryData('getAdminSettingsSecurityEvents', { owner }, () => after));
-          return { data: { savedOnly: !after.enforced } };
+          return { data: adaptSettingsSaveFeedback(result.data, !after.enforced) };
         } catch (error) { return failure(error.message); }
       }, invalidatesTags: ['AdminSettingsSecurityEvents', 'AdminSettingsStatus'],
+    }),
+    resetAdminSettingsSecurityEvents: builder.mutation({
+      async queryFn({ owner, expectedVersion }, api, _options, baseQuery) {
+        try {
+          const check = sessionGuard(api, owner), url = '/admin/settings/security-alerts/events';
+          if (api.getState().auth.admin.role !== 'SUPER_ADMIN') return failure('Only Super Admins can reset security-alert event preferences.', 403);
+          const read = await baseQuery({ url }); check(); if (read.error) return read;
+          const before = adaptSecurityAlertEvents(read.data);
+          if (!before.editable || !sectionVersion(expectedVersion) || before.eventVersion !== expectedVersion) return failure('Security-alert preferences changed or cannot be edited. Reload before resetting.', 409);
+          const complete = model => model.events?.length === securityEventKeys.length && securityEventKeys.every(key => model.events.some(event => event.key === key));
+          if (!complete(before)) return failure('The backend did not return all security-alert events. Reload before resetting.');
+          const result = await baseQuery({ url: url + '/reset', method: 'POST', body: { expectedVersion } }); check(); if (result.error) return settingsError(result);
+          const saved = adaptSecurityAlertEvents(result.data), dto = record(unwrapApiResponseData(result.data));
+          const defaultsMatch = model => complete(model) && model.events.every(event => ['inApp', 'email', 'sms'].every(channel => event[channel] === false));
+          const reread = await baseQuery({ url }); check();
+          if (reread.error) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
+          const after = adaptSecurityAlertEvents(reread.data);
+          if (dto.reset !== true || !sectionVersion(saved.eventVersion) || !defaultsMatch(saved) || after.eventVersion !== saved.eventVersion || !defaultsMatch(after)) return failure('The reset was sent, but the saved defaults could not be confirmed. Reload before trying again.');
+          api.dispatch(settingsApi.util.updateQueryData('getAdminSettingsSecurityEvents', { owner }, () => after));
+          return { data: adaptSettingsSaveFeedback(result.data, !after.enforced) };
+        } catch (error) { return failure(error.message); }
+      }, invalidatesTags: ['AdminSettingsSecurityEvents', 'AdminSettingsStatus', 'AdminSettingsEvents', 'AdminAuditLogs'],
     }),
     resetAdminSettingsSection: builder.mutation({
       async queryFn({ page, owner, expectedVersion }, api, _options, baseQuery) {
@@ -139,7 +207,9 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const responseConfirmed = personal ? saved.scope === 'PERSONAL' && saved.adminId === owner && timestamp(saved.version) && valuesMatch(saved, defaults) : saved.section === page && sectionVersion(saved.version) && valuesMatch(saved.values, defaults) && Array.isArray(saved.changedFields);
           const reread = await baseQuery({ url: readUrl }); check();
           if (reread.error) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
-          const after = personal ? adaptPreferences(reread.data) : adaptSection(reread.data, page);
+          const pageRead = personal ? { data: adaptPreferences(reread.data) } : await readSettingsPage(page, baseQuery, check, reread.data);
+          if (pageRead.error) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
+          const after = pageRead.data;
           const rawAfter = record(unwrapApiResponseData(reread.data));
           const confirmed = valuesMatch(personal ? rawAfter : rawAfter.values, defaults);
           if (!responseConfirmed || !after.version || !confirmed) return failure('The reset was sent, but the defaults could not be confirmed. Reload before trying again.');
@@ -177,7 +247,9 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
             if (!sectionVersion(saved.version) || !Array.isArray(saved.changedFields) || !valuesMatch(saved.values, defaults[page]) || !valuesMatch(saved.defaults, defaults[page])) return failure('The reset was sent, but the defaults could not be confirmed. Reload before trying again.');
             const reread = await baseQuery({ url: '/admin/settings/' + page }); check();
             if (reread.error) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
-            const raw = record(unwrapApiResponseData(reread.data)), after = adaptSection(reread.data, page);
+            const pageRead = await readSettingsPage(page, baseQuery, check, reread.data);
+            if (pageRead.error) return failure('The reset was sent, but its result could not be confirmed. Reload before trying again.');
+            const raw = record(unwrapApiResponseData(reread.data)), after = pageRead.data;
             if (!after.version || !valuesMatch(raw.values, defaults[page])) return failure('The reset was sent, but the defaults could not be confirmed. Reload before trying again.');
             api.dispatch(settingsApi.util.updateQueryData('getAdminSystemSettings', { page, owner }, () => after));
           }
@@ -230,4 +302,4 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
     }),
   }),
 });
-export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsIntegrationsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;
+export const { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useResetAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsIntegrationsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsSessionsQuery, useGetAdminSettingsEventsQuery, useGetAdminSettingsSystemLogsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } = settingsApi;

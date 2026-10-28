@@ -5,9 +5,10 @@ const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://trukk
 const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
 const apiLoggingDisabled = String(process.env.NEXT_PUBLIC_API_LOGGING ?? '').trim().toLowerCase() === 'false';
 const apiLoggingEnabled = process.env.NODE_ENV !== 'production' && !apiLoggingDisabled;
-const publicEndpoints = new Set(['loginAdmin', 'refreshAdmin', 'forgotAdminPassword', 'resetAdminPassword']);
+const publicEndpoints = new Set(['loginAdmin', 'verifyAdminTwoFactor', 'refreshAdmin', 'forgotAdminPassword', 'resetAdminPassword']);
 const reauthExcludedPaths = new Set([
   '/admin/auth/login',
+  '/admin/auth/2fa/verify',
   '/admin/auth/refresh',
   '/admin/auth/forgot-password',
   '/admin/auth/reset-password',
@@ -131,7 +132,7 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const tripScreenContent = /AdminTripScreen/.test(api.endpoint);
   const jobScreenContent = /AdminJobScreen/.test(api.endpoint);
   const feedbackContent = /^\/admin\/(?:support\/feedback|feedback)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const settingsContent = /^\/admin\/(?:settings(?:\/|$)|sessions(?:\/|$)|security(?:\/|$)|data-protection(?:\/|$)|platform\/version$|auth\/password$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
+  const settingsContent = /^\/admin\/(?:settings(?:\/|$)|sessions(?:\/|$)|security(?:\/|$)|data-protection(?:\/|$)|platform\/version$|auth\/(?:password|login|2fa\/verify)$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const csvResponse = !result.error && (
     ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips', 'exportAdminMaintenance', 'exportAdminDriverCompliance'].includes(api.endpoint)
     || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')

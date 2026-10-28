@@ -39,6 +39,7 @@ export const settingsControls = [
   {"page":"finance","group":"settingsPlatformFees","field":"enablePromotionalDiscounts","label":"Enable promotional discounts","type":"boolean"},
   {"page":"finance","group":"settingsEscrow","field":"escrowHoldPeriodDays","label":"Escrow Hold Period (Days)","type":"number"},
   {"page":"finance","group":"settingsEscrow","field":"autoReleaseOnPod","label":"Auto-release on POD","type":"enum","options":["Enabled","Disabled","Manual Only"]},
+  {"page":"finance","group":"settingsEscrow","field":"mobilizationPercent","label":"Mobilization (%)","type":"number"},
   {"page":"finance","group":"settingsEscrow","field":"requireManualReviewForHighValueJobs","label":"Require manual review for high-value jobs","type":"boolean"},
   {"page":"finance","group":"settingsEscrow","field":"notifyStakeholdersOnEscrowRelease","label":"Notify stakeholders on escrow release","type":"boolean"},
   {"page":"finance","group":"settingsPayout","field":"defaultPayoutMethod","label":"Default Payout Method","type":"enum","options":["Bank Transfer","Mobile Money","Wallet Credit"]},
@@ -115,6 +116,7 @@ export const settingsControls = [
   {"page":"operations","group":"settingsDocumentCompliance","field":"requiredDocsForJobCreation","label":"Required documents for job creation","type":"string"},
   {"page":"operations","group":"settingsDocumentCompliance","field":"requiredDocsForTripStart","label":"Required documents for trip start","type":"string"},
   {"page":"operations","group":"settingsDocumentCompliance","field":"requiredDocsForTripCompletion","label":"Required documents for trip completion","type":"string"},
+  {"page":"operations","group":"settingsDocumentCompliance","field":"verifyDocumentsAutomatically","label":"Verify documents automatically","type":"boolean"},
   {"page":"operations","group":"settingsTimingSlas","field":"defaultLoadingTimeHours","label":"Default loading time (Hours)","type":"number"},
   {"page":"operations","group":"settingsTimingSlas","field":"defaultUnloadingTimeHours","label":"Default unloading time (Hours)","type":"number"},
   {"page":"operations","group":"settingsTimingSlas","field":"delayThresholdHours","label":"Delay threshold (Hours)","type":"number"},
@@ -184,5 +186,6 @@ export const settingsControls = [
   {"page":"general","group":"settingsNotificationGeneral","type":"boolean","field":"jobAlerts","label":"Job Alerts"},
   {"page":"general","group":"settingsNotificationGeneral","type":"boolean","field":"payoutNotifications","label":"Payout Notifications"},
   {"page":"general","group":"settingsNotificationGeneral","type":"boolean","field":"incidentAlerts","label":"Incident Alerts"},
+  {"page":"general","group":"settingsNotificationGeneral","type":"boolean","field":"pushNotificationsEnabled","label":"Push Notifications"},
   {"page":"security","group":"settingsIpDeviceRestrictionsOverview","field":"trustedIpAddresses","label":"Trusted IP addresses (optional)","type":"string"}
 ];

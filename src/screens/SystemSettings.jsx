@@ -5,6 +5,7 @@ import { PageHeader, Button, SectionCard, QuickActionsCard, Logo } from '../ds.j
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { DriverDetailLoading } from './DriversLoading.jsx';
+import { SettingsSystemLogsDialog } from './SettingsActionDialogs.jsx';
 
 import { systemStatus as systemStatusTemplate, generalQuickActions } from '../mock/fixtures/settings.js';
 
@@ -43,6 +44,8 @@ function ColorField({ label, value, onChange }) {
 
 export function SystemSettings() {
   const editor = useSettingsEditor('general');
+  const [logsAdmin, setLogsAdmin] = useState(null);
+  const quickActions = editor.quickActions(generalQuickActions, { 'View System Logs': () => setLogsAdmin(editor.admin) });
   const updatePlatformInfo = editor.change('settingsPlatformInfo');
   const updateOperationalGeneral = editor.change('settingsOperationalGeneral');
   const updateNotificationGeneral = editor.change('settingsNotificationGeneral');
@@ -122,6 +125,7 @@ export function SystemSettings() {
               { key: 'jobAlerts', value: notif.jobAlerts, label: 'Job Alerts', hint: 'Notify relevant parties about new jobs.' },
               { key: 'payoutNotifications', value: notif.payoutNotifications, label: 'Payout Notifications', hint: 'Notify users about payout status.' },
               { key: 'incidentAlerts', value: notif.incidentAlerts, label: 'Incident Alerts', hint: 'Notify about incidents and exceptions.' },
+              { key: 'pushNotificationsEnabled', value: notif.pushNotificationsEnabled, label: 'Push Notifications', hint: 'Send mobile push notifications. Turning this off does not affect in-app notifications or email.' },
             ]} />
           </SectionCard>
 
@@ -151,14 +155,14 @@ export function SystemSettings() {
                 <span style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{platformVersion.buildNumber}</span>
               </div>
             </div>
-            <Button variant="outline" fullWidth icon="refresh-cw" onClick={() => editor.unavailable('Check for Updates')}>Check for Updates</Button>
           </SectionCard>
 
-          <QuickActionsCard items={editor.quickActions(generalQuickActions)} />
+          {quickActions.length > 0 && <QuickActionsCard items={quickActions} />}
 
           <SettingsDangerZone onConfirm={() => resetPlatformSettings()} />
         </div>
       </div>
+      {logsAdmin && logsAdmin === editor.admin && editor.authenticated && <SettingsSystemLogsDialog admin={logsAdmin} onClose={() => setLogsAdmin(null)} />}
     </>
   );
 }

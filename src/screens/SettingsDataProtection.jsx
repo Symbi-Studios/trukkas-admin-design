@@ -8,7 +8,7 @@ import { DriverDetailLoading } from './DriversLoading.jsx';
 
 import { dataProtectionStatus as dataProtectionStatusTemplate } from '../mock/fixtures/settings.js';
 
-import { SettingsTabStrip, SettingsDangerZone, SettingsMetaFooter } from './settingsShared.jsx';
+import { SettingsTabStrip, SettingsMetaFooter } from './settingsShared.jsx';
 
 const RETENTION_OPTIONS = ['1 year', '3 years', '5 years', '7 years', 'Indefinite'];
 
@@ -128,7 +128,6 @@ export function SettingsDataProtection() {
             <Field><Switch checked={exportAccess.notifyUsersWhenDataReady} label="Notify users when data is ready"
               hint="Send an email notification when export is completed."
               onChange={(v) => updateDataExportAccess({ notifyUsersWhenDataReady: v })} /></Field>
-            <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => editor.unavailable('Manage Data Export Requests')}>Manage Data Export Requests</Button>
           </SectionCard>
         </div>
 
@@ -164,17 +163,16 @@ export function SettingsDataProtection() {
               ))}
               {'—'}
             </div>
-            <Button variant="outline" fullWidth iconRight="chevron-right" onClick={() => editor.unavailable('View Compliance Details')}>View Compliance Details</Button>
           </SectionCard>
 
           <SectionCard title="Third-Party Data Processors" icon="share-2">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 10 }}>Manage third-party services that process your data.</span>
             <div style={{ display: 'grid' }}>
               {thirdPartyProcessors.map((p, i) => (
-                <button key={p.label} type="button" onClick={() => editor.unavailable('Manage Third-Party Data Processor')}
+                <div key={p.id}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 2px', border: 0,
                            borderTop: i ? '1px solid var(--tk-line)' : 'none', background: 'transparent',
-                           cursor: 'pointer', textAlign: 'left' }}>
+                           textAlign: 'left' }}>
                   <span style={{ width: 30, height: 30, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)',
                                 color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
                     <Icon name={p.icon} size={15} />
@@ -183,15 +181,12 @@ export function SettingsDataProtection() {
                     <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{p.label}</span>
                     <span className="tk-meta">{p.detail}</span>
                   </span>
-                  <Icon name="chevron-right" size={15} color="var(--tk-ink-300)" />
-                </button>
+                </div>
               ))}
               {thirdPartyProcessors.length ? null : '—'}
             </div>
           </SectionCard>
 
-          <SettingsDangerZone title="Permanently Delete All Platform Data" hint="This action cannot be undone."
-            onConfirm={() => editor.unavailable('Permanently Delete All Platform Data')} />
           <SettingsMetaFooter meta={meta} />
         </div>
       </div>

@@ -57,6 +57,7 @@ const write = (operation) => async (args, api, _options, baseQuery) => {
       const fields = adaptRegistrationFields(result.data, args.entity);
       if (operation === 'reorder' && (fields.length !== args.fieldIds.length || fields.some((f, index) => f.id !== args.fieldIds[index] || f.order !== index + 1))) throw new Error('The reorder was sent, but its result was not confirmed. Reload before trying again.');
       if (operation === 'bulk' && (!Array.isArray(dto.skipped) || fields.length + dto.skipped.length !== args.fieldIds.length || fields.some((f) => !args.fieldIds.includes(f.id) || Object.entries(request.body.changes).some(([key, value]) => f[key] !== value)))) throw new Error('The bulk update was sent, but its result was not confirmed. Reload before trying again.');
+      if (operation === 'bulk' && (new Set(dto.skipped).size !== dto.skipped.length || dto.skipped.some(id => typeof id !== 'string' || !args.fieldIds.includes(id) || fields.some(field => field.id === id)))) throw new Error('The bulk update was sent, but the skipped field IDs could not be confirmed. Reload before trying again.');
       return { data: { fields, skipped: dto.skipped || [] } };
     }
     const field = adaptRegistrationField(result.data, args.entity);

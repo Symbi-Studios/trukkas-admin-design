@@ -16,6 +16,7 @@ function Field({ children }) { return <div style={{ marginBottom: 14 }}>{childre
 
 export function SettingsFleet() {
   const editor = useSettingsEditor('fleet');
+  const quickActions = editor.quickActions(fleetQuickActions);
   const updateFleetPreferences = editor.change('settingsFleetPreferences');
   const updateAssetNumbering = editor.change('settingsAssetNumbering');
   const updateDefaultReminders = editor.change('settingsDefaultReminders');
@@ -181,7 +182,7 @@ export function SettingsFleet() {
           <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
             <SettingsStatusCard title="Fleet Settings Status" headline={fleetStatus.headline} caption={fleetStatus.caption}
               items={fleetStatus.items} />
-            <QuickActionsCard items={editor.quickActions(fleetQuickActions)} />
+            {quickActions.length > 0 && <QuickActionsCard items={quickActions} />}
             <SettingsDangerZone title="Reset Fleet Settings" hint="Restore all fleet settings to default values."
               onConfirm={() => resetFleetSettings()} />
             <SettingsMetaFooter meta={meta} />

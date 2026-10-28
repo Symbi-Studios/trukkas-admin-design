@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import { useNavigate } from "../router.js";
-import { PageHeader, Button, SectionCard, Card, Tabs, Badge, QuickActionsCard, Banner, Icon, EmptyState } from '../ds.js';
+import { PageHeader, Button, SectionCard, Card, Tabs, Badge, QuickActionsCard, Icon, EmptyState } from '../ds.js';
 import { SettingsCheckbox as Checkbox, SettingsSwitch as Switch, SettingsTextField as TextField, SettingsSelect as Select, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { DriverDetailLoading } from './DriversLoading.jsx';
+import { SettingsNotificationInbox } from './SettingsNotificationInbox.jsx';
 
 import { NOTIFICATION_FREQUENCIES, notificationQuickActions, NOTIFICATION_TABS, eventNotificationGroups as notificationEventControls, notificationChannelsStatus as notificationChannelControls } from '../mock/fixtures/settings.js';
 
+
+const visibleNotificationTabs = NOTIFICATION_TABS.filter((tab) => !['Email Templates', 'SMS Templates', 'Notification Groups'].includes(tab));
 
 const TIMEZONES = [
   "(GMT+01:00) Lagos, Nigeria",
@@ -59,127 +62,6 @@ function EventRow({ event, onToggle, onFrequency }) {
   );
 }
 
-const notificationPreview = { icon: 'truck', title: '—', body: '—', time: '—' };
-
-function NotificationPreviewCard({ channel }) {
-  if (channel === "Email") {
-    return (
-      <div
-        style={{
-          border: "1px solid var(--tk-line)",
-          borderRadius: "var(--tk-r-lg)",
-          padding: 14,
-          display: "grid",
-          gap: 6,
-        }}
-      >
-        <span className="tk-meta">
-          From: Trukkas &lt;{'—'}&gt;
-        </span>
-        <span
-          style={{
-            font: "600 14px/20px var(--tk-font-sans)",
-            color: "var(--tk-ink-900)",
-          }}
-        >
-          {notificationPreview.title}
-        </span>
-        <span
-          style={{
-            font: "400 13px/19px var(--tk-font-sans)",
-            color: "var(--tk-ink-500)",
-          }}
-        >
-          {notificationPreview.body}
-        </span>
-      </div>
-    );
-  }
-  if (channel === "SMS") {
-    return (
-      <div
-        style={{
-          border: "1px solid var(--tk-line)",
-          borderRadius: "var(--tk-r-lg)",
-          padding: 14,
-        }}
-      >
-        <div
-          style={{
-            display: "inline-block",
-            background: "var(--tk-blue-soft)",
-            color: "var(--tk-blue-ink)",
-            borderRadius: "var(--tk-r-lg)",
-            padding: "10px 12px",
-            font: "400 13px/19px var(--tk-font-sans)",
-            maxWidth: "90%",
-          }}
-        >
-          Trukkas: {notificationPreview.title} — {notificationPreview.body}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 10,
-        border: "1px solid var(--tk-line)",
-        borderRadius: "var(--tk-r-lg)",
-        padding: 14,
-      }}
-    >
-      <span
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: "var(--tk-r-sm)",
-          background: "var(--tk-blue-soft)",
-          color: "var(--tk-blue)",
-          display: "grid",
-          placeItems: "center",
-          flex: "0 0 auto",
-        }}
-      >
-        <Icon name={notificationPreview.icon} size={17} />
-      </span>
-      <div style={{ flex: 1, display: "grid", gap: 2 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span
-            style={{
-              flex: 1,
-              font: "600 13px/18px var(--tk-font-sans)",
-              color: "var(--tk-ink-900)",
-            }}
-          >
-            {notificationPreview.title}
-          </span>
-          <span className="tk-meta">{notificationPreview.time}</span>
-        </div>
-        <span
-          style={{
-            font: "400 13px/19px var(--tk-font-sans)",
-            color: "var(--tk-ink-500)",
-          }}
-        >
-          {notificationPreview.body}
-        </span>
-      </div>
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: 999,
-          background: "var(--tk-blue)",
-          flex: "0 0 auto",
-          marginTop: 3,
-        }}
-      />
-    </div>
-  );
-}
-
 export function SettingsNotifications() {
   const editor = useSettingsEditor('notifications');
   const updateNotificationChannels = editor.change('settingsNotificationChannels');
@@ -195,7 +77,6 @@ export function SettingsNotifications() {
   const quiet = editor.group('settingsQuietHours');
   const groups = notificationEventControls.map(({ group, icon, events }) => ({ group, icon, events: events.map(({ key, label, hint }) => ({ key, label, hint, ...editor.event({ key, label }) })) }));
   const [subTab, setSubTab] = useState("Notification Preferences");
-  const [previewChannel, setPreviewChannel] = useState("In-App");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -240,11 +121,11 @@ export function SettingsNotifications() {
           value={subTab}
           onChange={setSubTab}
           style={{ padding: "0 var(--tk-card-pad)" }}
-          items={NOTIFICATION_TABS}
+          items={visibleNotificationTabs}
         />
       </Card>
 
-      {subTab !== "Notification Preferences" ? (
+      {subTab === "In-App Notifications" ? <SettingsNotificationInbox /> : subTab !== "Notification Preferences" ? (
         <Card>
           <EmptyState
             icon="hammer"
@@ -460,29 +341,11 @@ export function SettingsNotifications() {
           </div>
 
           <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
-            <SectionCard title="Notification Preview" icon="eye">
-              <span
-                className="tk-meta"
-                style={{ display: "block", marginTop: -10, marginBottom: 10 }}
-              >
-                See how your notifications will look across different channels.
-              </span>
-              <Tabs
-                value={previewChannel}
-                onChange={setPreviewChannel}
-                items={["In-App", "Email", "SMS"]}
-                style={{ marginBottom: 12 }}
-              />
-              <NotificationPreviewCard channel={previewChannel} />
-            </SectionCard>
-
             <SectionCard title="Notification Channels" icon="send">
               <div style={{ display: "grid" }}>
                 {notificationChannelsStatus.map((c, i) => (
-                  <button
+                  <div
                     key={c.label}
-                    type="button"
-                    onClick={() => editor.unavailable('Manage Notification Channel')}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -491,7 +354,6 @@ export function SettingsNotifications() {
                       border: 0,
                       borderTop: i ? "1px solid var(--tk-line)" : "none",
                       background: "transparent",
-                      cursor: "pointer",
                       textAlign: "left",
                     }}
                   >
@@ -521,21 +383,12 @@ export function SettingsNotifications() {
                       <span className="tk-meta">{c.detail}</span>
                     </span>
                     <Badge tone="success">{c.status}</Badge>
-                  </button>
+                  </div>
                 ))}
               </div>
             </SectionCard>
 
-            <QuickActionsCard items={editor.quickActions(notificationQuickActions, {
-              'Manage Email Templates': () => setSubTab('Email Templates'),
-              'Manage SMS Templates': () => setSubTab('SMS Templates'),
-              'Notification Groups': () => setSubTab('Notification Groups'),
-            })} />
-
-            <Banner tone="info">
-              Tip: Use notification groups to set different preferences for
-              dispatchers, drivers, customers, and other team members.
-            </Banner>
+            <QuickActionsCard items={editor.quickActions(notificationQuickActions)} />
           </div>
         </div>
       )}

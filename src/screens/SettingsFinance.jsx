@@ -34,6 +34,7 @@ function MiniSwitch({ checked, label, onChange }) {
 
 export function SettingsFinance() {
   const editor = useSettingsEditor('finance');
+  const quickActions = editor.quickActions(financeQuickActions);
   const updateFinancialPolicies = editor.change('settingsFinancialPolicies');
   const updatePlatformFees = editor.change('settingsPlatformFees');
   const updateEscrowSettingsForm = editor.change('settingsEscrow');
@@ -139,6 +140,10 @@ export function SettingsFinance() {
                   onChange={(e) => updateEscrowSettingsForm({ autoReleaseOnPod: e.target.value })} />
                 <span className="tk-meta">Automatically release funds after proof of delivery.</span>
               </div>
+              <TextField label="Mobilization (%)" type="number" min={0} max={100} step="any" value={escrow.mobilizationPercent}
+                suffix={<span className="tk-meta">%</span>}
+                hint="Released to the trucker at pickup for newly accepted offers; the rest on completion. Existing jobs keep their split."
+                onChange={(e) => updateEscrowSettingsForm({ mobilizationPercent: e.target.value })} />
             </div>
             <Field><Switch checked={escrow.requireManualReviewForHighValueJobs} label="Require manual review for high-value jobs"
               hint="Jobs above a threshold require admin approval."
@@ -216,7 +221,7 @@ export function SettingsFinance() {
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
           <SettingsStatusCard title="Finance Status" headline={financeStatus.headline} caption={financeStatus.caption}
             items={financeStatus.items} />
-          <QuickActionsCard items={editor.quickActions(financeQuickActions)} />
+          {quickActions.length > 0 && <QuickActionsCard items={quickActions} />}
           <SettingsDangerZone title="Reset Finance Settings" hint="Restore all financial settings to default values."
             onConfirm={() => resetFinanceSettings()} />
           <SettingsMetaFooter meta={meta} />

@@ -5,6 +5,7 @@ import { useSelector } from 'react-redux';
 import { Banner, Button, DataTable, Modal, Pagination, Skeleton, TextField, Textarea } from '../ds.js';
 import { useGetAdminSettingsEventsQuery, useTerminateAdminSettingsSessionMutation, useChangeAdminSettingsPasswordMutation } from '../store/features/settings/settingsApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { useGetAdminSettingsSystemLogsQuery } from '../store/features/settings/settingsApi.js';
 
 export function SettingsSessionReasonDialog({ admin, session, all = false, onClose, onSaved }) {
   const [reason, setReason] = useState(''), [error, setError] = useState(null);
@@ -74,5 +75,24 @@ export function SettingsEventsDialog({ admin, type, onClose }) {
       ]} />
       <Pagination page={page} pageSize={20} total={data?.total ?? null} pageCount={data?.pageCount ?? null} onPage={setPage} />
     </>}
+  </Modal>;
+}
+
+export function SettingsSystemLogsDialog({ admin, onClose }) {
+  const [page, setPage] = useState(1);
+  const activeAdmin = useSelector(state => state.auth.admin);
+  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const currentSession = activeAdmin === admin && authenticated;
+  const query = useGetAdminSettingsSystemLogsQuery({ owner: admin.id, page, limit: 20 }, { skip: !currentSession, refetchOnMountOrArgChange: true });
+  const data = currentSession && !query.error ? query.currentData : null;
+  return <Modal open title="System Logs" width={900} onClose={onClose} footer={<Button variant="outline" onClick={onClose}>Close</Button>}>
+    {query.error ? <Banner tone="danger">{getApiErrorMessage(query.error)} <Button variant="outline" disabled={query.isFetching} onClick={() => query.refetch()}>Retry</Button></Banner>
+      : query.isLoading || query.isFetching && !data ? <Skeleton height={180} /> : <>
+        <DataTable rows={data?.rows || []} rowKey={row => row.id} columns={[
+          { key: 'time', header: 'Time' }, { key: 'job', header: 'Job' }, { key: 'result', header: 'Result' }, { key: 'message', header: 'Message' },
+        ]} />
+        <Pagination page={page} pageSize={20} total={data?.total ?? null} pageCount={data?.pageCount ?? null}
+          onPage={next => { if (!query.isFetching && Number.isInteger(next) && next >= 1 && next <= Math.max(1, data?.pageCount || 0)) setPage(next); }} />
+      </>}
   </Modal>;
 }
