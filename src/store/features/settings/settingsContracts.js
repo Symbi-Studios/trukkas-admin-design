@@ -122,23 +122,22 @@ export function encodePreference(field, value) {
   }
   throw new Error('Enter a valid notification preference.');
 }
-// Use the returned uiRowMap for new event mappings. This fallback reflects the
-// documented catalogue only; never guess an event key for an existing row.
+// Only row identities are local. Event keys come exclusively from uiRowMap.
 const notificationUiRows = [
-  ['newJobAssigned', 'New job assigned', null],
-  ['jobStatusUpdated', 'Job status updated', null],
-  ['tripDelayAlerts', 'Trip delay alerts', 'JOB_DELAYED'],
-  ['tripCompletion', 'Trip completion', null],
-  ['jobCancellation', 'Job cancellation', null],
-  ['maintenanceDue', 'Maintenance due', null],
-  ['maintenanceOverdue', 'Maintenance overdue', null],
-  ['vehicleIssueReported', 'Vehicle issue reported', null],
+  ['newJobAssigned', 'New job assigned'],
+  ['jobStatusUpdated', 'Job status updated'],
+  ['tripDelayAlerts', 'Trip delay alerts'],
+  ['tripCompletion', 'Trip completion'],
+  ['jobCancellation', 'Job cancellation'],
+  ['maintenanceDue', 'Maintenance due'],
+  ['maintenanceOverdue', 'Maintenance overdue'],
+  ['vehicleIssueReported', 'Vehicle issue reported'],
 ];
 function notificationRowMap(raw) {
   const entries = Array.isArray(raw) ? raw.map(item => [item?.row, item?.eventKey]) : Object.entries(record(raw));
-  return Object.fromEntries(notificationUiRows.map(([key, label, documentedKey]) => {
+  return Object.fromEntries(notificationUiRows.map(([key, label]) => {
     const matches = entries.filter(([row]) => row === key || labelKey(row) === labelKey(label));
-    const value = matches.length === 1 ? matches[0][1] : matches.length > 1 ? null : documentedKey;
+    const value = matches.length === 1 ? matches[0][1] : null;
     return [key, value === null || safeKey(value) ? value : null];
   }));
 }
