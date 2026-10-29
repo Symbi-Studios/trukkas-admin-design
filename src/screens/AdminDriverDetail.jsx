@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
-import { Avatar, Badge, Banner, Button, Card, DataTable, EmptyState, LabelValue, PageHeader, Pagination, SectionCard, StatCard, Tabs } from '../ds.js';
+import { Avatar, Badge, Banner, Button, Card, DataTable, EmptyState, Icon, LabelValue, PageHeader, Pagination, SectionCard, StatCard, Tabs, Tooltip } from '../ds.js';
 import { adminDriverError, useGetAdminDriverActivityQuery, useGetAdminDriverJobsQuery, useGetAdminDriverLicenseQuery, useGetAdminDriverProfileQuery, useGetAdminDriverTransactionsQuery } from '../store/features/drivers/driversApi.js';
 import { useGetAdminTripsQuery } from '../store/features/trips/tripsApi.js';
 import { DriverDetailLoading, DriverLicenseLoading, DriverTableLoading } from './DriversLoading.jsx';
@@ -13,6 +13,11 @@ const SUPPORTED_TABS = new Set(['Overview', 'Documents', 'Trips & Activity', 'Ea
 const ACTIVITY_TABS = new Set(['Maintenance Log', 'Incidents', 'Reviews & Ratings', 'Notes']);
 
 const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG')}` : '—';
+function MetricLabel({ label, description }) {
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{label} <Tooltip label={description}><span tabIndex={0} title={description} aria-label={description}><Icon name="info" size={14} color="var(--tk-ink-300)" /></span></Tooltip></span>;
+}
+const revenueLabel = <MetricLabel label="Total Revenue" description="Total revenue reported for this driver." />;
+const walletLabel = <MetricLabel label="Wallet Balance" description="Pending wallet balance from trips." />;
 function dateLabel(value) {
   const date = value ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString() : '—';
@@ -116,8 +121,8 @@ export function AdminDriverDetail() {
           <LabelValue layout="stack" label="Company" value={profile.company || '—'} />
           <LabelValue layout="stack" label="Total Jobs" value={Number.isFinite(profile.totalJobs) ? profile.totalJobs : '—'} />
           <LabelValue layout="stack" label="Failed Jobs" value={profile.failedJobs ?? '—'} />
-          <LabelValue layout="stack" label="Total Earnings" value={naira(profile.totalEarnings)} />
-          <LabelValue layout="stack" label="Wallet Balance" value={naira(profile.walletBalance)} />
+          <LabelValue layout="stack" label={revenueLabel} value={naira(profile.totalEarnings)} />
+          <LabelValue layout="stack" label={walletLabel} value={naira(profile.walletBalance)} />
           <LabelValue layout="stack" label="Joined" value={dateLabel(profile.joined)} />
           <LabelValue layout="stack" label="Last Login" value={dateLabel(profile.lastLoginAt)} />
           <LabelValue layout="stack" label="Registration Status" value={profile.registrationStatus || '—'} />
@@ -167,8 +172,8 @@ export function AdminDriverDetail() {
     </>}
     {tab === 'Earnings & Wallet' && <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--tk-space-4)' }}>
-        <StatCard icon="wallet" tint="green" label="Wallet Balance" value={naira(profile?.walletBalance)} />
-        <StatCard icon="banknote" tint="blue" label="Total Earnings" value={naira(profile?.totalEarnings)} caption="All time" />
+        <StatCard icon="wallet" tint="green" label={walletLabel} value={naira(profile?.walletBalance)} />
+        <StatCard icon="banknote" tint="blue" label={revenueLabel} value={naira(profile?.totalEarnings)} caption="All time" />
       </div>
       <HistorySection title="Wallet Transactions" query={transactionsQuery} page={transactionPage} limit={transactionLimit} onPage={setTransactionPage} onLimit={setTransactionLimit} columns={[
         { key: 'id', header: 'Transaction ID' }, { key: 'label', header: 'Description' }, { key: 'type', header: 'Type' },

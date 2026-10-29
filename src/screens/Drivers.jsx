@@ -67,7 +67,7 @@ export function Drivers() {
   const [pageSize, setPageSize] = useState(10);
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
-  const [regType, setRegType] = useState('All Types');
+  const [regType, setRegType] = useState('All Account Types');
   const [status, setStatus] = useState('All Status');
   const [company, setCompany] = useState('All Companies');
   const [licenseStatus, setLicenseStatus] = useState('All');
@@ -152,7 +152,7 @@ export function Drivers() {
   const metricValue = (value, loading) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
 
   function exportRoster() {
-    const header = ['Driver', 'Registration Type', 'Company', 'License No.', 'Status', 'License Status', 'Joined', 'Earnings', 'Rating'];
+    const header = ['Driver', 'Account Type', 'Company', 'License No.', 'Status', 'License Status', 'Joined', 'Earnings', 'Rating'];
     const rows = filtered.map((driver) => [driver.name, driver.registrationType, driver.company, driver.license, driver.status, driver.licenseStatus, driver.joined, driver.totalEarnings, driver.rating]);
     download('drivers-export.csv', [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n'));
   }
@@ -306,7 +306,7 @@ export function Drivers() {
         <TableToolbar
           search={<SearchField placeholder="Search by driver name, license number, phone, or company..." value={q} onChange={(event) => setQ(event.target.value)} />}
           filters={<>
-            <span style={{ position: 'relative' }}><FilterSelect label={regType} active={regType !== 'All Types'} onClick={() => setOpenMenu(openMenu === 'reg' ? null : 'reg')} />{filterMenu(openMenu === 'reg', setOpenMenu, ['All Types', ...REG_TYPES], regType, setRegType)}</span>
+            <span style={{ position: 'relative' }}><FilterSelect label={regType} active={regType !== 'All Account Types'} onClick={() => setOpenMenu(openMenu === 'reg' ? null : 'reg')} />{filterMenu(openMenu === 'reg', setOpenMenu, ['All Account Types', ...REG_TYPES], regType, setRegType)}</span>
             <span style={{ position: 'relative' }}><FilterSelect label={status} active={status !== 'All Status'} onClick={() => setOpenMenu(openMenu === 'status' ? null : 'status')} />{filterMenu(openMenu === 'status', setOpenMenu, ['All Status', 'Active', 'On Trip', 'Inactive', 'Pending Profile', 'Pending Review'], status, setStatus)}</span>
             <span style={{ position: 'relative' }}><FilterSelect label={company} active={company !== 'All Companies'} onClick={() => setOpenMenu(openMenu === 'company' ? null : 'company')} />{filterMenu(openMenu === 'company', setOpenMenu, ['All Companies', ...companies], company, setCompany)}</span>
             <span style={{ position: 'relative' }}><FilterSelect label={licenseStatus === 'All' ? 'All License Status' : licenseStatus} active={licenseStatus !== 'All'} onClick={() => setOpenMenu(openMenu === 'license' ? null : 'license')} />{filterMenu(openMenu === 'license', setOpenMenu, ['All', ...LICENSE_STATUSES], licenseStatus, setLicenseStatus)}</span>
@@ -326,7 +326,7 @@ export function Drivers() {
             : filtered.length === 0 ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this API page match the selected filters.' : 'No drivers match this search or status.'} />
               : <DataTable rows={filtered} rowKey={(driver) => driver.id} columns={[
                 { key: 'name', header: 'Driver', render: driverCell },
-                { key: 'registrationType', header: 'Registration Type', render: (driver) => <Badge tone={driver.registrationType === 'Company Driver' ? 'info' : 'neutral'}>{driver.registrationType}</Badge> },
+                { key: 'registrationType', header: 'Account Type', render: (driver) => <Badge tone={driver.registrationType === 'Company Driver' ? 'info' : 'neutral'}>{driver.registrationType}</Badge> },
                 { key: 'company', header: 'Company', render: (driver) => driver.company || '—' },
                 { key: 'license', header: 'License No.', render: (driver) => <span className="tk-mono">{driver.license || '—'}</span> },
                 { key: 'truckPlate', header: 'Assigned Truck', render: (driver) => driver.truckPlate ? <span className="tk-mono">{driver.truckPlate}</span> : <span className="tk-meta">—</span> },
