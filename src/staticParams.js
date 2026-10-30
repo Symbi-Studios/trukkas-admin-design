@@ -21,7 +21,7 @@ import { users } from './mock/fixtures/users.js';
 import { verifications } from './mock/fixtures/verifications.js';
 
 const routeValues = {
-  screen: [...NAV.flatMap((group) => group.items.map((item) => item.id)), 'triangulation', 'profile', 'signed-out'],
+  screen: [...NAV.flatMap((group) => group.items.map((item) => item.id)), 'fleet', 'triangulation', 'profile', 'signed-out'],
   announcementId: announcements.map((item) => item.id),
   companyId: companies.map((item) => item.id),
   forwarderId: companies.map((item) => item.id),
