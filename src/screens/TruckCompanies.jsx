@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
@@ -51,7 +53,7 @@ function CompaniesDirectory() {
     catch (error) { if (active.current) setNotice(companyError(error)); }
     finally { creating.current = false; }
   }
-  const [tab, setTab] = useState('All Companies'), [query, setQuery] = useState(''), [status, setStatus] = useState('All Statuses'), [location, setLocation] = useState('All Locations'), [fleet, setFleet] = useState('All Fleet Sizes'), [page, setPage] = useState(1), [pageSize, setPageSize] = useState(10), [selected, setSelected] = useState([]), [menuFor, setMenuFor] = useState(null), [addOpen, setAddOpen] = useState(false), [form, setForm] = useState(blank), [action, setAction] = useState(null), [notice, setNotice] = useState(null);
+  const [tab, setTab] = useState('All Companies'), [query, setQuery] = usePageSearchState('', () => setPage(1)), [status, setStatus] = useState('All Statuses'), [location, setLocation] = useState('All Locations'), [fleet, setFleet] = useState('All Fleet Sizes'), [page, setPage] = useState(1), [pageSize, setPageSize] = useState(10), [selected, setSelected] = useState([]), [menuFor, setMenuFor] = useState(null), [addOpen, setAddOpen] = useState(false), [form, setForm] = useState(blank), [action, setAction] = useState(null), [notice, setNotice] = useState(null);
   useEffect(() => {
     if (!menuFor) return;
     const close = () => setMenuFor(null);

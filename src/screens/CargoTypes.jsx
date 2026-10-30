@@ -1,3 +1,5 @@
+
+import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useMemo, useState } from 'react';
 import {
   PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, DataTable,
@@ -12,7 +14,7 @@ const EMPTY_FORM = { name: '', category: CATEGORIES[0], handling: '', trucks: ''
 export function CargoTypes() {
   const rows = useCollection('cargoTypes') || [];
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);

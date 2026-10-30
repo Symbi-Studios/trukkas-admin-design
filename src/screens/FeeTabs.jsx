@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -30,7 +32,7 @@ function Pages({ data, page, onPage, pageSize, onPageSize }) {
 export function FeeRecordsTab({ kind, rules }) {
   const owner = useSelector(state => state.auth.admin?.id), authenticated = useSelector(state => Boolean(state.auth.accessToken));
   const deductions = kind === 'deductions';
-  const [page, setPage] = useState(1), [limit, setLimit] = useState(25), [search, setSearch] = useState('');
+  const [page, setPage] = useState(1), [limit, setLimit] = useState(25), [search, setSearch] = usePageSearchState('', () => setPage(1));
   const [dateFrom, setFrom] = useState(''), [dateTo, setTo] = useState(''), [filter, setFilter] = useState(''), [ruleId, setRuleId] = useState('');
   const datesValid = feeRangeValid(dateFrom, dateTo), args = { owner, page, limit, search, dateFrom, dateTo, ...(deductions ? { status: filter } : { category: filter, feeRuleId: ruleId }) };
   const deductionQuery = useGetAdminFeeDeductionsQuery(args, { skip: !authenticated || !owner || !deductions || !datesValid, refetchOnMountOrArgChange: true });

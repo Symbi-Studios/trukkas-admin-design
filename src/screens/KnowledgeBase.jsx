@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -13,7 +15,7 @@ const PAGE_SIZE=8; const catTone={'Trips & Jobs':'info','Container Triangulation
 function exportCsv(rows){const head=['Title','Category','Author','Status','Views','Helpful','Last Updated'];const csv=[head,...rows.map(r=>[r.title,r.category,r.author,r.status,r.views??'—',r.helpful??'—',r.updated])].map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n');const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const a=document.createElement('a');a.href=u;a.download='knowledge-base.csv';a.click();URL.revokeObjectURL(u)}
 
 export function KnowledgeBase(){
- const navigate=useNavigate();const authenticated=useSelector(state=>Boolean(state.auth.accessToken));const [tab,setTab]=useState('All Articles');const [q,setQ]=useState('');const [category,setCategory]=useState('All');const [status,setStatus]=useState('All');const [author,setAuthor]=useState('All');const [page,setPage]=useState(1);const [tip,setTip]=useState(true);const [selected,setSelected]=useState([]);
+ const navigate=useNavigate();const authenticated=useSelector(state=>Boolean(state.auth.accessToken));const [tab,setTab]=useState('All Articles');const [q,setQ]=usePageSearchState('', () => setPage(1));const [category,setCategory]=useState('All');const [status,setStatus]=useState('All');const [author,setAuthor]=useState('All');const [page,setPage]=useState(1);const [tip,setTip]=useState(true);const [selected,setSelected]=useState([]);
  const [search,setSearch]=useState('');
  useEffect(()=>{const timer=setTimeout(()=>setSearch(q.trim()),250);return ()=>clearTimeout(timer)},[q]);
  const directory=useGetAdminKnowledgeArticleDirectoryQuery(undefined,{skip:!authenticated});

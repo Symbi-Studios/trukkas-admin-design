@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '../router.js';
@@ -231,7 +233,7 @@ function SummaryRow({ icon, tint, label, value }) {
 
 function ColumnPicker({ draft, sectionRefs }) {
   const { toggleReportColumn, setReportColumnGroup, setAllReportColumns } = useReportDraft();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = usePageSearchState('');
   const scrollerRef = useRef(null);
   const selCount = selectedColumns(draft.columnGroups);
   const colTotal = totalColumns(draft.columnGroups);

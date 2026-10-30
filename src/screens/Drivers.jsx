@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from '../router.js';
@@ -65,7 +67,7 @@ export function Drivers() {
   const [tab, setTab] = useState('All Drivers');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [search, setSearch] = useState('');
   const [regType, setRegType] = useState('All Account Types');
   const [status, setStatus] = useState('All Status');

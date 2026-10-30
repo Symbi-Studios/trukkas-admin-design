@@ -1,4 +1,5 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
@@ -55,7 +56,7 @@ function CompanyScreen() {
   const [messageCompany, messageState] = useMessageAdminCompanyMutation();
   const submitting = useRef(false), active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  const [tab, setTab] = useState('Overview'), [query, setQuery] = useState(''), [filter, setFilter] = useState('All Statuses'), [page, setPage] = useState(1), [selectedTruckId, setSelectedTruckId] = useState(null), [selectedDriverId, setSelectedDriverId] = useState(null), [checkedTrucks, setCheckedTrucks] = useState([]), [checkedDrivers, setCheckedDrivers] = useState([]), [menu, setMenu] = useState(false), [editOpen, setEditOpen] = useState(false), [messageOpen, setMessageOpen] = useState(false), [message, setMessage] = useState(''), [action, setAction] = useState(null), [notice, setNotice] = useState(null);
+  const [tab, setTab] = useState('Overview'), [query, setQuery] = usePageSearchState('', () => setPage(1), ['Trucks', 'Drivers'].includes(tab)), [filter, setFilter] = useState('All Statuses'), [page, setPage] = useState(1), [selectedTruckId, setSelectedTruckId] = useState(null), [selectedDriverId, setSelectedDriverId] = useState(null), [checkedTrucks, setCheckedTrucks] = useState([]), [checkedDrivers, setCheckedDrivers] = useState([]), [menu, setMenu] = useState(false), [editOpen, setEditOpen] = useState(false), [messageOpen, setMessageOpen] = useState(false), [message, setMessage] = useState(''), [action, setAction] = useState(null), [notice, setNotice] = useState(null);
   useEffect(() => { setQuery(''); setFilter('All Statuses'); setMenu(false); setEditOpen(false); setMessageOpen(false); setMessage(''); }, [id]);
   const requestedTab = search.get('tab');
   useEffect(() => { setTab(({ trucks: 'Trucks', drivers: 'Drivers', payouts: 'Payouts' })[requestedTab] || 'Overview'); setPage(1); setSelectedTruckId(null); setSelectedDriverId(null); setCheckedTrucks([]); setCheckedDrivers([]); setNotice(null); setAction(null); }, [id, requestedTab]);
@@ -192,7 +193,7 @@ function DriversTab({ onActivity, company, drivers, dataQuery, query, setQuery, 
 }
 function PayoutsTab({ company, payouts, query, summary, summaryQuery }) {
   const navigate = useNavigate();
-  const [search, setSearch] = useState(''), [status, setStatus] = useState('All Statuses'), [selectedId, setSelectedId] = useState(null), [page, setPage] = useState(1);
+  const [search, setSearch] = usePageSearchState('', () => setPage(1)), [status, setStatus] = useState('All Statuses'), [selectedId, setSelectedId] = useState(null), [page, setPage] = useState(1);
   const filtered = payouts.filter(row => (status === 'All Statuses' || row.status === status) && (!search || [row.id, row.reference, row.jobId, ...(row.tripIds || [])].some(value => value?.toLowerCase().includes(search.toLowerCase()))));
   const pages = Math.max(1, Math.ceil(filtered.length / 10)), currentPage = Math.min(page, pages), row = filtered.find(item => item.id === selectedId) || filtered[0];
   const payoutPath = payout => '/payouts/detail?id='+encodeURIComponent(payout.id)+(payout.source ? '&source='+encodeURIComponent(payout.source) : '');

@@ -82,7 +82,7 @@ function statsPresentation(dto) {
 }
 function filters(params) {
   return Object.fromEntries(Object.entries(params).filter(([key, value]) =>
-    ['statusFilter', 'origin', 'destination', 'driverId', 'dateFrom', 'dateTo'].includes(key) && value != null && value !== ''));
+    ['search', 'statusFilter', 'origin', 'destination', 'driverId', 'dateFrom', 'dateTo'].includes(key) && value != null && value !== ''));
 }
 export const tripScreenApi = baseApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',

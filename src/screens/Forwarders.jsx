@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
@@ -95,7 +97,7 @@ export function Forwarders() {
   }
 
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("", () => setPage(1));
   const [status, setStatus] = useState("All Status");
   const [verification, setVerification] = useState("All Verification Status");
   const [location, setLocation] = useState("All Locations");

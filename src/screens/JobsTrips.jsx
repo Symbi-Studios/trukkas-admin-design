@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
@@ -433,7 +435,7 @@ export function JobsTrips() {
   const [tab, setTab] = useState("All Jobs");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = usePageSearchState("", () => setPage(1));
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [typeFilter, setTypeFilter] = useState("All Types");
   const [cargoFilter, setCargoFilter] = useState("All Cargo");
@@ -507,12 +509,7 @@ export function JobsTrips() {
   const rawJobs = jobsResponse?.rows || [];
   const jobs = useMemo(() => rawJobs.map(normalize), [rawJobs]);
 
-  useEffect(() => {
-    const onGlobalSearch = (event) => setQuery(event.detail || "");
-    window.addEventListener("trukkas:global-search", onGlobalSearch);
-    return () =>
-      window.removeEventListener("trukkas:global-search", onGlobalSearch);
-  }, []);
+
   useEffect(() => {
     if (!toast) return undefined;
     const timer = setTimeout(() => setToast(null), 2600);

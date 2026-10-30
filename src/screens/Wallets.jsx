@@ -1,4 +1,5 @@
 "use client";
+import { usePageSearchState, matchesPageSearch } from '../components/PageSearch.jsx';
 
 import { useState } from "react";
 import { useSelector } from "react-redux";
@@ -104,6 +105,7 @@ function WalletScreen() {
   const role = useSelector(state => state.auth.admin?.role);
   const [action, setAction] = useState(null);
   const [tab, setTab] = useState("Escrow Overview");
+  const [search] = usePageSearchState('', undefined, tab !== 'Escrow Rules');
   const [modal, setModal] = useState(null);
   const [amount, setAmount] = useState("");
   const busy = false;
@@ -120,13 +122,13 @@ function WalletScreen() {
   const rulesQuery = useGetAdminEscrowRulesQuery({ owner, role }, { skip: !authenticated || tab !== "Escrow Rules", refetchOnMountOrArgChange: true });
   const activityQuery = useGetAdminEscrowActivityQuery({ owner, role }, { skip: !authenticated || tab !== "Activity Log", refetchOnMountOrArgChange: true });
   const { summary, breakdown: escrowBalanceBreakdown, breakdownTotal, weeklyActivity: escrowWeeklyActivity } = authenticated && !overviewQuery.error ? overviewQuery.currentData || emptyEscrowOverview : emptyEscrowOverview;
-  const accounts = authenticated && !accountsQuery.error ? accountsQuery.currentData || [] : [];
-  const holds = authenticated && !registerQuery.error ? registerQuery.currentData || [] : [];
-  const tx = authenticated && !ledgerQuery.error ? ledgerQuery.currentData || [] : [];
-  const releases = authenticated && !releasesQuery.error ? releasesQuery.currentData || [] : [];
-  const disputes = authenticated && !disputesQuery.error ? disputesQuery.currentData || [] : [];
+  const accounts = (authenticated && !accountsQuery.error ? accountsQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
+  const holds = (authenticated && !registerQuery.error ? registerQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
+  const tx = (authenticated && !ledgerQuery.error ? ledgerQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
+  const releases = (authenticated && !releasesQuery.error ? releasesQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
+  const disputes = (authenticated && !disputesQuery.error ? disputesQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
   const escrowRules = authenticated && !rulesQuery.error ? rulesQuery.currentData || adaptEscrowRules(null) : adaptEscrowRules(null);
-  const escrowActivityLog = authenticated && !activityQuery.error ? activityQuery.currentData || [] : [];
+  const escrowActivityLog = (authenticated && !activityQuery.error ? activityQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
   const escrowAlerts = authenticated && !alertsQuery.error ? alertsQuery.currentData || [] : [];
   const metric = (value) => overviewQuery.isLoading ? <Skeleton as="span" width={96} height={23} /> : formatNaira(value);
 
@@ -639,7 +641,7 @@ function WalletScreen() {
           )}
 
           {tab === "Disputes" &&
-            (disputesQuery.currentData && !disputesQuery.error && !disputesQuery.isFetching && disputes.length === 0 ? (
+            (disputesQuery.currentData && !disputesQuery.error && !disputesQuery.isFetching && disputesQuery.currentData.length === 0 ? (
               <EmptyState
                 icon="shield-check"
                 title="No open disputes"

@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
@@ -46,7 +48,7 @@ function FilterTitle({ children }) { return <h4 className="notify-filter-title">
 export function NotificationCenter() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('All');
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [statuses, setStatuses] = useState(['Unread']);
   const [priorities, setPriorities] = useState([]);
   const [category, setCategory] = useState('All Categories');
@@ -94,11 +96,7 @@ export function NotificationCenter() {
     setSettingsDraft((draft) => settingsOpen && draft ? draft : settingsData);
   }, [settingsData, settingsOpen]);
 
-  useEffect(() => {
-    const search = (event) => { setQ(event.detail); setPage(1); };
-    window.addEventListener('trukkas:global-search', search);
-    return () => window.removeEventListener('trukkas:global-search', search);
-  }, []);
+
 
   const filtered = useMemo(() => {
     const list = rows.filter((row) =>

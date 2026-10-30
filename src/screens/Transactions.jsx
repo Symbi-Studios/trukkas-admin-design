@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
@@ -230,7 +232,7 @@ export function Transactions() {
   const [draft, setDraft] = useState(defaultFilters);
   const [applied, setApplied] = useState(defaultFilters);
   const dateLabel = datePresets.find(preset => preset.from === applied.from && preset.to === applied.to)?.label || transactionRangeLabel(applied.from, applied.to);
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("", () => setPage(1));
   const [page, setPage] = useState(1);
   const [menuFor, setMenuFor] = useState(null);
   const [selected, setSelected] = useState([]);

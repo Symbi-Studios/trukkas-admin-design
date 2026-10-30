@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -78,7 +80,7 @@ function AuditLogsScreen() {
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const canView = authenticated && Boolean(owner) && role === 'SUPER_ADMIN';
   const [tab, setTab] = useState('All Logs');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = usePageSearchState('', () => setPage(1));
   const [draft, setDraft] = useState({ date: DATE_OPTIONS[0], user: 'All Users', module: 'All Modules', action: 'All Actions', status: 'All Statuses' });
   const [filters, setFilters] = useState(draft);
   const [selectedRows, setSelectedRows] = useState([]);
@@ -114,11 +116,7 @@ function AuditLogsScreen() {
   const actions = ['All Actions', ...new Set(audits.map((row) => row.action).filter((value) => value !== '—'))];
   const baseFilters = { date: DATE_OPTIONS[0], user: 'All Users', module: 'All Modules', action: 'All Actions', status: 'All Statuses' };
 
-  useEffect(() => {
-    const syncSearch = (event) => { setQuery(event.detail || ''); setPage(1); };
-    window.addEventListener('trukkas:global-search', syncSearch);
-    return () => window.removeEventListener('trukkas:global-search', syncSearch);
-  }, []);
+
 
   const filtered = useMemo(() => audits.filter((row) => {
     const q = query.trim().toLowerCase();

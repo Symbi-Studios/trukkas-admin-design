@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
@@ -76,7 +78,7 @@ export function FAQ() {
   const groups = useMemo(() => authenticated && !query.error ? query.currentData || [] : [], [authenticated, query.error, query.currentData]);
   const loading = !authenticated || query.isLoading || query.isFetching;
   const [category, setCategory] = useState("All Categories");
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("");
   const [openKey, setOpenKey] = useState(null);
   useEffect(() => { setOpenKey(null); }, [admin?.id]);
   const available = authenticated && !query.error && Boolean(query.currentData)

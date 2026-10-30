@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from '../router.js';
 import { PageHeader, Button, StatCard, SectionCard, Card, SearchField, DataTable, Pagination, Badge, DonutChart, LegendList, RankBarList, ListRow, QuickActionsCard, IconButton, DropdownMenu, Modal, TextField, Select, Banner } from '../ds.js';
@@ -24,7 +26,7 @@ function exportCsv(rows) {
 
 export function FleetManagement() {
   const navigate = useNavigate(), upload = useRef(null), toastTimer = useRef(null);
-  const [q, setQ] = useState(''), [search, setSearch] = useState(''), [sort, setSort] = useState('Newest');
+  const [q, setQ] = usePageSearchState('', () => setPage(1)), [search, setSearch] = useState(''), [sort, setSort] = useState('Newest');
   const [page, setPage] = useState(1), [pageSize, setPageSize] = useState(10), [menu, setMenu] = useState(null);
   const [addOpen, setAddOpen] = useState(false), [form, setForm] = useState(EMPTY), [toast, setToast] = useState(''), [review, setReview] = useState(null);
   useEffect(() => { const timer = setTimeout(() => { setSearch(q); setPage(1); }, 300); return () => clearTimeout(timer); }, [q]);

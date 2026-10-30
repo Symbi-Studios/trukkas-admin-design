@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
@@ -96,7 +98,7 @@ export function Maintenance() {
   const canWrite = ["SUPER_ADMIN", "OPS_ADMIN"].includes(role);
   const busy = useRef(false);
   const [tab, setTab] = useState("All Maintenance"),
-    [q, setQ] = useState(""),
+    [q, setQ] = usePageSearchState("", () => setPage(1)),
     [status, setStatus] = useState("All Statuses"),
     [priority, setPriority] = useState("All Priorities"),
     [type, setType] = useState("All Types"),

@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
@@ -77,7 +79,7 @@ export function BidsOffers() {
 }
 function BidsOffersContent({owner,role,authenticated}) {
   const navigate=useNavigate();
-  const [tab,setTab]=useState("Bid Overview"),[page,setPage]=useState(1),[q,setQ]=useState("");
+  const [tab,setTab]=useState("Bid Overview"),[page,setPage]=useState(1),[q,setQ]=usePageSearchState("", () => setPage(1));
   const [statusFilter,setStatusFilter]=useState("All Status"),[dateKey,setDateKey]=useState("week");
   const [menu,setMenu]=useState(null),[offerModal,setOfferModal]=useState(null),[toast,setToast]=useState(null),[offerError,setOfferError]=useState("");
   const dateOptions=useMemo(()=>bidScreenDateOptions(),[]);

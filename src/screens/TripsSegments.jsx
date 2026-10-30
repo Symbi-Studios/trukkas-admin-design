@@ -1,4 +1,5 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
@@ -102,6 +103,9 @@ export function TripsSegments() {
 function TripsSegmentsContent({ owner, role, authenticated }) {
   const navigate = useNavigate();
   const [page, setPage] = useState(1), [statusFilter, setStatusFilter] = useState("All Trips");
+  const [searchInput, setSearchInput] = usePageSearchState('', () => setPage(1));
+  const [search, setSearch] = useState('');
+  useEffect(() => { const timer = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 250); return () => clearTimeout(timer); }, [searchInput]);
   const [originFilter, setOriginFilter] = useState("All Locations"), [destFilter, setDestFilter] = useState("All Locations");
   const [driverFilter, setDriverFilter] = useState("All Drivers"), [driverId, setDriverId] = useState(null);
   const [dateFilter, setDateFilter] = useState("All Dates"), [menu, setMenu] = useState(null);
@@ -113,7 +117,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   selectedRef.current = selectedId;
   const selectedRange = useMemo(() => dateRange(dateFilter), [dateFilter]);
   const session = { owner, role };
-  const listFilters = { ...selectedRange, statusFilter: STATUS_TO_API[statusFilter],
+  const listFilters = { ...selectedRange, search, statusFilter: STATUS_TO_API[statusFilter],
     origin: originFilter === "All Locations" ? undefined : originFilter,
     destination: destFilter === "All Locations" ? undefined : destFilter, driverId };
   const list = useGetAdminTripScreenListQuery({ ...session, ...listFilters, page }, { skip: !authenticated, refetchOnMountOrArgChange: true });
@@ -153,6 +157,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   function selectTrip(t) { setSelectedId(t.id); setZoom(100); setFitVersion(0); setContactOpen(false); setMessage(""); setActionError(""); setMenu(null); }
   function closeTrip() { if (actionBusy) return; setSelectedId(null); setContactOpen(false); setMessage(""); setActionError(""); }
   function resetFilters() {
+    setSearchInput(''); setSearch('');
     setStatusFilter("All Trips"); setOriginFilter("All Locations"); setDestFilter("All Locations");
     setDriverFilter("All Drivers"); setDriverId(null); setDateFilter("All Dates"); setMenu(null); setPage(1);
   }

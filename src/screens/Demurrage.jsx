@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
@@ -106,7 +108,7 @@ function DemurrageScreen() {
   const summary = useMemo(() => demurrageSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.error, statsQuery.currentData]);
   const toastTimer = useRef(null), savingRules = useRef(false), rulesDirty = useRef(false), bulkPending = useRef(false);
   const [tab, setTab] = useState("All Demurrage"),
-    [q, setQ] = useState(""),
+    [q, setQ] = usePageSearchState("", () => setPage(1)),
     [status, setStatus] = useState("All"),
     [jobType, setJobType] = useState("All"),
     [date, setDate] = useState(""),

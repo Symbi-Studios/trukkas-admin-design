@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
@@ -79,7 +81,7 @@ export function RolesPermissions() {
   const rolesSummary = roleSummary(roles, catalog);
   const loading = authenticated && directory.isFetching;
   const value = (content) => loading ? <Skeleton as="span" width={60} height={23} /> : content;
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [status, setStatus] = useState('All Status');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);

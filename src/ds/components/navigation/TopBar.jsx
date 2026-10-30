@@ -7,7 +7,7 @@ import { DropdownMenu } from '../feedback/DropdownMenu.jsx';
 /** Sticky application bar: menu toggle, global search, system health, notifications, account. */
 export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, companies, exporters...',
                          health = 'System Health', notifications = 0, user, role, style,
-                         searchValue, onSearch, onNotifications, onViewProfile, onLogout }) {
+                         searchValue, onSearch, onSearchKeyDown, onNotifications, onViewProfile, onLogout }) {
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef(null);
 
@@ -42,7 +42,7 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
         </button>
       )}
       <SearchField className="tk-global-search" variant="global" placeholder={searchPlaceholder} style={{ flex: '0 1 440px' }}
-        value={searchValue} onChange={onSearch} />
+        value={searchValue} onChange={onSearch} onKeyDown={onSearchKeyDown} />
       <div className="tk-topbar-spacer" style={{ flex: 1 }} />
       <button className="tk-topbar-notifications" type="button" aria-label="Notifications" onClick={onNotifications}
         style={{ position: 'relative', width: 38, height: 38, display: 'grid', placeItems: 'center',

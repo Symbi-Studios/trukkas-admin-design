@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
@@ -84,7 +86,7 @@ export function Documents() {
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const [tab, setTab] = useState("all");
-  const [searchInput, setSearchInput] = useState("");
+  const [searchInput, setSearchInput] = usePageSearchState("", () => setPage(1));
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All document types");
   const [statusFilter, setStatusFilter] = useState("All statuses");

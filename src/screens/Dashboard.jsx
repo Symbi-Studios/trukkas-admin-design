@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "../router.js";
@@ -213,13 +215,9 @@ export function Dashboard() {
   const [ratingPeriod, setRatingPeriod] = useState("All Time");
   const [registrationTab, setRegistrationTab] = useState("Drivers");
   const [openMenu, setOpenMenu] = useState(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = usePageSearchState("");
 
-  useEffect(() => {
-    const onSearch = (event) => setQuery(event.detail || "");
-    window.addEventListener("trukkas:global-search", onSearch);
-    return () => window.removeEventListener("trukkas:global-search", onSearch);
-  }, []);
+
   const data = useMemo(() => {
     const normalized = jobs.map((job) => ({
       ...job,

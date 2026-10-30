@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
@@ -61,7 +63,7 @@ export function Announcements() {
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const [tab, setTab] = useState("All Announcements"),
-    [q, setQ] = useState(""),
+    [q, setQ] = usePageSearchState("", () => setPage(1)),
     [status, setStatus] = useState("All"),
     [type, setType] = useState("All"),
     [audience, setAudience] = useState("All"),

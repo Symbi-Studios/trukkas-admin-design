@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -67,7 +69,7 @@ export function LiveTracking() {
   const messageLock = useRef(false);
   const filterVersion = useRef(0);
   const [statusFilter, setStatusFilter] = useState('All Status');
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [quickFilter, setQuickFilter] = useState(null);
   const [showHeatMap, setShowHeatMap] = useState(false);
   const shareLock = useRef(false);

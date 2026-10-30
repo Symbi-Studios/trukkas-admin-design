@@ -1,3 +1,5 @@
+
+import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useMemo, useState } from 'react';
 import { Link } from '../router.js';
 import {
@@ -20,7 +22,7 @@ function two(a, b) {
 export function CargoManagement() {
   const cargo = useCollection('cargo') || [];
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
 
   const filtered = useMemo(() => !q ? cargo : cargo.filter(
     (c) => [c.id, c.desc, c.job].some((v) => v.toLowerCase().includes(q.toLowerCase())),

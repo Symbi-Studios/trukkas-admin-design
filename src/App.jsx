@@ -16,6 +16,7 @@ import { useGetAdminNotificationsQuery } from "./store/features/notifications/no
 import { clearSession } from "./store/features/auth/authSlice.js";
 import { baseApi } from "./store/api/baseApi.js";
 import { AppLoadingScreen } from "./components/AppLoadingScreen.jsx";
+import { PageSearchProvider, usePageSearch, usePageTextSearch } from './components/PageSearch.jsx';
 import "./mock/api.js";
 
 const PUBLIC_ROUTES = new Set([
@@ -26,9 +27,14 @@ const PUBLIC_ROUTES = new Set([
 ]);
 
 export function AdminShell({ children }) {
+  return <PageSearchProvider><AdminShellContent>{children}</AdminShellContent></PageSearchProvider>;
+}
+
+function AdminShellContent({ children }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
-  const [globalSearch, setGlobalSearch] = React.useState("");
+  const pageSearch = usePageSearch();
+  const searchKeyDown = usePageTextSearch(pageSearch.query, !pageSearch.filtering);
   const [mounted, setMounted] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
   const admin = useSelector((state) => state.auth.admin);
@@ -56,10 +62,22 @@ export function AdminShell({ children }) {
     if (pathname === "/signed-out") setLoggingOut(false);
   }, [pathname]);
 
-  React.useEffect(() => {
-    setGlobalSearch("");
+  React.useLayoutEffect(() => {
+    pageSearch.change('');
+    document.querySelector('.tk-global-search input')?.setCustomValidity('');
     setMobileNavOpen(false);
-  }, [pathname]);
+  }, [pathname, admin?.id, pageSearch.change]);
+
+  React.useEffect(() => {
+    const focusSearch = event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        const input = document.querySelector('.tk-global-search input');
+        if (input) { event.preventDefault(); input.focus(); input.select(); }
+      }
+    };
+    document.addEventListener('keydown', focusSearch);
+    return () => document.removeEventListener('keydown', focusSearch);
+  }, []);
 
   function toggleNavigation() {
     if (window.matchMedia("(max-width: 1023px)").matches) setMobileNavOpen((open) => !open);
@@ -157,14 +175,14 @@ export function AdminShell({ children }) {
           onMenu={toggleNavigation}
           notifications={notificationData?.unreadCount ?? 0}
           searchPlaceholder={SEARCH_PLACEHOLDER[activeId]}
-          searchValue={globalSearch}
+          searchValue={pageSearch.query}
+          onSearchKeyDown={event => {
+            if (event.key === 'Escape') { event.currentTarget.setCustomValidity(''); pageSearch.change(''); }
+            searchKeyDown(event);
+          }}
           onSearch={(event) => {
-            setGlobalSearch(event.target.value);
-            window.dispatchEvent(
-              new CustomEvent("trukkas:global-search", {
-                detail: event.target.value,
-              }),
-            );
+            event.target.setCustomValidity('');
+            pageSearch.change(event.target.value);
           }}
           onNotifications={() => router.push("/notifications")}
           onViewProfile={() => router.push("/profile")}

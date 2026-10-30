@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -62,7 +64,7 @@ export function UserManagement() {
   const unavailable = (action) => { setMenuFor(null); window.alert(`${action} is not supported through this control by the documented API.`); };
   const profilePath = (user) => `/users/detail?id=${encodeURIComponent(user.backendId)}&source=${user.source}`;
   const metric = (value) => !authenticated || statsQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [role, setRole] = useState('All Roles');
   const [status, setStatus] = useState('All Statuses');
   const [entity, setEntity] = useState('All Entities');

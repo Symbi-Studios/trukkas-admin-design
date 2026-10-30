@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 import { useEffect,useRef,useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
@@ -12,7 +14,7 @@ import { useFeedbackOperations } from '../store/features/feedback/useFeedbackOpe
 import { FeedbackSettingsDialog } from './FeedbackDialogs.jsx';
 import './Engagement.css';
 const PAGE_SIZE=8,TYPE_TONE={Praise:'success',Suggestion:'info',Issue:'danger',Other:'neutral'},TYPE_ICON={Praise:'message-square',Suggestion:'lightbulb',Issue:'triangle-alert',Other:'circle-help'};
-export function Feedback(){const navigate=useNavigate();const owner=useSelector(state=>state.auth.admin?.id),authenticated=useSelector(state=>Boolean(state.auth.accessToken));const [tab,setTab]=useState('All Feedback'),[q,setQ]=useState(''),[status,setStatus]=useState('All'),[type,setType]=useState('All'),[channel,setChannel]=useState('All'),[date,setDate]=useState(''),[page,setPage]=useState(1),[period,setPeriod]=useState('Last 30 days'),[provide,setProvide]=useState(false),[form,setForm]=useState({title:'',body:'',type:'Suggestion'}),[toast,setToast]=useState('');
+export function Feedback(){const navigate=useNavigate();const owner=useSelector(state=>state.auth.admin?.id),authenticated=useSelector(state=>Boolean(state.auth.accessToken));const [tab,setTab]=useState('All Feedback'),[q,setQ]=usePageSearchState('', () => setPage(1)),[status,setStatus]=useState('All'),[type,setType]=useState('All'),[channel,setChannel]=useState('All'),[date,setDate]=useState(''),[page,setPage]=useState(1),[period,setPeriod]=useState('Last 30 days'),[provide,setProvide]=useState(false),[form,setForm]=useState({title:'',body:'',type:'Suggestion'}),[toast,setToast]=useState('');
  const operations=useFeedbackOperations();
  const provideRequested=useSearchParams().get('action')==='provide';
  const [settings,setSettings]=useState(false);

@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "../router.js";
@@ -117,7 +119,7 @@ export function RequestedPayouts() {
   const all = directory?.rows || EMPTY_ROWS;
 
   const [tab, setTab] = useState("All Requests");
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("", () => setPage(1));
   const [type, setType] = useState("All Payout Types");
   const [status, setStatus] = useState("All Statuses");
   const [party, setParty] = useState("All Parties");

@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useMemo, useRef, useState } from "react";
 import { useSelector } from 'react-redux';
@@ -202,7 +204,7 @@ export function PricingManagement() {
   const terminalQuery = useGetAdminPricingTerminalRatesQuery(undefined, { skip: tab !== 'Surcharges & Fees' });
   const terminalRates = terminalQuery.error ? [] : terminalQuery.currentData?.rows || [];
   const surcharges = [...(config?.fees || []), ...terminalRates, ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || [])];
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("", () => setPage(1), tab === 'Service Pricing');
   const [serviceType, setServiceType] = useState("All Services");
   const [jobType, setJobType] = useState("All Job Types");
   const [route, setRoute] = useState("All Routes");

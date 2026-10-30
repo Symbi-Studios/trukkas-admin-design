@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -72,7 +74,7 @@ function VerificationScreen() {
   const statValue = (value) => allTime.isLoading || (allTime.isFetching && !allTime.currentData) ? <Skeleton as="span" width={54} height={23} /> : value;
   const unavailable = (action) => window.alert(`${action} is not available in the documented verification API.`);
   const [tab, setTab] = useState('All Verifications');
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [status, setStatus] = useState('All Statuses');
   const [riskLevel, setRiskLevel] = useState('All Levels');
   const [page, setPage] = useState(1);

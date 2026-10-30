@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useMemo, useState } from "react";
 import { useSelector } from 'react-redux';
@@ -115,7 +117,7 @@ export function Settlements() {
 function SettlementsScreen() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("All Settlements");
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("", () => setPage(1));
   const [settlementType, setSettlementType] = useState("All Types");
   const [status, setStatus] = useState("All Status");
   const [payerType, setPayerType] = useState("All Payers");

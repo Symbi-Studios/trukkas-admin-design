@@ -5,6 +5,9 @@ import * as React from 'react';
 export interface TopBarProps {
   onMenu?: () => void;
   searchPlaceholder?: string;
+  searchValue?: string;
+  onSearch?: React.ChangeEventHandler<HTMLInputElement>;
+  onSearchKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
   /** label beside the green dot; pass null to hide the pill */
   health?: React.ReactNode;
   notifications?: number;

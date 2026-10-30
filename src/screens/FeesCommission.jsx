@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "../router.js";
@@ -135,7 +137,7 @@ export function FeesCommission() {
     setBulkOpen(true);
   }
   const [tab, setTab] = useState("Fee Rules");
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("", () => setPage(1), tab === 'Fee Rules');
   const [status, setStatus] = useState("All Status");
   const [jobType, setJobType] = useState("All Job Types");
   const [cargoType, setCargoType] = useState("All Cargo Types");

@@ -1,4 +1,6 @@
 'use client';
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
@@ -247,7 +249,7 @@ export function SettingsFieldsRegistration() {
   const api = useRegistrationFields(entity);
   const fields = api.fields;
   const [category, setCategory] = useState(ALL);
-  const [q, setQ] = useState('');
+  const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [filter, setFilter] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [page, setPage] = useState(1);

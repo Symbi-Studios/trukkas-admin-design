@@ -1,4 +1,6 @@
 "use client";
+import { usePageSearchState } from '../components/PageSearch.jsx';
+
 
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
@@ -46,7 +48,7 @@ export function SupportTickets() {
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const searchParams = useSearchParams();
   const assignedTo = searchParams.get('assignedTo') === 'me' ? 'me' : undefined;
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePageSearchState("", () => setPage(1));
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
   const [priority, setPriority] = useState("All");
