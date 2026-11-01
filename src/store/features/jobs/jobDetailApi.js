@@ -84,7 +84,7 @@ function mapTrip(t) {
   return {
     id: t.tripId, jobId: text(t.jobId), statusCode: text(t.status), isDelayed: typeof t.isDelayed === 'boolean' ? t.isDelayed : null,
     status: t.isDelayed === true ? 'Delayed' : text(t.segmentLabel) || title(t.status),
-    truckPlate: shown(truck.plateNumber), truckId: text(truck.id), driverId: text(driver.id),
+    containerNumber: text(object(t.container).number) || shown(t.containerNumber), truckPlate: shown(truck.plateNumber), truckId: text(truck.id), driverId: text(driver.id),
     driverName: text(driver.name) || text(t.driverName) || '—', driverPhone: shown(driver.phone),
     truckingCompany: shown(company.name), truckerId: text(company.id),
     origin: shown(t.origin), destination: shown(t.destination), route: shown(t.route),

@@ -291,7 +291,7 @@
 }
 .jd-trip-selector > button {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--tk-space-2);
   padding: var(--tk-space-3);
@@ -315,6 +315,7 @@
 .jd-trip-selector strong {
   font: var(--tk-body-strong-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans);
   color: var(--tk-ink-900);
+  overflow-wrap: anywhere;
 }
 .jd-trip-selector small {
   overflow: hidden;

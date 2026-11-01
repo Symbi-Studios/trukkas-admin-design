@@ -1618,7 +1618,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                   <div className="jd-trip-selector">
                     {jobTrips.map((trip) => (
                       <button key={trip.id} className={trip.id === selectedTrip?.id ? "active" : ""} onClick={() => setSelectedTripId(trip.id)}>
-                        <Icon name="truck" size={16}/><span><strong>{trip.id}</strong><small>{trip.truckPlate} · {trip.driverName}</small></span><Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge>
+                        <Icon name="truck" size={16}/><span><strong>{trip.containerNumber} · {trip.route}</strong><small>{trip.truckPlate} · {trip.driverName}</small></span><Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge>
                       </button>
                     ))}
                   </div>
