@@ -2251,7 +2251,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               {tripFinancials.length > 0 && (
                 <SectionCard title="Trip-level Costs" description="Operational costs stay attached to each truck movement and roll up to the job." pad="none">
                   <DataTable rows={tripFinancials} rowKey={(trip) => trip.id} coloredHeader columns={[
-                    { key: "id", header: "Trip ID", render: (trip) => <strong className="jd-trip-id">{trip.id}</strong> },
+                    { key: "id", header: "Container / Route", render: (trip) => <strong className="jd-trip-id">{trip.containerNumber} · {trip.route}</strong> },
                     { key: "truckPlate", header: "Truck" },
                     { key: "driverName", header: "Driver" },
                     { key: "cost", header: "Trip Cost", render: (trip) => naira(trip.cost) },
