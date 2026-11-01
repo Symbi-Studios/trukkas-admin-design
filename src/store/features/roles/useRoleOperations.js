@@ -29,7 +29,7 @@ export function useRoleOperations() {
   }
   async function performWithAlert(args) {
     try { return await perform(args); }
-    catch (error) { if (currentOwner.current === owner) window.alert(error instanceof Error ? error.message : getApiErrorMessage(error)); return null; }
+    catch (error) { if (currentOwner.current === owner) window.alert(getApiErrorMessage(error)); return null; }
   }
   return { owner, authenticated: canRead, canManage, canDelete, saving: mutation.isLoading, perform, performWithAlert };
 }

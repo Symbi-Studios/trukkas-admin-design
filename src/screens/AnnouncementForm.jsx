@@ -31,7 +31,7 @@ export function AnnouncementForm({editing=false}){
  function chooseAudience(name){if(saving)return;if(name==='All Users'){set('audience',name)}else setAudienceDialog({name,admin:operations.admin})}
  function applyAudience(ids){const name=audienceDialog.name,key={'User Roles':'roleIds','Users with Access':'moduleIds','Custom Users':'userIds'}[name];setForm(f=>({...f,audience:name,targeting:{roleIds:[],moduleIds:[],userIds:[],[key]:ids}}));setAudienceDialog(null)}
  function validate(){if(!form.title.trim()||!form.message.trim()){setError('Title and message are required.');return false}setError('');return true}
- async function save(mode){if(!validate()||saving)return;setSaving(true);try{const result=await operations.perform({action:'save',id:editing||draftId?id:undefined,expectedVersion:source?.version,form,mode});if(result){setReview(false);navigate(announcementDetailUrl(result.announcement.id))}}catch(failure){setError(failure instanceof Error?failure.message:getApiErrorMessage(failure));setReview(false)}finally{setSaving(false)}}
+ async function save(mode){if(!validate()||saving)return;setSaving(true);try{const result=await operations.perform({action:'save',id:editing||draftId?id:undefined,expectedVersion:source?.version,form,mode});if(result){setReview(false);navigate(announcementDetailUrl(result.announcement.id))}}catch(failure){setError(getApiErrorMessage(failure));setReview(false)}finally{setSaving(false)}}
  if(id&&(query.isLoading||(query.isFetching&&!query.currentData)))return <DriverDetailLoading/>;
  if(id&&query.error)return <Card><DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice></Card>;
  if((editing||id)&&!authenticated)return <Card>—</Card>;

@@ -22,7 +22,7 @@ import {
   DropdownMenu,
   Icon,
   ListRow,
-  Modal,
+  Modal, Textarea,
   EmptyState, Banner,
 } from "../ds.js";
 import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation,
@@ -216,6 +216,8 @@ export function PricingManagement() {
   const [menuFor, setMenuFor] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editServiceId, setEditServiceId] = useState(null);
+  const [rejectRow, setRejectRow] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [exportOpen, setExportOpen] = useState(false);
   const [changeRecord, { isLoading: pricingChanging }] = useChangeAdminPricingRecordMutation();
   const [exportPricingPdf] = useExportAdminPricingServicesMutation();
@@ -270,14 +272,15 @@ export function PricingManagement() {
   }
 
   function unavailable(message) { setActionError({ error: message }); setMenuFor(null); setExportOpen(false); }
-  async function changePricing(row, action) {
+  async function changePricing(row, action, reason) {
     setMenuFor(null);
     if (changeLock.current) return;
     if (!canChangePricing(row, action, admin)) { unavailable('Your role or this pricing status does not allow this action.'); return; }
     changeLock.current = true; setActionError(null);
     try {
-      const saved = await changeRecord({ row, action }).unwrap();
-      setNotice(action === 'duplicate' ? 'Draft pricing version created.' : action === 'submit' ? 'Pricing submitted for approval.' : action === 'deactivate' ? 'Pricing deactivated.' : 'Pricing approved and activated.');
+      const saved = await changeRecord({ row, action, reason }).unwrap();
+      setNotice(action === 'reject' ? 'Pricing rejected.' : action === 'duplicate' ? 'Draft pricing version created.' : action === 'submit' ? 'Pricing submitted for approval.' : action === 'deactivate' ? 'Pricing deactivated.' : 'Pricing approved and activated.');
+      if (action === 'reject') { setRejectRow(null); setRejectReason(''); }
       if (action === 'duplicate' && saved.entity === 'services') navigate(pricingDetailUrl(saved.id));
     } catch (error) { setActionError(error); }
     finally { changeLock.current = false; }
@@ -959,8 +962,8 @@ export function PricingManagement() {
                       <Button
                         size="sm"
                         variant="danger"
-                        disabled
-                        title="The API requires a rejection reason; this screen has no reason input."
+                        disabled={pricingChanging || !canChangePricing(r, 'reject', admin)}
+                        onClick={() => { setActionError(null); setRejectReason(''); setRejectRow(r); }}
                       >
                         Reject
                       </Button>
@@ -1183,6 +1186,10 @@ export function PricingManagement() {
         </div>
       </div>
 
+      <Modal open={Boolean(rejectRow)} title="Reject pricing" onClose={() => { if (!pricingChanging) setRejectRow(null); }} footer={<><Button variant="outline" disabled={pricingChanging} onClick={() => setRejectRow(null)}>Cancel</Button><Button variant="danger" disabled={pricingChanging || !rejectReason.trim()} onClick={() => void changePricing(rejectRow, 'reject', rejectReason)}>{pricingChanging ? 'Rejecting…' : 'Reject'}</Button></>}>
+        {actionError && <Banner tone="danger">{pricingError(actionError)}</Banner>}
+        <Textarea label="Reason for rejection" maxLength={500} disabled={pricingChanging} value={rejectReason} onChange={(event) => setRejectReason(event.target.value.slice(0, 500))} />
+      </Modal>
       {setting && <PricingSettingModal key={setting.id} row={setting} writesUnavailable={setting.source === 'config' && !canEditConfig} onClose={() => setSetting(null)} onDone={setNotice} />}
       {addOpen && <PricingServiceForm id={editServiceId} onClose={() => setAddOpen(false)} onDone={saved => { setAddOpen(false); setNotice(editServiceId ? 'Draft pricing updated.' : 'Draft pricing created.'); navigate(pricingDetailUrl(saved.id)); }} />}
     </>

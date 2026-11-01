@@ -134,4 +134,4 @@ export function feedbackFilters({ search = '', status, type, channel, date = '',
   return { params: result, incompatible: false };
 }
 export const feedbackDetailUrl = (id, { page, search } = {}) => `/feedback/detail?${new URLSearchParams({ feedbackId: id, ...(Number.isSafeInteger(page) && page > 0 ? { page: String(page) } : {}), ...(feedbackText(search) ? { search } : {}) })}`;
-export const feedbackUnavailable = (action) => window.alert(`${action} is not supported by the documented feedback API.`);
+export const feedbackUnavailable = (action) => window.alert(`${action} is not available for this feedback.`);

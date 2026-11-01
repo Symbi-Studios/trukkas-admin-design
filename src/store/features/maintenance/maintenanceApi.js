@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 
 const path = '/admin/maintenance';
 const text = (v) => typeof v === 'string' && v.trim() ? v.trim() : null;
@@ -15,8 +16,7 @@ export const maintenanceHref = (id) => `/maintenance/detail?id=${encodeURICompon
 export function maintenanceError(error) {
   if (error?.status === 403) return 'Your account cannot perform this maintenance operation.';
   if (error?.status === 401) return 'Please sign in again.';
-  const message = error?.data?.message;
-  return (Array.isArray(message) ? message.join(' ') : text(message)) || text(error?.error) || 'The maintenance request could not be completed.';
+  return getApiErrorMessage(error, 'The maintenance request could not be completed.');
 }
 function dateValue(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value)) return null;
@@ -110,7 +110,7 @@ function mapList(response, args) {
   const p = data.pagination || {};
   const page = integer(p.page), limit = integer(p.limit), total = integer(p.total), totalPages = integer(p.totalPages);
   if (!page || !limit || total == null || totalPages == null || page !== (args.page ?? 1) || rows.length > limit || rows.length > total || new Set(rows.map(r => r.id)).size !== rows.length
-    || totalPages !== Math.ceil(total / limit) && !(total === 0 && totalPages === 1) || page > Math.max(1, totalPages) || total > 0 && !rows.length) throw new Error('The maintenance response has invalid pagination.');
+    || totalPages !== Math.ceil(total / limit) && !(total === 0 && totalPages === 1) || page > Math.max(1, totalPages) || total > 0 && !rows.length) throw new Error('The maintenance records could not be loaded completely. Please refresh.');
   return { rows, pagination: { page, limit, total, totalPages } };
 }
 function params(args = {}) {
@@ -162,7 +162,7 @@ export const maintenanceApi = taggedApi.injectEndpoints({
       query: ({ id }) => `${path}/${encodeURIComponent(id)}`,
       transformResponse: (response, _meta, { id }) => {
         const dto = unwrapApiResponseData(response);
-        if (dto?.id !== id) throw new Error('The maintenance API returned a different record.');
+        if (dto?.id !== id) throw new Error('The maintenance record could not be confirmed. Please refresh.');
         return mapRecord(dto);
       },
       providesTags: ['AdminMaintenance'],
@@ -212,7 +212,7 @@ export const maintenanceApi = taggedApi.injectEndpoints({
             const total = integer(pagination.total), pages = integer(pagination.totalPages), limit = integer(pagination.limit);
             if (!Array.isArray(dto?.trucks) || total == null || pages == null || pagination.page !== page || !limit
               || dto.trucks.length > limit || pages !== Math.ceil(total / limit) && !(total === 0 && pages === 1)
-              || expectedTotal != null && (total !== expectedTotal || pages !== expectedPages)) return failure('The truck options returned incomplete pagination. Refresh before scheduling.');
+              || expectedTotal != null && (total !== expectedTotal || pages !== expectedPages)) return failure('The truck list could not be loaded completely. Refresh before scheduling.');
             expectedTotal = total; expectedPages = pages;
             for (const truck of dto.trucks) {
               if (!text(truck?.id) || seen.has(truck.id)) return failure('The truck options returned missing or duplicate IDs.');
@@ -273,7 +273,7 @@ export const maintenanceApi = taggedApi.injectEndpoints({
         const page = integer(p.page), limit = integer(p.limit), total = integer(p.total), totalPages = integer(p.totalPages);
         if (page !== requestedPage || !limit || total == null || totalPages == null || centers.length > limit || centers.length > total
           || totalPages !== Math.ceil(total / limit) && !(total === 0 && totalPages === 1)
-          || page > Math.max(1, totalPages) || total > 0 && !centers.length) throw new Error('The service centers response has invalid pagination.');
+          || page > Math.max(1, totalPages) || total > 0 && !centers.length) throw new Error('The service centres could not be loaded completely. Please refresh.');
         return { rows: centers.map(item => ({ id: item.id, name: text(item.name) || '—', location: text(item.location) || '—' })), total, totalPages };
       }, providesTags: ['AdminMaintenance'],
     }),

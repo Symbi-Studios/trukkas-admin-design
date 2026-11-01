@@ -8,10 +8,10 @@ const sections = ['general', 'operations', 'finance', 'fleet', 'security', 'pass
 // Defaults explicitly documented by GET admin/notifications/settings.
 const notificationDefaults = { emailEnabled: true, pushEnabled: true, smsEnabled: false, quietHoursEnabled: false, quietHoursStart: '22:00', quietHoursEnd: '07:00' };
 function editableDefaults(dto) {
-  if (!Array.isArray(dto.fields)) throw new Error('The backend did not return the fields needed to confirm reset defaults.');
+  if (!Array.isArray(dto.fields)) throw new Error('The default settings could not be confirmed. Reload before resetting.');
   const fields = dto.fields.filter((field) => field?.editable === true);
-  if (fields.some((field) => typeof field.key !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(field.key) || ['constructor', 'prototype', '__proto__'].includes(field.key) || !Object.hasOwn(field, 'default') || !(field.default === null || ['string', 'boolean'].includes(typeof field.default) || (typeof field.default === 'number' && Number.isFinite(field.default))))) throw new Error('The backend did not return complete editable defaults.');
-  if (new Set(fields.map((field) => field.key)).size !== fields.length) throw new Error('The backend returned ambiguous editable defaults.');
+  if (fields.some((field) => typeof field.key !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(field.key) || ['constructor', 'prototype', '__proto__'].includes(field.key) || !Object.hasOwn(field, 'default') || !(field.default === null || ['string', 'boolean'].includes(typeof field.default) || (typeof field.default === 'number' && Number.isFinite(field.default))))) throw new Error('The default settings could not be confirmed. Reload before resetting.');
+  if (new Set(fields.map((field) => field.key)).size !== fields.length) throw new Error('The default settings could not be confirmed. Reload before resetting.');
   return Object.fromEntries(fields.map((field) => [field.key, field.default]));
 }
 const valuesMatch = (values, expected) => Object.entries(expected).every(([field, value]) => Object.hasOwn(record(values), field) && values[field] === value);
@@ -87,7 +87,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const plans = new Map(), submitted = [];
           for (const change of changes) {
             const control = findSettingsField(page, change.group, change.field), contract = before.contracts[change.group + '.' + change.field];
-            if (!control || !contract?.editable) return failure('This setting is fixed or unsupported by the backend.');
+            if (!control || !contract?.editable) return failure('This setting cannot be changed.');
             const section = personal ? page : contract.section;
             if (!canEditSettings(section, role)) return failure('Your admin access level cannot change this settings section.', 403);
             const value = personal ? encodePreference(contract, change.value) : encodeSetting(control, contract, change.value);
@@ -176,7 +176,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const before = adaptSecurityAlertEvents(read.data);
           if (!before.editable || !sectionVersion(expectedVersion) || before.eventVersion !== expectedVersion) return failure('Security-alert preferences changed or cannot be edited. Reload before resetting.', 409);
           const complete = model => model.events?.length === securityEventKeys.length && securityEventKeys.every(key => model.events.some(event => event.key === key));
-          if (!complete(before)) return failure('The backend did not return all security-alert events. Reload before resetting.');
+          if (!complete(before)) return failure('The security alerts could not be loaded completely. Reload before resetting.');
           const result = await baseQuery({ url: url + '/reset', method: 'POST', body: { expectedVersion } }); check(); if (result.error) return settingsError(result);
           const saved = adaptSecurityAlertEvents(result.data), dto = record(unwrapApiResponseData(result.data));
           const defaultsMatch = model => complete(model) && model.events.every(event => ['inApp', 'email', 'sms'].every(channel => event[channel] === false));
@@ -265,7 +265,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const result = await baseQuery({ url: '/admin/settings/notifications/test', method: 'POST', body: { channels: ['email'], idempotencyKey: key() } }); check(); if (result.error) return result;
           const dto = record(unwrapApiResponseData(result.data));
           const delivered = Array.isArray(dto.results) && dto.results.length === 1 && dto.results[0].channel === 'email' && dto.results[0].outcome === 'SENT' && text(dto.results[0].recipient)?.toLowerCase() === email.toLowerCase();
-          if (!delivered || !timestamp(dto.sentAt)) return failure('The backend did not confirm a test email sent to your admin email.');
+          if (!delivered || !timestamp(dto.sentAt)) return failure('The test email could not be confirmed. Check your inbox before trying again.');
           return { data: { sentAt: dto.sentAt, recipient: dto.results[0].recipient } };
         } catch (error) { return failure(error.message); }
       },

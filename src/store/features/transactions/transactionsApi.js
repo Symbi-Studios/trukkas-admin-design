@@ -111,7 +111,7 @@ async function readLedger(baseQuery, api, tab) {
       || pagination.total < 0 || !Number.isInteger(pagination.totalPages) || pagination.totalPages < 0
       || !Number.isInteger(pagination.limit) || pagination.limit <= 0
       || (Math.ceil(pagination.total / pagination.limit) !== pagination.totalPages && !(pagination.total === 0 && pagination.totalPages === 1))) {
-      return { error: { status: 'CUSTOM_ERROR', error: 'The transaction ledger is missing valid records or pagination.' } };
+      return { error: { status: 'CUSTOM_ERROR', error: 'The transactions could not be loaded completely. Please refresh.' } };
     }
     if (page === 1) { expectedTotal = pagination.total; expectedPages = Math.max(1, pagination.totalPages); }
     if (pagination.total !== expectedTotal || Math.max(1, pagination.totalPages) !== expectedPages) {
@@ -289,7 +289,7 @@ async function performPaymentAction(baseQuery, api, id, action) {
   if (result.error) return { error: result.error };
   const dto = record(unwrapApiResponseData(result.data));
   const expectedStatus = action === 'reverse' ? 'REVERSED' : 'PENDING';
-  if (!context.sameSession() || dto.transactionId !== id || dto.status !== expectedStatus) return actionError('The server response did not confirm this transaction action. Refresh before trying again.');
+  if (!context.sameSession() || dto.transactionId !== id || dto.status !== expectedStatus) return actionError('The transaction action could not be confirmed. Refresh and check before trying again.');
   return { data: { transactionId: dto.transactionId, status: dto.status, message: text(dto.message) } };
 }
 

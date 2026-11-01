@@ -1,5 +1,6 @@
 import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 import { adaptAdminDriver } from '../drivers/driversApi.js';
 import { companyCardComparison, companyPerformancePage, companyPayoutAllocation } from './companyUpdateContracts.js';
 
@@ -121,13 +122,13 @@ async function readAllPages(baseQuery, url, collection, params = {}) {
     if (result.error) return { error: result.error };
     const dto = unwrapApiResponseData(result.data) || {};
     if (!Array.isArray(dto[collection]) || count(dto.pagination?.totalPages) == null || count(dto.pagination?.total) == null || !count(dto.pagination?.limit)) {
-      return { error: { status: 'CUSTOM_ERROR', error: 'The API response is missing the list or pagination needed to load all company records.' } };
+      return { error: { status: 'CUSTOM_ERROR', error: 'The company records could not be loaded completely. Please refresh.' } };
     }
-    if (dto.pagination.page !== page) return { error: { status: 'CUSTOM_ERROR', error: 'The API did not return the requested page of company records.' } };
+    if (dto.pagination.page !== page) return { error: { status: 'CUSTOM_ERROR', error: 'The company records could not be loaded completely. Please refresh.' } };
     totalPages = Math.max(1, dto.pagination.totalPages);
     if (expectedTotal != null && expectedTotal !== dto.pagination.total) return failure('Company records changed while loading. Please refresh.');
     expectedTotal = dto.pagination.total;
-    if (page < totalPages && !dto[collection].length) return { error: { status: 'CUSTOM_ERROR', error: 'The API returned an empty page before the end of the company records.' } };
+    if (page < totalPages && !dto[collection].length) return { error: { status: 'CUSTOM_ERROR', error: 'The company records could not be loaded completely. Please refresh.' } };
     for (const row of dto[collection]) {
       const key = text(row.id) || (collection === 'settlements' ? text(row.jobId) : null);
       if (!key || seen.has(key)) return failure('The company response contains missing or duplicate record identifiers.');
@@ -142,8 +143,7 @@ export function companyError(error) {
   if (error?.status === 401) return 'Your session has expired. Please sign in again.';
   if (error?.status === 403) return 'You do not have permission to view or manage this company.';
   if (error?.status === 404) return 'Company not found.';
-  const message = unwrapApiResponseData(error?.data)?.message;
-  return (Array.isArray(message) ? message.join(' ') : text(message)) || text(error?.error) || text(error?.message) || 'Unable to load company data. Please try again.';
+  return getApiErrorMessage(error, 'Unable to load company data. Please try again.');
 }
 
 export function companyFormBody(form, original) {
@@ -227,7 +227,7 @@ export const companiesApi = baseApi.injectEndpoints({
     getAdminCompanyProfile: builder.query({
       serializeQueryArgs: serializeCompanyQuery,
       query: ({ id }) => ({ url: `/admin/users/${encodeURIComponent(id)}/profile` }),
-      transformResponse: (response, _meta, { id }) => { const company = adaptAdminCompanyProfile(response); if (company?.id !== id) throw new Error('The company API returned a different profile.'); return company; },
+      transformResponse: (response, _meta, { id }) => { const company = adaptAdminCompanyProfile(response); if (company?.id !== id) throw new Error('The company profile could not be confirmed. Please refresh.'); return company; },
       providesTags: ['AdminCompanies'],
     }),
     getAdminCompanyInfo: builder.query({
@@ -248,7 +248,7 @@ export const companiesApi = baseApi.injectEndpoints({
       query: ({ id, tab = 'all', page = 1, limit = 10 }) => ({ url: `/admin/users/${encodeURIComponent(id)}/jobs`, params: { tab, page, limit } }),
       transformResponse: (response, _meta, { page }) => {
         const dto = unwrapApiResponseData(response) || {};
-        if (!Array.isArray(dto.jobs) || count(dto.pagination?.total) == null || count(dto.pagination?.totalPages) == null || !count(dto.pagination?.limit) || dto.pagination.page !== page) throw new Error('The company jobs response is missing the requested records or pagination.');
+        if (!Array.isArray(dto.jobs) || count(dto.pagination?.total) == null || count(dto.pagination?.totalPages) == null || !count(dto.pagination?.limit) || dto.pagination.page !== page) throw new Error('The company jobs could not be loaded completely. Please refresh.');
         if (dto.jobs.some(job => !text(job.id)) || new Set(dto.jobs.map(job => job.id)).size !== dto.jobs.length) throw new Error('The company jobs contain missing or duplicate IDs.');
         return { rows: dto.jobs.map((job) => ({ id: text(job.id), reference: text(job.jobId) || '—', route: text(job.route), status: label(job.status), date: companyDate(job.createdAt), completionDate: companyDate(job.completionDate), amount: job.currency === 'NGN' ? number(job.value) : null })), pagination: dto.pagination };
       },

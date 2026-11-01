@@ -3,13 +3,40 @@ import { Icon } from '../../assets/icons/Icon.jsx';
 import { Avatar } from '../core/Avatar.jsx';
 import { SearchField } from '../forms/SearchField.jsx';
 import { DropdownMenu } from '../feedback/DropdownMenu.jsx';
+import { WorkspaceSearchResults } from './WorkspaceSearchResults.jsx';
 
 /** Sticky application bar: menu toggle, global search, system health, notifications, account. */
 export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, companies, exporters...',
                          health = 'System Health', notifications = 0, user, role, style,
-                         searchValue, onSearch, onSearchKeyDown, onNotifications, onViewProfile, onLogout }) {
+                         searchValue, onSearch, onSearchKeyDown, searchResults, searchLoading, searchUnavailable, onSearchSelect, onNotifications, onViewProfile, onLogout }) {
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef(null);
+  const searchRef = React.useRef(null);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [activeResult, setActiveResult] = React.useState(0);
+  const showResults = searchOpen && Boolean(searchValue?.trim());
+  const hits = searchLoading ? [] : (searchResults || []).flatMap(group => group.items);
+  React.useEffect(() => setActiveResult(0), [searchValue, searchResults]);
+  React.useEffect(() => {
+    function close(event) { if (!searchRef.current?.contains(event.target)) setSearchOpen(false); }
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, []);
+  function pick(item) {
+    if (!item) return;
+    setSearchOpen(false);
+    searchRef.current?.querySelector('input')?.blur();
+    onSearchSelect?.(item);
+  }
+  function handleSearchKeyDown(event) {
+    onSearchKeyDown?.(event);
+    if (event.defaultPrevented) return;
+    if (event.key === 'Escape') { setSearchOpen(false); return; }
+    if (!showResults || !hits.length) return;
+    if (event.key === 'ArrowDown') { event.preventDefault(); setActiveResult(i => (i + 1) % hits.length); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveResult(i => (i - 1 + hits.length) % hits.length); }
+    else if (event.key === 'Enter') { event.preventDefault(); pick(hits[activeResult] || hits[0]); }
+  }
 
   React.useEffect(() => {
     if (!accountOpen) return undefined;
@@ -41,8 +68,14 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
           <Icon name="menu" size={16} />
         </button>
       )}
-      <SearchField className="tk-global-search" variant="global" placeholder={searchPlaceholder} style={{ flex: '0 1 440px' }}
-        value={searchValue} onChange={onSearch} onKeyDown={onSearchKeyDown} />
+      <div ref={searchRef} className="tk-global-search" style={{ position: 'relative', flex: '0 1 440px', minWidth: 0 }} onFocus={() => setSearchOpen(true)}>
+        <SearchField variant="global" placeholder={searchPlaceholder} value={searchValue}
+          onChange={event => { setSearchOpen(true); onSearch?.(event); }} onKeyDown={handleSearchKeyDown}
+          role="combobox" aria-expanded={showResults} aria-controls="tk-workspace-search-results" aria-autocomplete="list"
+          aria-activedescendant={showResults && hits.length ? `tk-workspace-result-${Math.min(activeResult, hits.length - 1)}` : undefined} />
+        {showResults && <WorkspaceSearchResults groups={searchResults || []} query={searchValue} loading={searchLoading} unavailable={searchUnavailable}
+          active={activeResult} onActivate={setActiveResult} onSelect={pick} />}
+      </div>
       <div className="tk-topbar-spacer" style={{ flex: 1 }} />
       <button className="tk-topbar-notifications" type="button" aria-label="Notifications" onClick={onNotifications}
         style={{ position: 'relative', width: 38, height: 38, display: 'grid', placeItems: 'center',
@@ -62,14 +95,14 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
           {health}
         </span>
       )}
-      <div ref={accountRef} style={{ position: 'relative' }}>
+      <div ref={accountRef} className="tk-topbar-account-wrap" style={{ position: 'relative' }}>
         <button className="tk-topbar-account" type="button" onClick={() => setAccountOpen((open) => !open)}
-          aria-haspopup="menu" aria-expanded={accountOpen}
+          aria-label={`Account menu for ${user}`} aria-haspopup="menu" aria-expanded={accountOpen}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 0,
                    background: accountOpen ? 'var(--tk-surface-sunk)' : 'transparent', cursor: 'pointer',
                    padding: '5px 7px', borderRadius: 'var(--tk-r-md)' }}>
           <Avatar name={user} square size={34} tone="var(--tk-navy)" />
-          <span style={{ textAlign: 'left', lineHeight: 1.25 }}>
+          <span className="tk-topbar-account-copy" style={{ textAlign: 'left', lineHeight: 1.25 }}>
             <span style={{ display: 'block', font: '600 14px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{user}</span>
             <span style={{ display: 'block', font: '400 12px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>{role}</span>
           </span>

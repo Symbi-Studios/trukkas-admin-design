@@ -61,7 +61,7 @@ export function UserManagement() {
   const [activityOpen, setActivityOpen] = useState(false);
   const recentQuery = useGetUserManagementRecentActivityQuery({ owner: admin?.id, all: activityOpen }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const submitting = useRef(false);
-  const unavailable = (action) => { setMenuFor(null); window.alert(`${action} is not supported through this control by the documented API.`); };
+  const unavailable = (action) => { setMenuFor(null); window.alert(`${action} is not available here.`); };
   const profilePath = (user) => `/users/detail?id=${encodeURIComponent(user.backendId)}&source=${user.source}`;
   const metric = (value) => !authenticated || statsQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
   const [q, setQ] = usePageSearchState('', () => setPage(1));

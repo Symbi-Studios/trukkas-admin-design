@@ -52,7 +52,7 @@ export function AdminFleetTruckDetail() {
       <Button variant="outline" icon="arrow-left" onClick={() => navigate('/fleet')}>Back to Trucks</Button>
       <span className="truck-detail-actions"><span><Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>Actions</Button>{menu && <span><DropdownMenu width={225} items={[
         ...fleetReviewItems(truck, openReview), { label: 'Refresh profile', icon: 'rotate-ccw', onClick: () => { refresh(); setMenu(false); } },
-        { label: 'Schedule maintenance', icon: 'wrench', onClick: () => unavailable('Scheduling maintenance') }, { divider: true }, { label: 'Print profile', icon: 'printer', onClick: () => { setMenu(false); window.print(); } },
+        { label: 'Schedule maintenance', icon: 'wrench', onClick: () => navigate(`/maintenance?schedule=1&truckId=${encodeURIComponent(truck.id)}`) }, { divider: true }, { label: 'Print profile', icon: 'printer', onClick: () => { setMenu(false); window.print(); } },
       ]} /></span>}</span></span>
     </>} />
     {query.isFetching && <p className="tk-meta" role="status">Refreshing truck details…</p>}
@@ -91,7 +91,7 @@ export function AdminFleetTruckDetail() {
         <Card><Header title="Compliance & Insurance" action="View All" onAction={() => setTab('Documents')} /><Unavailable title="Compliance and insurance records" /></Card>
         <Card><Header title="Recent Activity" action="View All" onAction={() => setTab('Activity Log')} /><Unavailable title="Activity history" /></Card>
       </aside></div>
-    </div> : <Card pad="none"><div className="truck-panel-title"><div><h2 className="tk-section">{tab}</h2><p className="tk-meta">Records and activity for this truck.</p></div>{tab === 'Maintenance' && <Button icon="plus" onClick={() => unavailable('Scheduling maintenance')}>Schedule Maintenance</Button>}</div>
+    </div> : <Card pad="none"><div className="truck-panel-title"><div><h2 className="tk-section">{tab}</h2><p className="tk-meta">Records and activity for this truck.</p></div>{tab === 'Maintenance' && <Button icon="plus" onClick={() => navigate(`/maintenance?schedule=1&truckId=${encodeURIComponent(truck.id)}`)}>Schedule Maintenance</Button>}</div>
       <DataTable rows={[]} rowKey={(row) => row.id} columns={TAB_COLUMNS[tab] || TAB_COLUMNS[tab === 'Jobs' ? 'Trips' : 'Documents']} coloredHeader />
       <div className="truck-empty"><Icon name="clipboard-list" size={28} /><Unavailable title={`${tab} records`} /></div>
     </Card>}

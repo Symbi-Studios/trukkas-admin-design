@@ -19,7 +19,7 @@ export function companyPerformancePage(dto, page, limit) {
   if (dto?.metric !== 'performance' || dto.period !== 'thisMonth' || !Array.isArray(dto?.rankings) || count(pagination?.page) !== page || pagination?.limit !== limit
     || count(pagination.total) == null || count(pagination.totalPages) == null
     || pagination.totalPages !== Math.ceil(pagination.total / limit) && !(pagination.total === 0 && pagination.totalPages === 1)
-    || dto.rankings.length !== Math.min(limit, Math.max(0, pagination.total - (page - 1) * limit))) throw new Error('The company performance response is missing the requested rankings or pagination.');
+    || dto.rankings.length !== Math.min(limit, Math.max(0, pagination.total - (page - 1) * limit))) throw new Error('The company rankings could not be loaded completely. Please refresh.');
   const rows = dto.rankings.map(row => {
     const id = text(row?.companyId), rank = count(row?.rank), score = number(row?.performanceScore);
     if (!id || !rank) throw new Error('The performance ranking contains missing company IDs or ranks.');

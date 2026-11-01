@@ -96,13 +96,13 @@ export function prepareForm(form, original, mode, options, creating = false) {
     body.audienceMode = audienceMode;
     const key = audienceKeys[audienceMode];
     const catalogue = options.modes.find((item) => item.mode === audienceMode);
-    if (!catalogue || catalogue.requires !== key) throw new Error('The backend has not confirmed the selected audience mode.');
+    if (!catalogue || catalogue.requires !== key) throw new Error('The selected audience could not be confirmed. Reload and try again.');
     if (key) {
       const selected = ids(form.targeting?.[key]);
       if (!selected?.length) throw new Error('Select real audience IDs before saving.');
       if (audienceMode !== 'CUSTOM') {
         const allowed = catalogue.options;
-        if (!allowed?.length || selected.some((id) => !allowed.some((item) => item.id === id))) throw new Error('The backend has not confirmed these audience choices.');
+        if (!allowed?.length || selected.some((id) => !allowed.some((item) => item.id === id))) throw new Error('The selected audience could not be confirmed. Reload and try again.');
       } else if (!options.limits?.customUsersMax || selected.length > options.limits.customUsersMax) {
         throw new Error('The custom audience exceeds the confirmed user limit or its limit is unavailable.');
       }

@@ -56,8 +56,8 @@ export const companyDocumentsApi = baseApi.enhanceEndpoints({ addTagTypes: tags 
         const result = await storageQuery({ url, responseHandler: response => response.ok ? response.blob() : null }, api, options);
         if (!current()) return fail('Your session changed. Reopen the document.');
         if (result.error) return fail(result.error.status === 'FETCH_ERROR'
-          ? 'The document could not be loaded for preview. Check the connection and whether the file host allows cross-origin reads from this admin site.'
-          : 'The document could not be loaded for preview (HTTP ' + (result.error.originalStatus || result.error.status) + '). Reopen the document to refresh its file link.');
+          ? 'The document could not be loaded. Check your connection and try again.'
+          : 'The document could not be loaded. Reopen it and try again.');
         try {
           const blob = await companyDocumentPreviewBlob(result.data);
           if (!current()) return fail('Your session changed. Reopen the document.');

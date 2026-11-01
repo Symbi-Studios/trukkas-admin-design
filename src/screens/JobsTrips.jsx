@@ -1,5 +1,6 @@
 "use client";
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -80,8 +81,7 @@ function dateRange(value) {
 }
 
 function apiErrorMessage(error, fallback) {
-  const detail = error?.data?.message || error?.data?.error || error?.message || error?.error;
-  return Array.isArray(detail) ? detail.join(", ") : typeof detail === "string" && detail.trim() ? detail : fallback;
+  return getApiErrorMessage(error, fallback);
 }
 
 function downloadCsv(csv, filename) {
@@ -887,7 +887,7 @@ export function JobsTrips() {
       )}
       {jobsError && (
         <div className={styles.loadError}>
-          <Banner tone="danger" title="Unable to load jobs from the API." />
+          <Banner tone="danger" title="Unable to load jobs." />
           <Button variant="outline" icon="rotate-ccw" onClick={refetchJobs}>
             Retry
           </Button>

@@ -52,7 +52,7 @@ export function UserDetail() {
   const activityQuery = useGetManagedUserActivityQuery({ id, source, owner: admin?.id, roleCode: u?.roleCode, truckerType: u?.truckerType, all: tab === 'Activity Log' }, { skip: !activityAvailable, refetchOnMountOrArgChange: true });
   const activityLoading = activityAvailable && (activityQuery.isLoading || (activityQuery.isFetching && !activityQuery.currentData));
   useEffect(() => { if (activityAvailable && activityQuery.error) window.alert(getApiErrorMessage(activityQuery.error)); }, [activityAvailable, activityQuery.error]);
-  const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available for this user through this control in the documented API.`); };
+  const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available for this user.`); };
   useEffect(() => { setTab('Overview'); setMenu(false); operations.close(); }, [id, source]);
 
   function updateAccess(operation) {

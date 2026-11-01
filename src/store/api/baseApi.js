@@ -127,12 +127,13 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const reportContent = /^(?:get|preview|create|download|save|schedule)AdminReport/.test(api.endpoint);
   const roleContent = /^(?:getAdminRolesDirectory|getAdminRole|getAdminPermissions|changeAdminRole)$/.test(api.endpoint);
   const ticketContent = /^\/admin\/support\/(?:threads|tickets|agents|stats)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
+  const workspaceSearchContent = api.endpoint === 'getAdminWorkspaceSearch';
   const payoutContent = /AdminPayout/.test(api.endpoint);
   const bidScreenContent = /AdminBidScreen/.test(api.endpoint);
   const tripScreenContent = /AdminTripScreen/.test(api.endpoint);
   const jobScreenContent = /AdminJobScreen/.test(api.endpoint);
   const feedbackContent = /^\/admin\/(?:support\/feedback|feedback)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const settingsContent = /^\/admin\/(?:settings(?:\/|$)|sessions(?:\/|$)|security(?:\/|$)|data-protection(?:\/|$)|platform\/version$|auth\/(?:password|login|2fa\/verify)$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
+  const settingsContent = /^\/admin\/(?:profile(?:\/|$)|settings(?:\/|$)|sessions(?:\/|$)|security(?:\/|$)|data-protection(?:\/|$)|platform\/version$|auth\/(?:password|login|2fa\/verify)$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const csvResponse = !result.error && (
     ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips', 'exportAdminMaintenance', 'exportAdminDriverCompliance'].includes(api.endpoint)
     || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')
@@ -149,7 +150,7 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const maintenanceContent = /^\/admin\/maintenance(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const faqContent = /^\/admin\/faq(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
   const announcementContent = /^\/admin\/support\/broadcasts(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]) || api.endpoint === 'getAdminAnnouncementUsers';
-  const responseBody = payoutContent ? '[Payout content omitted]' : maintenanceContent ? '[Maintenance content omitted]' : jobScreenContent ? '[Job detail content omitted]' : feedbackContent
+  const responseBody = workspaceSearchContent ? '[Search results omitted]' : payoutContent ? '[Payout content omitted]' : maintenanceContent ? '[Maintenance content omitted]' : jobScreenContent ? '[Job detail content omitted]' : feedbackContent
     ? '[Feedback content omitted]'
     : announcementContent
     ? '[Announcement content omitted]'

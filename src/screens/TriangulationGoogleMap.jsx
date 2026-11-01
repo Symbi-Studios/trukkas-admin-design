@@ -62,7 +62,7 @@ export function TriangulationGoogleMap({
   selectedId,
   onSelect,
   ariaLabel = 'Triangulation opportunities map',
-  emptyMessage = 'Opportunity coordinates are not available in the API response yet.',
+  emptyMessage = 'Opportunity locations are not available.',
   mapType = 'roadmap',
   showTraffic = false,
   zoom,
@@ -114,7 +114,7 @@ export function TriangulationGoogleMap({
         gestureHandling: 'cooperative',
       });
       setState('ready');
-    }).catch((error) => { if (active) setState(error.message); });
+    }).catch(() => { if (active) setState('The map could not load. Please try again.'); });
     return () => {
       active = false;
       markersRef.current.forEach((marker) => marker.setMap(null));
@@ -263,7 +263,7 @@ export function TriangulationGoogleMap({
       <div ref={containerRef} className="tri-google-map-canvas" aria-label={ariaLabel} />
       {state !== 'ready' && (
         <div className="tri-google-map-message" role="status">
-          {state === 'missing-key' ? 'Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to display Google Maps.'
+          {state === 'missing-key' ? 'The map is unavailable right now.'
             : state === 'loading' ? 'Loading Google Maps…' : state}
         </div>
       )}

@@ -95,10 +95,10 @@ export function JobDetailMap({ origin, destination, liveLocation, recordedRoute,
         gestureHandling: 'cooperative',
       });
       setState('ready');
-    }).catch((error) => {
+    }).catch(() => {
       if (active) {
         setState('error');
-        setMapMessage(error.message || 'Google Maps could not load.');
+        setMapMessage('The map could not load. Please try again.');
       }
     });
     return () => {
@@ -193,7 +193,7 @@ export function JobDetailMap({ origin, destination, liveLocation, recordedRoute,
   }, [state, originAddress, destinationAddress, recordedRoute, recordedRouteLoading, preferRecordedRoute, livePoint?.lat, livePoint?.lng, heading, truckTitle]);
 
   const message = state === 'loading' ? 'Loading Google Maps…'
-    : state === 'missing-key' ? 'Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to display Google Maps.'
+    : state === 'missing-key' ? 'The map is unavailable right now.'
       : state === 'error' ? mapMessage
         : mapMessage;
 

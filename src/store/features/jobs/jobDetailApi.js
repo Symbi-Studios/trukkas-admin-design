@@ -268,7 +268,7 @@ export const jobDetailApi = baseApi.injectEndpoints({
               const saved = await run({ url: '/admin/trips/' + encodeURIComponent(tripId) });
               return saved.tripId === tripId && saved.jobId === id && (action === 'delay' ? saved.isDelayed === true && saved.delayReason === reason.trim() : saved.status === 'CARGO_ARRIVED');
             };
-          } else throw fail('This action has no documented admin API.');
+          } else throw fail('This action is not available.');
           await run(request);
           try { if (!await check()) throw fail('The saved result could not be confirmed. Refresh before retrying.'); }
           catch (e) { throw fail(e.error || 'The action was sent but could not be confirmed. Refresh before retrying.'); }

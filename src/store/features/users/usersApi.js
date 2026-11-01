@@ -183,7 +183,7 @@ async function readPages(baseQuery, api, url, names, params = {}, all = true) {
     if (meta.page !== page || count(meta.total) == null || count(meta.totalPages) == null || !count(meta.limit) || meta.limit > 100 || meta.totalPages > 500
       || list.length > meta.limit || list.length > meta.total || meta.total > 0 && !list.length
       || meta.totalPages !== Math.ceil(meta.total / meta.limit) && !(meta.total === 0 && meta.totalPages === 1)
-      || page > Math.max(1, meta.totalPages)) return failure('The response needs complete pagination before filtering or exporting.');
+      || page > Math.max(1, meta.totalPages)) return failure('The full list must be loaded before filtering or exporting.');
     if (!all) return { data: list.slice(0, 5) };
     if (total != null && (total !== meta.total || totalPages !== Math.max(1, meta.totalPages))) return failure('The collection changed while loading. Refresh to load every record.');
     total = meta.total;

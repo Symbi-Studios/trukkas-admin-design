@@ -19,5 +19,5 @@ export function useReportPreview(draft, page = 1, limit = 10) {
   const current = session.authenticated && key && !pending && !query.error ? query.currentData : null;
   return { ...session, query, configuration: config.configuration, configurationError: config.error,
     preview: current || unavailableReportPreview, loading: session.authenticated && !config.error && (meta.isLoading || meta.isFetching || Boolean(key) && (pending || query.isLoading || query.isFetching)),
-    error: config.error || (meta.error ? getApiErrorMessage(meta.error) : null) || (!pending && query.error ? getApiErrorMessage(query.error) : null) || (current && !current.canExport ? 'This report exceeds the backend export limit or has truncated source data. Narrow the filters before exporting.' : null) };
+    error: config.error || (meta.error ? getApiErrorMessage(meta.error) : null) || (!pending && query.error ? getApiErrorMessage(query.error) : null) || (current && !current.canExport ? 'This report is too large or contains incomplete data. Narrow the filters before exporting.' : null) };
 }

@@ -188,7 +188,7 @@ async function allPages(baseQuery, api, url, collection) {
     const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
     if (!Array.isArray(dto[collection]) || pagination.page !== page || !Number.isInteger(pagination.total) || pagination.total < 0
       || !Number.isInteger(pagination.totalPages) || pagination.totalPages < 0 || !Number.isInteger(pagination.limit) || pagination.limit <= 0
-      || (Math.ceil(pagination.total / pagination.limit) !== pagination.totalPages && !(pagination.total === 0 && pagination.totalPages === 1))) return apiError('The payout response is missing valid records or pagination.');
+      || (Math.ceil(pagination.total / pagination.limit) !== pagination.totalPages && !(pagination.total === 0 && pagination.totalPages === 1))) return apiError('The payout records could not be loaded completely. Please refresh.');
     if (page === 1) { total = pagination.total; pages = Math.max(1, pagination.totalPages); }
     if (pagination.total !== total || Math.max(1, pagination.totalPages) !== pages) return apiError('Payout records changed while loading. Please refresh the list.');
     for (const entry of dto[collection]) {

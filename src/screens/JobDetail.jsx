@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "../router.js";
 import {
@@ -383,7 +384,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const [reviewDoc, setReviewDoc] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const [docQuery, setDocQuery] = useState("");
+  const [docQuery, setDocQuery] = usePageSearchState("", undefined, tab === "Documents");
   const [docStatusFilter, setDocStatusFilter] = useState("All Statuses");
   const [docOpenFilter, setDocOpenFilter] = useState(false);
   const [logPage, setLogPage] = useState(1);
@@ -485,7 +486,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     { title: "Demurrage (if any)", description: naira(demurrage), state: "pending" },
     { title: "Job Closed", description: job.statusCode === "COMPLETED" ? "Delivery confirmed" : "—", state: job.statusCode === "COMPLETED" ? "done" : "pending", icon: "flag" },
   ];
-  function unavailable(action) { notify("info", action + " is unavailable: no supported admin operation or required data is available."); }
+  function unavailable(action) { notify("info", action + " is not available right now."); }
   function openReject(target = true) { setRejectionReason(""); setRejectOpen(target); }
   async function perform(action, details = {}) {
     if (actionLock.current || !authenticated) return;

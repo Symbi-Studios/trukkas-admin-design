@@ -36,7 +36,7 @@ export function AnnouncementReasonDialog({ action, announcement, operations, onC
     if (!reason.trim() || operations.saving) return;
     setError(null);
     try { const result = await operations.perform({ action, id: announcement.id, reason }); if (result) { onSaved(result); onClose(); } }
-    catch (failure) { setError(failure instanceof Error ? failure.message : getApiErrorMessage(failure)); }
+    catch (failure) { setError(getApiErrorMessage(failure)); }
   }
   return <Modal open title={action === 'archive' ? 'Archive Announcement' : 'Unpublish Announcement'} width={520} onClose={() => { if (!operations.saving) onClose(); }} footer={<>
     <Button variant="outline" disabled={operations.saving} onClick={onClose}>Cancel</Button>

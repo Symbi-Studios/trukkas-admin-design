@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 
 const registrationPath = '/admin/doc-review/trucks';
 const labels = { PENDING_REVIEW: 'Pending Review', ACTIVE: 'Active', APPROVED: 'Approved', REJECTED: 'Rejected', INACTIVE: 'Inactive' };
@@ -17,8 +18,7 @@ export function fleetError(error) {
   if (error?.status === 403) return 'You do not have permission to view or manage these trucks.';
   if (error?.status === 401) return 'Your session has expired. Please sign in again.';
   if (error?.status === 404) return 'Truck not found.';
-  const message = error?.data?.message;
-  return (Array.isArray(message) ? message.join(' ') : text(message)) || 'Unable to load fleet data. Please try again.';
+  return getApiErrorMessage(error, 'Unable to load fleet data. Please try again.');
 }
 
 // Registration state must not be interpreted as availability or an on-trip state.

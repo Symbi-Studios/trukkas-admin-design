@@ -39,7 +39,7 @@ async function readPage(url, params, kind, baseQuery) {
   const dto = unwrapApiResponseData(result.data), rows = feedbackCollection(dto, kind);
   if (!rows || rows.length > params.limit) return failure('The response does not contain an unambiguous valid feedback collection.');
   const meta = feedbackPagination(dto, params.page, params.limit, rows.length);
-  return meta ? { data: { rows, total: meta.total, pages: meta.pages } } : failure('The feedback response is missing valid documented pagination.');
+  return meta ? { data: { rows, total: meta.total, pages: meta.pages } } : failure('The feedback could not be loaded completely. Please refresh.');
 }
 async function readDirectory(url, kind, baseQuery, active) {
   const rows = [], seen = new Set();
@@ -51,7 +51,7 @@ async function readDirectory(url, kind, baseQuery, active) {
     if (!active()) return sessionError();
     if (result.error) return result;
     const data = result.data;
-    if (data.total == null || data.pages == null) return failure('The directory pagination is unavailable. Refresh the directory.');
+    if (data.total == null || data.pages == null) return failure('The directory could not be loaded completely. Please refresh.');
     if (total != null && (total !== data.total || pages !== data.pages)) return failure('The feedback collection changed while loading. Refresh it again.');
     total = data.total; pages = data.pages;
     for (const row of data.rows) { if (seen.has(row.id)) return failure('The collection contains duplicate IDs.'); seen.add(row.id); rows.push(row); }
@@ -124,7 +124,7 @@ export const feedbackApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFeedba
         if (result.error) return result;
         const download = object(result.data), blob = download.blob;
         if (!(blob instanceof Blob) || !blob.size || !['text/csv', 'application/csv', 'application/vnd.ms-excel'].includes(blob.type.split(';')[0].toLowerCase())
-          || /^\s*[<{\[]/.test(await blob.slice(0, 200).text())) return failure('The backend did not return a valid CSV download.');
+          || /^\s*[<{\[]/.test(await blob.slice(0, 200).text())) return failure('The download could not be prepared. Please try again.');
         const bytes = new Uint8Array(await blob.arrayBuffer());
         let binary = '';
         for (let start = 0; start < bytes.length; start += 32768) binary += String.fromCharCode(...bytes.subarray(start, start + 32768));

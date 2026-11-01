@@ -15,7 +15,7 @@ async function all(run,url,keys,params={},idKey='id'){
     const dto=await run({url,params:{...params,page,limit:100}}),key=keys.find(k=>Array.isArray(dto?.[k])),p=dto?.pagination;
     if(!key||count(p?.page)!==page||!count(p?.limit)||count(p?.total)==null||count(p?.totalPages)==null||p.totalPages>500
       ||p.totalPages!==Math.ceil(p.total/p.limit)&&!(p.total===0&&p.totalPages===1)
-      ||dto[key].length>p.limit||p.total>0&&!dto[key].length||total!=null&&(total!==p.total||pages!==Math.max(1,p.totalPages)))throw fail('The company collection or pagination is incomplete.');
+      ||dto[key].length>p.limit||p.total>0&&!dto[key].length||total!=null&&(total!==p.total||pages!==Math.max(1,p.totalPages)))throw fail('The company records could not be loaded completely. Please refresh.');
     total=p.total;pages=Math.max(1,p.totalPages);
     for(const row of dto[key]){const id=text(row?.[idKey]);if(!id||seen.has(id))throw fail('Company records contain invalid or repeated IDs.');seen.add(id);rows.push(row);}
   }

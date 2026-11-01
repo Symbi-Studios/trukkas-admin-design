@@ -97,7 +97,7 @@ export const rolesApi = taggedApi.injectEndpoints({
           const dto = unwrapApiResponseData(result.data), pagination = dto?.pagination;
           const currentTotal = roleInteger(pagination?.total), pages = roleInteger(pagination?.totalPages);
           if (!Array.isArray(dto?.roles) || roleInteger(pagination?.page) !== page || currentTotal == null || pages == null || pages > 500
-            || (currentTotal > 0 && pages === 0) || page > Math.max(1, pages)) return roleFailure('The roles response is missing valid records or pagination.');
+            || (currentTotal > 0 && pages === 0) || page > Math.max(1, pages)) return roleFailure('The roles could not be loaded completely. Please refresh.');
           if (total != null && (total !== currentTotal || totalPages !== Math.max(1, pages))) return roleFailure('The role directory changed while loading. Refresh to load all roles.');
           total = currentTotal; totalPages = Math.max(1, pages);
           if (page < totalPages && dto.roles.length === 0) return roleFailure('The roles response returned an incomplete collection.');

@@ -61,7 +61,7 @@ function VerificationDetailScreen() {
   const [tab, setTab] = useState('Verification Overview');
   const [menu, setMenu] = useState(false);
   const activity = tab === 'Comments' ? verificationEntryActivity(commentEntries) : tab === 'History' ? historyActivity : [...historyActivity, ...verificationEntryActivity(noteEntries)];
-  const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available in the documented verification API.`); };
+  const unavailable = (action) => { setMenu(false); window.alert(`${action} is not available for this verification.`); };
   useEffect(() => { setTab('Verification Overview'); setMenu(false); setDialog(null); }, [id, source, operations.owner]);
 
   async function approveVerification() {

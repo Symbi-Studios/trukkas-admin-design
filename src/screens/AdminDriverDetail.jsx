@@ -93,7 +93,7 @@ export function AdminDriverDetail() {
     <PageHeader
       crumbs={['Fleet Management', { label: 'Drivers', onClick: () => navigate('/drivers') }, id]}
       title="Driver Details"
-      description="View the driver profile and license data currently available from the admin API."
+      description="View the driver profile and license information."
       actions={<Button variant="outline" icon="arrow-left" onClick={() => navigate('/drivers')}>Back to Drivers</Button>}
     />
     {profileQuery.error && <Banner tone="danger" title="Unable to load driver profile">{adminDriverError(profileQuery.error)}</Banner>}
@@ -137,7 +137,7 @@ export function AdminDriverDetail() {
           <LabelValue layout="stack" label="Verification Status" value={<Badge>{license.status}</Badge>} />
           <LabelValue layout="stack" label="Expiry Date" value={dateLabel(license.expiresAt)} />
         </div>
-        {licenseUrl ? <Button variant="outline" icon="file-text" onClick={() => window.open(licenseUrl, '_blank', 'noopener,noreferrer')}>Open License Document</Button> : <EmptyState icon="file-text" title="No license document available" description="The admin API did not return a valid HTTP or HTTPS license URL." style={{ padding: '22px 8px' }} />}
+        {licenseUrl ? <Button variant="outline" icon="file-text" onClick={() => window.open(licenseUrl, '_blank', 'noopener,noreferrer')}>Open License Document</Button> : <EmptyState icon="file-text" title="No license document available" description="The license document is not available." style={{ padding: '22px 8px' }} />}
       </div> : <EmptyState icon="file-text" title="License information unavailable" description="No license record was returned for this driver." />}
     </SectionCard>}
     {tab === 'Overview' && profile?.trucks && <SectionCard title="Assigned Vehicles" pad="none">

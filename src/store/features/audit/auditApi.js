@@ -149,14 +149,14 @@ function readPage(response, requestedPage, systemEvents = false) {
   const entries = systemEvents ? dto.events : dto.logs;
   if (!Array.isArray(entries) || pagination.page !== requestedPage || count(pagination.total) == null
     || count(pagination.totalPages) == null || (pagination.total > 0 && pagination.totalPages === 0)) {
-    return failure('The audit API response is missing the logs or pagination needed to load all records.');
+    return failure('The audit logs could not be loaded completely. Please refresh.');
   }
   const size = count(pagination.limit);
-  if (!size || size > 100 || pagination.totalPages > 500 || Math.max(1, pagination.totalPages) !== Math.max(1, Math.ceil(pagination.total / size)) || entries.length !== Math.max(0, Math.min(size, pagination.total - (requestedPage - 1) * size))) return failure('The audit API returned an incomplete page or inconsistent pagination.');
+  if (!size || size > 100 || pagination.totalPages > 500 || Math.max(1, pagination.totalPages) !== Math.max(1, Math.ceil(pagination.total / size)) || entries.length !== Math.max(0, Math.min(size, pagination.total - (requestedPage - 1) * size))) return failure('The audit logs could not be loaded completely. Please refresh.');
   const ids = entries.map((row) => text(row?.id));
   if (entries.length > pagination.total || (pagination.total === 0 && pagination.totalPages > 1)
-    || requestedPage > Math.max(1, pagination.totalPages)) return failure('The audit API returned inconsistent pagination.');
-  if (ids.some((id) => !id) || new Set(ids).size !== ids.length) return failure('The audit API returned missing or duplicate audit IDs.');
+    || requestedPage > Math.max(1, pagination.totalPages)) return failure('The audit logs could not be loaded completely. Please refresh.');
+  if (ids.some((id) => !id) || new Set(ids).size !== ids.length) return failure('The audit logs could not be loaded completely. Please refresh.');
   return { data: { rows: entries.map((row) => systemEvents ? adaptSystemEvent(row) : adaptAdminAudit(row)), total: pagination.total, totalPages: Math.max(1, pagination.totalPages) } };
 }
 async function readAuditDirectory(baseQuery, params, api, systemEvents = false) {
@@ -171,14 +171,14 @@ async function readAuditDirectory(baseQuery, params, api, systemEvents = false) 
     const data = parsed.data;
     if (total != null && (data.total !== total || data.totalPages !== totalPages)) return failure('The audit log collection changed while loading. Refresh before filtering or exporting.');
     total = data.total; totalPages = data.totalPages;
-    if (page < totalPages && !data.rows.length) return failure('The audit API returned an empty page before the end of the log collection.');
+    if (page < totalPages && !data.rows.length) return failure('The audit logs could not be loaded completely. Please refresh.');
     for (const row of data.rows) {
-      if (seen.has(row.id)) return failure('The audit API repeated a record across pages. Refresh before filtering or exporting.');
+      if (seen.has(row.id)) return failure('The audit logs could not be loaded completely. Refresh before filtering or exporting.');
       seen.add(row.id); rows.push(row);
     }
     page += 1;
   } while (page <= totalPages);
-  if (rows.length !== total) return failure('The audit API did not return the complete log collection.');
+  if (rows.length !== total) return failure('The audit logs could not be loaded completely. Please refresh.');
   return { data: { rows, total } };
 }
 export function auditCsv(rows) {

@@ -5,12 +5,18 @@ import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
 import { useGetAdminSystemSettingsQuery, useGetAdminSettingsPreferencesQuery, useGetAdminSettingsSecurityEventsQuery, useSaveAdminSettingsSecurityEventsMutation, useResetAdminSettingsSecurityEventsMutation, useGetAdminSettingsStatusQuery, useGetAdminSettingsVersionQuery, useGetAdminSettingsChannelsQuery, useGetAdminSettingsProcessorsQuery, useGetAdminSettingsEventsQuery, useSaveAdminSettingsSectionMutation, useResetAdminSettingsSectionMutation, useResetAllAdminSettingsMutation, useTestAdminSettingsNotificationMutation } from '../store/features/settings/settingsApi.js';
 import { canEditSettings, statusForTemplate, settingsEventForTemplate, eventFrequencies } from '../store/features/settings/settingsContracts.js';
+import { settingsControls } from '../store/features/settings/settingsFields.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 function savedOnlyNotice(result) {
   if (!result.savedOnly) return null;
-  return [result.warning || 'Preferences saved. Some of these settings are stored only and do not affect platform behavior or notification delivery yet.',
-    result.savedOnlyFields?.length ? 'Saved-only fields: ' + result.savedOnlyFields.join(', ') : null].filter(Boolean).join('\n');
+  const fallback = 'Preferences saved. Some settings do not affect platform behavior or notification delivery yet.';
+  const warning = result.warning && !/\b(?:API|backend|endpoint|payload|schema|metadata|server)\b/i.test(result.warning) ? result.warning : fallback;
+  const labels = result.savedOnlyFields?.map((field) => {
+    const key = field.split('.').pop();
+    return settingsControls.find((control) => control.field === key)?.label || key.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ');
+  });
+  return [warning, labels?.length ? 'Settings not yet in effect: ' + labels.join(', ') : null].filter(Boolean).join('\n');
 }
 
 export function useSettingsEditor(page) {
@@ -44,7 +50,7 @@ export function useSettingsEditor(page) {
   const eventQuery = personal ? query : securityPreferences;
   const eventModel = eventQuery.error ? null : eventQuery.currentData;
   const values = draft?.baseValues || model?.values;
-  const unavailable = (action) => window.alert(action + ' is not supported by the documented settings API.');
+  const unavailable = (action) => window.alert(action + ' is not available in settings.');
   function event(control) {
     const row = control?.key ? settingsEventForTemplate(eventModel?.events, control.key, control.label, eventModel?.uiRowMap) : null;
     const values = row ? { ...row, ...eventDraft?.events[row.key] } : {};
@@ -134,7 +140,7 @@ export function useSettingsEditor(page) {
       const result = security ? await resetSecurityEvents({ owner, expectedVersion: resetModel.eventVersion }).unwrap()
         : await resetSettings({ page, owner, expectedVersion: resetModel.version }).unwrap();
       if (currentAdmin.current !== admin) return false;
-      setDraftState(null); setEventDraftState(null); window.alert(['Settings reset to their documented defaults.', savedOnlyNotice(result)].filter(Boolean).join('\n')); return true;
+      setDraftState(null); setEventDraftState(null); window.alert(['Settings reset to their defaults.', savedOnlyNotice(result)].filter(Boolean).join('\n')); return true;
     } catch (error) { if (currentAdmin.current === admin) window.alert(getApiErrorMessage(error)); return false; }
     finally { busy.current = false; }
   }
@@ -151,7 +157,7 @@ export function useSettingsEditor(page) {
     try {
       await resetAllSettings({ owner }).unwrap();
       if (currentAdmin.current !== admin) return false;
-      setDraftState(null); window.alert('Settings reset to their documented defaults.'); return true;
+      setDraftState(null); window.alert('Settings reset to their defaults.'); return true;
     } catch (error) { if (currentAdmin.current === admin) window.alert(getApiErrorMessage(error)); return false; }
     finally { busy.current = false; }
   }

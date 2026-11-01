@@ -17,7 +17,7 @@ function inboxPage(response, { page = 1, limit = 20 } = {}) {
     || pagination.page !== page || pagination.limit !== limit || total == null || pages == null
     || pages !== Math.ceil(total / limit) && !(total === 0 && pages === 1)
     || rows.length > limit || rows.length > total || page > Math.max(1, pages)) {
-    throw new Error('The notifications response did not include a valid list and pagination.');
+    throw new Error('The notifications could not be loaded completely. Please refresh.');
   }
   return { rows: rows.map(row => ({ id: row.id, title: text(row.title) || '—', body: text(row.body) || '—',
     created: dateLabel(row.createdAt), read: typeof row.isRead === 'boolean' ? row.isRead : null,

@@ -174,7 +174,7 @@ export function settingsEventForTemplate(rows, key, label, uiRowMap) {
 export function settingsEventChanges(rows, changes, security = false) {
   if (!Array.isArray(changes) || changes.length === 0 || new Set(changes.map(row => row?.key)).size !== changes.length) throw new Error('Choose valid event preference changes.');
   return changes.map(change => {
-    if (!rows?.some(row => row.key === change.key)) throw new Error('This event has no matching backend setting.');
+    if (!rows?.some(row => row.key === change.key)) throw new Error('This event setting is not available.');
     const fields = record(change.changes), keys = Object.keys(fields);
     if (!keys.length || keys.some(key => !(security ? ['inApp', 'email', 'sms'] : ['email', 'sms', 'frequency']).includes(key))) throw new Error('This event control is fixed or unsupported.');
     for (const key of keys) if (key === 'frequency' ? !Object.hasOwn(eventFrequencies, fields[key]) : typeof fields[key] !== 'boolean') throw new Error('Choose a supported event preference.');
@@ -190,7 +190,7 @@ export function adaptSystemLogs(response, { page = 1, limit = 20 } = {}) {
   if (!Array.isArray(dto.logs) || pagination.page !== page || pagination.limit !== limit || !count(pagination.total) || !count(pagination.totalPages)
     || (pagination.total === 0 ? ![0, 1].includes(pagination.totalPages) : pagination.totalPages !== Math.ceil(pagination.total / limit))
     || dto.logs.length > limit || dto.logs.length > pagination.total || page > Math.max(1, pagination.totalPages)
-    || dto.logs.some(row => !text(row?.id)) || new Set(dto.logs.map(row => row.id)).size !== dto.logs.length) throw new Error('The backend did not return a confirmed system logs page.');
+    || dto.logs.some(row => !text(row?.id)) || new Set(dto.logs.map(row => row.id)).size !== dto.logs.length) throw new Error('The system logs could not be loaded completely. Please refresh.');
   return { rows: dto.logs.map(row => ({
     id: row.id, time: dateLabel(row.timestamp), job: text(row.job) || '—', action: text(row.action) || '—',
     result: ['SUCCESS', 'FAILED'].includes(row.result) ? row.result : '—', level: ['INFO', 'ERROR'].includes(row.level) ? row.level : '—',

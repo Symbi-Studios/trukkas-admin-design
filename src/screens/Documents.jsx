@@ -1,5 +1,6 @@
 "use client";
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 
 import { useEffect, useState } from "react";
@@ -64,11 +65,7 @@ function canReviewDocument(document) {
 }
 
 function requestError(error) {
-  const message = error?.data?.message;
-  if (typeof message === "string") return message;
-  if (Array.isArray(message)) return message.join(" ");
-  if (error?.status === "CUSTOM_ERROR" && typeof error.error === "string") return error.error;
-  return error?.status === 403 ? "Your account cannot review these documents." : "The request could not be completed.";
+  return getApiErrorMessage(error, error?.status === 403 ? "Your account cannot review these documents." : "The request could not be completed.");
 }
 
 function DocumentsLoading() {
@@ -474,7 +471,7 @@ export function Documents() {
           <EmptyState
             icon="file-text"
             title={tab === "missing" && grouped.length && grouped.every((row) => row.summary.missing == null) ? "Missing document data unavailable" : "No job documents found"}
-            description={tab === "missing" && grouped.length && grouped.every((row) => row.summary.missing == null) ? "The queue response needs a missing document count for each job." : "Try adjusting the current filters."}
+            description={tab === "missing" && grouped.length && grouped.every((row) => row.summary.missing == null) ? "Missing document counts are not available." : "Try adjusting the current filters."}
           />
         )}
         <Pagination
@@ -703,7 +700,7 @@ function ExpandedJob({ row, selected, setSelected, navigate, onAction }) {
       )}
       {(isLoading || isFetching) && <div className="documents-expanded-loading" role="status" aria-label="Loading job documents"><Skeleton height={210} /></div>}
       {error && <div className="documents-error"><Banner tone="danger" title={error.status === 403 ? "Access denied to these job documents." : "Unable to load job documents."} /><Button variant="outline" onClick={refetch}>Retry</Button></div>}
-      {!error && !isLoading && !isFetching && shownDocuments.length === 0 && <EmptyState icon="file-text" title="No documents available" description="This job has no documents in the review response." />}
+      {!error && !isLoading && !isFetching && shownDocuments.length === 0 && <EmptyState icon="file-text" title="No documents available" description="No documents are available for this job." />}
       {!error && !isLoading && !isFetching && shownDocuments.length > 0 && <DataTable
         columns={documentColumns}
         rows={shownDocuments}

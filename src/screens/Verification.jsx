@@ -72,7 +72,7 @@ function VerificationScreen() {
   const summary = !operations.authenticated || allTime.error ? verificationSummary(null) : allTime.currentData || verificationSummary(null);
   const loading = query.isLoading || (query.isFetching && !query.currentData);
   const statValue = (value) => allTime.isLoading || (allTime.isFetching && !allTime.currentData) ? <Skeleton as="span" width={54} height={23} /> : value;
-  const unavailable = (action) => window.alert(`${action} is not available in the documented verification API.`);
+  const unavailable = (action) => window.alert(`${action} is not available for this verification.`);
   const [tab, setTab] = useState('All Verifications');
   const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [status, setStatus] = useState('All Statuses');

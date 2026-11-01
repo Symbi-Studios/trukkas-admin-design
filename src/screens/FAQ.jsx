@@ -89,7 +89,7 @@ export function FAQ() {
     if (helpQuery.isFetching) { window.alert('Wait for FAQ help links to finish loading.'); return; }
     if (helpQuery.error) { window.alert(getApiErrorMessage(helpQuery.error)); return; }
     const target = helpLinks?.[({ 'Contact Support': 'contactSupport', 'Send Feedback': 'feedback', 'View My Tickets': 'myTickets' })[topic.label]];
-    if (!target) { window.alert(`${topic.label} is not available for an admin requester through the documented API.`); return; }
+    if (!target) { window.alert(`${topic.label} is not available for this account.`); return; }
     if (topic.label === 'Contact Support') window.location.assign(target);
     else navigate(target);
   } }));

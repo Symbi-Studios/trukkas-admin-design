@@ -4,6 +4,7 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { PageHeader, Button, StatCard, Card, SectionCard, Tabs, Checkbox, Switch, Icon, IconButton, DropdownMenu, Pagination, Modal, Badge } from '../ds.js';
 import {
   useGetAdminNotificationsQuery,
@@ -31,9 +32,7 @@ const settingLabels = {
 };
 
 function errorMessage(error, fallback = 'Could not load notifications. Please try again.') {
-  const message = error?.data?.message || error?.data?.error || error?.message || error?.error;
-  return Array.isArray(message) ? message.join(', ') : typeof message === 'string' && message.trim()
-    ? message : fallback;
+  return getApiErrorMessage(error, fallback);
 }
 
 function formatClock(value) {
@@ -132,7 +131,7 @@ export function NotificationCenter() {
     setSettingsOpen(true);
   }
   async function toggleSavedSetting(key) {
-    if (!settings || settingsBusy) return;
+    if (!settings || settingsBusy || settings[key] == null) return;
     const next = { ...settings, [key]: !settings[key] };
     setSettings(next);
     setSettingsDraft(next);
@@ -177,7 +176,7 @@ export function NotificationCenter() {
     try {
       await markRead([row.id]).unwrap();
       notify('Notification marked as read');
-    } catch (requestError) { notify(errorMessage(requestError)); }
+    } catch (requestError) { notify(errorMessage(requestError, 'Could not mark the notification as read. Refresh and check before trying again.')); }
   }
   function open(row) {
     setMenu(null);
@@ -189,7 +188,7 @@ export function NotificationCenter() {
     try {
       await markAllRead().unwrap();
       notify('All notifications marked as read');
-    } catch (requestError) { notify(errorMessage(requestError)); }
+    } catch (requestError) { notify(errorMessage(requestError, 'Could not mark notifications as read. Refresh and check before trying again.')); }
   }
   const hasUnreadNotifications = Number(data?.summary?.allUnread) > 0 || Number(data?.unreadCount) > 0;
 
@@ -246,10 +245,10 @@ export function NotificationCenter() {
           {Object.entries(settingLabels).map(([key, value]) => {
             const hint = key === 'quiet' && settings
               ? `${formatClock(settings.quietHoursStart)} - ${formatClock(settings.quietHoursEnd)}` : value[2];
-            return <button className="notify-setting" key={key} disabled={!settings || settingsBusy} onClick={() => void toggleSavedSetting(key)}>
+            return <button className="notify-setting" key={key} disabled={!settings || settingsBusy || settings[key] == null} onClick={() => void toggleSavedSetting(key)}>
               <Icon name={value[0]} size={15} />
               <span><strong>{value[1]}</strong><small>{hint || ' '}</small></span>
-              <b className={settings?.[key] ? 'on' : ''}>{settings ? settings[key] ? 'On' : 'Off' : '—'}</b>
+              <b className={settings?.[key] ? 'on' : ''}>{settings?.[key] == null ? '—' : settings[key] ? 'On' : 'Off'}</b>
               <Icon name="chevron-right" size={13} />
             </button>;
           })}
@@ -266,10 +265,10 @@ export function NotificationCenter() {
       {settingsError && <div className="notify-settings-error" role="alert">{errorMessage(settingsError, 'Could not load notification settings.')} <button className="notify-link" onClick={refetchSettings}>Try again</button></div>}
       {settingsLoading && !settings && <div className="notify-settings-state">Loading notification settings…</div>}
       {settings && settingsDraft && <div className="notify-modal-settings">
-        {Object.entries({ email: 'Email Notifications', push: 'Push Notifications', sms: 'SMS Notifications', quiet: 'Quiet Hours' }).map(([key, label]) => <Switch key={key} label={label} checked={settingsDraft[key]} disabled={settingsBusy} hint={key === 'quiet' ? `${formatClock(settingsDraft.quietHoursStart)} - ${formatClock(settingsDraft.quietHoursEnd)}` : undefined} onChange={(value) => setSettingsDraft({ ...settingsDraft, [key]: value })} />)}
+        {Object.entries({ email: 'Email Notifications', push: 'Push Notifications', sms: 'SMS Notifications', quiet: 'Quiet Hours' }).map(([key, label]) => <Switch key={key} label={label} checked={settingsDraft[key] === true} unknown={settingsDraft[key] == null} disabled={settingsBusy || settingsDraft[key] == null} hint={key === 'quiet' ? `${formatClock(settingsDraft.quietHoursStart)} - ${formatClock(settingsDraft.quietHoursEnd)}` : undefined} onChange={(value) => setSettingsDraft({ ...settingsDraft, [key]: value })} />)}
         {settingsDraft.quiet && <div className="notify-quiet-hours">
-          <label>Starts at<input type="time" value={settingsDraft.quietHoursStart} disabled={settingsBusy} onChange={(event) => setSettingsDraft({ ...settingsDraft, quietHoursStart: event.target.value })} /></label>
-          <label>Ends at<input type="time" value={settingsDraft.quietHoursEnd} disabled={settingsBusy} onChange={(event) => setSettingsDraft({ ...settingsDraft, quietHoursEnd: event.target.value })} /></label>
+          <label>Starts at<input type="time" value={settingsDraft.quietHoursStart ?? ''} disabled={settingsBusy} onChange={(event) => setSettingsDraft({ ...settingsDraft, quietHoursStart: event.target.value })} /></label>
+          <label>Ends at<input type="time" value={settingsDraft.quietHoursEnd ?? ''} disabled={settingsBusy} onChange={(event) => setSettingsDraft({ ...settingsDraft, quietHoursEnd: event.target.value })} /></label>
         </div>}
         {settingsDraft.quiet && !quietHoursValid && <div className="notify-settings-error" role="alert">Enter both quiet-hour times in 24-hour HH:mm format.</div>}
       </div>}

@@ -16,7 +16,8 @@ import { useGetAdminNotificationsQuery } from "./store/features/notifications/no
 import { clearSession } from "./store/features/auth/authSlice.js";
 import { baseApi } from "./store/api/baseApi.js";
 import { AppLoadingScreen } from "./components/AppLoadingScreen.jsx";
-import { PageSearchProvider, usePageSearch, usePageTextSearch } from './components/PageSearch.jsx';
+import { PageSearchProvider, usePageSearch } from './components/PageSearch.jsx';
+import { useGetAdminWorkspaceSearchQuery } from './store/features/search/workspaceSearchApi.js';
 import "./mock/api.js";
 
 const PUBLIC_ROUTES = new Set([
@@ -34,7 +35,7 @@ function AdminShellContent({ children }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
   const pageSearch = usePageSearch();
-  const searchKeyDown = usePageTextSearch(pageSearch.query, !pageSearch.filtering);
+  const [searchTerm, setSearchTerm] = React.useState('');
   const [mounted, setMounted] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
   const admin = useSelector((state) => state.auth.admin);
@@ -47,6 +48,14 @@ function AdminShellContent({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const activeId = pathname.split("/")[1] || "dashboard";
+  const requestedSearch = pageSearch.query.trim();
+  React.useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(requestedSearch), 300);
+    return () => clearTimeout(timer);
+  }, [requestedSearch]);
+  const search = useGetAdminWorkspaceSearchQuery({ owner: admin?.id, role: admin?.role, search: searchTerm }, {
+    skip: !mounted || !admin?.id || loggingOut || PUBLIC_ROUTES.has(pathname) || !searchTerm || searchTerm !== requestedSearch,
+  });
 
   React.useEffect(() => {
     setMounted(true);
@@ -176,14 +185,11 @@ function AdminShellContent({ children }) {
           notifications={notificationData?.unreadCount ?? 0}
           searchPlaceholder={SEARCH_PLACEHOLDER[activeId]}
           searchValue={pageSearch.query}
-          onSearchKeyDown={event => {
-            if (event.key === 'Escape') { event.currentTarget.setCustomValidity(''); pageSearch.change(''); }
-            searchKeyDown(event);
-          }}
-          onSearch={(event) => {
-            event.target.setCustomValidity('');
-            pageSearch.change(event.target.value);
-          }}
+          onSearch={(event) => pageSearch.change(event.target.value)}
+          searchResults={searchTerm === requestedSearch ? search.currentData?.groups : []}
+          searchLoading={Boolean(requestedSearch) && (searchTerm !== requestedSearch || search.isFetching || search.isUninitialized)}
+          searchUnavailable={Boolean(search.error || search.currentData?.unavailable)}
+          onSearchSelect={item => { pageSearch.change(''); if (item.section === 'Trips' && pathname === '/trips') window.dispatchEvent(new CustomEvent('trukkas:select-trip', { detail: item.id })); else router.push(item.to); }}
           onNotifications={() => router.push("/notifications")}
           onViewProfile={() => router.push("/profile")}
           onLogout={handleLogout}

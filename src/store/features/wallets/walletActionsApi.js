@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { getApiErrorMessage, userFacingMessage } from '../../api/getApiErrorMessage.js';
 import './walletsApi.js';
 
 const text = value => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -15,9 +16,8 @@ export const escrowResolutionOptions = [
 ];
 export const escrowCanRelease = hold => Boolean(hold && ['LOCKED', 'MOBILIZATION_RELEASED'].includes(hold.statusCode) && hold.canRelease === true);
 export function walletActionError(error) {
-  if (error?.requiresRefresh && text(error.error)) return error.error;
-  const message = unwrapApiResponseData(error?.data)?.message;
-  return (Array.isArray(message) ? message.join(' ') : text(message)) || text(error?.error) || 'The request could not be completed.';
+  if (error?.requiresRefresh && text(error.error)) return userFacingMessage(error.error, 'Refresh and check before trying again.');
+  return getApiErrorMessage(error, 'The request could not be completed.');
 }
 function inSession(api, args) {
   const auth = api.getState().auth;

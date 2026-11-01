@@ -77,7 +77,7 @@ async function allPages(baseQuery, api, url, key, params = {}, identity = (row) 
     if (result.error) return result;
     const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
     const total = count(pagination.total), pages = count(pagination.totalPages), limit = count(pagination.limit);
-    if (!Array.isArray(dto[key]) || count(pagination.page) !== page || total == null || pages == null || !limit || limit > 100 || pages > 500 || Math.max(1, pages) !== Math.max(1, Math.ceil(total / limit)) || dto[key].length > limit) return failure('The response is missing valid settlement records or pagination.');
+    if (!Array.isArray(dto[key]) || count(pagination.page) !== page || total == null || pages == null || !limit || limit > 100 || pages > 500 || Math.max(1, pages) !== Math.max(1, Math.ceil(total / limit)) || dto[key].length > limit) return failure('The settlements could not be loaded completely. Please refresh.');
     if (expectedTotal != null && (expectedTotal !== total || expectedPages !== pages)) return failure('Settlement records changed while loading. Please refresh.');
     expectedTotal = total; expectedPages = pages;
     for (const row of dto[key]) {
@@ -163,7 +163,7 @@ async function actOnSettlement(args, api, baseQuery, action) {
   if (result.error) return result;
   const dto = record(unwrapApiResponseData(result.data));
   const acceptedStatuses = row.kind === 'ESCROW_TRANCHE' ? ['COMPLETED'] : ['PROCESSING', 'COMPLETED'];
-  if (dto.id !== row.id || dto.kind !== row.kind || dto.currency !== row.currency || number(dto.amount) !== row.amount || label(dto.method) !== row.method || !text(dto.version) || !acceptedStatuses.includes(dto.status) || !Array.isArray(dto.transactionReferences) || dto.transactionReferences.some((entry) => !text(entry)) || dto.status === 'COMPLETED' && datePart(dto.settledAt) === '—') return failure('The server response could not confirm the settlement update. Refresh before proceeding.');
+  if (dto.id !== row.id || dto.kind !== row.kind || dto.currency !== row.currency || number(dto.amount) !== row.amount || label(dto.method) !== row.method || !text(dto.version) || !acceptedStatuses.includes(dto.status) || !Array.isArray(dto.transactionReferences) || dto.transactionReferences.some((entry) => !text(entry)) || dto.status === 'COMPLETED' && datePart(dto.settledAt) === '—') return failure('The settlement update could not be confirmed. Refresh and check before proceeding.');
   return { data: adaptAdminSettlement(dto) };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from 'react';
+import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import { Banner, Button, Checkbox, EmptyState, LabelValue, Modal, SearchField, Select, Textarea, TextField } from '../ds.js';
 import { forwarderError, useCreateAdminForwarderMutation, useUpdateAdminForwarderMutation, useAddAdminForwarderNoteMutation, useVerifyAdminForwardersMutation, useRequestAdminForwarderVerificationMutation } from '../store/features/forwarders/forwardersApi.js';
 function useSave(onClose, onDone) {
@@ -203,7 +204,7 @@ export function ForwarderBulkVerifyModal({
       <p className="tk-meta">Approves submitted exporter licenses and address documents waiting for human review. National ID and BVN results remain with the verification provider.</p>
       {result ? result.map(row => <div key={row.userId} className="fd-row"><span style={{
           flex: 1
-        }}>{forwarders.find(item => item.id === row.userId)?.name || row.userId}</span><span>{row.outcome.replaceAll('_', ' ')}{row.error ? ' · ' + (typeof row.error === 'string' ? row.error : 'Verification failed') : ''}</span></div>) : <><SearchField placeholder="Search forwarders..." value={search} disabled={locked} onChange={event => setSearch(event.target.value)} /><span className="tk-meta">{selected.length} / 100 selected</span><div style={{
+        }}>{forwarders.find(item => item.id === row.userId)?.name || row.userId}</span><span>{row.outcome.replaceAll('_', ' ')}{row.error ? ' · ' + userFacingMessage(row.error, 'Verification failed') : ''}</span></div>) : <><SearchField placeholder="Search forwarders..." value={search} disabled={locked} onChange={event => setSearch(event.target.value)} /><span className="tk-meta">{selected.length} / 100 selected</span><div style={{
           maxHeight: 280,
           overflowY: 'auto'
         }}>{!rows.length ? <EmptyState title="No forwarders found" /> : rows.map(row => <div key={row.id} className="fd-row"><Checkbox label={row.name + ' · ' + row.id} checked={selected.includes(row.id)} disabled={busy || save.unconfirmed || selected.length >= 100 && !selected.includes(row.id)} onChange={checked => setSelected(current => checked ? [...current, row.id] : current.filter(id => id !== row.id))} /></div>)}</div><Textarea label="Reason (optional)" value={reason} disabled={locked || save.unconfirmed} onChange={event => setReason(event.target.value)} /></>}

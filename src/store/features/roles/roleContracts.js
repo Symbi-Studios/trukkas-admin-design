@@ -132,9 +132,9 @@ export function roleSummary(rows, catalog) {
 export function buildRoleConfiguration(values, catalog) {
   if (!catalog?.modules) throw new Error('The permission catalogue must finish loading before saving.');
   if (!roleText(values.name)) throw new Error('Enter a role name.');
-  if (values.roleType !== 'Custom') throw new Error('New system roles are not supported by the backend. Select Custom.');
+  if (values.roleType !== 'Custom') throw new Error('New system roles are not available. Select Custom.');
   if (!['Active', 'Inactive'].includes(values.status)) throw new Error('Select a valid status.');
-  if (values.scope !== 'org') throw new Error('Only organization-wide scope is supported by the backend.');
+  if (values.scope !== 'org') throw new Error('Only organization-wide scope is available.');
   if (values.manageUsers || values.require2fa) throw new Error('Team management is owner-only and 2FA is not supported. Turn off those settings before saving.');
   if (!/^#[0-9a-f]{6}$/i.test(values.color) || !ROLE_ICON_VALUES[values.icon]) throw new Error('Select a valid role color and icon.');
   const moduleAccess = buildRoleAccess(values, catalog);
@@ -151,13 +151,13 @@ export function permissionsForConfiguration(configuration, catalog) {
 export function buildRoleAccess(values, catalog) {
   if (!catalog?.modules) throw new Error('The permission catalogue must finish loading.');
   const unmapped = catalog.modules.filter((module) => !ROLE_MODULE_MATRIX.some((row) => row.key === roleGroupKey(module)));
-  if (unmapped.length) throw new Error('This form cannot configure these permission groups: ' + unmapped.map((module) => module.key).join(', ') + '. Role creation and preview are unavailable until their mapping is confirmed.');
+  if (unmapped.length) throw new Error('Some permission groups cannot be configured here. Role creation and preview are unavailable.');
   const moduleAccess = catalog.modules.map((m) => ({ moduleKey: m.key, level: 'none' }));
   for (const row of ROLE_MODULE_MATRIX) {
     const level = values.levels[row.key];
     const sources = catalogForRow(catalog, row.key);
     if (!sources.length) {
-      if (level != null && level !== 'none') throw new Error(row.label + ' has no backend permissions and cannot be configured.');
+      if (level != null && level !== 'none') throw new Error(row.label + ' has no available permissions and cannot be configured.');
       continue;
     }
     if (!['full', 'custom', 'none'].includes(level)) throw new Error('Select an access level for ' + row.label + '.');

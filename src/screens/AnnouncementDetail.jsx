@@ -22,9 +22,9 @@ export function AnnouncementDetail(){
  useEffect(()=>{setMenu(false);setToast('');setReasonDialog(null);clearTimeout(timer.current)},[announcementId,owner,operations.admin]);
  useEffect(()=>()=>clearTimeout(timer.current),[]);
  function notify(message){clearTimeout(timer.current);setToast(message);timer.current=setTimeout(()=>setToast(''),1600)}
- async function publish(){if(!a||pending.current||publication.isLoading)return;const id=a.id;pending.current=true;try{const result=await operations.perform({action:'publish',id});if(result&&activeId.current===id)notify(result.message)}catch(error){if(activeId.current===id)notify(error instanceof Error?error.message:getApiErrorMessage(error))}finally{pending.current=false}}
- async function duplicate(){try{const result=await operations.perform({action:'duplicate',id:a.id});if(result)navigate(announcementCopyUrl(result.announcement.id))}catch(error){notify(error instanceof Error?error.message:getApiErrorMessage(error))}}
- async function acknowledge(){try{const result=await operations.perform({action:'acknowledge',id:a.id});if(result)notify(result.message)}catch(error){notify(error instanceof Error?error.message:getApiErrorMessage(error))}}
+ async function publish(){if(!a||pending.current||publication.isLoading)return;const id=a.id;pending.current=true;try{const result=await operations.perform({action:'publish',id});if(result&&activeId.current===id)notify(result.message)}catch(error){if(activeId.current===id)notify(getApiErrorMessage(error))}finally{pending.current=false}}
+ async function duplicate(){try{const result=await operations.perform({action:'duplicate',id:a.id});if(result)navigate(announcementCopyUrl(result.announcement.id))}catch(error){notify(getApiErrorMessage(error))}}
+ async function acknowledge(){try{const result=await operations.perform({action:'acknowledge',id:a.id});if(result)notify(result.message)}catch(error){notify(getApiErrorMessage(error))}}
  function archive(){setMenu(false);setReasonDialog({admin:operations.admin,announcement:a})}
  if(query.isLoading||(query.isFetching&&!query.currentData))return <DriverDetailLoading/>;
  if(query.error)return <Card><DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice></Card>;

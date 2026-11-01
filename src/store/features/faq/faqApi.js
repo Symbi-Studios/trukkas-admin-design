@@ -48,7 +48,7 @@ export function adaptFaqResponse(response) {
   if (metadata && (!Number.isSafeInteger(metadata.total) || metadata.total < 0 || metadata.total !== position
     || !Number.isSafeInteger(metadata.totalPages) || metadata.totalPages < 0 || metadata.totalPages > 1
     || metadata.page !== 1 || (metadata.total > 0 && metadata.totalPages !== 1))) {
-    throw new Error('The FAQ response is incomplete. Pagination parameters are not documented for this endpoint.');
+    throw new Error('The questions could not be loaded completely. Please refresh.');
   }
   const order = FAQ_CATEGORIES.slice(1);
   return [...groups.values()].map(group => ({

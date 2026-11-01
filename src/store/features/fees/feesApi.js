@@ -146,7 +146,7 @@ async function allPages(baseQuery, api, url, select, identity) {
     if (api.getState().auth.admin?.id !== owner) return failure('Fee loading was cancelled.');
     const dto = record(unwrapApiResponseData(result.data)), list = select(dto), p = record(dto.pagination);
     const nextTotal = count(p.total), nextPages = count(p.totalPages), limit = count(p.limit);
-    if (!Array.isArray(list) || count(p.page) !== page || nextTotal == null || nextPages == null || !limit || limit > 100 || nextPages > 500 || Math.max(1, nextPages) !== Math.max(1, Math.ceil(nextTotal / limit)) || list.length > limit) return failure('The response is missing a complete fee collection or valid pagination.');
+    if (!Array.isArray(list) || count(p.page) !== page || nextTotal == null || nextPages == null || !limit || limit > 100 || nextPages > 500 || Math.max(1, nextPages) !== Math.max(1, Math.ceil(nextTotal / limit)) || list.length > limit) return failure('The fee rules could not be loaded completely. Please refresh.');
     if (total != null && (total !== nextTotal || pages !== nextPages)) return failure('Fee records changed while loading. Refresh and try again.');
     total = nextTotal; pages = nextPages;
     for (const entry of list) {
@@ -231,7 +231,7 @@ async function bulkUpdate({ updates }, api, baseQuery) {
     if (!sameSession()) return failure('Bulk updates may have partly applied. Refresh and review their values.');
     const rejection = rejected.get(entry.rule.id);
     if (rejection) {
-      failures.push({ id: entry.rule.id, message: text(rejection.reason) || text(rejection.error) || 'The backend rejected this fee change.', errorCode: text(rejection.errorCode) });
+      failures.push({ id: entry.rule.id, message: text(rejection.reason) || text(rejection.error) || 'This fee change was not accepted.', errorCode: text(rejection.errorCode) });
       continue;
     }
     const returned = saved.get(entry.rule.id), confirmed = await readRule(baseQuery, entry.rule.id);
@@ -256,7 +256,7 @@ function feeDocumentFilename(headers, format, fallback) {
 }
 async function download(baseQuery, api, url, format, filters = {}, fallback = 'fees') {
   if (!['csv', 'pdf'].includes(format)) return failure('Unsupported fee export format.');
-  if (filters.status && !['ACTIVE', 'INACTIVE'].includes(filters.status)) return failure('Draft fee rules are not supported by the backend.');
+  if (filters.status && !['ACTIVE', 'INACTIVE'].includes(filters.status)) return failure('Draft fee rules are not available.');
   const admin = api.getState().auth.admin;
   const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && admin?.id && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
   if (!sameSession()) return failure('Sign in before downloading fee documents.');
@@ -267,14 +267,14 @@ async function download(baseQuery, api, url, format, filters = {}, fallback = 'f
   } });
   if (result.error) return result;
   if (!sameSession()) return failure('The session changed. Download the fee document again.');
-  if (!(result.data instanceof Blob) || !result.data.size) return failure('The backend did not return a fee document.');
+  if (!(result.data instanceof Blob) || !result.data.size) return failure('The fee document is not available.');
   const expectedType = format === 'pdf' ? 'application/pdf' : 'text/csv';
-  if (result.data.type.split(';')[0].trim().toLowerCase() !== expectedType) return failure('The backend returned an unexpected fee document type.');
+  if (result.data.type.split(';')[0].trim().toLowerCase() !== expectedType) return failure('The fee document could not be opened.');
   const bytes = new Uint8Array(await result.data.arrayBuffer());
-  if (format === 'pdf' && String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') return failure('The backend did not return a valid PDF.');
+  if (format === 'pdf' && String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') return failure('The PDF could not be prepared. Please try again.');
   if (format === 'csv') {
     const csv = new TextDecoder().decode(bytes).trimStart();
-    if (!csv || /^(?:[\[{]|<(?:!doctype|html))/i.test(csv) || result.data.type.includes('json') || result.data.type.includes('html')) return failure('The backend did not return a valid CSV.');
+    if (!csv || /^(?:[\[{]|<(?:!doctype|html))/i.test(csv) || result.data.type.includes('json') || result.data.type.includes('html')) return failure('The CSV could not be prepared. Please try again.');
   }
   let binary = '';
   for (let start = 0; start < bytes.length; start += 32768) binary += String.fromCharCode(...bytes.subarray(start, start + 32768));
@@ -284,7 +284,7 @@ async function download(baseQuery, api, url, format, filters = {}, fallback = 'f
 async function exportFeeRules({ format, filters = {} }, api, baseQuery) {
   const params = Object.fromEntries(['search', 'status', 'jobType', 'cargoType', 'location', 'category'].map((key) => [key, text(filters[key])]).filter(([, value]) => value != null));
   if (!['csv', 'pdf'].includes(format)) return failure('Unsupported fee export format.');
-  if (params.status && !['ACTIVE', 'INACTIVE'].includes(params.status)) return failure('Draft fee rules are not supported by the backend.');
+  if (params.status && !['ACTIVE', 'INACTIVE'].includes(params.status)) return failure('Draft fee rules are not available.');
   if (params.category && !feeCategories.some((category) => category.value === params.category)) return failure('Select a supported fee category.');
   const owner = api.getState().auth.admin?.id;
   if (!owner || api.signal.aborted) return failure('Sign in before downloading fee documents.');
@@ -294,7 +294,7 @@ async function exportFeeRules({ format, filters = {} }, api, baseQuery) {
   if (api.signal.aborted || api.getState().auth.admin?.id !== owner) return failure('The session changed. Download the fee document again.');
   const dto = record(unwrapApiResponseData(preview.data)), total = count(record(dto.pagination).total);
   if (total == null || !Array.isArray(dto.rules)) return failure('The complete fee export scope could not be confirmed.');
-  if (total > 100) return failure('The backend exports at most 100 fee rules. Narrow the filters before exporting.');
+  if (total > 100) return failure('Up to 100 fee rules can be exported at a time. Narrow the filters before exporting.');
   if (dto.rules.length !== total) return failure('The complete fee export scope could not be confirmed.');
   return download(baseQuery, api, '/admin/fees/rules/export', format, params, 'fee-rules');
 }

@@ -62,8 +62,8 @@ const write = (operation) => async (args, api, _options, baseQuery) => {
     }
     const field = adaptRegistrationField(result.data, args.entity);
     if ((operation === 'update' && field.id !== args.id) || !field.updatedAt) throw new Error('The update was sent, but its result was not confirmed. Reload before trying again.');
-    if (operation === 'duplicate' && field.id === args.id) throw new Error('The duplicate was sent, but the API did not confirm a new field. Reload before trying again.');
-    if (['create', 'update'].includes(operation) && Object.entries(request.body).some(([key, value]) => key !== 'expectedVersion' && JSON.stringify(field[key]) !== JSON.stringify(value))) throw new Error('The save was sent, but the API did not confirm the requested values. Reload before trying again.');
+    if (operation === 'duplicate' && field.id === args.id) throw new Error('The duplicate was sent, but the new field could not be confirmed. Reload and check before trying again.');
+    if (['create', 'update'].includes(operation) && Object.entries(request.body).some(([key, value]) => key !== 'expectedVersion' && JSON.stringify(field[key]) !== JSON.stringify(value))) throw new Error('The save was sent, but the changes could not be confirmed. Reload and check before trying again.');
     return { data: field };
   } catch (error) { return failure(error.message); }
 };

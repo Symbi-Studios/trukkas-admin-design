@@ -20,7 +20,7 @@ export function useFeeOperations() {
   const pending = useRef(false), currentOwner = useRef(owner);
   currentOwner.current = owner;
   const busy = statusState.isLoading || rulesExportState.isFetching || ruleExportState.isFetching || reportState.isFetching;
-  const unavailable = (feature) => window.alert(feature + ' is not supported by the backend.');
+  const unavailable = (feature) => window.alert(feature + ' is not available.');
   async function toggle(rule) {
     if (pending.current || busy) return;
     if (!canManage) { window.alert('Fee changes require Super Admin or Finance Admin access.'); return; }

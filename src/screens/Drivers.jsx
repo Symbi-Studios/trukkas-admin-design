@@ -4,6 +4,7 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from '../router.js';
+import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, FilterSelect,
   DataTable, Pagination, Badge, QuickActionsCard, Card, DropdownMenu, IconButton,
@@ -253,7 +254,7 @@ export function Drivers() {
     importLock.current = true;
     try {
       const result = await importDrivers(file).unwrap();
-      const failures = result.results.filter((row) => row.status === 'FAILED').map((row) => `Line ${row.line ?? '—'}: ${row.error || '—'}`).join('; ');
+      const failures = result.results.filter((row) => row.status === 'FAILED').map((row) => `Line ${row.line ?? '—'}: ${userFacingMessage(row.error, 'Could not import this row.')}`).join('; ');
       setToast(`Created: ${result.created ?? '—'}. Failed: ${result.failed ?? '—'}.${failures ? ` ${failures}` : ''}`);
     } catch (error) { setToast(adminDriverError(error)); }
     finally { importLock.current = false; }
@@ -287,7 +288,7 @@ export function Drivers() {
     {pendingQuery.error && <Banner tone="warning" title="Pending driver review data unavailable">{adminDriverError(pendingQuery.error)}</Banner>}
 
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--tk-space-4)' }}>
-      <StatCard icon="users" label="Total Drivers" value={metricValue(counts.total, !statsQuery.data && statsQuery.isFetching)} caption={statsQuery.isLoading ? <Skeleton as="span" width={86} height={11} /> : counts.total == null ? 'Not provided by API' : 'All registered drivers'} />
+      <StatCard icon="users" label="Total Drivers" value={metricValue(counts.total, !statsQuery.data && statsQuery.isFetching)} caption={statsQuery.isLoading ? <Skeleton as="span" width={86} height={11} /> : counts.total == null ? 'Not available' : 'All registered drivers'} />
       <StatCard icon="user" tint="green" label="Individual Drivers" value={metricValue(counts.individual, statsQuery.isLoading)} caption="Individual registrations" />
       <StatCard icon="building-2" tint="navy" label="Company Drivers" value={metricValue(counts.company, statsQuery.isLoading)} caption="Company registrations" />
       <StatCard icon="clock" tint="amber" label="Pending Review" value={metricValue(counts.pending, pendingCountLoading)} caption="Pending review queue" />
@@ -325,7 +326,7 @@ export function Drivers() {
 
         {driversQuery.isFetching ? <DriverTableLoading />
           : driversQuery.error ? <div style={{ padding: 'var(--tk-card-pad)' }}><Banner tone="danger" title="Unable to load drivers">{adminDriverError(driversQuery.error)}</Banner><Button variant="outline" onClick={() => driversQuery.refetch()}>Retry</Button></div>
-            : filtered.length === 0 ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this API page match the selected filters.' : 'No drivers match this search or status.'} />
+            : filtered.length === 0 ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this page match the selected filters.' : 'No drivers match this search or status.'} />
               : <DataTable rows={filtered} rowKey={(driver) => driver.id} columns={[
                 { key: 'name', header: 'Driver', render: driverCell },
                 { key: 'registrationType', header: 'Account Type', render: (driver) => <Badge tone={driver.registrationType === 'Company Driver' ? 'info' : 'neutral'}>{driver.registrationType}</Badge> },
@@ -382,7 +383,7 @@ export function Drivers() {
           { icon: 'user-check', label: 'Review Pending Drivers', hint: 'Verify and approve driver registrations', onClick: () => changeTab('Pending Review') },
           { icon: 'shield-check', label: 'Verify Documents', hint: 'Review a pending driver license', onClick: verifyDocuments },
           { icon: 'file-chart-column', label: 'Driver Compliance Report', hint: 'Download the compliance CSV', onClick: () => void downloadCompliance() },
-          { icon: 'download', label: 'Export Driver List', hint: 'Download the loaded API page', onClick: exportRoster },
+          { icon: 'download', label: 'Export Driver List', hint: 'Download the displayed page', onClick: exportRoster },
         ]} />
       </div>
     </div>
@@ -421,7 +422,7 @@ export function Drivers() {
         <div><span className="tk-meta">License number</span><p className="tk-body tk-mono">{license.licenseNumber || '—'}</p></div>
         <div><span className="tk-meta">Status</span><p><Badge>{license.status}</Badge></p></div>
         <div><span className="tk-meta">Expires</span><p className="tk-body">{license.expiresAt ? new Date(license.expiresAt).toLocaleDateString() : '—'}</p></div>
-        {!license.licenseUrl && <EmptyState icon="file-text" title="No license file provided" description="The license endpoint did not return a document URL." style={{ padding: '18px 8px' }} />}
+        {!license.licenseUrl && <EmptyState icon="file-text" title="No license file provided" description="The license document is not available." style={{ padding: '18px 8px' }} />}
       </div> : null}
     </Modal>
   </>;

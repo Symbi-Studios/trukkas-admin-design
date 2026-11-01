@@ -76,7 +76,7 @@ function SettlementDetailScreen() {
 
   return (
     <>
-      <PageHeader crumbs={['Business & Finance', 'Settlements', r.id]} title={r.id}
+      <PageHeader crumbs={['Business & Finance', 'Settlements', r.id]} title={<span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{r.id}</span>}
         description="Detailed view of this settlement."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back</Button>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { Badge, Banner, Button, Card, EmptyState, Icon, Modal, PageHeader, SectionCard, Skeleton, Textarea } from '../ds.js';
 import { canAdminReview, documentStatusTone } from '../domain/documents.js';
 import {
@@ -15,11 +16,7 @@ import {
 import './Documents.css';
 
 function requestError(error) {
-  const message = error?.data?.message;
-  if (typeof message === 'string') return message;
-  if (Array.isArray(message)) return message.join(' ');
-  if (error?.status === 'CUSTOM_ERROR' && typeof error.error === 'string') return error.error;
-  return error?.status === 403 ? 'Your account cannot review this document.' : 'The request could not be completed.';
+  return getApiErrorMessage(error, error?.status === 403 ? 'Your account cannot review this document.' : 'The request could not be completed.');
 }
 
 function formatTime(value) {
@@ -66,10 +63,10 @@ export function DocumentDetail() {
     }
   }
 
-  if (!jobId) return <Card><EmptyState icon="file-text" title="Open a document from the queue" description="The document link needs its job ID." /><Button variant="secondary" onClick={() => navigate('/documents')}>Back to Documents</Button></Card>;
+  if (!jobId) return <Card><EmptyState icon="file-text" title="Open a document from the queue" description="Open a document from the queue to continue." /><Button variant="secondary" onClick={() => navigate('/documents')}>Back to Documents</Button></Card>;
   if (isLoading || (isFetching && !job)) return <div className="documents-screen" role="status" aria-label="Loading document details" aria-busy="true"><Card><Skeleton width={240} height={28} /></Card><Card><Skeleton height={360} /></Card></div>;
   if (error) return <Card><EmptyState icon="file-text" title={error.status === 403 ? 'Access denied' : error.status === 404 ? 'Job not found' : 'Document details unavailable'} description="Please try again or return to Documents." /><div className="documents-detail-empty-actions"><Button variant="outline" onClick={refetch}>Retry</Button><Button variant="secondary" onClick={() => navigate('/documents')}>Back to Documents</Button></div></Card>;
-  if (!document) return <Card><EmptyState icon="file-text" title="Document not found" description="This document is not in the job review response." /><Button variant="secondary" onClick={() => navigate('/documents')}>Back to Documents</Button></Card>;
+  if (!document) return <Card><EmptyState icon="file-text" title="Document not found" description="This document is not available for review." /><Button variant="secondary" onClick={() => navigate('/documents')}>Back to Documents</Button></Card>;
 
   const reviewable = Boolean(document.id) && document.canReview === true && canAdminReview(document);
   return (
@@ -96,7 +93,7 @@ export function DocumentDetail() {
               {document.uploadedAt && <div className="document-activity"><span className="node"><Icon name="upload" size={12} /></span><span><strong>Document uploaded</strong><small>{document.uploadedBy || '—'} · {formatTime(document.uploadedAt)}</small></span></div>}
               {document.reviewedAt && <div className="document-activity"><span className="node"><Icon name="shield-check" size={12} /></span><span><strong>Review recorded</strong><small>{document.reviewedBy || '—'} · {formatTime(document.reviewedAt)}</small></span></div>}
               {document.rejectionReason && <div className="document-review-note"><strong>Review reason</strong><p>{document.rejectionReason}</p></div>}
-            </> : <p className="tk-muted">Review history is not available in this response.</p>}
+            </> : <p className="tk-muted">Review history is not available.</p>}
           </SectionCard>
         </div>
         <div className="document-detail-rail">

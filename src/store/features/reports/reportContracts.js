@@ -22,7 +22,7 @@ export function reportEntityScope(filters = {}) {
   const params = {}, type = filters.entityType, id = filters.entity;
   const types = { Forwarder: 'FORWARDER', Exporter: 'EXPORTER', 'Truck Company': 'TRUCKING_COMPANY' };
   if (type && type !== 'All Types') {
-    if (!types[type]) return { error: 'This entity type is not supported by the report API.' };
+    if (!types[type]) return { error: 'Reports are not available for this entity type.' };
     params.entityType = types[type];
   }
   if (reportText(id) && id !== 'All Entities') params.entityId = id;
@@ -98,7 +98,7 @@ function reportCell(value, definition) {
 export function adaptReportPreview(dto, requested, empty) {
   dto = reportRecord(dto);
   const p = reportRecord(dto.pagination), total = reportInteger(dto.totalRecords), paginationTotal = reportInteger(p.total), limit = reportInteger(p.limit), page = reportInteger(p.page);
-  if (dto.reportType !== requested.configuration.reportType || !Array.isArray(dto.rows) || dto.rows.some(r => !r || typeof r !== 'object' || Array.isArray(r)) || page !== requested.page || limit !== requested.limit || !limit || total == null || paginationTotal == null || paginationTotal > total || (!dto.truncated && paginationTotal !== total) || reportInteger(p.totalPages) == null || Math.max(1, p.totalPages) !== Math.max(1, Math.ceil(paginationTotal / limit)) || dto.rows.length !== Math.max(0, Math.min(limit, paginationTotal - (page - 1) * limit)) || typeof dto.truncated !== 'boolean') throw new Error('The report preview is missing valid rows, pagination or truncation information.');
+  if (dto.reportType !== requested.configuration.reportType || !Array.isArray(dto.rows) || dto.rows.some(r => !r || typeof r !== 'object' || Array.isArray(r)) || page !== requested.page || limit !== requested.limit || !limit || total == null || paginationTotal == null || paginationTotal > total || (!dto.truncated && paginationTotal !== total) || reportInteger(p.totalPages) == null || Math.max(1, p.totalPages) !== Math.max(1, Math.ceil(paginationTotal / limit)) || dto.rows.length !== Math.max(0, Math.min(limit, paginationTotal - (page - 1) * limit)) || typeof dto.truncated !== 'boolean') throw new Error('The report preview could not be loaded completely. Please refresh.');
   const summary = reportRecord(dto.summary), metrics = reportRecord(dto.metrics);
   const cards = empty.summary.map(card => ({ ...card, trend: [] }));
   const keys = { total: 'totalVerifications', verified: 'verified', pending: 'pending', rejected: 'rejected', compliance: 'compliancePercent', avgTime: 'avgProcessingHours' };
@@ -132,7 +132,7 @@ export function confirmReportTemplate(value, requested) {
 }
 export function adaptReportExport(dto, configuration) {
   dto = reportRecord(dto);
-  if (!reportText(dto.id) || dto.reportType !== configuration.reportType || dto.format !== configuration.format || !reportText(dto.status)) throw new Error('The backend did not identify the generated export and its selected format.');
+  if (!reportText(dto.id) || dto.reportType !== configuration.reportType || dto.format !== configuration.format || !reportText(dto.status)) throw new Error('The exported report could not be confirmed. Refresh and check before trying again.');
   return { id: dto.id, reportId: reportText(dto.reportId), reportType: dto.reportType, status: dto.status, format: dto.format,
     filename: reportText(dto.filename), contentType: reportText(dto.contentType), sizeBytes: reportInteger(dto.sizeBytes), rowCount: reportInteger(dto.rowCount),
     expiresAt: reportText(dto.expiresAt), deliveryStatus: reportText(dto.deliveryStatus), deliveryError: reportText(dto.deliveryError), error: reportText(dto.error), createdAt: reportText(dto.createdAt),

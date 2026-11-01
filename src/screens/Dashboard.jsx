@@ -66,12 +66,13 @@ function MenuSelect({
   icon,
 }) {
   return (
-    <span className={styles.menuWrap}>
+    <span className={`${styles.menuWrap} ${id === 'date' ? styles.dateMenu : ''}`}>
       <FilterSelect
         label={value}
         icon={icon}
         active={openMenu === id}
         onClick={() => setOpenMenu(openMenu === id ? null : id)}
+        style={id === 'date' ? { maxWidth: '100%', width: '100%', justifyContent: 'center' } : undefined}
       />
       {openMenu === id && (
         <span className={styles.menu}>
@@ -156,7 +157,7 @@ const HEALTH = [
   {
     apiKey: "platformApi",
     icon: "server",
-    label: "Platform / API",
+    label: "Platform",
     status: "Healthy",
     tone: "success",
     route: "/settings",
@@ -276,7 +277,7 @@ export function Dashboard() {
       }, {}),
     )
       .sort((a, b) => b.trips - a.trips)
-      .slice(0, 5);
+      .slice(0, 10);
     const totalRouteTrips =
       routes.reduce((sum, route) => sum + route.trips, 0) || 1;
     const recentJobs = [...normalized]
@@ -473,7 +474,7 @@ export function Dashboard() {
     },
   ];
   const routes = overview
-    ? overview.topRoutesByVolume.map((route) => ({
+    ? overview.topRoutesByVolume.slice(0, 10).map((route) => ({
         ...route,
         pct: route.percentOfTotal == null
           ? "—"

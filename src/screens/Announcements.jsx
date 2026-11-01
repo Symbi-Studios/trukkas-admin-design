@@ -119,13 +119,13 @@ export function Announcements() {
     if (publishing.current || publication.isLoading) return;
     publishing.current = true;
     try { const response = await operations.perform({ action: 'publish', id }); if (response) notify(response.message); }
-    catch (error) { notify(error instanceof Error ? error.message : getApiErrorMessage(error)); }
+    catch (error) { notify(getApiErrorMessage(error)); }
     finally { publishing.current = false; }
   }
   async function duplicate(id) {
     setMenu(null);
     try { const result = await operations.perform({ action: 'duplicate', id }); if (result) navigate(announcementCopyUrl(result.announcement.id)); }
-    catch (error) { notify(error instanceof Error ? error.message : getApiErrorMessage(error)); }
+    catch (error) { notify(getApiErrorMessage(error)); }
   }
   const metric = (value, pending) => pending ? <Skeleton as="span" width={54} height={23} /> : announcementCount(value);
   return (

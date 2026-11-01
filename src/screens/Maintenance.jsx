@@ -97,6 +97,7 @@ export function Maintenance() {
   const role = useSelector(state => state.auth.admin?.role);
   const canWrite = ["SUPER_ADMIN", "OPS_ADMIN"].includes(role);
   const busy = useRef(false);
+  const requestedTruck = useRef(null);
   const [tab, setTab] = useState("All Maintenance"),
     [q, setQ] = usePageSearchState("", () => setPage(1)),
     [status, setStatus] = useState("All Statuses"),
@@ -147,7 +148,26 @@ export function Maintenance() {
   let ringEnd = 0;
   const ring = shares.length === 4 && shares.every(p => p != null && p <= 100) && Math.abs(shares.reduce((a, b) => a + b, 0) - 100) < 1
     ? `conic-gradient(${shares.map((p, i) => { const start = ringEnd; ringEnd += p; return `${colors[i]} ${start}% ${ringEnd}%`; }).join(",")})` : "var(--tk-viz-track)";
-  useEffect(() => { if (trucks.length && !form.plate) setForm(f => ({ ...f, plate: trucks[0].plate })); }, [trucks, form.plate]);
+  useEffect(() => {
+    const url = new URL(globalThis.window.location.href);
+    if (url.searchParams.get('schedule') !== '1') return;
+    requestedTruck.current = url.searchParams.get('truckId') || null;
+    setSchedule(true);
+    url.searchParams.delete('schedule'); url.searchParams.delete('truckId');
+    globalThis.window.history.replaceState(globalThis.window.history.state, '', url.pathname + url.search + url.hash);
+  }, []);
+  useEffect(() => {
+    if (!schedule || !fleetQuery.currentData || !requestedTruck.current || ['unavailable', 'selected'].includes(requestedTruck.current)) return;
+    const selected = trucks.find(truck => truck.id === requestedTruck.current);
+    if (selected && trucks.filter(truck => truck.plate === selected.plate).length === 1) {
+      setForm(f => ({ ...f, plate: selected.plate }));
+      requestedTruck.current = 'selected';
+    } else {
+      requestedTruck.current = 'unavailable';
+      notify('The selected truck is unavailable. Please choose a truck.');
+    }
+  }, [schedule, fleetQuery.currentData]);
+  useEffect(() => { if (schedule && !requestedTruck.current && trucks.length && !form.plate) setForm(f => ({ ...f, plate: trucks[0].plate })); }, [schedule, trucks, form.plate]);
   useEffect(() => { if (list.error) notify(maintenanceError(list.error)); }, [list.error]);
   useEffect(() => { if (fleetQuery.error) notify(maintenanceError(fleetQuery.error)); }, [fleetQuery.error]);
   useEffect(() => { if (statsQuery.error) notify(maintenanceError(statsQuery.error)); }, [statsQuery.error]);
@@ -769,12 +789,12 @@ export function Maintenance() {
       </div>
       <Modal
         open={schedule}
-        onClose={() => setSchedule(false)}
+        onClose={() => { requestedTruck.current = null; setSchedule(false); }}
         title="Schedule Maintenance"
         width={620}
         footer={
           <>
-            <Button variant="outline" onClick={() => setSchedule(false)}>
+            <Button variant="outline" onClick={() => { requestedTruck.current = null; setSchedule(false); }}>
               Cancel
             </Button>
             <Button

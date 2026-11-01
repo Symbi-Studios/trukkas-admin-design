@@ -26,15 +26,7 @@ const categoryLabels = {
   MAINTENANCE: 'Maintenance',
 };
 const priorityLabels = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
-const defaultSettings = {
-  email: true,
-  push: true,
-  sms: false,
-  quiet: false,
-  quietHoursStart: '22:00',
-  quietHoursEnd: '07:00',
-  updatedAt: null,
-};
+const validClock = (value) => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : null;
 
 function dateGroup(value) {
   const date = new Date(value);
@@ -83,12 +75,12 @@ function mapNotificationSettings(response) {
     throw new Error('The notification settings response is missing its settings.');
   }
   return {
-    email: typeof data.emailEnabled === 'boolean' ? data.emailEnabled : defaultSettings.email,
-    push: typeof data.pushEnabled === 'boolean' ? data.pushEnabled : defaultSettings.push,
-    sms: typeof data.smsEnabled === 'boolean' ? data.smsEnabled : defaultSettings.sms,
-    quiet: typeof data.quietHoursEnabled === 'boolean' ? data.quietHoursEnabled : defaultSettings.quiet,
-    quietHoursStart: data.quietHoursStart || defaultSettings.quietHoursStart,
-    quietHoursEnd: data.quietHoursEnd || defaultSettings.quietHoursEnd,
+    email: typeof data.emailEnabled === 'boolean' ? data.emailEnabled : null,
+    push: typeof data.pushEnabled === 'boolean' ? data.pushEnabled : null,
+    sms: typeof data.smsEnabled === 'boolean' ? data.smsEnabled : null,
+    quiet: typeof data.quietHoursEnabled === 'boolean' ? data.quietHoursEnabled : null,
+    quietHoursStart: validClock(data.quietHoursStart),
+    quietHoursEnd: validClock(data.quietHoursEnd),
     updatedAt: data.updatedAt || null,
   };
 }

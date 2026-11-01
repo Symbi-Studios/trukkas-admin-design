@@ -35,7 +35,7 @@ function pageData(dto, key, page, limit) {
   if (!Array.isArray(rows) || p.page !== page || p.limit !== limit || count(p.total) == null || count(p.totalPages) == null
     || Math.max(1, p.totalPages) !== Math.max(1, Math.ceil(p.total / limit))
     || page > Math.max(1, p.totalPages) || rows.length !== Math.max(0, Math.min(limit, p.total - (page - 1) * limit))
-    || rows.some(row => !text(row?.id)) || new Set(rows.map(row => row.id)).size !== rows.length) throw new Error('The fee response has incomplete records or pagination. Refresh before continuing.');
+    || rows.some(row => !text(row?.id)) || new Set(rows.map(row => row.id)).size !== rows.length) throw new Error('The fee records could not be loaded completely. Refresh before continuing.');
   return { rows, pagination: { page, limit, total: p.total, totalPages: Math.max(1, p.totalPages) } };
 }
 function scopedQuery(baseQuery, api, args, superOnly = false) {
@@ -50,7 +50,7 @@ function scopedQuery(baseQuery, api, args, superOnly = false) {
 async function listQuery(kind, args, api, baseQuery) {
   try {
     const { page = 1, limit = 20, dateFrom, dateTo, search } = args;
-    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !feeRangeValid(dateFrom, dateTo)) throw new Error('Select valid fee dates and pagination.');
+    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !feeRangeValid(dateFrom, dateTo)) throw new Error('Select valid dates and page settings.');
     const params = { page, limit, ...(dateFrom ? { dateFrom } : {}), ...(dateTo ? { dateTo } : {}) };
     if (text(search)) params.search = search.trim();
     let url = '/admin/fees/' + kind, collection = kind;
@@ -71,7 +71,7 @@ async function listQuery(kind, args, api, baseQuery) {
     const result = await scopedQuery(baseQuery, api, args, kind === 'audit')({ url, params });
     if (result.error) return result;
     const dto = record(unwrapApiResponseData(result.data));
-    if (dto.truncated === true) throw new Error('The backend truncated the fee data. Narrow the date range before reviewing totals.');
+    if (dto.truncated === true) throw new Error('The fee data is incomplete. Narrow the date range before reviewing totals.');
     const data = pageData(dto, collection, page, limit), totals = record(dto.totals);
     if (kind === 'audit') return { data: { ...data, rows: data.rows.map(row => adaptAdminAudit(row)), failed: count(totals.failed) } };
     if (kind === 'deductions') return { data: { ...data, period: period(dto.period), totals: { count: count(totals.count), ...Object.fromEntries(['assessed', 'applied', 'waived', 'refunded'].map(key => [key, totals.currency === 'NGN' ? amount(totals[key]) : null])) },
@@ -84,7 +84,7 @@ async function listQuery(kind, args, api, baseQuery) {
 }
 function adaptAnalytics(response) {
   const dto = record(unwrapApiResponseData(response));
-  if (dto.truncated === true) throw new Error('The backend truncated fee analytics. Select a shorter period.');
+  if (dto.truncated === true) throw new Error('The fee analytics are incomplete. Select a shorter period.');
   const ngn = dto.currency === 'NGN', money = value => ngn ? amount(value) : null;
   const collection = (key, identity) => {
     const rows = dto[key];

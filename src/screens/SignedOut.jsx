@@ -27,7 +27,7 @@ export function SignedOut() {
         </div>
         {serverUnconfirmed && (
           <p role="alert" className="tk-meta" style={{ margin: 0, color: 'var(--tk-danger)' }}>
-            We couldn’t confirm logout with the server. Your local session was cleared.
+          We couldn’t confirm sign-out. You’ve been signed out on this device.
           </p>
         )}
         <Button fullWidth onClick={() => router.replace('/login')}>Sign back in</Button>

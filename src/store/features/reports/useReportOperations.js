@@ -31,7 +31,7 @@ export function useReportOperations(draft) {
     if (pending.current || !authenticated) return false;
     pending.current = true; setError(null);
     try { await action(); return current(); }
-    catch (requestError) { if (current()) { const message = requestError instanceof Error ? requestError.message : getApiErrorMessage(requestError); setError({ scope: session.key, message }); window.alert(message); } return false; }
+    catch (requestError) { if (current()) { const message = getApiErrorMessage(requestError); setError({ scope: session.key, message }); window.alert(message); } return false; }
     finally { pending.current = false; }
   }
   async function schedule(form, configuration) {
@@ -73,7 +73,7 @@ export function useReportOperations(draft) {
         setGenerated({ scope: session.key, key: configurationKey, file });
       }
       if (file.status !== 'COMPLETED') throw new Error(file.error || 'The report file could not be generated.');
-      if (configuration.fileSettings.compressFile && !file.contentType?.includes('zip') && !file.filename?.toLowerCase().endsWith('.zip')) throw new Error('The backend did not confirm the requested ZIP compression.');
+      if (configuration.fileSettings.compressFile && !file.contentType?.includes('zip') && !file.filename?.toLowerCase().endsWith('.zip')) throw new Error('The requested ZIP file could not be confirmed. Check the report before trying again.');
       if (draft.delivery === 'email') {
         if (file.deliveryStatus !== 'SENT' || !Array.isArray(file.deliveredTo) || configuration.delivery.recipients.some((email) => !file.deliveredTo.includes(email))) throw new Error(file.deliveryError || 'The report was generated, but email delivery is ' + (file.deliveryStatus || 'unconfirmed') + '.');
         if (current()) window.alert('Report link sent to your email.');

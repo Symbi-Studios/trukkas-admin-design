@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Banner, Button, Modal, TextField } from '../ds.js';
-import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { getApiErrorMessage, userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import { editableFeeRule, feeNumber, validFeeValue, useUpdateAdminFeeRuleMutation, useBulkUpdateAdminFeeRulesMutation } from '../store/features/fees/feesApi.js';
 
 export function FeeRuleEditDialog({ rule, canManage, onClose }) {
@@ -43,7 +43,7 @@ export function FeeRulesBulkDialog({ rules, canManage, onClose }) {
       const result = await update({ updates }).unwrap();
       for (const rule of result.verified) baseline.current.set(rule.id, rule);
       if (result.failures.length || result.reportedFailureCount > 0) {
-        setError(result.verified.length + ' of ' + updates.length + ' requested values confirmed. ' + (result.failures.length ? 'Review: ' + result.failures.map((item) => item.id + ': ' + item.message).join('; ') + '.' : 'The backend reported failures; review the updated values.'));
+        setError(result.verified.length + ' of ' + updates.length + ' requested values confirmed. ' + (result.failures.length ? 'Review: ' + result.failures.map((item) => item.id + ': ' + userFacingMessage(item.message)).join('; ') + '.' : 'Some changes could not be confirmed; review the updated values.'));
       } else onClose();
     } catch (requestError) { setError(getApiErrorMessage(requestError) + ' Some changes may have applied. Refresh and review their values before retrying.'); }
     finally { pending.current = false; }

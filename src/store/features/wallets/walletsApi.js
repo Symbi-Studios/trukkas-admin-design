@@ -129,7 +129,7 @@ async function readAll(baseQuery, api, url, key, filters = {}) {
     if (!Array.isArray(dto[key])) return invalid('The response is missing its record list.');
     const totalPages = count(dto.pagination?.totalPages), total = count(dto.pagination?.total);
     const returnedPage = count(dto.pagination?.page), limit = count(dto.pagination?.limit);
-    if (totalPages == null || total == null || returnedPage !== page || !limit || limit > 100 || !(totalPages === Math.ceil(total / limit) || total === 0 && totalPages === 1) || totalPages > 500 || dto[key].length > limit) return invalid('The response is missing valid pagination.');
+    if (totalPages == null || total == null || returnedPage !== page || !limit || limit > 100 || !(totalPages === Math.ceil(total / limit) || total === 0 && totalPages === 1) || totalPages > 500 || dto[key].length > limit) return invalid('The records could not be loaded completely. Please refresh.');
     if (expectedTotal != null && (total !== expectedTotal || totalPages !== expectedPages)) return invalid('The record list changed while loading. Please reload.');
     expectedTotal = total; expectedPages = totalPages;
     for (const row of dto[key]) {

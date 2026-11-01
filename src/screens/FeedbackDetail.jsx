@@ -38,7 +38,7 @@ export function FeedbackDetail(){const navigate=useNavigate(),params=useParams()
  async function change(action,values,message){
    if(busy)return null;
    try{const result=await operations.perform(action,values,f.version);if(result){if(message)notify(message);return result}}
-   catch(error){notify(error instanceof Error?error.message:getApiErrorMessage(error))}
+   catch(error){notify(getApiErrorMessage(error))}
    return null;
  }
  const updateFeedback=(_id,values)=>change('update',values,'Feedback updated');

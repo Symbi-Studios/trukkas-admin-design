@@ -1,5 +1,6 @@
 'use client';
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -57,8 +58,7 @@ function downloadCsv(csv) {
 }
 
 function apiErrorMessage(error, fallback) {
-  const detail = error?.data?.message || error?.data?.error || error?.message || error?.error;
-  return Array.isArray(detail) ? detail.join(', ') : typeof detail === 'string' && detail.trim() ? detail : fallback;
+  return getApiErrorMessage(error, fallback);
 }
 
 export function LiveTracking() {
@@ -255,7 +255,7 @@ export function LiveTracking() {
     <div className="lt-map-wrap" style={big ? { height: 560 } : undefined}>
       <TriangulationGoogleMap points={layer === 'Clusters' ? clusterPoints : mapPoints} selectedId={selectedId} onSelect={setSelectedId}
         ariaLabel="Live truck tracking map"
-        emptyMessage={tripsLoading ? 'Loading truck locations…' : 'The trips response has no truck coordinates to plot.'}
+        emptyMessage={tripsLoading ? 'Loading truck locations…' : 'Truck locations are not available.'}
         mapType={mapStyle} showTraffic={showTraffic} zoom={zoom} fitVersion={fitVersion} fitOnDataChange={false}
         routes={layer === 'Trips' ? trackingOverview?.routes : undefined}
         geofences={layer === 'Geofences' ? trackingOverview?.geofences : undefined}
@@ -345,7 +345,7 @@ export function LiveTracking() {
       {toast && <Banner tone={toast.tone} title={toast.title} />}
       {tripsLoading && <Banner tone="info" title="Loading trips…" />}
       {(tripsFetching || refreshingTrips) && !tripsLoading && <Banner tone="info" title="Refreshing trips" />}
-      {tripsError && <Banner tone="warning" title="Live trip data is unavailable">The tracking map can only plot coordinates returned by GET /api/v1/admin/trips.</Banner>}
+      {tripsError && <Banner tone="warning" title="Live trip data is unavailable">Trip locations are unavailable right now.</Banner>}
 
       <div className="lt-main">
         <SectionCard title={statusFilter === 'All Status' && !q ? `Active Trips (${activeCount ?? '—'})` : `Trips (${tripsResponse?.pagination.total ?? '—'})`} pad="tight">

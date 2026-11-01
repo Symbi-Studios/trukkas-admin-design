@@ -55,7 +55,7 @@ function RoleEditForm({ role: loadedRole, catalog, operations, onClose, onSaved 
     try {
       const saved = await operations.perform({ action: 'edit', id: role.id, expectedVersion: role.version, changes, catalog });
       if (saved) { onSaved(saved); onClose(); }
-    } catch (error) { setError(error instanceof Error ? error.message : getApiErrorMessage(error)); }
+    } catch (error) { setError(getApiErrorMessage(error)); }
   }
   return <Modal open title="Edit Role" description={role.name} width={640} onClose={() => { if (!operations.saving) onClose(); }} footer={<>
     <Button variant="outline" disabled={operations.saving} onClick={onClose}>Cancel</Button>

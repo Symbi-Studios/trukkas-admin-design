@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate } from '../router.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, Button, Badge, Card, SectionCard, EntityHeaderCard, LabelValue,
   Tabs, MapPanel, Banner, Modal, Textarea, Select, Skeleton,
@@ -18,10 +19,7 @@ import './TriangulationDetail.css';
 const naira = (value) => typeof value === 'number' ? `₦${value.toLocaleString('en-NG')}` : '—';
 const text = (value) => value || '—';
 function apiError(error) {
-  const message = error?.data?.message;
-  if (typeof message === 'string') return message;
-  if (Array.isArray(message)) return message.join(' ');
-  return error?.status === 403 ? 'Your account cannot access this opportunity.' : 'The request could not be completed.';
+  return getApiErrorMessage(error, error?.status === 403 ? 'Your account cannot access this opportunity.' : 'The request could not be completed.');
 }
 
 export function TriangulationApiDetail() {
@@ -82,7 +80,7 @@ export function TriangulationApiDetail() {
   if (error) return <Card><p className="tk-body">{apiError(error)}</p>
     <Button variant="outline" onClick={refetch}>Retry</Button>
     <Button variant="secondary" onClick={() => navigate('/triangulation')}>Back to Opportunities</Button></Card>;
-  if (!opportunity) return <Card><p className="tk-body">This match is no longer on the selected opportunities page. A detail endpoint is needed for a durable link.</p>
+  if (!opportunity) return <Card><p className="tk-body">This match is no longer on the selected opportunities page.</p>
     <Button variant="outline" onClick={() => navigate('/triangulation')}>Back to Opportunities</Button></Card>;
 
   return <>
@@ -91,7 +89,7 @@ export function TriangulationApiDetail() {
       description="Review the match and coordinate the next steps."
       actions={<>
         <Button variant="outline" icon="arrow-left" onClick={() => navigate('/triangulation')}>Back to Opportunities</Button>
-        <Button icon="check-check" disabled title="Creating a match needs a backend endpoint.">Create Match</Button>
+        <Button icon="check-check" disabled title="Creating a match is not available.">Create Match</Button>
       </>} />
     {notice && <Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner>}
     {isFetching && <Banner tone="info">Refreshing opportunity…</Banner>}
@@ -131,15 +129,15 @@ export function TriangulationApiDetail() {
         <SectionCard title="Match Analysis">
           <LabelValue label="Match Score" value={opportunity.score == null ? '—' : `${opportunity.score}%`} />
           <LabelValue label="Job Proximity" value={opportunity.distanceKm == null ? '—' : `${opportunity.distanceKm} km`} />
-          <p className="tk-meta">The API does not yet provide the individual match factors.</p>
+          <p className="tk-meta">Individual match factors are not available.</p>
         </SectionCard>
         <SectionCard title="Actions">
           <div style={{ display: 'grid', gap: 10 }}>
             <Button fullWidth icon="building-2" disabled={!opportunity.jobId || !opportunity.truckerId}
               onClick={() => setNotifyOpen(true)}>Notify Trucking Company</Button>
             <Button fullWidth variant="outline" icon="shield" onClick={() => setInterveneOpen(true)}>Intervene on Job</Button>
-            <Button fullWidth variant="outline" disabled title="A forwarder proposal endpoint is needed.">Propose to Forwarder</Button>
-            <Button fullWidth variant="danger" disabled title="A reject-opportunity endpoint is needed.">Reject Opportunity</Button>
+            <Button fullWidth variant="outline" disabled title="Proposing to a forwarder is not available.">Propose to Forwarder</Button>
+            <Button fullWidth variant="danger" disabled title="Rejecting an opportunity is not available.">Reject Opportunity</Button>
           </div>
         </SectionCard>
       </div>
@@ -154,7 +152,7 @@ export function TriangulationApiDetail() {
       <SectionCard title="Proposed Multi-Leg Route">
         <LabelValue label="Current Segment" value={text(opportunity.currentRoute)} />
         <LabelValue label="Proposed Segment" value={text(opportunity.proposedRoute)} />
-        <p className="tk-meta">Stop sequence, road geometry, distance and travel time need the detail response.</p>
+        <p className="tk-meta">Stop sequence, route, distance and travel time are not available.</p>
       </SectionCard>
       <SectionCard title="Financial Breakdown">
         <LabelValue label="Estimated Trip Revenue" value={naira(opportunity.revenue)} />
@@ -173,9 +171,9 @@ export function TriangulationApiDetail() {
           { value: 'notes', label: 'Notes & Activity' },
         ]} value={tab} onChange={setTab} />
         <div style={{ padding: 24 }} className="tk-meta">
-          {tab === 'related' ? 'Related opportunities need the opportunity detail response.'
-            : tab === 'compliance' ? 'Compliance and document status need the opportunity detail response.'
-              : 'Notes and activity need dedicated read and write endpoints.'}
+          {tab === 'related' ? 'Related opportunities are not available.'
+            : tab === 'compliance' ? 'Compliance and document status are not available.'
+              : 'Notes and activity are not available.'}
         </div>
       </SectionCard>
       <SectionCard title="Opportunity Details">

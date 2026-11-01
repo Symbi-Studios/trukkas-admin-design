@@ -144,7 +144,13 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   const canManage = ["SUPER_ADMIN", "OPS_ADMIN"].includes(role);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(null), 2600); return () => clearTimeout(timer); }, [toast]);
-  useEffect(() => { const id = new URLSearchParams(window.location.search).get("tripId"); if (id?.trim()) setSelectedId(id.trim()); }, []);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("tripId");
+    if (id?.trim()) setSelectedId(id.trim());
+    const select = event => { if (typeof event.detail === 'string' && event.detail.trim()) setSelectedId(event.detail.trim()); };
+    window.addEventListener('trukkas:select-trip', select);
+    return () => window.removeEventListener('trukkas:select-trip', select);
+  }, []);
   useEffect(() => { if (optionsQuery.error) setToast({ tone: "warning", title: "Unable to load trip filter options. Refresh to try again." }); }, [optionsQuery.error]);
   useEffect(() => { if (tripsResponse?.pagination.totalPages && page > tripsResponse.pagination.totalPages) setPage(tripsResponse.pagination.totalPages); }, [page, tripsResponse?.pagination.totalPages]);
   function notify(tone, title) { if (active.current) setToast({ tone, title }); }
@@ -163,7 +169,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   }
   async function exportTrips() {
     if (exporting || !authenticated) return;
-    try { const csv = await exportTripsCsv({ ...session, ...listFilters }).unwrap(); if (active.current) { downloadCsv(csv); notify(total > 5000 ? "warning" : "success", total > 5000 ? "Trips exported. This filter matches more than 5,000 trips; the API exports up to 5,000. Narrow the filters for smaller groups." : "Trips exported."); } }
+    try { const csv = await exportTripsCsv({ ...session, ...listFilters }).unwrap(); if (active.current) { downloadCsv(csv); notify(total > 5000 ? "warning" : "success", total > 5000 ? "Trips exported. This filter matches more than 5,000 trips; up to 5,000 were exported. Narrow the filters for smaller groups." : "Trips exported."); } }
     catch (e) { notify("danger", getApiErrorMessage(e)); }
   }
   async function perform(action, trip, details = {}) {
@@ -197,7 +203,6 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
       { label: "View Job", icon: "briefcase-business", onClick: () => { if (menu.trip.jobId) navigate("/jobs/detail?id=" + encodeURIComponent(menu.trip.jobId)); else notify("info", "Job details are unavailable."); setMenu(null); } }] : [];
 
   const cols = [
-    { key: "id", header: "Trip ID", width: "120px", render: (r) => <a onClick={() => selectTrip(r)} style={{ cursor: "pointer" }}>{r.id}</a> },
     { key: "job", header: "Job ID", width: "120px" },
     { key: "type", header: "Trip Type", render: (r) => <Badge tone="purple">{r.tripType || "—"}</Badge> },
     { key: "route", header: "Route", render: (r) => <span className="route-cell">{r.from}　→　{r.to}</span>, width: "120px" },

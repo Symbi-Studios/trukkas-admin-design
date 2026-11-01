@@ -13,7 +13,7 @@ function FeedbackSettingsForm({ data, operations, onClose, onSaved }) {
   async function save() {
     if (!changed || saving || !operations.canManageSettings) return;
     try { const result = await operations.perform('settings', next, data.version); if (result) { onSaved(); onClose(); } }
-    catch (error) { window.alert(error instanceof Error ? error.message : getApiErrorMessage(error)); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
   }
   return <Modal open title="Manage Feedback Settings" width={560} onClose={() => { if (!saving) onClose(); }} footer={<>
     <Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>

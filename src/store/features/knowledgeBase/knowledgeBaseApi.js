@@ -205,7 +205,7 @@ export const knowledgeBaseApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminK
           if (result.error) return result;
           const dto = record(payload(result.data)), pagination = record(dto.pagination || dto);
           if (!Array.isArray(dto.articles) || count(pagination.page) !== page || count(pagination.total) == null || count(pagination.totalPages) == null
-            || (count(pagination.total) > 0 && count(pagination.totalPages) === 0) || page > Math.max(1, count(pagination.totalPages))) return failure('The knowledge base response is missing valid articles or pagination.');
+            || (count(pagination.total) > 0 && count(pagination.totalPages) === 0) || page > Math.max(1, count(pagination.totalPages))) return failure('The articles could not be loaded completely. Please refresh.');
           if (total != null && (total !== count(pagination.total) || totalPages !== Math.max(1, count(pagination.totalPages)))) return failure('The article directory changed while loading. Refresh to load it again.');
           total = count(pagination.total); totalPages = Math.max(1, count(pagination.totalPages));
           if (page < totalPages && dto.articles.length === 0) return failure('The article directory returned an incomplete collection.');

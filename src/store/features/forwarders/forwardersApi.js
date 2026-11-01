@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js';
 import { forwarderJobBody } from './forwarderJobContracts.js';
 
@@ -28,8 +29,7 @@ export function forwarderError(error) {
   if (error?.status === 401) return 'Your session has expired. Please sign in again.';
   if (error?.status === 403) return 'You do not have permission to view or manage this forwarder.';
   if (error?.status === 404) return 'Forwarder not found.';
-  const message = unwrapApiResponseData(error?.data)?.message;
-  return (Array.isArray(message) ? message.join(' ') : text(message)) || text(error?.error) || text(error?.message) || 'Unable to load forwarder data. Please try again.';
+  return getApiErrorMessage(error, 'Unable to load forwarder data. Please try again.');
 }
 const nonNegative = (value) => number(value) != null && value >= 0 ? value : null;
 const percentage = (value) => nonNegative(value) != null && value <= 100 ? value : null;
@@ -180,16 +180,16 @@ async function readAllPages(baseQuery, url, collection, params = {}, signal) {
     const result = await baseQuery({ url, params: { ...params, page, limit: 100 } });
     if (result.error) return { error: result.error };
     const dto = unwrapApiResponseData(result.data) || {}, meta = dto.pagination;
-    if (!validPage(dto, collection, page) || meta.limit > 100) return failure('The API response is missing valid records or pagination.');
-    if (expectedTotal != null && expectedTotal !== meta.total) return failure('The API records changed while loading. Please refresh.');
+    if (!validPage(dto, collection, page) || meta.limit > 100) return failure('The records could not be loaded completely. Please refresh.');
+    if (expectedTotal != null && expectedTotal !== meta.total) return failure('The records changed while loading. Please refresh.');
     expectedTotal = meta.total; totalPages = Math.max(1, meta.totalPages);
     for (const row of dto[collection]) {
-      if (!text(row?.id) || seen.has(row.id)) return failure('The API returned missing or duplicate records. Please refresh.');
+      if (!text(row?.id) || seen.has(row.id)) return failure('The records could not be loaded completely. Please refresh.');
       seen.add(row.id); rows.push(row);
     }
     page += 1;
   } while (page <= totalPages);
-  return rows.length === expectedTotal ? { data: rows } : failure('The API did not return all records. Please refresh.');
+  return rows.length === expectedTotal ? { data: rows } : failure('The records could not be loaded completely. Please refresh.');
 }
 function validPage(dto, collection, page) {
   const rows = dto[collection], meta = dto.pagination;
@@ -249,7 +249,7 @@ export const forwardersApi = baseApi.injectEndpoints({
       transformResponse: (response, _meta, { page = 1 } = {}) => {
         const dto = documentedPage(response, 'rankings', row => text(row?.forwarderId) && count(row.rank) > 0, 'Spending rankings');
         const rows = dto.rows.map(row => ({ ...row, id: row.forwarderId }));
-        if (!validPage({ rankings: rows, pagination: dto.pagination }, 'rankings', page) || rows.length !== Math.max(0, Math.min(dto.pagination.limit, dto.pagination.total - (page - 1) * dto.pagination.limit)) || new Set(rows.map(row => row.rank)).size !== rows.length) throw new Error('The rankings response has invalid records or pagination.');
+        if (!validPage({ rankings: rows, pagination: dto.pagination }, 'rankings', page) || rows.length !== Math.max(0, Math.min(dto.pagination.limit, dto.pagination.total - (page - 1) * dto.pagination.limit)) || new Set(rows.map(row => row.rank)).size !== rows.length) throw new Error('The rankings could not be loaded completely. Please refresh.');
         return { rows: rows.map(row => ({ id: row.id, rank: row.rank, name: text(row.name) || '—', spend: row.currency === 'NGN' ? nonNegative(row.totalSpend) : null })), pagination: dto.pagination };
       }, providesTags: ['AdminForwarders'],
     }),
@@ -257,7 +257,7 @@ export const forwardersApi = baseApi.injectEndpoints({
       query: ({ id, page = 1, limit = 20 }) => ({ url: userPath(id) + '/notes', params: { page, limit } }),
       transformResponse: (response, _meta, { page = 1 }) => {
         const dto = documentedPage(response, 'notes', row => text(row?.id) && Object.hasOwn(row, 'body') && Object.hasOwn(row, 'createdAt'), 'Forwarder notes');
-        if (!validPage({ notes: dto.rows, pagination: dto.pagination }, 'notes', page) || dto.rows.length !== Math.max(0, Math.min(dto.pagination.limit, dto.pagination.total - (page - 1) * dto.pagination.limit))) throw new Error('The notes response has invalid records or pagination.');
+        if (!validPage({ notes: dto.rows, pagination: dto.pagination }, 'notes', page) || dto.rows.length !== Math.max(0, Math.min(dto.pagination.limit, dto.pagination.total - (page - 1) * dto.pagination.limit))) throw new Error('The notes could not be loaded completely. Please refresh.');
         return { rows: dto.rows.map(row => ({ id: row.id, body: text(row.body) || '—', admin: text(row.admin?.name) || '—', createdAt: forwarderDate(row.createdAt), updatedAt: forwarderDate(row.updatedAt) })), pagination: dto.pagination };
       }, providesTags: ['AdminForwarders'],
     }),
@@ -345,7 +345,7 @@ export const forwardersApi = baseApi.injectEndpoints({
       query: ({ id }) => ({ url: `${userPath(id)}/profile` }),
       transformResponse: (response, _meta, { id }) => {
         const profile = adaptAdminForwarderProfile(response);
-        if (!profile || profile.id !== id) throw new Error('The API did not return the requested user profile.');
+        if (!profile || profile.id !== id) throw new Error('The user profile could not be loaded. Please refresh.');
         return profile;
       }, providesTags: ['AdminForwarders'],
     }),
@@ -378,7 +378,7 @@ export const forwardersApi = baseApi.injectEndpoints({
         const result = await baseQuery({ url: userPath(id) + '/jobs', params: { tab, page, limit } });
         if (result.error) return result;
         const dto = unwrapApiResponseData(result.data) || {};
-        if (!validPage(dto, 'jobs', page)) return failure('The job history response is missing records or pagination.');
+        if (!validPage(dto, 'jobs', page)) return failure('The job history could not be loaded completely. Please refresh.');
         const rows = dto.jobs.map((job) => ({ id: text(job.jobId) || '—', detailId: text(job.id), cargo: '—', route: text(job.route) || '—', status: label(job.status), date: forwarderDate(job.createdAt), amount: job.currency === 'NGN' ? number(job.value) : null }));
         // User job history supplies the real detail ID and amount. The jobs
         // directory is needed only for its documented cargo type fields.
@@ -404,7 +404,7 @@ export const forwardersApi = baseApi.injectEndpoints({
       query: ({ id, page = 1, limit = 10 }) => ({ url: `${userPath(id)}/transactions`, params: { page, limit } }),
       transformResponse: (response, _meta, { page }) => {
         const dto = unwrapApiResponseData(response) || {};
-        if (!validPage(dto, 'transactions', page)) throw new Error('The wallet response is missing records or pagination.');
+        if (!validPage(dto, 'transactions', page)) throw new Error('The wallet records could not be loaded completely. Please refresh.');
         return { rows: (dto.transactions || []).map((row) => ({ id: text(row.id), label: text(row.label) || '—', type: label(row.type), amount: number(row.amount), status: label(row.status), date: forwarderDate(row.createdAt) })), pagination: dto.pagination };
       }, providesTags: ['AdminForwarders'],
     }),

@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 
 const cleanText = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -194,8 +195,7 @@ export function adminDriverError(error) {
   if (error?.status === 401) return 'Your session has expired. Please sign in again.';
   if (error?.status === 403) return 'You do not have permission to view or manage this driver.';
   if (error?.status === 404) return 'Driver not found.';
-  const message = unwrapApiResponseData(error?.data)?.message;
-  return (Array.isArray(message) ? message.join(' ') : cleanText(message)) || cleanText(error?.error) || 'Unable to load driver data. Please try again.';
+  return getApiErrorMessage(error, 'Unable to load driver data. Please try again.');
 }
 
 export const driversApi = baseApi.injectEndpoints({

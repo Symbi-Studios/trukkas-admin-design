@@ -8,7 +8,7 @@ export function hasGoogleMapsApiKey() {
 export function loadGoogleMaps() {
   if (typeof window === 'undefined') return Promise.reject(new Error('Google Maps are available in the browser only.'));
   if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
-  if (!apiKey) return Promise.reject(new Error('Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to display Google Maps.'));
+  if (!apiKey) return Promise.reject(new Error('The map is unavailable right now.'));
   if (mapsPromise) return mapsPromise;
 
   mapsPromise = new Promise((resolve, reject) => {
@@ -25,7 +25,7 @@ export function loadGoogleMaps() {
       delete window[callback];
       script.remove();
       mapsPromise = null;
-      reject(new Error('Google Maps could not load. Check the key and allowed website origins.'));
+      reject(new Error('The map could not load. Please try again.'));
     };
     document.head.appendChild(script);
   });

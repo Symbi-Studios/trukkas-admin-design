@@ -108,6 +108,13 @@
 .tk-sidebar-slot { display: flex; flex: 0 0 auto; min-width: 0; z-index: 92; }
 .tk-sidebar-scrim { display: none; }
 .tk-topbar { flex: 0 0 auto; min-width: 0; }
+.tk-global-search { min-width: 0; }
+.tk-topbar-menu, .tk-topbar-notifications, .tk-topbar-health, .tk-topbar-account-wrap { flex-shrink: 0; }
+.tk-topbar-health { white-space: nowrap; }
+.tk-topbar-account-wrap { max-width: min(220px, 30%); }
+.tk-topbar-account { max-width: 100%; }
+.tk-topbar-account-copy { min-width: 0; max-width: 150px; }
+.tk-topbar-account-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-page-frame, .tk-page-main, .tk-card, .tk-section-card-body { min-width: 0; }
 .tk-page-header-actions { justify-content: flex-end; }
 .tk-table-toolbar-filters { display: flex; align-items: center; gap: var(--tk-space-3); flex-wrap: wrap; }
@@ -165,7 +172,7 @@
   .tk-topbar { height: auto !important; min-height: var(--tk-h-topbar); flex-wrap: wrap; padding-block: var(--tk-space-3) !important; }
   .tk-topbar-spacer { display: none; }
   .tk-topbar-account > span:not(:first-child), .tk-topbar-account > svg { display: none !important; }
-  .tk-topbar-account { margin-left: auto; }
+  .tk-topbar-account-wrap { margin-left: auto; max-width: none; }
   .tk-page-header-row { display: grid !important; grid-template-columns: minmax(0, 1fr); }
   .tk-page-header-copy { min-width: 0 !important; }
   .tk-page-header-actions { width: 100%; justify-content: flex-start; }
@@ -264,7 +271,6 @@
 }
 
 @media (max-width: 380px) {
-  .tk-topbar-account { display: none !important; }
   .tk-page-main [style*="repeat(2"] { grid-template-columns: minmax(0, 1fr) !important; }
   .tk-pagination-pages button:not(:first-child):not(:last-child), .tk-pagination-pages span { display: none !important; }
 }

@@ -16,13 +16,13 @@ export function twoFactorProof({ code, backupCode } = {}) {
 export function adaptTwoFactorChallenge(response) {
   const dto = record(unwrapApiResponseData(response));
   if (dto.twoFactorRequired !== true) return null;
-  if (!text(dto.challengeId) || dto.method !== 'TOTP' || !timestamp(dto.expiresAt) || dto.accessToken || dto.refreshToken) throw new Error('The backend did not return a complete two-factor challenge. Sign in again.');
+  if (!text(dto.challengeId) || dto.method !== 'TOTP' || !timestamp(dto.expiresAt) || dto.accessToken || dto.refreshToken) throw new Error('The verification request could not be completed. Sign in again.');
   return { challengeId: dto.challengeId, method: dto.method, expiresAt: dto.expiresAt, backupCodesRemaining: count(dto.backupCodesRemaining) };
 }
 
 export function adaptTwoFactorStatus(response) {
   const dto = record(unwrapApiResponseData(response));
-  if (typeof dto.available !== 'boolean' || typeof dto.enabled !== 'boolean' || dto.enabled && dto.method !== 'TOTP') throw new Error('The backend did not return a confirmed two-factor status.');
+  if (typeof dto.available !== 'boolean' || typeof dto.enabled !== 'boolean' || dto.enabled && dto.method !== 'TOTP') throw new Error('The two-factor status could not be confirmed. Please reload.');
   return { available: dto.available, enabled: dto.enabled, method: dto.method === 'TOTP' ? dto.method : null,
     enabledAt: timestamp(dto.enabledAt), backupCodesRemaining: count(dto.backupCodesRemaining), setupPending: typeof dto.setupPending === 'boolean' ? dto.setupPending : null };
 }
@@ -30,20 +30,20 @@ export function adaptTwoFactorStatus(response) {
 export function adaptTwoFactorSetup(response, email) {
   const dto = record(unwrapApiResponseData(response));
   const secret = text(dto.secret), issuer = text(dto.issuer), account = text(dto.account);
-  if (dto.method !== 'TOTP' || dto.enabled !== false || !secret || !/^[A-Z2-7]+=*$/i.test(secret) || !issuer || !account || !text(email) || account.toLowerCase() !== email.trim().toLowerCase()) throw new Error('The backend did not confirm an authenticator key for your admin account.');
+  if (dto.method !== 'TOTP' || dto.enabled !== false || !secret || !/^[A-Z2-7]+=*$/i.test(secret) || !issuer || !account || !text(email) || account.toLowerCase() !== email.trim().toLowerCase()) throw new Error('The authenticator setup could not be confirmed. Please reload.');
   const url = new URL(dto.otpauthUrl);
-  if (url.protocol !== 'otpauth:' || url.hostname !== 'totp' || url.searchParams.get('secret') !== secret) throw new Error('The backend returned inconsistent authenticator setup details.');
+  if (url.protocol !== 'otpauth:' || url.hostname !== 'totp' || url.searchParams.get('secret') !== secret) throw new Error('The authenticator setup could not be confirmed. Please reload.');
   return { secret, issuer, account };
 }
 
 export function adaptTwoFactorResult(response, operation) {
   const dto = record(unwrapApiResponseData(response)), status = record(dto.twoFactor);
   if (operation === 'disable') {
-    if (status.enabled !== false || status.method !== null || status.backupCodesRemaining !== 0) throw new Error('The backend did not confirm that two-factor authentication is off.');
+    if (status.enabled !== false || status.method !== null || status.backupCodesRemaining !== 0) throw new Error('The two-factor status could not be confirmed. Reload before continuing.');
     return { enabled: false };
   }
-  if (operation === 'enable' && (status.enabled !== true || status.method !== 'TOTP' || !timestamp(status.enabledAt) || status.backupCodesRemaining !== 10)) throw new Error('The backend did not confirm that two-factor authentication is on.');
+  if (operation === 'enable' && (status.enabled !== true || status.method !== 'TOTP' || !timestamp(status.enabledAt) || status.backupCodesRemaining !== 10)) throw new Error('The two-factor status could not be confirmed. Reload before continuing.');
   const codes = dto.backupCodes;
-  if (!Array.isArray(codes) || codes.length !== 10 || codes.some((code) => !text(code)) || new Set(codes).size !== codes.length || operation === 'backup-codes' && dto.backupCodesRemaining !== 10) throw new Error('The backend did not return the ten single-use backup codes. Reload two-factor settings before continuing.');
+  if (!Array.isArray(codes) || codes.length !== 10 || codes.some((code) => !text(code)) || new Set(codes).size !== codes.length || operation === 'backup-codes' && dto.backupCodesRemaining !== 10) throw new Error('The backup codes could not be confirmed. Reload two-factor settings before continuing.');
   return { enabled: true, backupCodes: codes };
 }

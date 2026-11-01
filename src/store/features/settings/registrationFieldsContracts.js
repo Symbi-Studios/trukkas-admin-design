@@ -1,5 +1,5 @@
 import { unwrapApiResponseData } from '../../api/baseApi.js';
-import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
+import { getApiErrorMessage, userFacingMessage } from '../../api/getApiErrorMessage.js';
 
 const record = (v) => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
 const text = (v) => typeof v === 'string' && v.trim() ? v : null;
@@ -17,7 +17,7 @@ export const registrationEntity = (v) => REGISTRATION_ENTITIES.some((item) => it
 
 export function adaptRegistrationField(response, entity) {
   const dto = record(unwrapApiResponseData(response));
-  if (!text(dto.id) || dto.entity !== entity) throw new Error('The API returned an unconfirmed registration field. Reload before continuing.');
+  if (!text(dto.id) || dto.entity !== entity) throw new Error('The registration field could not be confirmed. Reload before continuing.');
   return {
     id: dto.id, entity, label: text(dto.label), key: text(dto.key), type: text(dto.type), category: text(dto.category),
     placeholder: string(dto.placeholder), helpText: string(dto.helpText), validation: text(dto.validation),
@@ -28,9 +28,9 @@ export function adaptRegistrationField(response, entity) {
 }
 export function adaptRegistrationFields(response, entity) {
   const dto = record(unwrapApiResponseData(response));
-  if (dto.entity !== entity || !Array.isArray(dto.fields)) throw new Error('The API did not return the registration fields collection.');
+  if (dto.entity !== entity || !Array.isArray(dto.fields)) throw new Error('The registration fields could not be loaded. Please refresh.');
   const fields = dto.fields.map((field) => adaptRegistrationField(field, entity));
-  if (new Set(fields.map((field) => field.id)).size !== fields.length) throw new Error('The API returned duplicate registration field IDs.');
+  if (new Set(fields.map((field) => field.id)).size !== fields.length) throw new Error('The registration fields could not be loaded completely. Please refresh.');
   return fields.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
 }
 export function adaptRegistrationSummary(response) {
@@ -41,7 +41,7 @@ export function adaptRegistrationMeta(response) {
   const dto = record(unwrapApiResponseData(response));
   return Object.fromEntries(['types', 'categories', 'validationRules'].map((key) => {
     const options = dto[key];
-    if (!Array.isArray(options) || options.some((o) => !text(o?.value) || !text(o?.label)) || new Set(options.map((o) => o.value)).size !== options.length) throw new Error('The API did not return complete registration field metadata.');
+    if (!Array.isArray(options) || options.some((o) => !text(o?.value) || !text(o?.label)) || new Set(options.map((o) => o.value)).size !== options.length) throw new Error('The registration field options could not be loaded completely. Please refresh.');
     return [key, options.map(({ value, label }) => ({ value, label }))];
   }));
 }
@@ -70,7 +70,7 @@ export function encodeRegistrationField(draft, original) {
     body[property] = value;
   }
   if (original) {
-    if (!timestamp(original.updatedAt)) throw new Error('The API did not return the field version. Reload before saving.');
+    if (!timestamp(original.updatedAt)) throw new Error('The field could not be confirmed. Reload before saving.');
     body.expectedVersion = original.updatedAt;
   }
   return body;
@@ -79,8 +79,8 @@ export function registrationFieldsError(error) {
   const dto = record(error?.data), errors = {};
   for (const [key, value] of Object.entries(record(dto.errors))) {
     const message = Array.isArray(value) ? value.filter((v) => typeof v === 'string').join(' ') : text(value);
-    if (message) errors[key] = message;
+    if (message) errors[key] = userFacingMessage(message);
   }
-  const message = error instanceof Error ? error.message : getApiErrorMessage(error);
+  const message = getApiErrorMessage(error);
   return { message, errors: { ...errors, form: message } };
 }

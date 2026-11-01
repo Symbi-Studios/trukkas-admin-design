@@ -123,7 +123,7 @@ function FieldEditor({ entity, mode, field, fields, metadata, total, onClose, on
       setDraft({ ...saved });
       onSaved(saved);
     } catch (err) {
-      setErrors(err.errors || { form: err.message || 'Could not save this field.' });
+      setErrors(err.errors || { form: getApiErrorMessage(err, 'Could not save this field.') });
     } finally {
       setSaving(false);
     }
@@ -282,7 +282,7 @@ export function SettingsFieldsRegistration() {
 
   async function action(run) {
     try { return await run(); }
-    catch (error) { window.alert(error.message || getApiErrorMessage(error)); return null; }
+    catch (error) { window.alert(getApiErrorMessage(error)); return null; }
   }
   function openEditor(next) {
     if (!api.ready) { window.alert(api.error ? getApiErrorMessage(api.error) : 'Wait for the current settings to finish loading.'); return; }
@@ -299,7 +299,7 @@ export function SettingsFieldsRegistration() {
   }
 
   async function moveTo(field, targetOrder) {
-    if (!Number.isSafeInteger(targetOrder) || !fields.every((row, i) => row.order === i + 1)) { window.alert('The API did not return a complete field order. Reload before reordering.'); return; }
+    if (!Number.isSafeInteger(targetOrder) || !fields.every((row, i) => row.order === i + 1)) { window.alert('The field order could not be loaded completely. Reload before reordering.'); return; }
     const ids = fields.map((f) => f.id).filter((id) => id !== field.id);
     ids.splice(Math.max(0, Math.min(ids.length, targetOrder - 1)), 0, field.id);
     await action(() => api.reorder(ids));
@@ -317,7 +317,7 @@ export function SettingsFieldsRegistration() {
   async function bulk(changes) {
     const result = await action(() => api.bulk(selected, changes));
     if (!result) return;
-    if (result.skipped.length) window.alert(`${result.skipped.length} system field(s) were skipped by the API.`);
+    if (result.skipped.length) window.alert(`${result.skipped.length} system field(s) were skipped.`);
     setSelected([]);
   }
 

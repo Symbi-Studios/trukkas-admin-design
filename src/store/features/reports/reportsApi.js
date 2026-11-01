@@ -69,7 +69,7 @@ function adaptReportJobStats(response) {
   // for this four-category report. Do not normalize a partial donut to 100%.
   return overview;
 }
-const directoryError = () => ({ error: { status: 'CUSTOM_ERROR', error: 'The entity directory response is missing valid records or complete pagination.' } });
+const directoryError = () => ({ error: { status: 'CUSTOM_ERROR', error: 'The directory could not be loaded completely. Please refresh.' } });
 async function readDirectory(baseQuery, url, params = {}, api) {
   const owner = api.getState().auth.admin?.id;
   const rows = [], seen = new Set();
@@ -187,14 +187,14 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
           try { return JSON.parse(await response.text()); } catch { return { message: 'Unable to download the report. It may have expired.' }; }
         } });
         if (result.error) return result;
-        if (!(result.data instanceof Blob) || !result.data.size) return reportFailure('The backend returned no report file.');
+        if (!(result.data instanceof Blob) || !result.data.size) return reportFailure('The report file is not available.');
         const bytes = new Uint8Array(await result.data.arrayBuffer()), zip = file.contentType?.includes('zip') || file.filename?.toLowerCase().endsWith('.zip');
         const signature = String.fromCharCode(...bytes.slice(0, 5)), isZip = bytes[0] === 80 && bytes[1] === 75 && [[3,4],[5,6],[7,8]].some(([a,b]) => bytes[2] === a && bytes[3] === b);
-        if ((zip || file.format === 'XLSX') && !isZip || !zip && file.format === 'PDF' && signature !== '%PDF-') return reportFailure('The backend returned an unexpected report file.');
+        if ((zip || file.format === 'XLSX') && !isZip || !zip && file.format === 'PDF' && signature !== '%PDF-') return reportFailure('The report file could not be opened.');
         if (!zip && ['CSV', 'JSON'].includes(file.format)) {
           const content = new TextDecoder().decode(bytes).trimStart();
-          if (file.format === 'JSON') { try { JSON.parse(content); } catch { return reportFailure('The backend did not return valid JSON.'); } }
-          else if (!content || /^(?:[\[{]|<(?:!doctype|html))/i.test(content) || result.data.type.includes('json') || result.data.type.includes('html')) return reportFailure('The backend did not return valid CSV.');
+          if (file.format === 'JSON') { try { JSON.parse(content); } catch { return reportFailure('The report file could not be opened.'); } }
+          else if (!content || /^(?:[\[{]|<(?:!doctype|html))/i.test(content) || result.data.type.includes('json') || result.data.type.includes('html')) return reportFailure('The report file could not be opened.');
         }
         let binary = ''; for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
         return { data: { content: btoa(binary), filename: reportText(file.filename), contentType: reportText(file.contentType) || result.data.type } };
@@ -228,7 +228,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
 });
 export const { useGetAdminReportJobStatsQuery, useGetAdminReportEntitiesQuery, useGetAdminReportOverviewQuery, useGetAdminReportMetaQuery, usePreviewAdminReportQuery, useCreateAdminReportExportMutation, useSaveAdminReportTemplateMutation, useScheduleAdminReportMutation, useLazyDownloadAdminReportExportQuery } = reportsApi;
 export function saveReportFile(file) {
-  if (!reportText(file.filename)) throw new Error('The backend did not supply a report filename.');
+  if (!reportText(file.filename)) throw new Error('The report file could not be downloaded.');
   const bytes = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([bytes], { type: file.contentType || 'application/octet-stream' }));
   const link = document.createElement('a'); link.href = url; link.download = file.filename.split(/[\\/]/).pop(); link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

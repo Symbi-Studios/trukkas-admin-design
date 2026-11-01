@@ -129,7 +129,7 @@ async function pages(baseQuery, api, url, select, identity, filters = {}) {
     if (api.getState().auth.admin?.id !== owner) return failure('Verification loading was cancelled.');
     const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination), list = select(dto);
     const size = count(pagination.limit), nextTotal = count(pagination.total), nextPages = count(pagination.totalPages);
-    if (!Array.isArray(list) || count(pagination.page) !== page || !size || size > 100 || nextTotal == null || nextPages == null || nextPages > 500 || Math.max(1, nextPages) !== Math.max(1, Math.ceil(nextTotal / size)) || list.length > size) return failure('The response is missing verification records or valid pagination.');
+    if (!Array.isArray(list) || count(pagination.page) !== page || !size || size > 100 || nextTotal == null || nextPages == null || nextPages > 500 || Math.max(1, nextPages) !== Math.max(1, Math.ceil(nextTotal / size)) || list.length > size) return failure('The verifications could not be loaded completely. Please refresh.');
     if (total != null && (nextTotal !== total || nextPages !== totalPages)) return failure('Verifications changed while loading. Refresh and try again.');
     total = nextTotal; totalPages = nextPages;
     for (const row of list) { const key = identity(row); if (!key || seen.has(key)) return failure('The response has missing or duplicate verification records.'); seen.add(key); rows.push(row); }
@@ -163,7 +163,7 @@ async function download(baseQuery, id, kind, filters) {
   if (result.error) return result;
   if (!(result.data instanceof Blob) || !result.data.size) return failure('No verification document was returned.');
   const bytes = new Uint8Array(await result.data.arrayBuffer());
-  if (zip ? bytes[0] !== 80 || bytes[1] !== 75 || ![[3,4],[5,6],[7,8]].some(([a,b]) => bytes[2] === a && bytes[3] === b) : String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') return failure('The backend did not return a valid ' + format.toUpperCase() + ' document.');
+  if (zip ? bytes[0] !== 80 || bytes[1] !== 75 || ![[3,4],[5,6],[7,8]].some(([a,b]) => bytes[2] === a && bytes[3] === b) : String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') return failure('Unable to prepare the ' + format.toUpperCase() + ' document.');
   let binary = ''; for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
   return { data: { content: btoa(binary), format } };
 }

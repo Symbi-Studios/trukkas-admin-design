@@ -67,7 +67,7 @@ export function TicketDetail(){
   function notify(message) { clearTimeout(toastTimer.current); setToast(message); toastTimer.current = setTimeout(() => setToast(''), 3000); }
   async function update(key, selected) {
     const code = key === 'status' ? TICKET_STATUS_CODES[selected] : key === 'priority' ? TICKET_PRIORITY_CODES[selected] : key === 'category' ? TICKET_CATEGORY_CODES[selected] : selected;
-    if (!code) { notify('This status is not supported by the ticket API.'); return false; }
+    if (!code) { notify('This status is not available for this ticket.'); return false; }
     return saveChanges({ [key === 'assignee' ? 'assignedTo' : key]: code });
   }
   async function saveChanges(body, expectedUpdatedAt = ticket.sourceData.updatedAt) {

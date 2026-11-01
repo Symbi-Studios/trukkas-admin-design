@@ -5,6 +5,7 @@ import { Banner, Button, Checkbox, Modal } from '../ds.js';
 import { TriangulationGoogleMap } from './TriangulationGoogleMap.jsx';
 import { useCreateAdminTrackingGeofenceMutation } from '../store/features/tracking/trackingApi.js';
 import { geofenceBoundaryError } from '../store/features/tracking/geofenceGeometry.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 export function TrackingGeofenceDialog({ open, target, onClose, onCreated }) {
   const [vertices, setVertices] = useState([]);
@@ -35,8 +36,7 @@ export function TrackingGeofenceDialog({ open, target, onClose, onCreated }) {
       const saved = await createGeofence({ tripId: target.tripId, truckId: target.truckId, vertices, notifyOnEntry, notifyOnExit }).unwrap();
       onCreated(saved); onClose();
     } catch (failure) {
-      const detail = failure?.data?.message || failure?.error || failure?.message;
-      setError(Array.isArray(detail) ? detail.join(', ') : typeof detail === 'string' ? detail : 'Unable to create the geofence.');
+      setError(getApiErrorMessage(failure, 'Unable to create the geofence.'));
       setSaveUnconfirmed(failure?.saveUnconfirmed === true);
     } finally { savingLock.current = false; }
   }

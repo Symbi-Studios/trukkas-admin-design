@@ -71,6 +71,21 @@ function BidsTableLoading({ columns }) {
   );
 }
 
+function BidsMetricsLoading() {
+  return (
+    <div className="kpi-grid" role="status" aria-label="Loading bid analytics" aria-busy="true">
+      {Array.from({ length: 6 }, (_, index) => (
+        <Card className="metric-card" key={index}>
+          <Skeleton width="46%" height={12} />
+          <div style={{ marginTop: 14 }}><Skeleton width={72} height={27} /></div>
+          <div style={{ marginTop: 8 }}><Skeleton width={38} height={12} /></div>
+          <div style={{ marginTop: 8 }}><Skeleton width="64%" height={10} /></div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 
 export function BidsOffers() {
   const owner=useSelector((s)=>s.auth.admin?.id),role=useSelector((s)=>s.auth.admin?.role);
@@ -91,6 +106,7 @@ function BidsOffersContent({owner,role,authenticated}) {
   const offerQuery=useGetAdminBidScreenOfferQuery({...session,id:offerModal?.bidId},{skip:!authenticated||!offerModal?.bidId,refetchOnMountOrArgChange:true});
   const data=directoryQuery.error?null:directoryQuery.currentData;
   const analytics=analyticsQuery.error?null:analyticsQuery.currentData;
+  const analyticsLoading=authenticated&&analyticsQuery.isFetching&&!analytics;
   const topCompanies=topQuery.error?null:topQuery.currentData?.rows;
   const selectedOffer=offerQuery.error?null:offerQuery.currentData;
   const selection=useMemo(()=>selectBidScreenRows(data,{tab,query:q,statusFilter,...dates}),[data,tab,q,statusFilter,dates.dateFrom,dates.dateTo]);
@@ -108,7 +124,7 @@ function BidsOffersContent({owner,role,authenticated}) {
     :["All Status",...STATUSES].map((s)=>({label:s,icon:s===statusFilter?"check":undefined,onClick:()=>{setStatusFilter(s);setPage(1);setMenu(null);}}));
   function viewJob(row){if(row.jobId)navigate("/jobs/detail?id="+encodeURIComponent(row.jobId));else setToast({tone:"info",title:"Job details are unavailable."});}
   function resolveOffer(_offer,accept){
-    const title=(accept?"Accepting":"Declining")+" counteroffers is unavailable: there is no documented admin API.";
+    const title=(accept?"Accepting":"Declining")+" counteroffers is not available.";
     setOfferError(title);setToast({tone:"info",title});
   }
   function openOffer(row){setOfferError("");setOfferModal(row);setMenu(null);}
@@ -208,7 +224,8 @@ function BidsOffersContent({owner,role,authenticated}) {
               onClick={(event) => openMenu(event, "date")}
             >
               <Icon name="calendar" size={15} />
-              {dateRange}⌄
+              <span>{dateRange}</span>
+              <Icon name="chevron-down" size={14} />
             </button>
           </span>
           <span style={{ position: "relative" }}>
@@ -229,7 +246,7 @@ function BidsOffersContent({owner,role,authenticated}) {
       {data?.errors.length > 0 && <Banner tone="warning" title={"Unable to load: " + data.errors.join(", ") + "."} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
       {(analyticsQuery.error || topQuery.error) && <Banner tone="warning" title="Bid analytics are temporarily unavailable." action={<Button size="sm" variant="outline" onClick={() => { analyticsQuery.refetch(); topQuery.refetch(); }}>Retry analytics</Button>} />}
 
-      <div className="kpi-grid">
+      {analyticsLoading ? <BidsMetricsLoading /> : <div className="kpi-grid">
         <Metric
           label="Total Bids" metric={analytics?.metrics.totalBids} comparison={analytics?.comparison}
           icon="briefcase-business"
@@ -258,7 +275,7 @@ function BidsOffersContent({owner,role,authenticated}) {
           label="Avg. Winning Margin" metric={analytics?.metrics.margin} comparison={analytics?.comparison}
           icon="badge-percent"
         />
-      </div>
+      </div>}
 
       <Tabs
         items={[
@@ -330,7 +347,12 @@ function BidsOffersContent({owner,role,authenticated}) {
               </div>
               <a onClick={() => setTab("Bid Overview")}>View Report</a>
             </div>
-            <div className="bid-analytics">
+            {analyticsLoading ? <div className="bid-analytics" role="status" aria-label="Loading bid analytics" aria-busy="true">
+              <Skeleton width={130} height={130} radius={65} />
+              <div style={{ display: "grid", gap: 12 }}>
+                {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} width="100%" height={13} />)}
+              </div>
+            </div> : <div className="bid-analytics">
               <DonutChart
                 size={130}
                 thickness={20}
@@ -341,7 +363,7 @@ function BidsOffersContent({owner,role,authenticated}) {
               <div>
                 {breakdown.map((item) => <div className="bid-legend" key={item.label}><span><i style={{ background: item.color }} />{item.label}</span><b>{item.display}</b></div>)}
               </div>
-            </div>
+            </div>}
           </div>
           <div className="ops-panel">
             <div className="ops-panel-head">
@@ -404,15 +426,21 @@ function BidsOffersContent({owner,role,authenticated}) {
               onClick={() =>
                 setToast({
                   tone: "info",
-                  title: "A full funnel report has no documented API.",
+                  title: "A full funnel report is not available.",
                 })
               }
             >
               View Report
             </a>
           </div>
-          <div className="funnel">
-            {funnelData.map((x) => (
+          <div className="funnel" aria-busy={analyticsLoading || undefined}>
+            {analyticsLoading ? emptyFunnel.map((x) => (
+              <div className="funnel-row" key={x[0]}>
+                <span>{x[0]}</span>
+                <Skeleton height={18} radius={3} />
+                <Skeleton width={32} height={12} />
+              </div>
+            )) : funnelData.map((x) => (
               <div className="funnel-row" key={x[0]}>
                 <span>{x[0]}</span>
                 <i

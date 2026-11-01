@@ -48,7 +48,7 @@ function AuditDrawer({ audit, loading, onClose, onNavigate, onNotify, onCopy }) 
           <div><Badge tone={STATUS_TONE[audit.status] || 'neutral'}>{audit.status}</Badge><time>{audit.date}, {audit.time}<small>{audit.relative}</small></time></div>
         </section>
 
-        <section className="audit-detail-section"><h3>User Information</h3><div className="audit-user"><Avatar name={audit.user} size={42} /><div><strong>{audit.user}</strong><span>{audit.email}</span></div><Badge tone="info">{audit.role}</Badge><button onClick={() => audit.actorPath ? onNavigate(audit.actorPath) : onNotify('Viewing this admin actor profile is not supported by the current profile routes.')}>View User Profile</button></div></section>
+        <section className="audit-detail-section"><h3>User Information</h3><div className="audit-user"><Avatar name={audit.user} size={42} /><div><strong>{audit.user}</strong><span>{audit.email}</span></div><Badge tone="info">{audit.role}</Badge><button onClick={() => audit.actorPath ? onNavigate(audit.actorPath) : onNotify('This profile is not available.')}>View User Profile</button></div></section>
 
         <section className="audit-detail-section"><h3>Action Details</h3><dl className="audit-facts">
           <dt>Action</dt><dd><Badge tone={ACTION_TONE[audit.action]}>{audit.action}</Badge></dd>
@@ -60,7 +60,7 @@ function AuditDrawer({ audit, loading, onClose, onNavigate, onNotify, onCopy }) 
 
         <section className="audit-detail-section"><h3>Changes Made</h3><div className="audit-change-labels"><span>Before</span><span>After</span></div><div className="audit-change-grid"><pre>{detailValue(audit.before?.join('\n') ?? '—')}</pre><Icon name="chevron-right" size={18} /><pre>{detailValue(audit.after?.join('\n') ?? '—')}</pre></div></section>
 
-        <section className="audit-detail-section"><h3>Related Records</h3>{audit.related?.length ? <div className="audit-related-list">{audit.related.map((item) => <button key={item.key} onClick={() => item.path ? onNavigate(item.path) : onNotify('Opening this related record requires a supported detail route and its record context.')}><span><Icon name={item.icon} size={16} /></span><small>{item.label}</small><strong>{item.value}</strong><em>View</em></button>)}</div> : <p className="audit-no-related">{audit.related == null ? '—' : 'No related records for this event.'}</p>}</section>
+        <section className="audit-detail-section"><h3>Related Records</h3>{audit.related?.length ? <div className="audit-related-list">{audit.related.map((item) => <button key={item.key} onClick={() => item.path ? onNavigate(item.path) : onNotify('This related record cannot be opened.')}><span><Icon name={item.icon} size={16} /></span><small>{item.label}</small><strong>{item.value}</strong><em>View</em></button>)}</div> : <p className="audit-no-related">{audit.related == null ? '—' : 'No related records for this event.'}</p>}</section>
 
         <section className="audit-detail-section"><h3>Additional Information</h3><dl className="audit-facts"><dt>User Agent</dt><dd>{detailValue(audit.userAgent)}</dd><dt>Session ID</dt><dd className="audit-session">{detailValue(audit.sessionId)}</dd><dt>Audit ID</dt><dd className="audit-session">{audit.id}</dd></dl></section>
       </div>
@@ -141,7 +141,7 @@ function AuditLogsScreen() {
   function reset() { setDraft(baseFilters); setFilters(baseFilters); setQuery(''); setPage(1); }
   function notify(message) { if (!active.current) return; window.clearTimeout(toastTimer.current); setToast(message); toastTimer.current = window.setTimeout(() => setToast(''), 1800); }
   async function copyReference(value) {
-    if (!value || value === '—') { notify('The API did not provide a reference to copy.'); return; }
+    if (!value || value === '—') { notify('There is no reference to copy.'); return; }
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
       await navigator.clipboard.writeText(value); notify('Reference copied');
@@ -149,7 +149,7 @@ function AuditLogsScreen() {
   }
   function exportRows() {
     if (!canView || loading || logsQuery.error || !logsQuery.currentData) { notify('Audit logs are not available to export.'); return; }
-    if (!auditTabAvailable(tab, audits)) { notify('Exporting this event category is not available in the documented audit API.'); return; }
+    if (!auditTabAvailable(tab, audits)) { notify('Exporting this event category is not available.'); return; }
     const rows = selectedRows.length ? filtered.filter((row) => selectedRows.includes(row.id)) : filtered;
     if (!rows.length) { notify('No audit logs selected for export.'); return; }
     let url;

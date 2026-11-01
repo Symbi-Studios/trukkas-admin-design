@@ -5,7 +5,7 @@ export const announcementCount = (value) => count(value) == null ? '—' : count
 export const announcementDetailUrl = (id) => '/announcements/detail?announcementId=' + encodeURIComponent(id);
 export const announcementEditUrl = (id) => '/announcements/edit?announcementId=' + encodeURIComponent(id);
 export const announcementCopyUrl = (id) => '/announcements/new?draftId=' + encodeURIComponent(id);
-export const announcementUnavailable = (action) => window.alert(action + ' is not supported by the documented broadcast API for this announcement screen.');
+export const announcementUnavailable = (action) => window.alert(action + ' is not available for this announcement.');
 const failure = (message, status = 'CUSTOM_ERROR', writeSent = false) => ({ error: { status, error: message, data: { message, writeSent } } });
 function guard(api, owner) {
   const actor = api.getState().auth.admin;
@@ -20,9 +20,9 @@ async function readDetail(baseQuery, id, check) {
 async function readPage(baseQuery, params, check) {
   const result = await baseQuery({ url: ROOT, params }); check(); if (result.error) return result;
   const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
-  if (!Array.isArray(dto.broadcasts) || count(pagination.page) !== params.page || count(pagination.total) == null || count(pagination.totalPages) == null) return failure('The broadcasts response is missing valid records or pagination.');
+  if (!Array.isArray(dto.broadcasts) || count(pagination.page) !== params.page || count(pagination.total) == null || count(pagination.totalPages) == null) return failure('The announcements could not be loaded completely. Please refresh.');
   const total = count(pagination.total), pages = Math.max(1, count(pagination.totalPages));
-  if (pages > 500 || total > 0 && count(pagination.totalPages) === 0 || params.page > pages) return failure('The broadcasts pagination could not be safely resolved.');
+  if (pages > 500 || total > 0 && count(pagination.totalPages) === 0 || params.page > pages) return failure('The announcements could not be loaded completely. Please refresh.');
   return { data: { rows: dto.broadcasts, total, pages } };
 }
 async function readDirectory(baseQuery, status, check) {

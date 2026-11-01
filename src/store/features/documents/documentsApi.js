@@ -119,7 +119,7 @@ function mapQueueResponse(response, args = {}) {
   const pagination = data.pagination || {};
   const limit = numberOrNull(pagination.limit), total = numberOrNull(pagination.total), page = numberOrNull(pagination.page), pages = numberOrNull(pagination.totalPages);
   if (!limit || total == null || page !== (args.page ?? 1) || pages == null || rows.length > limit || rows.length > total || pages !== Math.ceil(total / limit) && !(total === 0 && pages === 1)
-    || page > Math.max(1, pages) || (total > 0 && !rows.length)) throw new Error('The document queue returned invalid or incomplete pagination.');
+    || page > Math.max(1, pages) || (total > 0 && !rows.length)) throw new Error('The document queue could not be loaded completely. Please refresh.');
   return {
     rows,
     pagination: {

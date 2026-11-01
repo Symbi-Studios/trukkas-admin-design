@@ -1,16 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Avatar, Badge, Button, Card, Icon, LabelValue, PageHeader, ProgressBar,
-  SectionCard, Switch, Tabs, TextField, Timeline,
+  SectionCard, Switch, Tabs, TextField, Timeline, Modal,
 } from '../ds.js';
-import { useGetManagedUserProfileQuery, useUpdateManagedAdminMutation } from '../store/features/users/usersApi.js';
+import { useGetAdminSelfProfileQuery, useGetAdminSelfSecurityQuery, useGetAdminSelfSessionQuery, useGetAdminSelfActivitySummaryQuery, useUpdateAdminSelfProfileMutation } from '../store/features/profile/profileApi.js';
+import { useChangeAdminSettingsPasswordMutation } from '../store/features/settings/settingsApi.js';
+import { useGetAdminTwoFactorQuery } from '../store/features/settings/twoFactorApi.js';
 import { useGetAdminAuditDirectoryQuery } from '../store/features/audit/auditApi.js';
 import { adaptAdminSelfProfile, profileActivity, profileUnavailable } from '../store/features/profile/profileValues.js';
 import { DriverDetailLoading, DriverLoadingNotice } from './DriversLoading.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { SettingsTwoFactorDialog } from './SettingsTwoFactorDialog.jsx';
 import './AdminProfile.css';
 
 function Notice({ children }) {
@@ -30,7 +33,11 @@ function OverviewTab({ user, notify, canEdit }) {
     phone: user.phone ?? '',
     location: user.location ?? '',
   });
-  const [saveAdmin, { isLoading: saving }] = useUpdateManagedAdminMutation();
+  const [saveAdmin, { isLoading: saving }] = useUpdateAdminSelfProfileMutation();
+  const [pendingChanges, setPendingChanges] = useState(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const saveLock = useRef(false);
 
   function field(key) {
     return {
@@ -43,15 +50,27 @@ function OverviewTab({ user, notify, canEdit }) {
   async function saveProfile(event) {
     event.preventDefault();
     if (saving) return;
-    const unsupported = ['email', 'phone', 'location'].filter((key) => form[key] !== (user[key] == null || user[key] === '—' ? '' : user[key]));
-    if (unsupported.length) { profileUnavailable(`Update ${unsupported.join(', ')}`); return; }
     if (!canEdit) { profileUnavailable('Save Personal Information'); return; }
     if (!form.name.trim()) return;
-    if (form.name.trim() === user.name) { window.alert('There are no changes to save.'); return; }
+    const changes = {};
+    if (form.name.trim() !== user.name) changes.name = form.name.trim();
+    if (form.email.trim() !== user.email) changes.email = form.email.trim();
+    for (const key of ['phone', 'location']) if ((form[key].trim() || null) !== (user[key] ?? null)) changes[key] = form[key].trim() || null;
+    if (!Object.keys(changes).length) { window.alert('There are no changes to save.'); return; }
+    if (changes.email) { setPasswordError(''); setCurrentPassword(''); setPendingChanges(changes); return; }
+    await submitChanges(changes);
+  }
+
+  async function submitChanges(changes, password) {
+    if (saveLock.current || !changes) return;
+    saveLock.current = true;
+    const task = saveAdmin({ owner: user.id, version: user.version, changes, ...(changes.email ? { currentPassword: password } : {}) });
     try {
-      await saveAdmin({ id: user.id, name: form.name.trim() }).unwrap();
+      await task.unwrap();
+      setPendingChanges(null); setCurrentPassword(''); setPasswordError('');
       notify('Personal information updated.');
-    } catch (error) { window.alert(getApiErrorMessage(error)); }
+    } catch (error) { setCurrentPassword(''); if (changes.email) setPasswordError(getApiErrorMessage(error)); else window.alert(getApiErrorMessage(error)); }
+    finally { task.reset(); saveLock.current = false; }
   }
 
   return (
@@ -89,15 +108,20 @@ function OverviewTab({ user, notify, canEdit }) {
           <LabelValue label="Last active" value={user.lastActive} />
         </SectionCard>
       </div>
+      <Modal open={Boolean(pendingChanges)} title="Confirm email change" onClose={() => { if (!saving) { setPendingChanges(null); setCurrentPassword(''); setPasswordError(''); } }} footer={<><Button variant="outline" disabled={saving} onClick={() => { setPendingChanges(null); setCurrentPassword(''); setPasswordError(''); }}>Cancel</Button><Button disabled={saving || !currentPassword} onClick={() => void submitChanges(pendingChanges, currentPassword)}>{saving ? 'Saving…' : 'Save changes'}</Button></>}>
+        <TextField label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} error={passwordError} />
+      </Modal>
     </div>
   );
 }
 
-function SecurityTab({ user, notify }) {
+function SecurityTab({ user, notify, admin }) {
   const twoFactor = user.twoFactor;
   const loginNotifications = user.loginNotifications;
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
   const [error, setError] = useState('');
+  const [twoFactorOpen, setTwoFactorOpen] = useState(false);
+  const [changePassword, { isLoading: changingPassword }] = useChangeAdminSettingsPasswordMutation();
 
   function toggleSetting(key) {
     profileUnavailable(key === 'twoFactor' ? 'Change Two-factor Authentication' : 'Change Login Notifications');
@@ -114,7 +138,10 @@ function SecurityTab({ user, notify }) {
       return;
     }
     setError('');
-    profileUnavailable('Change Password');
+    try {
+      await changePassword({ owner: user.id, currentPassword: passwords.current, newPassword: passwords.next }).unwrap();
+      setPasswords({ current: '', next: '', confirm: '' });
+    } catch (failure) { setError(getApiErrorMessage(failure)); }
   }
 
   const passwordField = (key) => ({
@@ -133,13 +160,13 @@ function SecurityTab({ user, notify }) {
               <TextField label="Confirm new password" type="password" autoComplete="new-password" {...passwordField('confirm')} />
             </div>
             {error && <p className="tk-profile-error" role="alert">{error}</p>}
-            <Button type="submit" icon="key-round">Change password</Button>
+            <Button type="submit" icon="key-round" disabled={changingPassword}>Change password</Button>
           </form>
         </SectionCard>
 
         <SectionCard title="Sign-in protection" icon="shield-check">
           <div className="tk-profile-switches">
-            <Switch checked={twoFactor === true} unknown={twoFactor == null} onChange={(value) => toggleSetting('twoFactor', value)}
+            <Switch checked={twoFactor === true} unknown={twoFactor == null} onChange={() => setTwoFactorOpen(true)}
               label="Two-factor authentication" hint="Require a verification code when signing in." />
             <Switch checked={loginNotifications === true} unknown={loginNotifications == null} onChange={(value) => toggleSetting('loginNotifications', value)}
               label="Login notifications" hint="Email me when my account signs in on a new device." />
@@ -168,6 +195,7 @@ function SecurityTab({ user, notify }) {
           </div>
         </SectionCard>
       </div>
+      {twoFactorOpen && admin && <SettingsTwoFactorDialog admin={admin} onClose={() => setTwoFactorOpen(false)} />}
     </div>
   );
 }
@@ -198,13 +226,20 @@ export function AdminProfile() {
   const admin = useSelector((state) => state.auth.admin);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const canRead = authenticated && admin?.role === 'SUPER_ADMIN' && Boolean(admin?.id);
-  const query = useGetManagedUserProfileQuery({ id: admin?.id, source: 'admin' }, { skip: !canRead });
-  const user = adaptAdminSelfProfile(authenticated ? admin : null, canRead && !query.error ? query.currentData : null);
+  const query = useGetAdminSelfProfileQuery({ owner: admin?.id }, { skip: !authenticated || !admin?.id });
+  const options = { skip: !authenticated || !admin?.id };
+  const security = useGetAdminSelfSecurityQuery({ owner: admin?.id }, options);
+  const session = useGetAdminSelfSessionQuery({ owner: admin?.id }, options);
+  const summary = useGetAdminSelfActivitySummaryQuery({ owner: admin?.id }, options);
+  const twoFactor = useGetAdminTwoFactorQuery({ owner: admin?.id }, options);
+  const user = adaptAdminSelfProfile(authenticated ? admin : null, null, !query.error ? query.currentData : null,
+    !security.error ? security.currentData : null, !session.error ? session.currentData : null, !summary.error ? summary.currentData : null);
+  user.twoFactor = !twoFactor.error ? twoFactor.currentData?.enabled ?? null : null;
   const [tab, setTab] = useState('overview');
   const [notice, setNotice] = useState('');
 
-  if (canRead && (query.isLoading || (query.isFetching && !query.currentData))) return <DriverDetailLoading />;
-  if (canRead && query.error) return <Card><DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice></Card>;
+  if (authenticated && (query.isLoading || (query.isFetching && !query.currentData))) return <DriverDetailLoading />;
+  if (authenticated && query.error) return <Card><DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice></Card>;
 
   function notify(message) {
     setNotice(message);
@@ -249,8 +284,8 @@ export function AdminProfile() {
         ]} />
       </Card>
 
-      {tab === 'overview' && <OverviewTab key={`${user.id}:${user.name}:${user.email}`} user={user} notify={notify} canEdit={canRead} />}
-      {tab === 'security' && <SecurityTab key={user.id} user={user} notify={notify} />}
+      {tab === 'overview' && <OverviewTab key={`${user.id}:${user.version}`} user={user} notify={notify} canEdit={Boolean(user.version)} />}
+      {tab === 'security' && <SecurityTab key={user.id} user={user} notify={notify} admin={admin} />}
       {tab === 'activity' && <ActivityTab key={user.id} user={user} canRead={canRead} />}
     </>
   );

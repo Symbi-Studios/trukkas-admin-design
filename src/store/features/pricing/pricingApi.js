@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 import { serviceCore, serviceBody, assertServiceEquipment, pricingServiceRoles } from './pricingServiceContracts.js';
 import { adaptPricingFormOptions } from './pricingFormOptions.js';
 
@@ -108,7 +109,7 @@ function pricingPage(response, entity) {
   const rows = Array.isArray(data.items) ? data.items : data[collectionKeys[entity]];
   const pagination = record(data.pagination);
   const total = count(pagination.total) ?? count(data.total), totalPages = count(pagination.totalPages) ?? count(data.totalPages);
-  if (!Array.isArray(rows) || total == null || totalPages == null || rows.some((row) => !text(record(row).id))) throw new Error(`The ${entity} response is missing its records or pagination contract.`);
+  if (!Array.isArray(rows) || total == null || totalPages == null || rows.some((row) => !text(record(row).id))) throw new Error(`The ${entity} records could not be loaded completely. Please refresh.`);
   return { rows, total, totalPages };
 }
 async function pricingCollection(entity, baseQuery, signal, params = {}, complete = true, limit = 100) {
@@ -148,15 +149,17 @@ export function canChangePricing(row, action, admin) {
   if (!pricingReviewerRoles.has(admin.role)) return false;
   if (action === 'deactivate') return row.entity !== 'exceptions' && row.statusCode === 'ACTIVE';
   if (action === 'activate') return row.entity !== 'exceptions' && row.statusCode === 'PENDING_APPROVAL';
+  if (action === 'reject') return row.entity === 'exceptions' ? row.statusCode === 'PENDING' && row.requesterId && row.requesterId !== admin.id : row.statusCode === 'PENDING_APPROVAL';
   return action === 'approve' && row.entity === 'exceptions' && row.statusCode === 'PENDING' && row.requesterId && row.requesterId !== admin.id;
 }
 function pricingRecord(response, entity) {
   const dto = record(unwrapApiResponseData(response));
   return text(dto.id) ? dto : record(dto[({ services: 'service', 'price-lists': 'priceList', surcharges: 'surcharge', exceptions: 'exception' })[entity]]);
 }
-async function changePricingRecord({ row, action }, api, baseQuery) {
+async function changePricingRecord({ row, action, reason }, api, baseQuery) {
   const admin = api.getState().auth.admin;
   if (!canChangePricing(row, action, admin)) return { error: { status: 'CUSTOM_ERROR', error: 'Your role or this pricing status does not allow this action.' } };
+  if (action === 'reject' && (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500)) return { error: { status: 'CUSTOM_ERROR', error: 'Enter a reason of up to 500 characters.' } };
   const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
   if (!sameSession()) return { error: { status: 'CUSTOM_ERROR', error: 'The session changed. Refresh before continuing.' } };
   const path = '/admin/pricing/' + row.entity + '/' + encodeURIComponent(row.id);
@@ -168,11 +171,11 @@ async function changePricingRecord({ row, action }, api, baseQuery) {
   const comparable = row.entity === 'services' ? ['basePrice'] : row.entity === 'surcharges' ? ['value'] : row.entity === 'exceptions' ? ['standardPrice', 'exceptionPrice'] : [];
   if (comparable.some((key) => row[key] == null || current[key] !== row[key])) return { error: { status: 'CUSTOM_ERROR', error: 'The rate changed. Refresh before continuing.' } };
   if (action === 'submit' && (!row.updatedAt || current.updatedAt !== row.updatedAt)) return { error: { status: 'CUSTOM_ERROR', error: 'The draft changed. Refresh before submitting.' } };
-  const result = await baseQuery({ url: path + '/' + action, method: 'POST', ...(!['duplicate', 'submit'].includes(action) ? { body: {} } : {}) });
+  const result = await baseQuery({ url: path + '/' + action, method: 'POST', ...(action === 'reject' ? { body: { reason: reason.trim() } } : !['duplicate', 'submit'].includes(action) ? { body: {} } : {}) });
   if (result.error) return result;
   const savedDto = pricingRecord(result.data, row.entity), id = action === 'duplicate' ? text(savedDto.id) : row.id;
   const unconfirmed = () => ({ error: { status: 'CUSTOM_ERROR', error: 'The pricing change was sent but could not be confirmed. Refresh before trying again.' } });
-  const status = { duplicate: 'DRAFT', submit: 'PENDING_APPROVAL', activate: 'ACTIVE', deactivate: 'INACTIVE', approve: 'APPROVED' }[action];
+  const status = action === 'reject' ? (row.entity === 'exceptions' ? 'REJECTED' : 'DRAFT') : { duplicate: 'DRAFT', submit: 'PENDING_APPROVAL', activate: 'ACTIVE', deactivate: 'INACTIVE', approve: 'APPROVED' }[action];
   const responseRow = adapters[row.entity](savedDto);
   if (!sameSession() || !id || savedDto.id !== id || responseRow.statusCode !== status || comparable.some((key) => responseRow[key] !== current[key]) || action === 'duplicate' && (id === row.id || !text(savedDto.code))) return unconfirmed();
   const confirmation = await pricingRecordSnapshot(row.entity, id, baseQuery, api.signal);
@@ -262,8 +265,7 @@ export function adaptAdminPricingConfig(response) {
 export function pricingError(error) {
   if (error?.status === 401) return 'Your session has expired. Please sign in again.';
   if (error?.status === 403) return 'You do not have permission to access or change these pricing settings.';
-  const message = unwrapApiResponseData(error?.data)?.message;
-  return (Array.isArray(message) ? message.join(' ') : text(message)) || text(error?.error) || text(error?.message) || 'Unable to load pricing settings. Please try again.';
+  return getApiErrorMessage(error, 'Unable to load pricing settings. Please try again.');
 }
 function validateValue(field, value) {
   if (!field) throw new Error('Unsupported pricing setting.');

@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useNavigate } from '../router.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, Button, SectionCard, TextField, Select, Textarea, ColorSwatchPicker, ChoiceCard,
   Switch, SearchField, PermissionRow, Banner,
@@ -31,7 +33,7 @@ export function CreateRole() {
   const [manageUsers, setManageUsers] = useState(true);
   const [require2fa, setRequire2fa] = useState(false);
   const [levels, setLevels] = useState(initialLevels);
-  const [permQ, setPermQ] = useState('');
+  const [permQ, setPermQ] = usePageSearchState('');
   const operations = useRoleOperations();
   const { owner, authenticated, saving } = operations;
   const catalogQuery = useGetAdminPermissionsQuery({ owner }, { skip: !authenticated });
@@ -48,7 +50,7 @@ export function CreateRole() {
   function chooseLevel(key, level) {
     if (editingDisabled) return;
     if (!catalog) { window.alert('Wait for the permission catalogue to load.'); return; }
-    if (!catalogForRow(catalog, key).length) { window.alert('This module has no backend permissions and cannot be configured.'); return; }
+    if (!catalogForRow(catalog, key).length) { window.alert('Permissions are not available for this module.'); return; }
     if (level === 'custom') {
       if (!catalog) { window.alert('Wait for the permission catalogue to load.'); return; }
       const modules = catalogForRow(catalog, key);
@@ -57,18 +59,18 @@ export function CreateRole() {
     } else setLevels((current) => ({ ...current, [key]: level }));
   }
   async function save() {
-    try { buildRoleConfiguration(values, catalog); } catch (error) { window.alert(error.message); return; }
+    try { buildRoleConfiguration(values, catalog); } catch (error) { window.alert(getApiErrorMessage(error)); return; }
     const saved = await operations.performWithAlert({ action: 'create', values, catalog });
     if (saved) navigate('/roles');
   }
   function showPreview() {
     try { setPreview(permissionsForConfiguration({ moduleAccess: buildRoleAccess(values, catalog) }, catalog)); }
-    catch (error) { window.alert(error.message); }
+    catch (error) { window.alert(getApiErrorMessage(error)); }
   }
 
   const visibleModules = useMemo(() => (
-    !permQ ? ROLE_MODULE_MATRIX : ROLE_MODULE_MATRIX.filter((m) => m.label.toLowerCase().includes(permQ.toLowerCase()))
-  ), [permQ]);
+    !permQ.trim() ? ROLE_MODULE_MATRIX : ROLE_MODULE_MATRIX.filter((m) => [m.label, ...catalogForRow(catalog, m.key).flatMap(module => module.actions.flatMap(action => [action.name, action.description, action.key]))].some(value => String(value || '').toLowerCase().includes(permQ.trim().toLowerCase())))
+  ), [permQ, catalog]);
 
   function setAll(level) {
     if (editingDisabled) return;

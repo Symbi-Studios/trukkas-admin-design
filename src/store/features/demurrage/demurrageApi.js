@@ -196,7 +196,7 @@ async function readDirectory(baseQuery, api, filters = {}) {
     if (!Array.isArray(dto.demurrage) || pagination.page !== page || !Number.isInteger(pagination.total) || pagination.total < 0
       || !Number.isInteger(pagination.totalPages) || pagination.totalPages < 0 || !Number.isInteger(pagination.limit) || pagination.limit <= 0
       || pagination.limit > 100 || pagination.totalPages > 500 || dto.demurrage.length > pagination.limit
-      || (Math.ceil(pagination.total / pagination.limit) !== pagination.totalPages && !(pagination.total === 0 && pagination.totalPages === 1))) return failure('The demurrage response is missing valid records or pagination.');
+      || (Math.ceil(pagination.total / pagination.limit) !== pagination.totalPages && !(pagination.total === 0 && pagination.totalPages === 1))) return failure('The demurrage records could not be loaded completely. Please refresh.');
     if (page === 1) { total = pagination.total; pages = Math.max(1, pagination.totalPages); }
     if (pagination.total !== total || Math.max(1, pagination.totalPages) !== pages) return failure('Demurrage records changed while loading. Please refresh.');
     for (const value of dto.demurrage) {

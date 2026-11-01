@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
+import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, FilterSelect, DropdownMenu, StatCard, SectionCard, MapPanel,
   DataTable, Badge, Button, Modal, Banner, Pagination, SkeletonRow, LabelValue,
@@ -23,10 +24,7 @@ function summaryNumber(summary, ...keys) {
   return null;
 }
 function requestError(error) {
-  const message = error?.data?.message;
-  if (typeof message === 'string') return message;
-  if (Array.isArray(message)) return message.join(' ');
-  return error?.status === 403 ? 'Your account cannot access triangulation.' : 'The request could not be completed.';
+  return getApiErrorMessage(error, error?.status === 403 ? 'Your account cannot access triangulation.' : 'The request could not be completed.');
 }
 
 function ScoreRing({ value }) {
@@ -127,7 +125,7 @@ export function ContainerTriangulation() {
       description="Optimize empty capacity by matching trucks, containers and upcoming loads across the Trukkas network."
       actions={<>
         <Button variant="outline" icon="settings" onClick={() => setRulesOpen(true)}>Triangulation Rules</Button>
-        <Button icon="play" disabled title="The backend has not exposed a run-engine endpoint.">Run Triangulation Engine</Button>
+        <Button icon="play" disabled title="Running the matching engine is not available.">Run Triangulation Engine</Button>
       </>} />
     {notice && <Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner>}
     {isFetching && !isLoading && <Banner tone="info">Refreshing opportunities…</Banner>}
@@ -197,7 +195,7 @@ export function ContainerTriangulation() {
             { key: 'action', header: 'Action', render: (row) => <span className="triangulation-row-actions">
               <Button size="sm" onClick={(event) => { event.stopPropagation(); openDetail(row); }}>View</Button>
               <Button size="sm" variant="outline" disabled={!row.jobId || !row.truckerId}
-                title={!row.jobId || !row.truckerId ? 'This match needs jobId and truckerId from the API.' : undefined}
+                title={!row.jobId || !row.truckerId ? 'The job or trucking company is missing from this match.' : undefined}
                 onClick={(event) => { event.stopPropagation(); setNotifyTarget(row); }}>Notify Company</Button>
             </span> },
           ]} />
@@ -221,7 +219,7 @@ export function ContainerTriangulation() {
           { key: 'emptyKm', header: 'Empty KM avoided' },
           { key: 'status', header: 'Status' },
         ]} />
-        <div className="triangulation-message">Recent assignments and their outcomes need an activity endpoint.</div>
+        <div className="triangulation-message">Recent matching activity is not available.</div>
       </SectionCard>
       <SectionCard title="Triangulation Impact">
         <div className="triangulation-impact-cards">
@@ -251,7 +249,7 @@ export function ContainerTriangulation() {
         <LabelValue label="Maximum chain length" value="—" />
         <LabelValue label="Auto-assign threshold" value="—" />
       </div>
-      <p className="tk-meta">The backend needs a triangulation rules endpoint to display and save these thresholds.</p>
+      <p className="tk-meta">Triangulation rules are not available.</p>
     </Modal>
     <Modal open={mapExpanded} onClose={() => setMapExpanded(false)} title="Job Locations" width={860}>
       <div className="triangulation-expanded-map">

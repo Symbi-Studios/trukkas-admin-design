@@ -146,7 +146,7 @@ async function readAll(baseQuery, url, collection, params = {}) {
     if (result.error) return result;
     const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
     if (!Array.isArray(dto[collection]) || count(pagination.page) !== page || count(pagination.total) == null || count(pagination.totalPages) == null
-      || (count(pagination.total) > 0 && count(pagination.totalPages) === 0) || page > Math.max(1, count(pagination.totalPages))) return failure('The support response is missing valid records or pagination.');
+      || (count(pagination.total) > 0 && count(pagination.totalPages) === 0) || page > Math.max(1, count(pagination.totalPages))) return failure('The support records could not be loaded completely. Please refresh.');
     if (total != null && (total !== count(pagination.total) || totalPages !== Math.max(1, count(pagination.totalPages)))) return failure('The support directory changed while loading. Refresh to load it again.');
     total = count(pagination.total); totalPages = Math.max(1, count(pagination.totalPages));
     if (page < totalPages && dto[collection].length === 0) return failure('The support response returned an incomplete collection.');
@@ -237,7 +237,7 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
           || body.priority !== undefined && !Object.values(TICKET_PRIORITY_CODES).includes(body.priority)
           || body.category !== undefined && !Object.values(TICKET_CATEGORY_CODES).includes(body.category)
           || body.subject !== undefined && (!text(body.subject) || body.subject.length > 200)
-          || body.assignedTo !== undefined && body.assignedTo !== null && !text(body.assignedTo)) return failure('This ticket change is not supported by the API.');
+          || body.assignedTo !== undefined && body.assignedTo !== null && !text(body.assignedTo)) return failure('This ticket change is not available.');
         const current = await readTicket(id, baseQuery);
         if (!owns(api, owner)) return sessionError();
         if (current.error) return current;
