@@ -30,6 +30,7 @@ import {
   TextField,
 } from "../ds.js";
 import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
+import { useGetAdminCompanyDocumentPreviewQuery, useLazyGetAdminCompanyDocumentPreviewQuery } from "../store/features/companies/companyDocumentsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { JobDetailMap } from "./JobDetailMap.jsx";
@@ -382,6 +383,12 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const [mapOpen, setMapOpen] = useState(false);
   const [acceptBidFor, setAcceptBidFor] = useState(null);
   const [reviewDoc, setReviewDoc] = useState(null);
+  const documentPreview = useGetAdminCompanyDocumentPreviewQuery(
+    { companyId: jobId, id: reviewDoc?.id, url: reviewDoc?.url, owner },
+    { skip: !authenticated || !jobId || !reviewDoc?.url || tab !== "Documents" },
+  );
+  const previewUrl = documentPreview.error ? null : documentPreview.currentData?.url;
+  const [loadDocument] = useLazyGetAdminCompanyDocumentPreviewQuery();
   const [toast, setToast] = useState(null);
 
   const [docQuery, setDocQuery] = usePageSearchState("", undefined, tab === "Documents");
@@ -535,6 +542,24 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
       await Promise.all([jobQuery.refetch().unwrap(), ...(selectedTripBase ? [tripQuery.refetch().unwrap(), trackingMapQuery.refetch().unwrap()] : [])]);
       if (active.current) notify("info", "Tracking data refreshed.");
     } catch (error) { if (active.current) notify("danger", getApiErrorMessage(error)); }
+  }
+  async function downloadRelatedDocument(doc) {
+    if (!doc.url || !authenticated || !jobId) {
+      notify("info", "This document is unavailable.");
+      return;
+    }
+    try {
+      const file = await loadDocument({ companyId: jobId, id: doc.id, url: doc.url, owner }).unwrap();
+      if (!active.current) return;
+      const link = document.createElement("a");
+      link.href = file.url;
+      link.download = doc.name && doc.name !== "—" ? doc.name : "document";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      if (active.current) notify("warning", "Unable to download this document. Please try again.");
+    }
   }
   function exportActivity() {
     if (!job.activityKnown) { unavailable("Export Log"); return; }
@@ -2022,7 +2047,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               <SectionCard title="Document Preview">
                 {reviewDoc ? (
                   <>
-                    {reviewDoc.url ? <div className="jd-doc-preview"><iframe src={reviewDoc.url} title={reviewDoc.name + " preview"} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", minHeight: 220, border: 0 }} /></div> : (
+                    {reviewDoc.url ? <div className="jd-doc-preview">{previewUrl ? <iframe src={previewUrl} title={reviewDoc.name + " preview"} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", minHeight: 220, border: 0 }} /> : documentPreview.error ? <DriverLoadingNotice>Unable to preview this document. Please try again.</DriverLoadingNotice> : <Skeleton height={220} />}</div> : (
                     <div className="jd-doc-preview">
                       <strong
                         style={{
@@ -2088,6 +2113,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     <span className="tk-meta">
                       {reviewDoc.size} · Submitted {reviewDoc.date}
                     </span>
+                    {previewUrl && <div style={{ marginTop: 8 }}><a href={previewUrl} download={reviewDoc.name}>Download document</a></div>}
 
                     <div className="jd-finance-rows" style={{ marginTop: 14 }}>
                       <div>
@@ -2497,7 +2523,9 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     >
                       {d.name}
                     </span>
-                    <Icon name="download" size={14} color="var(--tk-ink-300)" />
+                    <button type="button" aria-label={"Download " + d.name} disabled={!d.url} onClick={() => void downloadRelatedDocument(d)} style={{ border: 0, padding: 0, background: "none", cursor: d.url ? "pointer" : "not-allowed", display: "inline-flex" }}>
+                      <Icon name="download" size={14} color="var(--tk-ink-300)" />
+                    </button>
                   </div>
                 ))}
               </SectionCard>

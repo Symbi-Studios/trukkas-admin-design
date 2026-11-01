@@ -103,4 +103,4 @@ export const companyDocumentsApi = baseApi.enhanceEndpoints({ addTagTypes: tags 
     }),
   }),
 });
-export const { useGetAdminCompanyDocumentPreviewQuery, useGetAdminCompanyDocumentsQuery, useReviewAdminCompanyDocumentMutation } = companyDocumentsApi;
+export const { useGetAdminCompanyDocumentPreviewQuery, useLazyGetAdminCompanyDocumentPreviewQuery, useGetAdminCompanyDocumentsQuery, useReviewAdminCompanyDocumentMutation } = companyDocumentsApi;

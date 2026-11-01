@@ -35,16 +35,16 @@ function downloadCsv(csv) {
   document.body.appendChild(link); link.click(); link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-function Metric({ label, card, comparison, icon, color = "#4c16ac" }) {
+function Metric({ label, card, comparison, icon, color = "#4c16ac", loading = false }) {
   const direction = card?.direction;
   return <Card className="metric-card">
-    <label>{label}</label><strong>{card?.displayValue ?? "—"}</strong>
+    <label>{label}</label><strong>{loading ? <Skeleton as="span" width={72} height={27} /> : card?.displayValue ?? "—"}</strong>
     <span className={"delta " + (direction === "DOWN" ? "down" : "")}>
-      {card?.displayChange !== "—" && direction ? (direction === "DOWN" ? "↓ " : direction === "UP" ? "↑ " : "") + card.displayChange : "—"}
+      {loading ? <Skeleton as="span" width={55} height={14} /> : card?.displayChange !== "—" && direction ? (direction === "DOWN" ? "↓ " : direction === "UP" ? "↑ " : "") + card.displayChange : "—"}
     </span>
-    <small>{comparison && comparison !== "—" ? "vs " + comparison : "—"}</small>
+    <small>{loading ? <Skeleton as="span" width={90} height={12} /> : comparison && comparison !== "—" ? "vs " + comparison : "—"}</small>
     <i className="metric-icon" style={{ color, background: color + "12" }}><Icon name={icon} size={20} /></i>
-    <Sparkline points={card?.sparkline || []} color={color} />
+    {!loading && <Sparkline points={card?.sparkline || []} color={color} />}
   </Card>;
 }
 function FilterControl({ label, value, active, onClick }) {
@@ -73,27 +73,6 @@ function TripScreenMenu({ anchor, items, onClose }) {
     <DropdownMenu width={220} items={items} style={{ maxHeight: "calc(100vh - 16px)", overflowY: "auto" }} />
   </div>;
 }
-
-function TripsLoading() {
-  return (
-    <div className="operations-screen" aria-busy="true">
-      <Card>
-        <Skeleton width={220} height={28} />
-        <div style={{ marginTop: 12 }}><Skeleton width={420} height={14} /></div>
-      </Card>
-      <div className="kpi-grid">
-        {Array.from({ length: 6 }, (_, index) => (
-          <Card className="metric-card" key={index}>
-            <Skeleton width="48%" height={12} />
-            <div style={{ marginTop: 14 }}><Skeleton width={72} height={27} /></div>
-          </Card>
-        ))}
-      </div>
-      <Card><Skeleton height={260} /></Card>
-    </div>
-  );
-}
-
 
 export function TripsSegments() {
   const owner = useSelector((s) => s.auth.admin?.id), role = useSelector((s) => s.auth.admin?.role);
@@ -131,6 +110,8 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   const trips = tripsResponse?.rows || [], paged = trips;
   const total = tripsResponse?.pagination.total ?? null;
   const stats = statsQuery.error ? null : statsQuery.currentData;
+  const statsLoading = authenticated && !statsQuery.error && !statsQuery.currentData;
+  const listLoading = authenticated && !list.error && !list.currentData;
   const options = optionsQuery.error ? null : optionsQuery.currentData;
   const selectedRow = trips.find((t) => t.id === selectedId);
   const selectedTrip = detailQuery.error ? null : detailQuery.currentData || selectedRow || null;
@@ -214,7 +195,6 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
     { key: "progress", header: "Progress", width: "120px", render: (r) => <span><ProgressBar value={r.progress ?? 0} max={100} label={r.progress == null ? "—" : r.progress + "%"} /></span> },
     { key: "a", header: "Actions", render: (r) => <span style={{ position: "relative" }}><button className="row-actions" aria-label={"Actions for " + r.id} onClick={(e) => openMenu(e, "row", r)}>•••</button></span> },
   ];
-  if (authenticated && !tripsResponse && (list.isLoading || list.isFetching)) return <TripsLoading />;
   return (
     <div className="operations-screen">
       <PageHeader
@@ -239,30 +219,36 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
 
       <div className="kpi-grid">
         <Metric
+          loading={statsLoading}
           label="All Trips" card={stats?.cards.allTrips} comparison={stats?.comparisonLabel}
           icon="briefcase-business"
         />
         <Metric
+          loading={statsLoading}
           label="In Transit" card={stats?.cards.inTransit} comparison={stats?.comparisonLabel}
           icon="route"
           color="#12a150"
         />
         <Metric
+          loading={statsLoading}
           label="At Pickup" card={stats?.cards.atPickup} comparison={stats?.comparisonLabel}
           icon="truck"
           color="#2469e8"
         />
         <Metric
+          loading={statsLoading}
           label="At Delivery" card={stats?.cards.atDelivery} comparison={stats?.comparisonLabel}
           icon="clipboard-check"
           color="#f5a524"
         />
         <Metric
+          loading={statsLoading}
           label="Returning Container" card={stats?.cards.returningContainer} comparison={stats?.comparisonLabel}
           icon="layers"
           color="#0e9f9a"
         />
         <Metric
+          loading={statsLoading}
           label="Delayed" card={stats?.cards.delayed} comparison={stats?.comparisonLabel}
           icon="clock"
           color="#e02b22"
@@ -273,7 +259,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
         <div className="ops-panel-head">
           <div>
             <h3>
-              All Trips <small>({total ?? "—"})</small>
+              All Trips <small>{listLoading ? <Skeleton as="span" width={30} height={12} /> : `(${total ?? "—"})`}</small>
             </h3>
             <p>Click a trip to view its live map and details.</p>
           </div>
@@ -289,7 +275,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
           <Button variant="outline" icon="rotate-cw" onClick={resetFilters}>Reset</Button>
         </div>
 
-        {!tripsResponse ? <DriverLoadingNotice>—</DriverLoadingNotice> : trips.length === 0 ? (
+        {listLoading ? <div aria-busy="true" style={{ padding: 18 }}><Skeleton height={260} /></div> : !tripsResponse ? <DriverLoadingNotice>—</DriverLoadingNotice> : trips.length === 0 ? (
           <div
             style={{ padding: "40px 18px", textAlign: "center" }}
             className="tk-meta"
@@ -299,14 +285,14 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
         ) : (
           <DataTable rows={paged} columns={cols} onRowClick={selectTrip} />
         )}
-        <Pagination
+        {!listLoading && <Pagination
           page={page}
           pageCount={tripsResponse?.pagination.totalPages ?? 1}
           total={total ?? "—"}
           pageSize={PAGE_SIZE}
           onPage={(next) => { if (Number.isInteger(next) && next >= 1 && next <= (tripsResponse?.pagination.totalPages ?? 1)) setPage(next); }}
           onPageSize={() => {}}
-        />
+        />}
       </div>
 
       {menu && <TripScreenMenu anchor={menu.anchor} items={menuItems} onClose={setMenu} />}
