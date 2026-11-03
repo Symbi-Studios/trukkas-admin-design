@@ -54,7 +54,7 @@ function fmt(date) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function naira(n) {
-  return `₦${Math.round(n || 0).toLocaleString('en-NG')}`;
+  return Number.isFinite(n) ? `₦${n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 }
 function tenureFrom(dateStr) {
   const start = new Date(dateStr);

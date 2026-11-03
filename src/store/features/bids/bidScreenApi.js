@@ -33,7 +33,7 @@ function displayDate(value, time = false) {
   return new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', ...(time ? { hour: '2-digit', minute: '2-digit' } : { month: 'short', day: 'numeric', year: 'numeric' }) }).format(new Date(valid));
 }
 export function bidScreenMoney(amount) {
-  return numeric(amount) == null ? '—' : '₦' + numeric(amount).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  return numeric(amount) == null ? '—' : '₦' + numeric(amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function signedMoney(amount) { return amount == null ? '—' : (amount > 0 ? '+' : amount < 0 ? '−' : '') + bidScreenMoney(Math.abs(amount)); }
 function range(from, to) { return { dateFrom: new Date(from).toISOString(), dateTo: new Date(to).toISOString() }; }

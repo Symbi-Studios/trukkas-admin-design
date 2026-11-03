@@ -111,14 +111,14 @@ export function SettingsOperations() {
             gap: "var(--tk-grid-gap)",
           }}
         >
-          <SectionCard title="Job & Trip Settings" icon="briefcase">
+          {editor.groupVisible('settingsJobTrip') && (<SectionCard title="Job & Trip Settings" icon="briefcase">
             <span
               className="tk-meta"
               style={{ display: "block", marginTop: -10, marginBottom: 14 }}
             >
               Configure how jobs and trips behave on the platform.
             </span>
-            <Field>
+            {editor.visible('settingsJobTrip', 'defaultJobExpiryHours') && (<Field>
               <TextField
                 label="Default Job Expiry (Hours)"
                 type="number"
@@ -130,8 +130,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsJobTrip', 'defaultLoadType') && (<Field>
               <Select
                 label="Default Load Type"
                 options={LOAD_TYPES}
@@ -140,8 +140,8 @@ export function SettingsOperations() {
                   updateJobTripSettings({ defaultLoadType: e.target.value })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsJobTrip', 'autoCancelExpiredJobs') && (<Field>
               <Switch
                 checked={jobTrip.autoCancelExpiredJobs}
                 label="Auto-cancel expired jobs"
@@ -150,8 +150,8 @@ export function SettingsOperations() {
                   updateJobTripSettings({ autoCancelExpiredJobs: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsJobTrip', 'requireDocumentVerification') && (<Field>
               <Switch
                 checked={jobTrip.requireDocumentVerification}
                 label="Require document verification"
@@ -160,8 +160,8 @@ export function SettingsOperations() {
                   updateJobTripSettings({ requireDocumentVerification: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsJobTrip', 'defaultTripStatus') && (<Field>
               <Select
                 label="Default Trip Status"
                 options={TRIP_STATUSES}
@@ -170,25 +170,25 @@ export function SettingsOperations() {
                   updateJobTripSettings({ defaultTripStatus: e.target.value })
                 }
               />
-            </Field>
-            <Switch
+            </Field>) }
+            {editor.visible('settingsJobTrip', 'allowMultiStopTrips') && (<Switch
               checked={jobTrip.allowMultiStopTrips}
               label="Allow multi-stop trips"
               hint="Allow multiple pickup and delivery locations."
               onChange={(v) =>
                 updateJobTripSettings({ allowMultiStopTrips: v })
               }
-            />
-          </SectionCard>
+            />) }
+          </SectionCard>) }
 
-          <SectionCard title="Bidding & Assignment" icon="gavel">
+          {editor.groupVisible('settingsBiddingAssignment') && (<SectionCard title="Bidding & Assignment" icon="gavel">
             <span
               className="tk-meta"
               style={{ display: "block", marginTop: -10, marginBottom: 14 }}
             >
               Control how bids, offers, and driver assignments work.
             </span>
-            <Field>
+            {editor.visible('settingsBiddingAssignment', 'defaultBiddingDurationHours') && (<Field>
               <TextField
                 label="Default Bidding Duration (Hours)"
                 type="number"
@@ -200,8 +200,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsBiddingAssignment', 'preferredBidSelection') && (<Field>
               <Select
                 label="Preferred Bid Selection"
                 options={BID_SELECTIONS}
@@ -212,8 +212,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsBiddingAssignment', 'allowManualAssignment') && (<Field>
               <Switch
                 checked={bidding.allowManualAssignment}
                 label="Allow manual assignment"
@@ -222,8 +222,8 @@ export function SettingsOperations() {
                   updateBiddingAssignment({ allowManualAssignment: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsBiddingAssignment', 'requireDriverAcceptance') && (<Field>
               <Switch
                 checked={bidding.requireDriverAcceptance}
                 label="Require driver acceptance"
@@ -232,8 +232,8 @@ export function SettingsOperations() {
                   updateBiddingAssignment({ requireDriverAcceptance: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsBiddingAssignment', 'autoCancelUnacceptedJobs') && (<Field>
               <Switch
                 checked={bidding.autoCancelUnacceptedJobs}
                 label="Auto-cancel unaccepted jobs"
@@ -242,23 +242,23 @@ export function SettingsOperations() {
                   updateBiddingAssignment({ autoCancelUnacceptedJobs: v })
                 }
               />
-            </Field>
-            <Switch
+            </Field>) }
+            {editor.visible('settingsBiddingAssignment', 'notifyOnNewBids') && (<Switch
               checked={bidding.notifyOnNewBids}
               label="Notify on new bids"
               hint="Send alerts when new bids are received."
               onChange={(v) => updateBiddingAssignment({ notifyOnNewBids: v })}
-            />
-          </SectionCard>
+            />) }
+          </SectionCard>) }
 
-          <SectionCard title="Dispatch & Tracking" icon="radio-tower">
+          {editor.groupVisible('settingsDispatchTracking') && (<SectionCard title="Dispatch & Tracking" icon="radio-tower">
             <span
               className="tk-meta"
               style={{ display: "block", marginTop: -10, marginBottom: 14 }}
             >
               Configure dispatch, trip tracking, and live operations.
             </span>
-            <Field>
+            {editor.visible('settingsDispatchTracking', 'enableDispatchApproval') && (<Field>
               <Switch
                 checked={dispatch.enableDispatchApproval}
                 label="Enable dispatch approval"
@@ -267,8 +267,8 @@ export function SettingsOperations() {
                   updateDispatchTracking({ enableDispatchApproval: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsDispatchTracking', 'liveLocationTracking') && (<Field>
               <Switch
                 checked={dispatch.liveLocationTracking}
                 label="Live location tracking"
@@ -277,8 +277,8 @@ export function SettingsOperations() {
                   updateDispatchTracking({ liveLocationTracking: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsDispatchTracking', 'trackingUpdateInterval') && (<Field>
               <Select
                 label="Tracking update interval"
                 options={TRACKING_INTERVALS}
@@ -289,8 +289,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsDispatchTracking', 'allowTripReRouting') && (<Field>
               <Switch
                 checked={dispatch.allowTripReRouting}
                 label="Allow trip re-routing"
@@ -299,31 +299,31 @@ export function SettingsOperations() {
                   updateDispatchTracking({ allowTripReRouting: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsDispatchTracking', 'requirePod') && (<Field>
               <Switch
                 checked={dispatch.requirePod}
                 label="Require POD (Proof of Delivery)"
                 hint="Mark trip as completed only after POD is uploaded."
                 onChange={(v) => updateDispatchTracking({ requirePod: v })}
               />
-            </Field>
-            <Switch
+            </Field>) }
+            {editor.visible('settingsDispatchTracking', 'autoCompleteTrip') && (<Switch
               checked={dispatch.autoCompleteTrip}
               label="Auto-complete trip"
               hint="Automatically complete trip after POD verification."
               onChange={(v) => updateDispatchTracking({ autoCompleteTrip: v })}
-            />
-          </SectionCard>
+            />) }
+          </SectionCard>) }
 
-          <SectionCard title="Document & Compliance" icon="file-text">
+          {editor.groupVisible('settingsDocumentCompliance') && (<SectionCard title="Document & Compliance" icon="file-text">
             <span
               className="tk-meta"
               style={{ display: "block", marginTop: -10, marginBottom: 14 }}
             >
               Set document and compliance requirements for jobs and trips.
             </span>
-            <Field>
+            {editor.visible('settingsDocumentCompliance', 'requiredDocsForJobCreation') && (<Field>
               <TextField
                 label="Required documents for job creation"
                 value={docCompliance.requiredDocsForJobCreation}
@@ -333,8 +333,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsDocumentCompliance', 'requiredDocsForTripStart') && (<Field>
               <TextField
                 label="Required documents for trip start"
                 value={docCompliance.requiredDocsForTripStart}
@@ -344,8 +344,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsDocumentCompliance', 'requiredDocsForTripCompletion') && (<Field>
               <TextField
                 label="Required documents for trip completion"
                 value={docCompliance.requiredDocsForTripCompletion}
@@ -355,7 +355,7 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
+            </Field>) }
             {/* <Switch
               checked={docCompliance.verifyDocumentsAutomatically}
               label="Verify documents automatically"
@@ -364,16 +364,16 @@ export function SettingsOperations() {
                 updateDocumentCompliance({ verifyDocumentsAutomatically: v })
               }
             /> */}
-          </SectionCard>
+          </SectionCard>) }
 
-          <SectionCard title="Timing & SLAs" icon="clock">
+          {editor.groupVisible('settingsTimingSlas') && (<SectionCard title="Timing & SLAs" icon="clock">
             <span
               className="tk-meta"
               style={{ display: "block", marginTop: -10, marginBottom: 14 }}
             >
               Set operational timelines and service level agreements.
             </span>
-            <Field>
+            {editor.visible('settingsTimingSlas', 'defaultLoadingTimeHours') && (<Field>
               <TextField
                 label="Default loading time (Hours)"
                 type="number"
@@ -384,8 +384,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsTimingSlas', 'defaultUnloadingTimeHours') && (<Field>
               <TextField
                 label="Default unloading time (Hours)"
                 type="number"
@@ -396,8 +396,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsTimingSlas', 'delayThresholdHours') && (<Field>
               <TextField
                 label="Delay threshold (Hours)"
                 type="number"
@@ -409,8 +409,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsTimingSlas', 'autoFlagPotentialDelays') && (<Field>
               <Switch
                 checked={timing.autoFlagPotentialDelays}
                 label="Auto-flag potential delays"
@@ -419,23 +419,23 @@ export function SettingsOperations() {
                   updateTimingSlas({ autoFlagPotentialDelays: v })
                 }
               />
-            </Field>
-            <Switch
+            </Field>) }
+            {editor.visible('settingsTimingSlas', 'enableSlaTracking') && (<Switch
               checked={timing.enableSlaTracking}
               label="Enable SLA tracking"
               hint="Track and report on delivery performance."
               onChange={(v) => updateTimingSlas({ enableSlaTracking: v })}
-            />
-          </SectionCard>
+            />) }
+          </SectionCard>) }
 
-          <SectionCard title="Communication" icon="message-square">
+          {editor.groupVisible('settingsOperationsCommunication') && (<SectionCard title="Communication" icon="message-square">
             <span
               className="tk-meta"
               style={{ display: "block", marginTop: -10, marginBottom: 14 }}
             >
               Configure communication settings for operations.
             </span>
-            <Field>
+            {editor.visible('settingsOperationsCommunication', 'sendJobAssignmentNotifications') && (<Field>
               <Switch
                 checked={comms.sendJobAssignmentNotifications}
                 label="Send job assignment notifications"
@@ -446,8 +446,8 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsOperationsCommunication', 'sendTripStatusUpdates') && (<Field>
               <Switch
                 checked={comms.sendTripStatusUpdates}
                 label="Send trip status updates"
@@ -456,8 +456,8 @@ export function SettingsOperations() {
                   updateOperationsCommunication({ sendTripStatusUpdates: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsOperationsCommunication', 'sendDelayAlerts') && (<Field>
               <Switch
                 checked={comms.sendDelayAlerts}
                 label="Send delay alerts"
@@ -466,8 +466,8 @@ export function SettingsOperations() {
                   updateOperationsCommunication({ sendDelayAlerts: v })
                 }
               />
-            </Field>
-            <Field>
+            </Field>) }
+            {editor.visible('settingsOperationsCommunication', 'sendCompletionNotifications') && (<Field>
               <Switch
                 checked={comms.sendCompletionNotifications}
                 label="Send completion notifications"
@@ -478,16 +478,16 @@ export function SettingsOperations() {
                   })
                 }
               />
-            </Field>
-            <Switch
+            </Field>) }
+            {editor.visible('settingsOperationsCommunication', 'enableInAppChat') && (<Switch
               checked={comms.enableInAppChat}
               label="Enable in-app chat"
               hint="Allow direct communication between ops and drivers."
               onChange={(v) =>
                 updateOperationsCommunication({ enableInAppChat: v })
               }
-            />
-          </SectionCard>
+            />) }
+          </SectionCard>) }
         </div>
 
         <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>

@@ -49,7 +49,7 @@ export function WalletActionDialog({ kind, record, owner, role, onClose }) {
       {kind === 'resolve' && <Select label="Resolution" value={type} disabled={busy || requiresRefresh} onChange={event => setType(event.target.value)} placeholder="Select resolution" options={options} />}
       <Textarea label="Reason" required rows={4} maxLength={kind === 'open' ? 200 : kind === 'release' ? 500 : undefined} value={reason} disabled={busy || requiresRefresh} onChange={event => setReason(event.target.value)} />
       {kind === 'open' && <><Textarea label="Description (optional)" rows={4} maxLength={2000} value={description} disabled={busy || requiresRefresh} onChange={event => setDescription(event.target.value)} /><Select label="On behalf of" value={onBehalfOf} disabled={busy || requiresRefresh} onChange={event => setOnBehalfOf(event.target.value)} options={[{ value:'FORWARDER',label:'Forwarder' },{ value:'TRUCKER',label:'Trucker' }]} /></>}
-      {partial && <>{holdQuery.isFetching && <DriverTableLoading columns={2} label="Loading unpaid escrow balance" />}<TextField label="Refund amount (₦)" required type="number" min={0} max={unpaid ?? undefined} step="0.01" value={refund} disabled={busy || requiresRefresh} onChange={event => setRefund(event.target.value)} /></>}
+      {partial && <>{holdQuery.isFetching && <DriverTableLoading columns={2} label="Loading unpaid escrow balance" />}<TextField label="Refund amount (₦)" required money type="number" min={0} max={unpaid ?? undefined} step="0.01" value={refund} disabled={busy || requiresRefresh} onChange={event => setRefund(event.target.value)} /></>}
     </div>
   </Modal>;
 }

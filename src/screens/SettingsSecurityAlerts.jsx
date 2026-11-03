@@ -48,7 +48,7 @@ export function SettingsSecurityAlerts() {
   const resetSecurityAlertsSettings = () => editor.reset();
   const securityAlertsStatus = editor.status(securityAlertsStatusTemplate);
   const recentSecurityAlerts = editor.events;
-  const events = securityAlertControls.map(({ key, icon, label, description }) => ({ key, icon, label, description, ...editor.event({ key, label }) }));
+  const events = securityAlertControls.filter(({ key }) => editor.eventAvailable(key)).map(({ key, icon, label, description }) => ({ key, icon, label, description, ...editor.event({ key, label }) }));
   const delivery = editor.group('settingsAlertDelivery');
   const quiet = editor.group('settingsSecurityAlertsQuietHours');
   const meta = editor.group('settingsMeta');
@@ -94,41 +94,41 @@ export function SettingsSecurityAlerts() {
             ))}
           </SectionCard>
 
-          <SectionCard title="Alert Delivery Settings" icon="settings">
+          {editor.groupVisible('settingsAlertDelivery') && (<SectionCard title="Alert Delivery Settings" icon="settings">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Configure how and when you receive security alerts.</span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
               <div style={{ display: 'grid', gap: 6 }}>
-                <TextField label="Email for security alerts" type="email" value={delivery.emailForSecurityAlerts}
-                  onChange={(e) => updateAlertDelivery({ emailForSecurityAlerts: e.target.value })} />
+                {editor.visible('settingsAlertDelivery', 'emailForSecurityAlerts') && (<TextField label="Email for security alerts" type="email" value={delivery.emailForSecurityAlerts}
+                  onChange={(e) => updateAlertDelivery({ emailForSecurityAlerts: e.target.value })} />) }
                 <span className="tk-meta">Security alerts will be sent to this email address.</span>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
-                <TextField label="Phone number for SMS alerts" value={delivery.phoneForSmsAlerts}
-                  onChange={(e) => updateAlertDelivery({ phoneForSmsAlerts: e.target.value })} />
+                {editor.visible('settingsAlertDelivery', 'phoneForSmsAlerts') && (<TextField label="Phone number for SMS alerts" value={delivery.phoneForSmsAlerts}
+                  onChange={(e) => updateAlertDelivery({ phoneForSmsAlerts: e.target.value })} />) }
                 <span className="tk-meta">Receive security alerts via SMS.</span>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
-                <Select label="Digest frequency (optional)" options={DIGEST_FREQUENCIES} value={delivery.digestFrequency}
-                  onChange={(e) => updateAlertDelivery({ digestFrequency: e.target.value })} />
+                {editor.visible('settingsAlertDelivery', 'digestFrequency') && (<Select label="Digest frequency (optional)" options={DIGEST_FREQUENCIES} value={delivery.digestFrequency}
+                  onChange={(e) => updateAlertDelivery({ digestFrequency: e.target.value })} />) }
                 <span className="tk-meta">Choose how often to receive non-critical alerts.</span>
               </div>
             </div>
-          </SectionCard>
+          </SectionCard>) }
 
-          <SectionCard title="Quiet Hours" icon="clock">
+          {editor.groupVisible('settingsSecurityAlertsQuietHours') && (<SectionCard title="Quiet Hours" icon="clock">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Pause non-critical security alerts during specific hours.</span>
             <div style={{ marginBottom: 14 }}>
-              <Switch checked={quiet.enabled} label="Enable quiet hours"
+              {editor.visible('settingsSecurityAlertsQuietHours', 'enabled') && (<Switch checked={quiet.enabled} label="Enable quiet hours"
                 hint="You will still receive critical alerts (e.g. failed logins, suspicious activity)."
-                onChange={(v) => updateSecurityAlertsQuietHours({ enabled: v })} />
+                onChange={(v) => updateSecurityAlertsQuietHours({ enabled: v })} />) }
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
-              <TextField label="From" value={quiet.from} suffix={<Icon name="clock" size={15} color="var(--tk-ink-300)" />}
-                onChange={(e) => updateSecurityAlertsQuietHours({ from: e.target.value })} />
-              <TextField label="To" value={quiet.to} suffix={<Icon name="clock" size={15} color="var(--tk-ink-300)" />}
-                onChange={(e) => updateSecurityAlertsQuietHours({ to: e.target.value })} />
+              {editor.visible('settingsSecurityAlertsQuietHours', 'from') && (<TextField label="From" value={quiet.from} suffix={<Icon name="clock" size={15} color="var(--tk-ink-300)" />}
+                onChange={(e) => updateSecurityAlertsQuietHours({ from: e.target.value })} />) }
+              {editor.visible('settingsSecurityAlertsQuietHours', 'to') && (<TextField label="To" value={quiet.to} suffix={<Icon name="clock" size={15} color="var(--tk-ink-300)" />}
+                onChange={(e) => updateSecurityAlertsQuietHours({ to: e.target.value })} />) }
             </div>
-          </SectionCard>
+          </SectionCard>) }
         </div>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>

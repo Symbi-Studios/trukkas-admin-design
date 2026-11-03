@@ -67,30 +67,30 @@ export function SettingsSecurity() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--tk-grid-gap)' }}>
-          <SectionCard title="Authentication Settings" icon="lock">
+          {editor.groupVisible('settingsAuth') && (<SectionCard title="Authentication Settings" icon="lock">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Configure how users authenticate and access the platform.</span>
-            <Field><Switch checked={auth.requireTwoFactorAuth} label="Require Two-Factor Authentication (2FA)"
+            {editor.visible('settingsAuth', 'requireTwoFactorAuth') && (<Field><Switch checked={auth.requireTwoFactorAuth} label="Require Two-Factor Authentication (2FA)"
               hint="Require 2FA for all users, especially admins."
-              onChange={(v) => updateAuthSettings({ requireTwoFactorAuth: v })} /></Field>
-            <Field><Switch checked={auth.allowSingleSignOn} label="Allow Single Sign-On (SSO)"
+              onChange={(v) => updateAuthSettings({ requireTwoFactorAuth: v })} /></Field>) }
+            {editor.visible('settingsAuth', 'allowSingleSignOn') && (<Field><Switch checked={auth.allowSingleSignOn} label="Allow Single Sign-On (SSO)"
               hint="Enable SAML/SSO for enterprise users."
-              onChange={(v) => updateAuthSettings({ allowSingleSignOn: v })} /></Field>
-            <Field><Switch checked={auth.enableBiometricLogin} label="Enable biometric login (if available)"
+              onChange={(v) => updateAuthSettings({ allowSingleSignOn: v })} /></Field>) }
+            {editor.visible('settingsAuth', 'enableBiometricLogin') && (<Field><Switch checked={auth.enableBiometricLogin} label="Enable biometric login (if available)"
               hint="Allow fingerprint/face ID for supported devices."
-              onChange={(v) => updateAuthSettings({ enableBiometricLogin: v })} /></Field>
-            <Field><Switch checked={auth.requireEmailVerification} label="Require email verification"
+              onChange={(v) => updateAuthSettings({ enableBiometricLogin: v })} /></Field>) }
+            {editor.visible('settingsAuth', 'requireEmailVerification') && (<Field><Switch checked={auth.requireEmailVerification} label="Require email verification"
               hint="New users must verify their email before accessing the platform."
-              onChange={(v) => updateAuthSettings({ requireEmailVerification: v })} /></Field>
-            <Switch checked={auth.allowRememberDevice} label="Allow remember device"
+              onChange={(v) => updateAuthSettings({ requireEmailVerification: v })} /></Field>) }
+            {editor.visible('settingsAuth', 'allowRememberDevice') && (<Switch checked={auth.allowRememberDevice} label="Allow remember device"
               hint="Let users stay signed in on trusted devices."
-              onChange={(v) => updateAuthSettings({ allowRememberDevice: v })} />
-          </SectionCard>
+              onChange={(v) => updateAuthSettings({ allowRememberDevice: v })} />) }
+          </SectionCard>) }
 
-          <SectionCard title="Password Policy" icon="key-round">
+          {editor.groupVisible('settingsPasswordPolicyOverview') && (<SectionCard title="Password Policy" icon="key-round">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Set password requirements for all users.</span>
-            <Field><TextField label="Minimum password length" type="number" value={passwordPolicy.minPasswordLength}
+            {editor.visible('settingsPasswordPolicyOverview', 'minPasswordLength') && (<Field><TextField label="Minimum password length" type="number" value={passwordPolicy.minPasswordLength}
               suffix={<span className="tk-meta">characters</span>}
-              onChange={(e) => updatePasswordPolicyOverview({ minPasswordLength: e.target.value })} /></Field>
+              onChange={(e) => updatePasswordPolicyOverview({ minPasswordLength: e.target.value })} /></Field>) }
             <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
               {PASSWORD_RULES.map((rule) => (
                 <div key={rule} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -99,76 +99,76 @@ export function SettingsSecurity() {
                 </div>
               ))}
             </div>
-            <Field><TextField label="Password expiry (days)" type="number" value={passwordPolicy.passwordExpiryDays}
+            {editor.visible('settingsPasswordPolicyOverview', 'passwordExpiryDays') && (<Field><TextField label="Password expiry (days)" type="number" value={passwordPolicy.passwordExpiryDays}
               hint="Users will be prompted to change their password after this period."
-              onChange={(e) => updatePasswordPolicyOverview({ passwordExpiryDays: e.target.value })} /></Field>
-            <Switch checked={passwordPolicy.preventReuseOfPreviousPasswords} label="Prevent reuse of previous passwords"
+              onChange={(e) => updatePasswordPolicyOverview({ passwordExpiryDays: e.target.value })} /></Field>) }
+            {editor.visible('settingsPasswordPolicyOverview', 'preventReuseOfPreviousPasswords') && (<Switch checked={passwordPolicy.preventReuseOfPreviousPasswords} label="Prevent reuse of previous passwords"
               hint="Block users from reusing last 5 passwords."
-              onChange={(v) => updatePasswordPolicyOverview({ preventReuseOfPreviousPasswords: v })} />
-          </SectionCard>
+              onChange={(v) => updatePasswordPolicyOverview({ preventReuseOfPreviousPasswords: v })} />) }
+          </SectionCard>) }
 
-          <SectionCard title="Session Management" icon="monitor-smartphone">
+          {editor.groupVisible('settingsSessionManagementOverview') && (<SectionCard title="Session Management" icon="monitor-smartphone">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Control user sessions and inactivity settings.</span>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
-              <TextField label="Session timeout (minutes)" type="number" value={sessionMgmt.sessionTimeoutMinutes}
+              {editor.visible('settingsSessionManagementOverview', 'sessionTimeoutMinutes') && (<TextField label="Session timeout (minutes)" type="number" value={sessionMgmt.sessionTimeoutMinutes}
                 hint="Automatically log out inactive users."
-                onChange={(e) => updateSessionManagementOverview({ sessionTimeoutMinutes: e.target.value })} />
-              <TextField label="Maximum concurrent sessions" type="number" value={sessionMgmt.maxConcurrentSessions}
+                onChange={(e) => updateSessionManagementOverview({ sessionTimeoutMinutes: e.target.value })} />) }
+              {editor.visible('settingsSessionManagementOverview', 'maxConcurrentSessions') && (<TextField label="Maximum concurrent sessions" type="number" value={sessionMgmt.maxConcurrentSessions}
                 hint="Limit the number of active sessions per user."
-                onChange={(e) => updateSessionManagementOverview({ maxConcurrentSessions: e.target.value })} />
+                onChange={(e) => updateSessionManagementOverview({ maxConcurrentSessions: e.target.value })} />) }
             </div>
-            <Field><Switch checked={sessionMgmt.showActiveSessionsToUsers} label="Show active sessions to users"
+            {editor.visible('settingsSessionManagementOverview', 'showActiveSessionsToUsers') && (<Field><Switch checked={sessionMgmt.showActiveSessionsToUsers} label="Show active sessions to users"
               hint="Allow users to view and manage their active sessions."
-              onChange={(v) => updateSessionManagementOverview({ showActiveSessionsToUsers: v })} /></Field>
-            <Switch checked={sessionMgmt.terminateAllSessionsOnPasswordChange} label="Terminate all sessions on password change"
+              onChange={(v) => updateSessionManagementOverview({ showActiveSessionsToUsers: v })} /></Field>) }
+            {editor.visible('settingsSessionManagementOverview', 'terminateAllSessionsOnPasswordChange') && (<Switch checked={sessionMgmt.terminateAllSessionsOnPasswordChange} label="Terminate all sessions on password change"
               hint="Automatically log out all devices when password is changed."
-              onChange={(v) => updateSessionManagementOverview({ terminateAllSessionsOnPasswordChange: v })} />
-          </SectionCard>
+              onChange={(v) => updateSessionManagementOverview({ terminateAllSessionsOnPasswordChange: v })} />) }
+          </SectionCard>) }
 
-          <SectionCard title="IP & Device Restrictions" icon="map-pin">
+          {editor.groupVisible('settingsIpDeviceRestrictionsOverview') && (<SectionCard title="IP & Device Restrictions" icon="map-pin">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Restrict access from specific IP addresses or devices.</span>
-            <Field><Select label="Access control" options={ACCESS_CONTROL_OPTIONS} value={ipRestrictions.accessControl}
-              onChange={(e) => updateIpDeviceRestrictionsOverview({ accessControl: e.target.value })} /></Field>
-            <Field><Textarea label="Trusted IP addresses (optional)" rows={2} placeholder="e.g. 192.168.1.0/24, 203.0.113.5"
+            {editor.visible('settingsIpDeviceRestrictionsOverview', 'accessControl') && (<Field><Select label="Access control" options={ACCESS_CONTROL_OPTIONS} value={ipRestrictions.accessControl}
+              onChange={(e) => updateIpDeviceRestrictionsOverview({ accessControl: e.target.value })} /></Field>) }
+            {editor.visible('settingsIpDeviceRestrictionsOverview', 'trustedIpAddresses') && (<Field><Textarea label="Trusted IP addresses (optional)" rows={2} placeholder="e.g. 192.168.1.0/24, 203.0.113.5"
               hint="Enter one IP address or range per line."
               value={ipRestrictions.trustedIpAddresses}
-              onChange={(e) => updateIpDeviceRestrictionsOverview({ trustedIpAddresses: e.target.value })} /></Field>
-            <Field><Switch checked={ipRestrictions.requireTrustedDevicesForAdmins} label="Require trusted devices for admin users"
+              onChange={(e) => updateIpDeviceRestrictionsOverview({ trustedIpAddresses: e.target.value })} /></Field>) }
+            {editor.visible('settingsIpDeviceRestrictionsOverview', 'requireTrustedDevicesForAdmins') && (<Field><Switch checked={ipRestrictions.requireTrustedDevicesForAdmins} label="Require trusted devices for admin users"
               hint="Only allow admin access from recognized devices."
-              onChange={(v) => updateIpDeviceRestrictionsOverview({ requireTrustedDevicesForAdmins: v })} /></Field>
-            <Switch checked={ipRestrictions.blockSuspiciousIpAddresses} label="Block suspicious IP addresses automatically"
+              onChange={(v) => updateIpDeviceRestrictionsOverview({ requireTrustedDevicesForAdmins: v })} /></Field>) }
+            {editor.visible('settingsIpDeviceRestrictionsOverview', 'blockSuspiciousIpAddresses') && (<Switch checked={ipRestrictions.blockSuspiciousIpAddresses} label="Block suspicious IP addresses automatically"
               hint="Automatically block IPs with repeated failed login attempts."
-              onChange={(v) => updateIpDeviceRestrictionsOverview({ blockSuspiciousIpAddresses: v })} />
-          </SectionCard>
+              onChange={(v) => updateIpDeviceRestrictionsOverview({ blockSuspiciousIpAddresses: v })} />) }
+          </SectionCard>) }
 
-          <SectionCard title="Data Protection" icon="database">
+          {editor.groupVisible('settingsDataProtectionOverview') && (<SectionCard title="Data Protection" icon="database">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Manage data security and encryption settings.</span>
-            <Field><Switch checked={dataProtection.encryptSensitiveData} label="Encrypt sensitive data"
+            {editor.visible('settingsDataProtectionOverview', 'encryptSensitiveData') && (<Field><Switch checked={dataProtection.encryptSensitiveData} label="Encrypt sensitive data"
               hint="Encrypt all sensitive data at rest and in transit."
-              onChange={(v) => updateDataProtectionOverview({ encryptSensitiveData: v })} /></Field>
-            <Field><Switch checked={dataProtection.enableDataMasking} label="Enable data masking"
+              onChange={(v) => updateDataProtectionOverview({ encryptSensitiveData: v })} /></Field>) }
+            {editor.visible('settingsDataProtectionOverview', 'enableDataMasking') && (<Field><Switch checked={dataProtection.enableDataMasking} label="Enable data masking"
               hint="Mask personal data in non-production environments."
-              onChange={(v) => updateDataProtectionOverview({ enableDataMasking: v })} /></Field>
-            <Switch checked={dataProtection.allowDataExport} label="Allow data export"
+              onChange={(v) => updateDataProtectionOverview({ enableDataMasking: v })} /></Field>) }
+            {editor.visible('settingsDataProtectionOverview', 'allowDataExport') && (<Switch checked={dataProtection.allowDataExport} label="Allow data export"
               hint="Restrict or disable data export for non-admin users."
-              onChange={(v) => updateDataProtectionOverview({ allowDataExport: v })} />
-          </SectionCard>
+              onChange={(v) => updateDataProtectionOverview({ allowDataExport: v })} />) }
+          </SectionCard>) }
 
-          <SectionCard title="Security Alerts" icon="bell">
+          {editor.groupVisible('settingsSecurityAlertsOverview') && (<SectionCard title="Security Alerts" icon="bell">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Get notified about important security events.</span>
-            <Field><Switch checked={securityAlerts.emailAlertsFailedLogin} label="Email alerts for failed login attempts"
+            {editor.visible('settingsSecurityAlertsOverview', 'emailAlertsFailedLogin') && (<Field><Switch checked={securityAlerts.emailAlertsFailedLogin} label="Email alerts for failed login attempts"
               hint="Notify admins when there are repeated failed logins."
-              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsFailedLogin: v })} /></Field>
-            <Field><Switch checked={securityAlerts.emailAlertsNewUserRegistrations} label="Email alerts for new user registrations"
+              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsFailedLogin: v })} /></Field>) }
+            {editor.visible('settingsSecurityAlertsOverview', 'emailAlertsNewUserRegistrations') && (<Field><Switch checked={securityAlerts.emailAlertsNewUserRegistrations} label="Email alerts for new user registrations"
               hint="Notify admins when new accounts are created."
-              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsNewUserRegistrations: v })} /></Field>
-            <Field><Switch checked={securityAlerts.emailAlertsRoleChanges} label="Email alerts for role changes"
+              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsNewUserRegistrations: v })} /></Field>) }
+            {editor.visible('settingsSecurityAlertsOverview', 'emailAlertsRoleChanges') && (<Field><Switch checked={securityAlerts.emailAlertsRoleChanges} label="Email alerts for role changes"
               hint="Notify admins when user roles or permissions change."
-              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsRoleChanges: v })} /></Field>
-            <Switch checked={securityAlerts.emailAlertsSuspiciousActivity} label="Email alerts for suspicious activity"
+              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsRoleChanges: v })} /></Field>) }
+            {editor.visible('settingsSecurityAlertsOverview', 'emailAlertsSuspiciousActivity') && (<Switch checked={securityAlerts.emailAlertsSuspiciousActivity} label="Email alerts for suspicious activity"
               hint="Get notified about unusual or high-risk activity."
-              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsSuspiciousActivity: v })} />
-          </SectionCard>
+              onChange={(v) => updateSecurityAlertsOverview({ emailAlertsSuspiciousActivity: v })} />) }
+          </SectionCard>) }
         </div>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>

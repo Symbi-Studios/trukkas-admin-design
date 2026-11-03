@@ -26,6 +26,8 @@ export function DonutChart({ data = [], size = 168, thickness = 22, centerValue,
       </g>
       {(centerValue != null) && (
         <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle"
+              textLength={(typeof centerValue === 'string' || typeof centerValue === 'number') && String(centerValue).length > 8 ? size - thickness * 2 - 12 : undefined}
+              lengthAdjust="spacingAndGlyphs"
               style={{ font: '700 26px var(--tk-font-sans)', fill: 'var(--tk-ink-900)' }}>{centerValue}</text>
       )}
       {centerLabel && (

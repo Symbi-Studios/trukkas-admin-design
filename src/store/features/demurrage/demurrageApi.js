@@ -1,5 +1,6 @@
 import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { hasKoboPrecision } from '../../../lib/money.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -293,7 +294,7 @@ export const demurrageApi = baseApi.enhanceEndpoints({ addTagTypes: [...financia
         baseQuery = scopedQuery(baseQuery,api,form);
         if (!financeRole(api)) return failure('Only Super Admins and Finance Admins can create charges.');
         const daysOver = number(form.daysOver), freeDays = form.freeDays === '' ? null : number(form.freeDays), ratePerDay = form.rate === '' ? null : number(form.rate);
-        if (!text(form.jobId) || !text(form.container) || !text(form.customer) || daysOver == null || daysOver < 0 || (form.freeDays !== '' && (freeDays == null || freeDays < 0)) || (form.rate !== '' && (ratePerDay == null || ratePerDay < 0))) return failure('Enter a job ID, container, customer and valid non-negative charge values.');
+        if (!text(form.jobId) || !text(form.container) || !text(form.customer) || daysOver == null || daysOver < 0 || (form.freeDays !== '' && (freeDays == null || freeDays < 0)) || (form.rate !== '' && (ratePerDay == null || ratePerDay < 0 || !hasKoboPrecision(form.rate)))) return failure('Enter valid charge details and a rate with at most two decimal places.');
         const body = { jobId: text(form.jobId), containerNumber: text(form.container), customerName: text(form.customer), daysOver, ...(freeDays == null ? {} : { freeDays }), ...(ratePerDay == null ? {} : { ratePerDay }) };
         const result = await baseQuery({ url: '/admin/demurrage', method: 'POST', body });
         if (result.error) return { error: result.error };
@@ -326,7 +327,7 @@ export const demurrageApi = baseApi.enhanceEndpoints({ addTagTypes: [...financia
         baseQuery = scopedQuery(baseQuery,api,values);
         if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return failure('Only Super Admins can update demurrage rules.');
         const freeDays = number(values.freeDays), rate = number(values.rate);
-        if (freeDays == null || freeDays * 1440 < 1 || rate == null || rate < 0) return failure('Enter valid free days (at least one minute) and a non-negative daily rate.');
+        if (freeDays == null || freeDays * 1440 < 1 || rate == null || rate < 0 || !hasKoboPrecision(values.rate)) return failure('Enter valid free days and a non-negative daily rate with at most two decimal places.');
         const result = await baseQuery({ url: '/admin/config', method: 'POST', body: { demurrageGracePeriodMinutes: freeDays * 1440, demurrageRatePerDay: rate } });
         if (result.error) return { error: result.error };
         const dto = record(unwrapApiResponseData(result.data)), updates = record(dto.updates);

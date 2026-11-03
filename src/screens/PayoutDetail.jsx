@@ -16,7 +16,6 @@ import {
   Timeline,
   AttachmentCard,
   Modal,
-  TextField,
   Textarea,
   Banner,
   Avatar,
@@ -30,6 +29,7 @@ import {
 } from "../store/features/payouts/payoutsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
+import "./PayoutDetail.css";
 
 const STATUS_TONE = {
   "Pending Review": "warning",
@@ -310,12 +310,11 @@ export function PayoutDetail() {
   const [modal, setModal] = useState(null);
   const [remark, setRemark] = useState("");
   const [note, setNote] = useState("");
-  const [refundAmount, setRefundAmount] = useState("");
   const [banner, setBanner] = useState(null);
   const [showAllDocs, setShowAllDocs] = useState(false);
 
   useEffect(() => {
-    setMenu(false); setModal(null); setRemark(""); setNote(""); setRefundAmount(""); setBanner(null); setShowAllDocs(false);
+    setMenu(false); setModal(null); setRemark(""); setNote(""); setBanner(null); setShowAllDocs(false);
     return () => clearTimeout(flashTimer.current);
   }, [payoutId, source]);
 
@@ -426,12 +425,6 @@ export function PayoutDetail() {
     finally { operationPending.current = false; }
   }
 
-  async function handleRefundSubmit() {
-    const value = Number(refundAmount);
-    if (!value || value <= 0) return;
-    setModal(null); unavailable("Creating a payout refund");
-  }
-
   const [tileBg, tileFg, tileIcon] =
     TILE_TINT[r.status] || TILE_TINT["Pending Review"];
   const isDriver = r.partyType === "driver";
@@ -513,9 +506,9 @@ export function PayoutDetail() {
 
         <Card style={{ display: "grid", gap: 18 }}>
           <div
+            className="payout-detail-summary"
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0,1fr) minmax(220px, 320px)",
               gap: 24,
               alignItems: "start",
             }}
@@ -564,7 +557,7 @@ export function PayoutDetail() {
                 </div>
               </div>
             </div>
-            <div>
+            <div className="payout-detail-facts">
               <LabelValue
                 label="Payout ID"
                 value={
@@ -632,9 +625,9 @@ export function PayoutDetail() {
               style={{ padding: "4px var(--tk-card-pad) 8px" }}
             >
               <div
+                className="payout-detail-person"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
                   gap: 20,
                 }}
               >
@@ -894,18 +887,6 @@ export function PayoutDetail() {
                 </Button>
                 <Button
                   variant="outline"
-                  icon="rotate-ccw"
-                  fullWidth
-                  disabled
-                  onClick={() => {
-                    setRefundAmount(r.amount == null ? "" : String(r.amount));
-                    setModal("refund");
-                  }}
-                >
-                  Create Refund
-                </Button>
-                <Button
-                  variant="outline"
                   icon="list"
                   fullWidth
                   disabled={!r.relatedSettlement}
@@ -985,37 +966,6 @@ export function PayoutDetail() {
           <Textarea label="Notes" rows={4} value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} />
         </Modal>
 
-        <Modal
-          open={modal === "refund"}
-          onClose={() => setModal(null)}
-          title="Create Refund"
-          description={`Issue a refund against ${r.id}.`}
-          footer={
-            <>
-              <Button variant="outline" onClick={() => setModal(null)}>
-                Cancel
-              </Button>
-              <Button
-                disabled={
-                  busy || !Number(refundAmount) || Number(refundAmount) <= 0
-                }
-                onClick={handleRefundSubmit}
-              >
-                {busy ? "Processing…" : "Create Refund"}
-              </Button>
-            </>
-          }
-        >
-          <TextField
-            label="Refund Amount (₦)"
-            required
-            type="number"
-            min="1"
-            max={r.amount}
-            value={refundAmount}
-            onChange={(e) => setRefundAmount(e.target.value)}
-          />
-        </Modal>
       </>
     );
   }
@@ -1049,9 +999,9 @@ export function PayoutDetail() {
         <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
           <Card style={{ display: "grid", gap: 0 }}>
             <div
+              className="payout-detail-summary"
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0,1fr) minmax(220px, 320px)",
                 gap: 24,
                 alignItems: "start",
               }}
@@ -1096,7 +1046,7 @@ export function PayoutDetail() {
                   </span>
                 </div>
               </div>
-              <div>
+              <div className="payout-detail-facts">
                 <LabelValue
                   label="Payout ID"
                   value={
@@ -1159,9 +1109,9 @@ export function PayoutDetail() {
             style={{ padding: "4px var(--tk-card-pad) 8px" }}
           >
             <div
+              className="payout-detail-person"
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
                 gap: 20,
               }}
             >

@@ -11,7 +11,7 @@ export function reportNumber(value) {
 }
 const count = (value) => { const number = reportNumber(value); return Number.isSafeInteger(number) && number >= 0 ? number : null; };
 export const reportCount = (value) => { const number = count(value); return number == null ? '—' : number.toLocaleString('en-NG'); };
-export const reportMoney = (value) => { const number = reportNumber(value); return number == null ? '—' : '₦' + number.toLocaleString('en-NG', { maximumFractionDigits: 2 }); };
+export const reportMoney = (value) => { const number = reportNumber(value); return number == null ? '—' : '₦' + number.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 export const reportPercent = (value) => { const number = reportNumber(value); return number == null ? '—' : number.toLocaleString('en-NG', { maximumFractionDigits: 1 }) + '%'; };
 export function reportChange(current, previous) {
   if (count(current) == null || count(previous) == null || previous === 0) return null;

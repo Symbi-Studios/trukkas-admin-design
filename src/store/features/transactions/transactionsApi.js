@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { hasKoboPrecision } from '../../../lib/money.js';
 import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js';
 import { transactionComparisonCaption } from './transactionDates.js';
 
@@ -33,9 +34,9 @@ const percentLabel = (value) => number(value) == null ? '—' : `${number(value)
 const dateTime = (value) => timestamp(value) == null ? '—' : new Date(timestamp(value)).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 export const transactionNumber = (value) => number(value) == null ? '—' : number(value).toLocaleString('en-NG');
-export const transactionMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG')}`;
+export const transactionMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const transactionAmount = (row, currency = false) => row.amount == null ? '—'
-  : `${row.pos == null ? '' : row.pos ? '+' : '-'}${currency ? transactionMoney(row.amount) : transactionNumber(row.amount)}`;
+  : `${row.pos == null ? '' : row.pos ? '+' : '-'}${currency ? transactionMoney(row.amount) : number(row.amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const transactionDetailUrl = (id) => `/transactions/detail?id=${encodeURIComponent(id)}`;
 export const transactionJobUrl = (id) => `/jobs/detail?id=${encodeURIComponent(id)}`;
 
@@ -165,18 +166,7 @@ export function transactionInsights(rows, from, to, stats) {
   const successfulCount = stats?.successfulCount ?? count(['Completed']), failedReversedCount = stats?.failedReversedCount ?? count(['Failed', 'Reversed']);
   const summaryPercent = (value) => value == null || !(stats?.totalTransactions ?? scoped?.length) ? '0%' : `${(value / (stats?.totalTransactions ?? scoped.length) * 100).toFixed(1)}%`;
   const comparisonPercent = (value) => value == null || value === '—' ? '0%' : value;
-  const completed = knownStatuses ? scoped.filter((row) => row.statusCode === 'COMPLETED') : null;
-  const knownVolume = completed != null && completed.every((row) => row.amount != null && row.typeCode != null && row.pos != null);
-  // Keep the six existing chart categories. Reversal entries retain their
-  // original backend type, so their explicit reversal flag takes precedence.
-  let amounts = knownVolume ? VOLUME_LABELS.map(() => 0) : null;
-  completed?.forEach((row) => {
-    if (!amounts) return;
-    const index = row.isReversal || row.type === 'Reversal' ? 4 : row.type === 'Refund' ? 3 : row.type === 'Fee' ? 2 : row.pos === true ? 0 : row.pos === false ? 1 : 5;
-    amounts[index] += row.amount;
-  });
-  let volumeTotal = amounts?.reduce((sum, value) => sum + value, 0) ?? null;
-  if (volumeTotal != null && !Number.isFinite(volumeTotal)) { amounts = null; volumeTotal = null; }
+  const volumeTotal = stats?.successfulAmount ?? null;
   return {
     summary: {
       comparisonCaption: stats?.comparisonCaption || '—',
@@ -187,7 +177,7 @@ export function transactionInsights(rows, from, to, stats) {
       successfulDelta: comparisonPercent(stats?.successfulDelta), failedReversedDelta: comparisonPercent(stats?.failedReversedDelta),
     },
     volumeTotal,
-    volume: VOLUME_LABELS.map((name, index) => ({ label: name, amount: amounts?.[index] ?? null, pct: amounts == null ? null : volumeTotal === 0 ? 0 : Math.round(amounts[index] / volumeTotal * 1000) / 10, color: index === 5 ? 'var(--tk-ink-300)' : `var(--tk-viz-${index + 1})` })),
+    volume: stats?.volume ?? VOLUME_LABELS.map((name, index) => ({ label: name, amount: null, pct: null, color: index === 5 ? 'var(--tk-ink-300)' : `var(--tk-viz-${index + 1})` })),
     statuses: STATUS_ITEMS.map((entry) => ({ ...entry, count: count([entry.label]), pct: percent(count([entry.label])) })),
     alerts: stats?.alerts || [],
   };
@@ -203,6 +193,8 @@ export function adaptAdminTransactionStats(response) {
   return {
     comparisonCaption: comparisonCaption || '—',
     totalTransactions: count(card('transactionCount').value), successfulCount: count(card('successful').count), failedReversedCount: count(card('failedReversed').count),
+    successfulAmount: number(card('successful').value),
+    volume: Array.isArray(dto.volume) ? dto.volume.map((row, index) => ({ label: text(row.label) || '—', amount: number(row.amount), pct: number(row.pct), color: `var(--tk-viz-${index % 6 + 1})` })) : null,
     successfulDelta: delta(card('successful').vsPreviousPct), failedReversedDelta: delta(card('failedReversed').vsPreviousPct),
     totalInflow: number(card('totalInflow').value),
     totalOutflow: number(card('totalOutflow').value), netMovement: number(card('netMovement').value),
@@ -342,7 +334,7 @@ export const transactionsApi = baseApi.enhanceEndpoints({ addTagTypes: financial
     refundAdminTransaction: builder.mutation({
       queryFn: ({ id, amount }, api, _options, baseQuery) => {
         const value = number(amount);
-        if (!text(id) || value == null || value <= 0) return { error: { status: 'CUSTOM_ERROR', error: 'Enter a valid refund amount.' } };
+        if (!text(id) || value == null || value <= 0 || !hasKoboPrecision(amount)) return { error: { status: 'CUSTOM_ERROR', error: 'Enter a valid refund amount with at most two decimal places.' } };
         return createTransactionRecord(baseQuery, api, id, 'refund', { amount: value });
       }, invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? financialTags : [],
     }),

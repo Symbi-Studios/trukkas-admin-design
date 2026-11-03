@@ -856,6 +856,7 @@ export function Maintenance() {
           </div>
           <TextField
             label="Estimated Cost"
+            money
             type="number"
             value={form.estimatedCost}
             onChange={(e) =>

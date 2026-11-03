@@ -30,7 +30,7 @@ const STATUS_QUERY = {
 const TAB_QUERY = { Active: 'ACTIVE', 'On Trip': 'ON_TRIP', Inactive: 'INACTIVE', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
 const LICENSE_QUERY = { Valid: 'VALID', 'Expiring Soon': 'EXPIRING_SOON', Expired: 'EXPIRED', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
 const EMPTY_DRIVER_FORM = { firstName: '', lastName: '', email: '', phone: '', licenseNumber: '', licenseExpiresAt: '', companyId: '', truckId: '' };
-const naira = (value) => Number.isFinite(value) ? `₦${Math.round(value).toLocaleString('en-NG')}` : '—';
+const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 
 function safeDocumentUrl(value) {
   try {
@@ -370,7 +370,7 @@ export function Drivers() {
             : !earningsQuery.error && earningsQuery.currentData ? <LineChart height={180} area
               labels={earningsQuery.currentData.chart.map((month) => month.label)}
               series={[{ name: 'Completed trip value', color: 'var(--tk-blue)', points: earningsQuery.currentData.chart.map((month) => month.value) }]}
-              format={(value) => value >= 1000000 ? `₦${Number((value / 1000000).toFixed(1))}M` : value >= 1000 ? `₦${Number((value / 1000).toFixed(1))}k` : naira(value)} />
+              format={naira} />
               : <EmptyState icon="wallet" title="Earnings data unavailable" description={earningsQuery.error ? adminDriverError(earningsQuery.error) : '—'} style={{ padding: '24px 8px' }} />}
         </SectionCard>
         <SectionCard title="Top Rated Drivers">

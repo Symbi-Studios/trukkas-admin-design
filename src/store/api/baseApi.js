@@ -29,89 +29,6 @@ const rawBaseQuery = fetchBaseQuery({
 const refreshBaseQuery = fetchBaseQuery({ baseUrl });
 let activeRefresh = null;
 
-const REDACTED = '[REDACTED]';
-const sensitiveField = /entity[_-]?id|authorization|cookie|password|passcode|secret|token|credential|otp|email|phone|mobile|contact|name|actor|recipient|address|birth|\bdob\b|gender|location|latitude|longitude|coordinates|route|plate|notes?|details|comment|avatar|photo|\bbio\b|ip[_-]?address|device[_-]?id|nin|bvn|ssn|passport|license|iban|bank[_-]?(account|number)|card[_-]?(number|cvv)|national[_-]?id|tax[_-]?id|url|link|reason|fileName|^(body|title|message)$|(^|[_-])search($|[_-])|(^|[_-])query($|[_-])|^q$/i;
-const identityCollection = new Set([
-  'users', 'admins', 'drivers', 'forwarders', 'customers', 'profiles',
-  'companies', 'accounts', 'recipients', 'contacts', 'verification',
-]);
-
-function redactInlineText(value) {
-  return value
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, REDACTED)
-    .replace(/(?<![\w])\+?(?:\d[\s().-]?){9,14}(?!\w)/g, REDACTED);
-}
-
-function sanitizeForLog(value, key = '', parents = [], seen = new WeakSet()) {
-  if (sensitiveField.test(key) || /^(subject|content|senderId|assignedTo|author|summary|seoTitle|metaDescription|tags|guide)$/i.test(key)) return REDACTED;
-  if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
-  if (typeof value === 'string') return redactInlineText(value);
-  if (typeof value !== 'object') return String(value);
-
-  if (seen.has(value)) return '[Circular]';
-  seen.add(value);
-
-  if (typeof Headers !== 'undefined' && value instanceof Headers) {
-    return Object.fromEntries(Array.from(value.entries(), ([header, content]) => [
-      header,
-      sanitizeForLog(content, header, parents, seen),
-    ]));
-  }
-  if (typeof FormData !== 'undefined' && value instanceof FormData) {
-    return Object.fromEntries(Array.from(value.entries(), ([field, content]) => [
-      field,
-      content instanceof Blob ? '[File omitted]' : sanitizeForLog(content, field, parents, seen),
-    ]));
-  }
-  if (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams) {
-    return Object.fromEntries(Array.from(value.entries(), ([field, content]) => [
-      field,
-      sanitizeForLog(content, field, parents, seen),
-    ]));
-  }
-  if (typeof Blob !== 'undefined' && value instanceof Blob) return `[Binary data omitted; ${value.size} bytes]`;
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return '[Binary data omitted]';
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map((item) => sanitizeForLog(item, '', parents, seen));
-
-  const keys = Object.keys(value);
-  const containsIdentityFields = keys.some((field) => /email|phone|mobile|first[_-]?name|last[_-]?name|full[_-]?name|(^|[_-])name($|[_-])/i.test(field));
-  const nextParents = [...parents, key.toLowerCase()];
-  return Object.fromEntries(keys.map((field) => {
-    const isIdentity = containsIdentityFields && /^id$/i.test(field);
-    const isNestedIdentityId = /^((user|admin|driver|trucker|forwarder|customer|profile|account|recipient|contact)[_-]?id)$/i.test(field);
-    const inIdentityCollection = parents.some((parent) => identityCollection.has(parent));
-    return [field, isIdentity || isNestedIdentityId || (inIdentityCollection && /^id$/i.test(field))
-      ? REDACTED
-      : sanitizeForLog(value[field], field, nextParents, seen)];
-  }));
-}
-
-function sanitizeUrl(rawUrl) {
-  try {
-    const value = String(rawUrl);
-    const url = /^[a-z][a-z\d+.-]*:/i.test(value)
-      ? new URL(value)
-      : new URL(value.replace(/^\/+/, ''), `${baseUrl}/`);
-    const segments = url.pathname.split('/');
-    let redactNextSegment = false;
-    const safeSegments = segments.map((segment) => {
-      if (redactNextSegment) {
-        redactNextSegment = false;
-        return REDACTED;
-      }
-      if (identityCollection.has(segment.toLowerCase())) redactNextSegment = true;
-      return segment;
-    });
-    url.searchParams.forEach((value, key) => {
-      url.searchParams.set(key, sanitizeForLog(value, key));
-    });
-    return `${url.origin}${safeSegments.join('/')}${url.search}`;
-  } catch {
-    return redactInlineText(String(rawUrl));
-  }
-}
-
 async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.endpoint) {
   const startedAt = Date.now();
   const result = await query(args, api, extraOptions);
@@ -120,87 +37,24 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   const request = result.meta?.request;
   const response = result.meta?.response;
   const method = (request?.method || (typeof args === 'string' ? 'GET' : args.method || 'GET')).toUpperCase();
-  const url = sanitizeUrl(request?.url || (typeof args === 'string' ? args : args.url));
+  const url = request?.url || (typeof args === 'string' ? args : args.url);
   const requestBody = typeof args === 'string' ? undefined : args.body;
-  const verificationContent = /Verification/.test(api.endpoint);
-  const userManagementContent = /(?:UserManagement|ManagedUser|ManagedAdmin)/.test(api.endpoint);
-  const reportContent = /^(?:get|preview|create|download|save|schedule)AdminReport/.test(api.endpoint);
-  const roleContent = /^(?:getAdminRolesDirectory|getAdminRole|getAdminPermissions|changeAdminRole)$/.test(api.endpoint);
-  const ticketContent = /^\/admin\/support\/(?:threads|tickets|agents|stats)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const workspaceSearchContent = api.endpoint === 'getAdminWorkspaceSearch';
-  const payoutContent = /AdminPayout/.test(api.endpoint);
-  const bidScreenContent = /AdminBidScreen/.test(api.endpoint);
-  const tripScreenContent = /AdminTripScreen/.test(api.endpoint);
-  const jobScreenContent = /AdminJobScreen/.test(api.endpoint);
-  const feedbackContent = /^\/admin\/(?:support\/feedback|feedback)(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const settingsContent = /^\/admin\/(?:profile(?:\/|$)|settings(?:\/|$)|sessions(?:\/|$)|security(?:\/|$)|data-protection(?:\/|$)|platform\/version$|auth\/(?:password|login|2fa\/verify)$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const csvResponse = !result.error && (
-    ['exportAdminJobs', 'exportAdminJobSheet', 'exportAdminTrips', 'exportAdminMaintenance', 'exportAdminDriverCompliance'].includes(api.endpoint)
-    || response?.headers?.get('content-type')?.toLowerCase().includes('text/csv')
-  );
-  // Free-text audit actions and notes can contain personal details that field-
-  // name redaction cannot reliably identify. Keep the request/status log only.
-  const auditResponse = /^\/admin\/audit-logs(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const driverActivityResponse = !result.error && api.endpoint === 'getAdminDriverActivity';
-  const pricingHistoryResponse = !result.error && ['getAdminPricingHistory', 'getAdminPricingRecentHistory', 'getAdminPricingExceptions'].includes(api.endpoint);
-  const transactionContentResponse = !result.error && ['getAdminTransactionLedger', 'getAdminTransactionDetail', 'getAdminTransactionStats', 'retryAdminTransaction', 'reverseAdminTransaction', 'refundAdminTransaction', 'reportAdminTransactionIssue'].includes(api.endpoint);
-  const settlementResponse = !result.error && ['getAdminSettlements', 'getAdminSettlement', 'getAdminSettlementAlerts', 'approveAdminSettlement', 'retryAdminSettlement'].includes(api.endpoint);
-  const feeContentResponse = !result.error && ['getAdminFeeRules', 'getAdminFeeRule', 'getAdminFeeRuleHistory', 'updateAdminFeeRule', 'setAdminFeeRuleStatus', 'bulkUpdateAdminFeeRules'].includes(api.endpoint);
-  const demurrageResponse = /Demurrage/.test(api.endpoint);
-  const maintenanceContent = /^\/admin\/maintenance(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const faqContent = /^\/admin\/faq(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]);
-  const announcementContent = /^\/admin\/support\/broadcasts(?:\/|$)/.test((typeof args === 'string' ? args : args.url).split('?')[0]) || api.endpoint === 'getAdminAnnouncementUsers';
-  const responseBody = workspaceSearchContent ? '[Search results omitted]' : payoutContent ? '[Payout content omitted]' : maintenanceContent ? '[Maintenance content omitted]' : jobScreenContent ? '[Job detail content omitted]' : feedbackContent
-    ? '[Feedback content omitted]'
-    : announcementContent
-    ? '[Announcement content omitted]'
-    : faqContent
-    ? '[FAQ content omitted]'
-    : ticketContent
-    ? '[Support ticket content omitted]'
-    : settingsContent
-    ? '[Settings and security content omitted]'
-    : userManagementContent
-    ? '[User management content omitted]'
-    : roleContent
-    ? '[Role and permission content omitted]'
-    : reportContent
-    ? '[Report content omitted]'
-    : verificationContent
-    ? '[Verification content omitted]'
-    : csvResponse
-    ? '[CSV content omitted]'
-    : auditResponse
-      ? '[Audit log content omitted]'
-    : driverActivityResponse
-      ? '[Driver activity content omitted]'
-    : pricingHistoryResponse
-      ? '[Pricing history and exception content omitted]'
-    : transactionContentResponse
-      ? '[Transaction content omitted]'
-    : settlementResponse
-      ? '[Settlement content omitted]'
-    : feeContentResponse
-      ? '[Fee rule and history content omitted]'
-    : demurrageResponse
-      ? '[Demurrage content omitted]'
-    : result.error
-      ? (result.error.data ?? { error: result.error.error ?? result.error.status })
-      : result.data;
+  const responseBody = result.error
+    ? (result.error.data ?? { error: result.error.error ?? result.error.status })
+    : result.data;
 
   console.groupCollapsed(`[API] ${method} ${url} → ${response?.status ?? result.error?.status ?? 'complete'} (${Date.now() - startedAt}ms)`);
   console.info('Endpoint:', label);
   console.info('Request:', {
     method,
     url,
-    headers: sanitizeForLog(request?.headers),
-    body: payoutContent ? '[Payout request content omitted]' : maintenanceContent ? '[Maintenance request content omitted]' : jobScreenContent ? '[Job detail request omitted]' : feedbackContent ? '[Feedback request content omitted]' : announcementContent ? '[Announcement request content omitted]' : faqContent ? '[FAQ request content omitted]' : ticketContent ? '[Support ticket request content omitted]' : settingsContent ? '[Settings and security request content omitted]' : userManagementContent ? '[User management request content omitted]' : roleContent ? '[Role request content omitted]' : reportContent ? '[Report request content omitted]' : verificationContent ? '[Verification request content omitted]' : sanitizeForLog(requestBody),
+    headers: request?.headers ? Object.fromEntries(request.headers.entries()) : undefined,
+    body: requestBody,
   });
-  console.info('Response body:', sanitizeForLog(responseBody));
+  console.info('Response body:', responseBody);
   console.groupEnd();
   return result;
 }
-
 function isTerminalRefreshError(error) {
   const status = error?.status === 'PARSING_ERROR' ? error.originalStatus : error?.status;
   return [400, 401, 403, 422].includes(status);

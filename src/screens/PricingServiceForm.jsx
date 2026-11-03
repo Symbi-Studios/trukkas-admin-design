@@ -73,7 +73,7 @@ function PricingServiceEditor({ id, admin, authenticated, onClose, onDone }) {
           {draft.cargoType !== 'BULK_BREAK' && selector('containerTypeId', 'Container Type', options.containerTypes)}
           {draft.cargoType !== 'CONTAINER' && selector('truckTypeId', 'Truck Type', options.truckTypes)}
           {selector('unit', 'Unit', options.units, true)}
-          <TextField label="Base Price (₦)" type="number" min={0} step="any" required placeholder={editing && model?.core.basePrice == null ? '—' : '350000'} value={draft.basePrice} disabled={!ready || busy} onChange={change('basePrice')} />
+          <TextField label="Base Price (₦)" money type="number" min={0} required placeholder={editing && model?.core.basePrice == null ? '—' : '350000'} value={draft.basePrice} disabled={!ready || busy} onChange={change('basePrice')} />
         </div>
       </>}
     </div>

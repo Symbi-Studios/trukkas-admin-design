@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { hasKoboPrecision } from '../../../lib/money.js';
 import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 
 const path = '/admin/maintenance';
@@ -249,7 +250,7 @@ export const maintenanceApi = taggedApi.injectEndpoints({
       async queryFn(form, _api, _options, fetch) {
         const cost = form.estimatedCost === '' ? null : Number(form.estimatedCost);
         if (!text(form.truckId) || !Object.hasOwn(types, form.type) || !Object.hasOwn(priorities, form.priority) || !text(form.description) || !dateValue(form.dueDate)) return failure('Select a truck and enter valid maintenance details.');
-        if (cost != null && number(cost) == null) return failure('Enter a valid non-negative estimated cost.');
+        if (cost != null && (number(cost) == null || !hasKoboPrecision(form.estimatedCost))) return failure('Enter a valid non-negative estimated cost with at most two decimal places.');
         if (form.description.trim().length > 1000 || (form.serviceCenterName || '').length > 120 || (form.serviceCenterLocation || '').length > 200 || (form.notes || '').length > 2000) return failure('The maintenance details exceed the supported field lengths.');
         const body = { truckId: form.truckId, type: form.type, priority: form.priority, description: form.description.trim(), dueDate: form.dueDate,
           ...(text(form.serviceCenterName) ? { serviceCenterName: form.serviceCenterName.trim() } : {}),

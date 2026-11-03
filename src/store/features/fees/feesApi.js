@@ -26,11 +26,10 @@ export const feeCategories = [
 const validPeriod = (value) => feePeriods.some((period) => period.value === value);
 export function feeMoney(value) {
   const parsed = feeNumber(value);
-  return parsed == null ? '—' : (parsed < 0 ? '-' : '') + '₦' + Math.abs(parsed).toLocaleString('en-NG');
+  return parsed == null ? '—' : (parsed < 0 ? '-' : '') + '₦' + Math.abs(parsed).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 export function feeMillions(value) {
-  const parsed = feeNumber(value);
-  return parsed == null ? '—' : (parsed < 0 ? '-' : '') + '₦' + (Math.abs(parsed) / 1000000).toFixed(2) + 'M';
+  return feeMoney(value);
 }
 export const feeDetailUrl = (rule) => '/fees/detail?id=' + encodeURIComponent(rule.id);
 function date(value, includeTime = false) {

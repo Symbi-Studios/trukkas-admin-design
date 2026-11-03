@@ -133,9 +133,9 @@ function ExportReportScreen() {
               </div>
               {draft.showMoreFilters && (
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--tk-line)' }}>
-                  <TextField label="Min Amount (₦)" type="number" placeholder="0" style={{ minWidth: 160 }}
+                  <TextField label="Min Amount (₦)" money type="number" placeholder="0" style={{ minWidth: 160 }}
                     value={draft.filters.minAmount} onChange={(e) => updateReportDraft({ filters: { ...draft.filters, minAmount: e.target.value } })} />
-                  <TextField label="Max Amount (₦)" type="number" placeholder="No limit" style={{ minWidth: 160 }}
+                  <TextField label="Max Amount (₦)" money type="number" placeholder="No limit" style={{ minWidth: 160 }}
                     value={draft.filters.maxAmount} onChange={(e) => updateReportDraft({ filters: { ...draft.filters, maxAmount: e.target.value } })} />
                 </div>
               )}

@@ -1,0 +1,44 @@
+.payout-detail-summary,
+.payout-detail-person {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  min-width: 0;
+}
+
+.payout-detail-summary > *,
+.payout-detail-person > * {
+  min-width: 0;
+}
+
+.payout-detail-facts > div {
+  flex-wrap: wrap;
+}
+
+.payout-detail-facts > div > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.payout-detail-facts > div > span:last-child {
+  max-width: 100%;
+}
+
+.payout-detail-facts span[style*="inline-flex"] {
+  max-width: 100%;
+}
+
+.payout-detail-facts span[style*="inline-flex"] > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.payout-detail-person {
+  overflow-wrap: anywhere;
+}
+
+.payout-detail-person > div:first-child > span:first-child {
+  flex: 0 0 auto;
+}
+
+.payout-detail-person > div:first-child > div > span:first-child {
+  flex-wrap: wrap;
+}

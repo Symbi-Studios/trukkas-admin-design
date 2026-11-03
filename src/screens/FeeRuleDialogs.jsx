@@ -23,7 +23,7 @@ export function FeeRuleEditDialog({ rule, canManage, onClose }) {
     <Button disabled={state.isLoading || !canManage || !valid} onClick={save}>Save</Button>
   </>}>
     {error && <Banner tone="danger" title="Unable to save">{error}</Banner>}
-    <TextField label={rule.calculationType === 'FLAT' ? 'Amount (₦)' : 'Rate (%)'} type="number" min="0" max={rule.calculationType === 'FLAT' ? 10000000 : 100} step="0.01" required value={value} disabled={state.isLoading} onChange={(event) => setValue(event.target.value)} />
+    <TextField label={rule.calculationType === 'FLAT' ? 'Amount (₦)' : 'Rate (%)'} money={rule.calculationType === 'FLAT'} type="number" min="0" max={rule.calculationType === 'FLAT' ? 10000000 : 100} step="0.01" required value={value} disabled={state.isLoading} onChange={(event) => setValue(event.target.value)} />
   </Modal>;
 }
 
@@ -54,7 +54,7 @@ export function FeeRulesBulkDialog({ rules, canManage, onClose }) {
   </>}>
     <div style={{ display: 'grid', gap: 16 }}>
       {error && <Banner tone="danger" title="Review fee changes">{error}</Banner>}
-      {editable.map((rule) => <TextField key={rule.id} label={rule.name + (rule.calculationType === 'FLAT' ? ' — Amount (₦)' : ' — Rate (%)')} type="number" min="0" max={rule.calculationType === 'FLAT' ? 10000000 : 100} step="0.01" required value={values[rule.id]} disabled={state.isLoading} onChange={(event) => setValues((current) => ({ ...current, [rule.id]: event.target.value }))} />)}
+      {editable.map((rule) => <TextField key={rule.id} label={rule.name + (rule.calculationType === 'FLAT' ? ' — Amount (₦)' : ' — Rate (%)')} money={rule.calculationType === 'FLAT'} type="number" min="0" max={rule.calculationType === 'FLAT' ? 10000000 : 100} step="0.01" required value={values[rule.id]} disabled={state.isLoading} onChange={(event) => setValues((current) => ({ ...current, [rule.id]: event.target.value }))} />)}
     </div>
   </Modal>;
 }

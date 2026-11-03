@@ -1,3 +1,5 @@
+import { hasKoboPrecision } from '../../../lib/money.js';
+
 export const SERVICE_UNITS = [{ value: 'PER_TRUCK', label: 'Per Truck' }, { value: 'PER_KM', label: 'Per km' }, { value: 'PER_TONNE', label: 'Per Tonne' }];
 export const SERVICE_CARGO = [{ value: 'CONTAINER', label: 'Container' }, { value: 'BULK_BREAK', label: 'Bulk / Break Bulk' }];
 export const SERVICE_MOVEMENTS = [{ value: 'PORT_TO_DESTINATION', label: 'Port to Destination' }, { value: 'PORT_TO_PORT', label: 'Port to Port' }, { value: 'BULK_BREAK', label: 'Bulk / Break Bulk' }, { value: 'EXPORT', label: 'Export' }];
@@ -40,7 +42,7 @@ export function serviceBody(fields, creating) {
       continue;
     }
     if (key === 'basePrice') {
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new Error('Enter a valid non-negative base price.');
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || !hasKoboPrecision(value)) throw new Error('Enter a valid non-negative base price with at most two decimal places.');
       body[key] = value;
     } else {
       const parsed = text(value);

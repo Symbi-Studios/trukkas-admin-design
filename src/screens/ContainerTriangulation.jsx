@@ -15,7 +15,7 @@ import { TriangulationGoogleMap } from './TriangulationGoogleMap.jsx';
 import './ContainerTriangulation.css';
 
 const PAGE_SIZE = 20;
-const naira = (value) => typeof value === 'number' ? `₦${value.toLocaleString('en-NG')}` : '—';
+const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 const count = (value) => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('en-NG') : '—';
 function summaryNumber(summary, ...keys) {
   for (const key of keys) {

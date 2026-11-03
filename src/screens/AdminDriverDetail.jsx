@@ -12,7 +12,7 @@ const TAB_ITEMS = ['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wall
 const SUPPORTED_TABS = new Set(['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wallet', 'Compliance']);
 const ACTIVITY_TABS = new Set(['Maintenance Log', 'Incidents', 'Reviews & Ratings', 'Notes']);
 
-const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG')}` : '—';
+const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 function MetricLabel({ label, description }) {
   return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{label} <Tooltip label={description}><span tabIndex={0} title={description} aria-label={description}><Icon name="info" size={14} color="var(--tk-ink-300)" /></span></Tooltip></span>;
 }

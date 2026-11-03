@@ -1,5 +1,6 @@
 import { unwrapApiResponseData } from '../../api/baseApi.js';
 import { settingsControls } from './settingsFields.js';
+import { hasKoboPrecision } from '../../../lib/money.js';
 
 export const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 export const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -88,7 +89,7 @@ export function adaptSection(response, page, related = {}) {
     if (compatible) contracts[control.group + '.' + control.field] = {
       section, key: descriptor.key, type: descriptor.type, editable: descriptor.editable === true && (control.type !== 'enum' || enumChoices(control, descriptor).length > 0),
       enforced: descriptor.enforced === true, description: text(descriptor.description),
-      min: numeric(descriptor.min), max: numeric(descriptor.max), choices: enumChoices(control, descriptor),
+      min: numeric(descriptor.min), max: numeric(descriptor.max), unit: text(descriptor.unit), choices: enumChoices(control, descriptor),
       defaultValue: decode(control, descriptor, descriptor.default),
     };
   }
@@ -99,6 +100,7 @@ export function encodeSetting(control, contract, value) {
   if (control.type === 'boolean' && typeof value === 'boolean') return value;
   if (control.type === 'number') {
     const parsed = numeric(value);
+    if (contract.unit?.startsWith('NGN') && !hasKoboPrecision(value)) throw new Error('Enter an amount with at most two decimal places.');
     if (parsed != null && (contract.min == null || parsed >= contract.min) && (contract.max == null || parsed <= contract.max)) return parsed;
   }
   if (control.type === 'enum') {

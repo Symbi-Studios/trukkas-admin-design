@@ -13,7 +13,7 @@ const shell = (invalid, focused, disabled) => ({
 const input = { flex: 1, border: 0, outline: 'none', background: 'transparent',
   font: '400 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)', minWidth: 0 };
 
-export function TextField({ label, required, hint, error, icon, suffix, disabled, style, ...rest }) {
+export function TextField({ label, required, hint, error, icon, suffix, disabled, style, money = false, onChange, ...rest }) {
   const [f, setF] = React.useState(false);
   return (
     <label className="tk-field" style={{ display: 'grid', gap: 6, ...style }}>
@@ -25,7 +25,9 @@ export function TextField({ label, required, hint, error, icon, suffix, disabled
       <div style={shell(!!error, f, disabled)}>
         {icon && <Icon name={icon} size={16} color="var(--tk-ink-300)" />}
         <input disabled={disabled} onFocus={() => setF(true)} onBlur={() => setF(false)}
-               {...rest} style={input} />
+               {...rest} type={money ? 'text' : rest.type} inputMode={money ? 'decimal' : rest.inputMode} step={money ? undefined : rest.step} onChange={money ? (event) => {
+                 if (/^-?\d*(?:\.\d{0,2})?$/.test(event.target.value)) onChange?.(event);
+               } : onChange} style={input} />
         {suffix}
       </div>
       {(error || hint) && (

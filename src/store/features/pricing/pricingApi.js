@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { hasKoboPrecision } from '../../../lib/money.js';
 import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 import { serviceCore, serviceBody, assertServiceEquipment, pricingServiceRoles } from './pricingServiceContracts.js';
 import { adaptPricingFormOptions } from './pricingFormOptions.js';
@@ -6,7 +7,7 @@ import { adaptPricingFormOptions } from './pricingFormOptions.js';
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const number = (value) => (typeof value === 'number' || (typeof value === 'string' && value.trim())) && Number.isFinite(Number(value)) ? Number(value) : null;
 const date = (value) => { const parsed = value ? new Date(value) : null; return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
-const money = (value) => value == null ? '—' : `₦${value.toLocaleString('en-NG')}`;
+const money = (value) => value == null ? '—' : `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const format = (value, unit) => value == null ? '—' : unit === 'NGN' ? money(value) : unit === 'NGN/day' ? `${money(value)}/day` : unit === 'NGN/km' ? `${money(value)}/km` : unit === 'NGN/truck' ? `${money(value)}/truck` : unit === '%' ? `${value}%` : `${value.toLocaleString('en-NG')} ${unit}`;
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const count = (value) => Number.isSafeInteger(number(value)) && number(value) >= 0 ? number(value) : null;
@@ -288,6 +289,7 @@ async function savePricingSetting(source, args, api, baseQuery) {
     const { id, portId, key, expectedValue, calc } = args;
     const field = source === 'config' ? fields.find((item) => item.key === key) : { min: 0 };
     const value = validateValue(field, args.value);
+    if ((source === 'terminal' || source === 'surcharge' && calc !== 'PERCENT_OF_BASE' || source === 'config' && field.unit?.startsWith('NGN')) && !hasKoboPrecision(value)) return failed('Enter an amount with at most two decimal places.');
     const previous = validateValue(field, expectedValue);
     if (source === 'terminal' && (!text(id) || !text(portId) || !['handlingFee', 'baseFeePerKm'].includes(key))) return failed('Unsupported terminal pricing setting.');
     if (source === 'surcharge' && (!text(id) || args.status !== 'DRAFT' || !['PERCENT_OF_BASE', 'FIXED_PER_TRUCK', 'PER_KM'].includes(calc))) return failed('Only confirmed draft surcharges can be edited.');

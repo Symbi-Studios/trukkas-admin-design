@@ -914,6 +914,7 @@ function WalletScreen() {
       >
         <TextField
           label="Amount (₦)"
+          money
           required
           type="number"
           min="1"

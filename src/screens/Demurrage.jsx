@@ -684,6 +684,7 @@ function DemurrageScreen() {
           </div>
           <TextField
             label="Daily Rate (₦)"
+            money
             type="number"
             placeholder="—"
             value={form.rate}
@@ -710,6 +711,7 @@ function DemurrageScreen() {
           <TextField label="Default Free Days" type="number" placeholder="—" value={ruleForm.freeDays} disabled={!canSaveRules || updateState.isLoading} onChange={(e) => { rulesDirty.current = true; setRuleForm({ ...ruleForm, freeDays: e.target.value }); }} />
           <TextField
             label="Default Daily Rate (₦)"
+            money
             type="number"
             placeholder="—"
             value={ruleForm.rate}

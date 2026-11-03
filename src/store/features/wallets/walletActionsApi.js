@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { hasKoboPrecision } from '../../../lib/money.js';
 import { getApiErrorMessage, userFacingMessage } from '../../api/getApiErrorMessage.js';
 import './walletsApi.js';
 
@@ -83,7 +84,7 @@ export const walletActionsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminP
           const reason = text(args.reason), money = ['ACCEPT_POD','PARTIAL_REFUND'].includes(args.type), refund = amount(args.compensationAmount);
           if (!text(args.id) || !text(args.jobId) || !reason || !escrowResolutionOptions.some(option => option.value === args.type)) throw failure('Select a resolution and enter a reason.');
           if (money && !escrowMoneyRoles.includes(args.role)) throw failure('Only Super Admin and Finance Admin can resolve a dispute with a payment or refund.');
-          if (args.type === 'PARTIAL_REFUND' && (refund == null || refund < 0)) throw failure('Enter the refund amount in naira.');
+          if (args.type === 'PARTIAL_REFUND' && (refund == null || refund < 0 || !hasKoboPrecision(args.compensationAmount))) throw failure('Enter a refund amount with at most two decimal places.');
           const run = transport(api,baseQuery,args), url = '/admin/disputes/'+encodeURIComponent(args.id), dispute = await run({ url });
           if (dispute?.id !== args.id || dispute.jobId !== args.jobId || !['OPEN','UNDER_REVIEW'].includes(dispute.status)) throw failure('This dispute is no longer open for resolution. Refresh its details.');
           const escrowId = text(dispute.job?.escrow?.id);

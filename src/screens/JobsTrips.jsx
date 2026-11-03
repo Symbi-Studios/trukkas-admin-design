@@ -96,7 +96,7 @@ function downloadCsv(csv, filename) {
 }
 const naira = (number) => number == null
   ? "—"
-  : `₦${Math.round(number).toLocaleString("en-NG")}`;
+  : `₦${number.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const shortType = (type) =>
   type === "Transfer / Value Chain" ? "Transfer" : type;
 
@@ -1245,6 +1245,7 @@ export function JobsTrips() {
             min="0"
             type="number"
             label="Job Value (₦)"
+            money
             value={draft.jobValue}
             onChange={(event) =>
               setDraft({ ...draft, jobValue: event.target.value })

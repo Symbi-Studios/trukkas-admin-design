@@ -20,8 +20,8 @@ function guardedQuery(baseQuery, api, args = {}) {
   };
 }
 export const settlementNumber = (value) => number(value)?.toLocaleString('en-NG') ?? '—';
-export const settlementMoney = (value) => number(value) == null ? '—' : (number(value) < 0 ? '-' : '') + '₦' + Math.abs(number(value)).toLocaleString('en-NG');
-export const settlementMillions = (value) => number(value) == null ? '—' : '₦' + (number(value) / 1000000).toFixed(2) + 'M';
+export const settlementMoney = (value) => number(value) == null ? '—' : (number(value) < 0 ? '-' : '') + '₦' + Math.abs(number(value)).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const settlementMillions = settlementMoney;
 export const settlementDetailUrl = (row) => '/settlements/detail?id=' + encodeURIComponent(row.id);
 
 function datePart(value, time = false) {
@@ -141,7 +141,7 @@ export function settlementInsights(response) {
     const rows = keys.map(key => { const matches = statusRows?.filter(row => row?.status === key); return matches?.length === 1 ? matches[0] : null; });
     const totalCount = rows.every(row => count(row?.count) != null) ? rows.reduce((sum,row) => sum+count(row.count),0) : null;
     const share = rows.every(row => percent(row?.share) != null) ? Math.round(rows.reduce((sum,row) => sum+percent(row.share),0)*10)/10 : null;
-    const totalAmount = rows.every(row => nonnegative(row?.amount) != null) ? rows.reduce((sum,row) => sum+nonnegative(row.amount),0) : null;
+    const totalAmount = name === 'Completed' ? summary.completedSettlements : name === 'Pending' ? summary.pendingSettlements : name === 'On Hold' ? summary.onHold : summary.failedSettlements;
     return { label:name,tone,icon,count:totalCount,pct:share == null ? '—' : share+'%',amount:totalAmount };
   });
   return { summary,payouts,statuses,period:record(dto.period),comparisonPeriod:record(dto.comparisonPeriod) };

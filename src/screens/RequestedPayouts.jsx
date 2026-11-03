@@ -348,8 +348,9 @@ export function RequestedPayouts() {
                 {
                   key: "id",
                   header: "Payout ID",
+                  width: 170,
                   render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
+                    <span className="payout-id-cell">
                       <span className="tk-mono">{r.id}</span>
                     </span>
                   ),
@@ -367,12 +368,11 @@ export function RequestedPayouts() {
                 {
                   key: "party",
                   header: "Party",
+                  width: 240,
                   render: (r) => (
-                    <span
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
+                    <span className="payout-party-cell">
                       <Avatar name={r.party} size={28} />
-                      <span style={{ display: "grid", gap: 2 }}>
+                      <span className="payout-party-text">
                         {r.companyId ? (
                           <Link to={payoutCompanyUrl(r.companyId)} onClick={(e) => e.stopPropagation()}>{r.party}</Link>
                         ) : <span className="tk-label">{r.party}</span>}

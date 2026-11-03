@@ -175,6 +175,16 @@ export function useSettingsEditor(page) {
   }
   const loading = [query, securityPreferences, status, version, channels, processors, events].some((read) => read.isLoading || (read.isFetching && !read.currentData));
   return { group, change, event, changeEvent, save, reset, resetAll, unavailable, quickActions, owner, admin, authenticated: !skip,
+    eventAvailable: (key) => {
+      const row = eventModel?.events?.find((item) => item.key === key);
+      return key === 'suspiciousActivity' ? row?.delivered === true : row?.delivered !== false;
+    },
+    visible: (group, field) => Boolean(model?.hasDescriptors && model.contracts?.[group + '.' + field]?.enforced === true),
+    groupVisible: (group) => Boolean(model?.hasDescriptors && settingsControls.some((control) => control.page === page && control.group === group && model.contracts?.[group + '.' + control.field]?.enforced === true)),
+    groupEditable: (group) => Boolean(model?.hasDescriptors && settingsControls.some((control) => {
+      const contract = model.contracts?.[group + '.' + control.field];
+      return control.page === page && control.group === group && contract?.enforced === true && contract.editable;
+    })),
     status: (template) => statusForTemplate(status.error ? null : status.currentData, template),
     platformVersion: version.error ? null : version.currentData,
     channels: channels.error ? null : channels.currentData,

@@ -13,5 +13,7 @@ export interface TextFieldProps extends React.InputHTMLAttributes<HTMLInputEleme
   icon?: string;
   /** trailing node — a unit, a counter, a small button */
   suffix?: React.ReactNode;
+  /** Limits a naira amount to two decimal places. */
+  money?: boolean;
 }
 export declare function TextField(props: TextFieldProps): JSX.Element;

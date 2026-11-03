@@ -369,7 +369,7 @@ export function TransactionDetail() {
             {busy ? 'Processing…' : 'Create Refund'}
           </Button>
         </>}>
-        <TextField label="Refund Amount (₦)" required type="number" min="1" max={refundLimit}
+        <TextField label="Refund Amount (₦)" required money type="number" min="1" max={refundLimit}
           value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
       </Modal>
 

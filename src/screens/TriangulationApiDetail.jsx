@@ -16,7 +16,7 @@ import {
 import { TriangulationGoogleMap } from './TriangulationGoogleMap.jsx';
 import './TriangulationDetail.css';
 
-const naira = (value) => typeof value === 'number' ? `₦${value.toLocaleString('en-NG')}` : '—';
+const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 const text = (value) => value || '—';
 function apiError(error) {
   return getApiErrorMessage(error, error?.status === 403 ? 'Your account cannot access this opportunity.' : 'The request could not be completed.');

@@ -8,7 +8,7 @@ const number = (value) => typeof value === 'number' && Number.isFinite(value) ? 
 const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
 const label = (value) => text(value)?.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (part) => part.toUpperCase()) || '—';
-export const forwarderMoney = (value) => number(value) == null ? '—' : `₦${value.toLocaleString('en-NG')}`;
+export const forwarderMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const forwarderDate = (value) => {
   if (!text(value) || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value)) return '—';
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);

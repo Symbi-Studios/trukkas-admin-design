@@ -10,8 +10,8 @@ const display = (value) => text(value) ?? '—';
 const status = (value) => text(value)?.toLowerCase().split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ') ?? '—';
 
 export const escrowNumber = (value) => number(value)?.toLocaleString('en-NG') ?? '—';
-export const escrowMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG')}`;
-export const escrowMillions = (value) => number(value) == null ? '—' : `₦${(number(value) / 1000000).toFixed(2)}M`;
+export const escrowMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export const escrowMillions = escrowMoney;
 export const escrowCount = (value, unit) => number(value) == null ? '—' : `${escrowNumber(value)} ${unit}`;
 
 function datePart(value, time = false) {

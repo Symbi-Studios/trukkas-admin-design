@@ -18,7 +18,7 @@ const name = (user) => text(user.name) || text(user.businessName) || text([text(
 const identity = (row) => `${text(row?.source) || ''}:${row?.id}`;
 const apiError = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
 
-export const payoutMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG')}`;
+export const payoutMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const payoutNumber = (value) => number(value) == null ? '—' : number(value).toLocaleString('en-NG');
 export const payoutDetailUrl = (payout) => `/payouts/detail?id=${encodeURIComponent(payout.id)}${payout.source ? `&source=${encodeURIComponent(payout.source)}` : ''}`;
 export const payoutCompanyUrl = (id) => `/companies/detail?id=${encodeURIComponent(id)}&tab=payouts`;
@@ -50,8 +50,8 @@ function profileType(profile) {
 function requestFields(value) {
   const dto = record(value), beneficiary = record(dto.beneficiary), bank = record(dto.bank), requestedBy = record(dto.requestedBy);
   const related = record(dto.related), eligibility = record(dto.eligibility);
-  const deductions = Array.isArray(dto.deductions) && dto.deductions.every((entry) => number(entry?.amount) != null && number(entry.amount) >= 0)
-    ? dto.deductions.reduce((sum, entry) => sum + number(entry.amount), 0) : null;
+  const deductions = Array.isArray(dto.deductions) && dto.deductions.length === 1 ? money(dto.deductions[0]?.amount)
+    : Array.isArray(dto.deductions) && dto.deductions.length === 0 ? 0 : null;
   const jobs = records(dto.jobs), singleJob = jobs.length === 1 ? jobs[0] : {};
   const jobIds = Array.isArray(dto.jobIds) ? dto.jobIds.filter((id) => text(id)) : null;
   const trips = records(singleJob.trips), singleTrip = trips.length === 1 ? trips[0] : {};
@@ -66,8 +66,7 @@ function requestFields(value) {
     : dto.payoutStatus === 'AWAITING_APPROVAL' ? 'PENDING' : text(dto.payoutStatus) || text(dto.status);
   const ngn = dto.currency === 'NGN';
   const gross = number(dto.grossAmount), net = number(dto.netAmount);
-  const validAmounts = ngn && gross != null && gross > 0 && net != null && net >= 0 && net <= gross
-    && Number.isFinite(deductions) && Math.abs(gross - deductions - net) < 0.005;
+  const validAmounts = ngn && gross != null && gross > 0 && net != null && net >= 0 && net <= gross;
   const isPending = dto.source === 'user_withdrawal' && dto.reviewStatus === 'PENDING_REVIEW' && dto.payoutStatus === 'AWAITING_APPROVAL';
   return { ...dto, id: dto.source === 'admin_payout' ? text(dto.payoutLogId) || text(dto.id) : text(dto.id),
     party: { ...beneficiary, role: beneficiary.type, truckerType: beneficiary.classification },
@@ -100,15 +99,13 @@ function allocationTripDetails(dto, allocation) {
   return { truckPlate: shared('truckPlate') || '—', driverName: shared('driverName') || '—', status: label(shared('status')) };
 }
 
-export function adaptAdminPayout(dto, profile = {}) {
+export function adaptAdminPayout(dto) {
   dto = requestFields(dto);
-  profile = record(profile);
   const party = record(dto.party), requester = record(dto.requester);
-  const partyId = text(party.id), confirmedProfile = profile.id === partyId ? profile : {};
-  const account = record(confirmedProfile.details?.account);
-  const partyType = profileType(party) || profileType(confirmedProfile);
+  const partyId = text(party.id);
+  const partyType = profileType(party);
   const companyId = partyType === 'company' ? partyId : null;
-  const partyName = text(party.name) || name(confirmedProfile) || '—';
+  const partyName = name(party) || '—';
   const payment = record(dto.payment);
   const rawStatus = text(dto.status);
   const awaitingReview = dto.source === 'user_withdrawal' && rawStatus === 'PENDING';
@@ -130,13 +127,13 @@ export function adaptAdminPayout(dto, profile = {}) {
     requestedByRole: text(dto.requestedByRole) || '—',
     requester: {
       name: text(requester.name) || partyName, idBadge: partyId || '—',
-      role: text(requester.role) || label(confirmedProfile.role || party.role),
-      phone: text(requester.phone) || text(confirmedProfile.phone) || '—',
-      email: text(requester.email) || text(party.email) || text(confirmedProfile.email) || '—',
-      status: label(requester.status || confirmedProfile.status || account.accountStatus),
-      rating: number(requester.rating) ?? number(confirmedProfile.rating) ?? '—',
-      totalTrips: number(requester.totalTrips) ?? number(confirmedProfile.stats?.totalTrips?.count) ?? '—',
-      company: text(requester.company) || (companyId ? partyName : text(confirmedProfile.linkedCompany?.name)) || '—',
+      role: text(requester.role) || label(party.role),
+      phone: text(requester.phone) || text(party.phone) || '—',
+      email: text(requester.email) || text(party.email) || '—',
+      status: label(requester.status || party.status),
+      rating: number(requester.rating) ?? '—',
+      totalTrips: number(requester.totalTrips) ?? '—',
+      company: text(requester.company) || (companyId ? partyName : '—'),
     },
     jobId, jobIds: Array.isArray(dto.jobIds) ? dto.jobIds.filter((id) => text(id)) : jobId ? [jobId] : null,
     tripIds: allocationContext.tripIds, truckTripCount: allocationContext.truckTripCount,
@@ -172,7 +169,13 @@ export function adaptAdminPayout(dto, profile = {}) {
       { title: rawStatus === 'REJECTED' ? 'Rejected' : 'Approved', time: approvedOn ? datePart(approvedOn) : '—', state: payoutTimestamp(approvedOn) != null ? rawStatus === 'REJECTED' ? 'danger' : 'done' : 'pending', icon: rawStatus === 'REJECTED' ? 'x' : 'check' },
       { title: 'Processed', time: processedOn ? datePart(processedOn) : '—', state: payoutTimestamp(processedOn) != null ? 'done' : 'pending', icon: 'banknote' },
     ],
-    activity: records(dto.activity).map((entry) => ({ title: text(entry.title) || '—', description: text(entry.description) || '—', time: dateTime(entry.time), state: text(entry.state) || 'pending', icon: text(entry.icon) })),
+    activity: records(dto.activity).map((entry) => {
+      const outcome = text(entry.outcome)?.toUpperCase();
+      return {
+        title: text(entry.title) || '—', description: text(entry.description) || '—', time: dateTime(entry.time),
+        state: ['SUCCESS', 'COMPLETED', 'DONE', 'APPROVED'].includes(outcome) ? 'done' : ['FAILED', 'FAILURE', 'REJECTED'].includes(outcome) ? 'danger' : 'pending',
+      };
+    }),
     documents: records(dto.documents).map((entry) => ({ name: text(entry.name) || '—', file: text(entry.file) || text(entry.size) || '—', kind: text(entry.kind), url: text(entry.url) })),
     issueNotes: records(dto.issueNotes).map((entry) => ({ note: text(entry.note) || '—', time: dateTime(entry.time) })),
   };
@@ -252,14 +255,8 @@ async function readPayout(baseQuery, args) {
 async function payoutDetail(baseQuery, api, args) {
   const result = await readPayout(baseQuery, args);
   if (result.error) return result;
-  const [profileResult, documentsResult] = await Promise.all([
-    baseQuery({ url: '/admin/users/' + encodeURIComponent(result.data.beneficiary.id) + '/profile' }),
-    payoutDocuments(baseQuery, args),
-  ]);
-  for (const entry of [profileResult, documentsResult]) if (entry.error?.status === 401) return { error: entry.error };
   if (api.signal.aborted) return apiError('Payout loading was cancelled.');
-  const profile = profileResult.error ? {} : record(unwrapApiResponseData(profileResult.data));
-  return { data: { ...adaptAdminPayout(result.data, profile), documents: documentsResult.data || [] } };
+  return { data: adaptAdminPayout(result.data) };
 }
 
 async function reviewWithdrawal(baseQuery, api, args, decision) {

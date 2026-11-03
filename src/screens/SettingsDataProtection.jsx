@@ -67,68 +67,68 @@ export function SettingsDataProtection() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr)) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-          <SectionCard title="Data Privacy & Consent" icon="shield">
+          {editor.groupVisible('settingsDataPrivacyConsent') && (<SectionCard title="Data Privacy & Consent" icon="shield">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Manage user consent and data collection preferences.</span>
-            <Field><Switch checked={consent.collectOnlyNecessaryData} label="Collect only necessary data"
+            {editor.visible('settingsDataPrivacyConsent', 'collectOnlyNecessaryData') && (<Field><Switch checked={consent.collectOnlyNecessaryData} label="Collect only necessary data"
               hint="Limit data collection to what is required for platform operation."
-              onChange={(v) => updateDataPrivacyConsent({ collectOnlyNecessaryData: v })} /></Field>
-            <Field><Switch checked={consent.enableUserConsentTracking} label="Enable user consent tracking"
+              onChange={(v) => updateDataPrivacyConsent({ collectOnlyNecessaryData: v })} /></Field>) }
+            {editor.visible('settingsDataPrivacyConsent', 'enableUserConsentTracking') && (<Field><Switch checked={consent.enableUserConsentTracking} label="Enable user consent tracking"
               hint="Record and manage user consent for data processing."
-              onChange={(v) => updateDataPrivacyConsent({ enableUserConsentTracking: v })} /></Field>
-            <Switch checked={consent.showPrivacyNoticeToUsers} label="Show privacy notice to users"
+              onChange={(v) => updateDataPrivacyConsent({ enableUserConsentTracking: v })} /></Field>) }
+            {editor.visible('settingsDataPrivacyConsent', 'showPrivacyNoticeToUsers') && (<Switch checked={consent.showPrivacyNoticeToUsers} label="Show privacy notice to users"
               hint="Display privacy notice during sign up and at key touchpoints."
-              onChange={(v) => updateDataPrivacyConsent({ showPrivacyNoticeToUsers: v })} />
-          </SectionCard>
+              onChange={(v) => updateDataPrivacyConsent({ showPrivacyNoticeToUsers: v })} />) }
+          </SectionCard>) }
 
-          <SectionCard title="Data Retention" icon="database">
+          {editor.groupVisible('settingsDataRetentionSecurity') && (<SectionCard title="Data Retention" icon="database">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Set how long different types of data are kept.</span>
-            <RetentionRow label="User account data" hint="Includes profile information and account activity."
-              value={retention.userAccountData} onChange={(e) => updateDataRetentionSecurity({ userAccountData: e.target.value })} />
-            <RetentionRow label="Job & trip data" hint="Includes job details, communications, and logs."
-              value={retention.jobTripData} onChange={(e) => updateDataRetentionSecurity({ jobTripData: e.target.value })} />
-            <RetentionRow label="Financial records" hint="Includes transactions, payouts, and invoices."
-              value={retention.financialRecords} onChange={(e) => updateDataRetentionSecurity({ financialRecords: e.target.value })} />
-            <RetentionRow label="Support tickets" hint="Includes customer and support communications."
-              value={retention.supportTickets} onChange={(e) => updateDataRetentionSecurity({ supportTickets: e.target.value })} />
-          </SectionCard>
+            {editor.visible('settingsDataRetentionSecurity', 'userAccountData') && (<RetentionRow label="User account data" hint="Includes profile information and account activity."
+              value={retention.userAccountData} onChange={(e) => updateDataRetentionSecurity({ userAccountData: e.target.value })} />) }
+            {editor.visible('settingsDataRetentionSecurity', 'jobTripData') && (<RetentionRow label="Job & trip data" hint="Includes job details, communications, and logs."
+              value={retention.jobTripData} onChange={(e) => updateDataRetentionSecurity({ jobTripData: e.target.value })} />) }
+            {editor.visible('settingsDataRetentionSecurity', 'financialRecords') && (<RetentionRow label="Financial records" hint="Includes transactions, payouts, and invoices."
+              value={retention.financialRecords} onChange={(e) => updateDataRetentionSecurity({ financialRecords: e.target.value })} />) }
+            {editor.visible('settingsDataRetentionSecurity', 'supportTickets') && (<RetentionRow label="Support tickets" hint="Includes customer and support communications."
+              value={retention.supportTickets} onChange={(e) => updateDataRetentionSecurity({ supportTickets: e.target.value })} />) }
+          </SectionCard>) }
 
-          <SectionCard title="Data Deletion" icon="trash-2">
+          {editor.groupVisible('settingsDataDeletion') && (<SectionCard title="Data Deletion" icon="trash-2">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Manage how data is deleted and handled.</span>
-            <Field><Switch checked={deletion.allowAccountDeletion} label="Allow account deletion"
+            {editor.visible('settingsDataDeletion', 'allowAccountDeletion') && (<Field><Switch checked={deletion.allowAccountDeletion} label="Allow account deletion"
               hint="Let users permanently delete their account."
-              onChange={(v) => updateDataDeletion({ allowAccountDeletion: v })} /></Field>
-            <Field><Switch checked={deletion.anonymizeDataAfterDeletion} label="Anonymize data after deletion"
+              onChange={(v) => updateDataDeletion({ allowAccountDeletion: v })} /></Field>) }
+            {editor.visible('settingsDataDeletion', 'anonymizeDataAfterDeletion') && (<Field><Switch checked={deletion.anonymizeDataAfterDeletion} label="Anonymize data after deletion"
               hint="Anonymize data instead of immediate deletion where required."
-              onChange={(v) => updateDataDeletion({ anonymizeDataAfterDeletion: v })} /></Field>
+              onChange={(v) => updateDataDeletion({ anonymizeDataAfterDeletion: v })} /></Field>) }
             <Banner tone="warning">
               Some data may be retained longer due to legal, financial, or regulatory obligations.
             </Banner>
-          </SectionCard>
+          </SectionCard>) }
         </div>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-          <SectionCard title="Data Encryption" icon="lock">
+          {editor.groupVisible('settingsDataEncryption') && (<SectionCard title="Data Encryption" icon="lock">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Ensure your data is encrypted both in transit and at rest.</span>
-            <Field><Switch checked={encryption.encryptDataInTransit} label="Encrypt data in transit (TLS)"
+            {editor.visible('settingsDataEncryption', 'encryptDataInTransit') && (<Field><Switch checked={encryption.encryptDataInTransit} label="Encrypt data in transit (TLS)"
               hint="Use TLS 1.2+ for all data transmissions."
-              onChange={(v) => updateDataEncryption({ encryptDataInTransit: v })} /></Field>
-            <Field><Switch checked={encryption.encryptDataAtRest} label="Encrypt data at rest"
+              onChange={(v) => updateDataEncryption({ encryptDataInTransit: v })} /></Field>) }
+            {editor.visible('settingsDataEncryption', 'encryptDataAtRest') && (<Field><Switch checked={encryption.encryptDataAtRest} label="Encrypt data at rest"
               hint="All sensitive data is encrypted using AES-256."
-              onChange={(v) => updateDataEncryption({ encryptDataAtRest: v })} /></Field>
+              onChange={(v) => updateDataEncryption({ encryptDataAtRest: v })} /></Field>) }
             <Banner tone="info">
               All sensitive information (e.g. passwords, personal data, payment details) is encrypted using industry best practices.
             </Banner>
-          </SectionCard>
+          </SectionCard>) }
 
-          <SectionCard title="Data Export & Access" icon="download">
+          {editor.groupVisible('settingsDataExportAccess') && (<SectionCard title="Data Export & Access" icon="download">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Allow users to access or export their data.</span>
-            <Field><Switch checked={exportAccess.allowUsersDownloadData} label="Allow users to download their data"
+            {editor.visible('settingsDataExportAccess', 'allowUsersDownloadData') && (<Field><Switch checked={exportAccess.allowUsersDownloadData} label="Allow users to download their data"
               hint="Users can request a copy of their personal data."
-              onChange={(v) => updateDataExportAccess({ allowUsersDownloadData: v })} /></Field>
-            <Field><Switch checked={exportAccess.notifyUsersWhenDataReady} label="Notify users when data is ready"
+              onChange={(v) => updateDataExportAccess({ allowUsersDownloadData: v })} /></Field>) }
+            {editor.visible('settingsDataExportAccess', 'notifyUsersWhenDataReady') && (<Field><Switch checked={exportAccess.notifyUsersWhenDataReady} label="Notify users when data is ready"
               hint="Send an email notification when export is completed."
-              onChange={(v) => updateDataExportAccess({ notifyUsersWhenDataReady: v })} /></Field>
-          </SectionCard>
+              onChange={(v) => updateDataExportAccess({ notifyUsersWhenDataReady: v })} /></Field>) }
+          </SectionCard>) }
         </div>
 
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
@@ -146,7 +146,7 @@ export function SettingsDataProtection() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Compliance & Standards" icon="file-check">
+          {false && (<SectionCard title="Compliance & Standards" icon="file-check">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Manage compliance with data protection regulations.</span>
             <div style={{ display: 'grid', gap: 14, marginBottom: 14 }}>
               {complianceStandards.map((c) => (
@@ -163,7 +163,7 @@ export function SettingsDataProtection() {
               ))}
               {'—'}
             </div>
-          </SectionCard>
+          </SectionCard>) }
 
           <SectionCard title="Third-Party Data Processors" icon="share-2">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 10 }}>Manage third-party services that process your data.</span>

@@ -2,7 +2,8 @@
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
 import { Link, useNavigate } from "../router.js";
 import {
@@ -192,19 +193,49 @@ function DateRangeButton({ value, onChange, presets }) {
 }
 
 function RowMenu({ items, id, menuFor, setMenuFor }) {
+  const anchorRef = useRef(null);
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState(null);
+  const open = menuFor === id;
+  useLayoutEffect(() => {
+    if (!open) { setPosition(null); return; }
+    const update = () => {
+      if (!anchorRef.current || !menuRef.current) return;
+      const anchor = anchorRef.current.getBoundingClientRect();
+      const menu = menuRef.current.getBoundingClientRect();
+      setPosition({
+        left: Math.max(8, Math.min(anchor.right - menu.width, window.innerWidth - menu.width - 8)),
+        top: anchor.bottom + 6 + menu.height <= window.innerHeight - 8 ? anchor.bottom + 6 : Math.max(8, anchor.top - menu.height - 6),
+      });
+    };
+    const outside = (event) => { if (!anchorRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setMenuFor(null); };
+    const escape = (event) => { if (event.key === "Escape") setMenuFor(null); };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, items.length, setMenuFor]);
   return (
-    <span style={{ position: "relative" }}>
+    <span ref={anchorRef} style={{ position: "relative" }}>
       <IconButton
         icon="ellipsis-vertical"
         onClick={() => setMenuFor(menuFor === id ? null : id)}
       />
-      {menuFor === id && (
-        <span
-          style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }}
+      {open && createPortal(
+        <span ref={menuRef}
+          style={{ position: "fixed", left: position?.left ?? 0, top: position?.top ?? -10000, zIndex: 95, visibility: position ? "visible" : "hidden", maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
           onMouseLeave={() => setMenuFor(null)}
+          onClick={(event) => event.stopPropagation()}
         >
           <DropdownMenu width={200} items={items} />
-        </span>
+        </span>, document.body
       )}
     </span>
   );

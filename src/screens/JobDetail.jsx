@@ -70,8 +70,8 @@ const STATUS_TONE = {
   Delayed: "danger",
 };
 export const statusTone = (s) => STATUS_TONE[s] || "neutral";
-const naira = (n) => typeof n === "number" && Number.isFinite(n) ? "₦" + Math.round(n).toLocaleString("en-NG") : "—";
-const nairaShort = (n) => typeof n !== "number" || !Number.isFinite(n) ? "—" : Math.abs(n) >= 1000000 ? "₦" + (n / 1000000).toFixed(1) + "M" : "₦" + Math.round(n / 1000) + "K";
+const naira = (n) => typeof n === "number" && Number.isFinite(n) ? "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+const nairaShort = naira;
 const displayCount = (n) => n == null ? "—" : n;
 const percentage = (n) => n == null ? "—" : n + "%";
 const TINT = {

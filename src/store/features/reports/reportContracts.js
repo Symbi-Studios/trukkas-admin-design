@@ -92,7 +92,7 @@ function reportCell(value, definition) {
   if (type === 'boolean') return typeof value === 'boolean' ? value : null;
   const parsed = type === 'integer' ? metricCount(value) : unit === 'percent 0-100' ? metricRate(value) : metricNumber(value);
   if (parsed == null || unit === 'hours' && parsed < 0) return null;
-  const formatted = parsed.toLocaleString('en-NG', { maximumFractionDigits: type === 'integer' ? 0 : 2 });
+  const formatted = parsed.toLocaleString('en-NG', { minimumFractionDigits: unit === 'NGN naira' ? 2 : 0, maximumFractionDigits: unit === 'NGN naira' ? 2 : type === 'integer' ? 0 : 2 });
   return unit === 'NGN naira' ? '₦' + formatted : unit === 'percent 0-100' ? formatted + '%' : unit === 'hours' ? formatted + ' hrs' : formatted;
 }
 export function adaptReportPreview(dto, requested, empty) {

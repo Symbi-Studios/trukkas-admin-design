@@ -16,10 +16,10 @@ const LANGUAGES = ['English (EN)', 'French (FR)', 'Portuguese (PT)'];
 const CURRENCIES = ['Nigerian Naira (NGN)', 'US Dollar (USD)', 'Ghanaian Cedi (GHS)', 'Kenyan Shilling (KES)'];
 const DISTANCE_UNITS = ['Kilometers (km)', 'Miles (mi)'];
 
-function ToggleGrid({ items, onToggle }) {
+function ToggleGrid({ items, onToggle, visible }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '16px 20px' }}>
-      {items.map((it) => (
+      {items.filter((it) => visible(it.key)).map((it) => (
         <Switch key={it.key} checked={it.value} onChange={(v) => onToggle(it.key, v)}
           label={it.label} hint={it.hint} />
       ))}
@@ -71,40 +71,40 @@ export function SystemSettings() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-          <SectionCard title="Platform Information" icon="building-2"
-            action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsPlatformInfo')) flash('platform'); }}>
+          {editor.groupVisible('settingsPlatformInfo') && (<SectionCard title="Platform Information" icon="building-2"
+            action={editor.groupEditable('settingsPlatformInfo') && <Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsPlatformInfo')) flash('platform'); }}>
               {saved === 'platform' ? 'Saved ✓' : 'Save Changes'}</Button>}>
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Basic information about your Trukkas platform.</span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
-              <TextField label="Platform Name" value={platformInfo.platformName}
-                onChange={(e) => updatePlatformInfo({ platformName: e.target.value })} />
-              <TextField label="Company Email" value={platformInfo.companyEmail}
-                onChange={(e) => updatePlatformInfo({ companyEmail: e.target.value })} />
-              <Select label="Timezone" options={TIMEZONES} value={platformInfo.timezone}
-                onChange={(e) => updatePlatformInfo({ timezone: e.target.value })} />
-              <TextField label="Website" value={platformInfo.website}
-                onChange={(e) => updatePlatformInfo({ website: e.target.value })} />
-              <TextField label="Phone Number" value={platformInfo.phoneNumber}
-                onChange={(e) => updatePlatformInfo({ phoneNumber: e.target.value })} />
-              <Select label="Default Language" options={LANGUAGES} value={platformInfo.defaultLanguage}
-                onChange={(e) => updatePlatformInfo({ defaultLanguage: e.target.value })} />
+              {editor.visible('settingsPlatformInfo', 'platformName') && (<TextField label="Platform Name" value={platformInfo.platformName}
+                onChange={(e) => updatePlatformInfo({ platformName: e.target.value })} />) }
+              {editor.visible('settingsPlatformInfo', 'companyEmail') && (<TextField label="Company Email" value={platformInfo.companyEmail}
+                onChange={(e) => updatePlatformInfo({ companyEmail: e.target.value })} />) }
+              {editor.visible('settingsPlatformInfo', 'timezone') && (<Select label="Timezone" options={TIMEZONES} value={platformInfo.timezone}
+                onChange={(e) => updatePlatformInfo({ timezone: e.target.value })} />) }
+              {editor.visible('settingsPlatformInfo', 'website') && (<TextField label="Website" value={platformInfo.website}
+                onChange={(e) => updatePlatformInfo({ website: e.target.value })} />) }
+              {editor.visible('settingsPlatformInfo', 'phoneNumber') && (<TextField label="Phone Number" value={platformInfo.phoneNumber}
+                onChange={(e) => updatePlatformInfo({ phoneNumber: e.target.value })} />) }
+              {editor.visible('settingsPlatformInfo', 'defaultLanguage') && (<Select label="Default Language" options={LANGUAGES} value={platformInfo.defaultLanguage}
+                onChange={(e) => updatePlatformInfo({ defaultLanguage: e.target.value })} />) }
             </div>
-          </SectionCard>
+          </SectionCard>) }
 
-          <SectionCard title="Operational Settings" icon="settings"
+          {editor.groupVisible('settingsOperationalGeneral') && (<SectionCard title="Operational Settings" icon="settings"
             action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsOperationalGeneral')) flash('operational'); }}>
               {saved === 'operational' ? 'Saved ✓' : 'Save Changes'}</Button>}>
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Configure core operational preferences.</span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
-              <TextField label="Default Job Expiry (Hours)" type="number" value={operational.defaultJobExpiryHours}
+              {editor.visible('settingsOperationalGeneral', 'defaultJobExpiryHours') && (<TextField label="Default Job Expiry (Hours)" type="number" value={operational.defaultJobExpiryHours}
                 hint="How long a job stays open for bids."
-                onChange={(e) => updateOperationalGeneral({ defaultJobExpiryHours: e.target.value })} />
-              <Select label="Default Currency" options={CURRENCIES} value={operational.defaultCurrency}
-                onChange={(e) => updateOperationalGeneral({ defaultCurrency: e.target.value })} />
-              <Select label="Distance Unit" options={DISTANCE_UNITS} value={operational.distanceUnit}
-                onChange={(e) => updateOperationalGeneral({ distanceUnit: e.target.value })} />
+                onChange={(e) => updateOperationalGeneral({ defaultJobExpiryHours: e.target.value })} />) }
+              {editor.visible('settingsOperationalGeneral', 'defaultCurrency') && (<Select label="Default Currency" options={CURRENCIES} value={operational.defaultCurrency}
+                onChange={(e) => updateOperationalGeneral({ defaultCurrency: e.target.value })} />) }
+              {editor.visible('settingsOperationalGeneral', 'distanceUnit') && (<Select label="Distance Unit" options={DISTANCE_UNITS} value={operational.distanceUnit}
+                onChange={(e) => updateOperationalGeneral({ distanceUnit: e.target.value })} />) }
             </div>
-            <ToggleGrid onToggle={(key, v) => updateOperationalGeneral({ [key]: v })} items={[
+            <ToggleGrid visible={(key) => editor.visible('settingsOperationalGeneral', key)} onToggle={(key, v) => updateOperationalGeneral({ [key]: v })} items={[
               { key: 'autoAssignJobs', value: operational.autoAssignJobs, label: 'Auto-assign jobs', hint: 'Automatically assign jobs to preferred partners.' },
               { key: 'allowPartialBids', value: operational.allowPartialBids, label: 'Allow partial bids', hint: 'Allow bidders to submit partial bids.' },
               { key: 'autoCompleteTrips', value: operational.autoCompleteTrips, label: 'Auto-complete trips', hint: 'Mark trip as completed after POD upload.' },
@@ -112,13 +112,13 @@ export function SystemSettings() {
               { key: 'enableDriverRatings', value: operational.enableDriverRatings, label: 'Enable driver ratings', hint: 'Allow shippers to rate drivers after delivery.' },
               { key: 'enableGeofencing', value: operational.enableGeofencing, label: 'Enable geofencing', hint: 'Use location-based checks for trip updates.' },
             ]} />
-          </SectionCard>
+          </SectionCard>) }
 
-          <SectionCard title="Notification Settings" icon="bell"
+          {editor.groupVisible('settingsNotificationGeneral') && (<SectionCard title="Notification Settings" icon="bell"
             action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsNotificationGeneral')) flash('notif'); }}>
               {saved === 'notif' ? 'Saved ✓' : 'Save Changes'}</Button>}>
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Manage system notifications and alerts.</span>
-            <ToggleGrid onToggle={(key, v) => updateNotificationGeneral({ [key]: v })} items={[
+            <ToggleGrid visible={(key) => editor.visible('settingsNotificationGeneral', key)} onToggle={(key, v) => updateNotificationGeneral({ [key]: v })} items={[
               { key: 'emailNotifications', value: notif.emailNotifications, label: 'Email Notifications', hint: 'Send system emails to users.' },
               { key: 'smsNotifications', value: notif.smsNotifications, label: 'SMS Notifications', hint: 'Send SMS alerts for key events.' },
               { key: 'inAppNotifications', value: notif.inAppNotifications, label: 'In-App Notifications', hint: 'Show in-app notifications.' },
@@ -127,7 +127,7 @@ export function SystemSettings() {
               { key: 'incidentAlerts', value: notif.incidentAlerts, label: 'Incident Alerts', hint: 'Notify about incidents and exceptions.' },
               { key: 'pushNotificationsEnabled', value: notif.pushNotificationsEnabled, label: 'Push Notifications', hint: 'Send mobile push notifications. Turning this off does not affect in-app notifications or email.' },
             ]} />
-          </SectionCard>
+          </SectionCard>) }
 
        
         </div>
