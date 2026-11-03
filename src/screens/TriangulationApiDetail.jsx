@@ -9,7 +9,7 @@ import {
   Tabs, MapPanel, Banner, Modal, Textarea, Select, Skeleton,
 } from '../ds.js';
 import {
-  useGetAdminTriangulationOpportunitiesQuery,
+  useGetAdminTriangulationOpportunityQuery,
   useNotifyAdminTriangulationMatchMutation,
   useInterveneAdminTriangulationJobMutation,
 } from '../store/features/triangulation/triangulationApi.js';
@@ -26,11 +26,10 @@ export function TriangulationApiDetail() {
   const params = useSearchParams();
   const navigate = useNavigate();
   const opportunityId = params.get('opportunityId');
-  const page = Math.max(1, Number(params.get('page')) || 1);
   const radiusKm = Math.max(1, Number(params.get('radiusKm')) || 150);
   const { currentData: response, isLoading, isFetching, error, refetch } =
-    useGetAdminTriangulationOpportunitiesQuery({ page, limit: 20, radiusKm }, { skip: !opportunityId });
-  const opportunity = response?.rows.find((row) => row.id === opportunityId);
+    useGetAdminTriangulationOpportunityQuery({ id: opportunityId, radiusKm }, { skip: !opportunityId });
+  const opportunity = response?.opportunity;
   const [notifyCompany, { isLoading: notifying }] = useNotifyAdminTriangulationMatchMutation();
   const [intervene, { isLoading: intervening }] = useInterveneAdminTriangulationJobMutation();
   const [tab, setTab] = useState('related');
@@ -110,7 +109,7 @@ export function TriangulationApiDetail() {
         <LabelValue label="Current Route" value={text(opportunity.currentRoute)} />
         <LabelValue label="Truck" value={text(opportunity.truckPlate)} />
         <LabelValue label="Trucking Company" value={text(opportunity.company)} />
-        <LabelValue label="Container" value={text(opportunity.containerNumber)} />
+        <LabelValue label="Container" value={text(opportunity.currentContainerNumber)} />
         <LabelValue label="Cargo" value={text(opportunity.currentCargo)} />
         <LabelValue label="Current Location" value={text(opportunity.currentLocation)} />
         <LabelValue label="ETA (Destination)" value={text(opportunity.currentEta)} />

@@ -37,6 +37,21 @@ const DATE_RANGES = [
 ];
 const TREND_PERIODS = ["Last 6 Months", "Last 3 Months", "This Year"];
 const ACTIVITY_PERIODS = ["Last 30 days", "Last 90 days", "This year"];
+function dashboardDates(value) {
+  if (value === DATE_RANGES[0]) return { from: '2026-09-01', to: '2026-09-30' };
+  if (value === 'All Time') return undefined;
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const field = (key) => Number(parts.find((part) => part.type === key).value);
+  const today = new Date(Date.UTC(field('year'), field('month') - 1, field('day')));
+  const end = new Date(today);
+  const start = new Date(today);
+  if (value === 'Last 30 days') start.setUTCDate(start.getUTCDate() - 29);
+  else if (value === 'Last 90 days') start.setUTCDate(start.getUTCDate() - 89);
+  else if (value === 'This year' || value === 'This Year') start.setUTCMonth(0, 1);
+  else if (value === 'This Month') start.setUTCDate(1);
+  else if (value === 'Last Month') { start.setUTCDate(1); end.setTime(start.getTime() - 86400000); start.setTime(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1)); }
+  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
+}
 const REGISTRATION_TABS = [
   "Drivers",
   "Trucking Companies",
@@ -108,13 +123,13 @@ function FlowNode({ icon, tint = "blue", value, label, note, onClick }) {
   );
 }
 
-function StarRating({ rating, reviews, trend, breakdown }) {
+function StarRating({ rating, reviews, trend, breakdown, allTime }) {
   const rows = [5, 4, 3, 2, 1].map((stars) => ({
     stars,
     pct: breakdown?.[stars] ?? 0,
   }));
   const trendLabel = Number.isFinite(trend)
-    ? `${trend < 0 ? "↓" : "↑"} ${Math.abs(trend)} from last month`
+    ? `${trend < 0 ? "↓" : "↑"} ${Math.abs(trend)} from ${allTime ? "last month" : "previous period"}`
     : null;
   return (
     <div className={styles.rating}>
@@ -198,22 +213,26 @@ const HEALTH = [
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const [dateRange, setDateRange] = useState(DATE_RANGES[0]);
+  const [activityPeriod, setActivityPeriod] = useState(null);
+  const [revenuePeriod, setRevenuePeriod] = useState(null);
+  const [ratingPeriod, setRatingPeriod] = useState(null);
   const {
-    data: overview,
+    currentData: overview,
     isLoading: isOverviewLoading,
+    isFetching: isOverviewFetching,
     isUninitialized: isOverviewUninitialized,
     isError: isOverviewError,
     refetch: refetchOverview,
-  } = useGetAdminOverviewQuery();
+  } = useGetAdminOverviewQuery(dashboardDates(dateRange));
+  const earningsQuery = useGetAdminOverviewQuery(dashboardDates(revenuePeriod), { skip: revenuePeriod == null });
+  const activityQuery = useGetAdminOverviewQuery(dashboardDates(activityPeriod), { skip: activityPeriod == null });
+  const ratingQuery = useGetAdminOverviewQuery(dashboardDates(ratingPeriod), { skip: ratingPeriod == null });
   const jobs = useCollection("jobs") || [];
   const drivers = useCollection("drivers") || [];
   const companies = useCollection("companies") || [];
   const trucks = useCollection("trucks") || [];
-  const [dateRange, setDateRange] = useState(DATE_RANGES[0]);
   const [trendPeriod, setTrendPeriod] = useState(TREND_PERIODS[0]);
-  const [activityPeriod, setActivityPeriod] = useState(ACTIVITY_PERIODS[0]);
-  const [revenuePeriod, setRevenuePeriod] = useState("This Month");
-  const [ratingPeriod, setRatingPeriod] = useState("All Time");
   const [registrationTab, setRegistrationTab] = useState("Drivers");
   const [openMenu, setOpenMenu] = useState(null);
   const [query, setQuery] = usePageSearchState("");
@@ -390,7 +409,10 @@ export function Dashboard() {
       .slice(0, 5);
   }, [overview, registrationTab, drivers, companies, jobs, query]);
 
-  const apiTripActivity = overview?.tripActivity;
+  const earningsOverview = revenuePeriod == null ? overview : earningsQuery.currentData;
+  const activityOverview = activityPeriod == null ? overview : activityQuery.currentData;
+  const ratingOverview = ratingPeriod == null ? overview : ratingQuery.currentData;
+  const apiTripActivity = activityOverview?.tripActivity;
   const activityCompleted =
     apiTripActivity?.completed ?? overview?.jobs.completed ?? (overview ? 0 : data.completed);
   const activityInTransit =
@@ -429,47 +451,47 @@ export function Dashboard() {
   const earnings = [
     {
       label: "Drivers",
-      value: overview
-        ? overview.earningsBreakdown.drivers.percent ?? overview.earningsBreakdown.drivers.amount ?? 0
+      value: earningsOverview
+        ? earningsOverview.earningsBreakdown.drivers.percent ?? earningsOverview.earningsBreakdown.drivers.amount ?? 0
         : data.driverPayouts,
-      amount: overview ? overview.earningsBreakdown.drivers.amount : data.driverPayouts,
-      percent: overview?.earningsBreakdown.drivers.percent,
+      amount: earningsOverview ? earningsOverview.earningsBreakdown.drivers.amount : data.driverPayouts,
+      percent: earningsOverview?.earningsBreakdown.drivers.percent,
       color: "var(--tk-blue)",
     },
     {
       label: "Companies",
-      value: overview
-        ? overview.earningsBreakdown.companies.percent ?? overview.earningsBreakdown.companies.amount ?? 0
+      value: earningsOverview
+        ? earningsOverview.earningsBreakdown.companies.percent ?? earningsOverview.earningsBreakdown.companies.amount ?? 0
         : data.companyPayouts,
-      amount: overview ? overview.earningsBreakdown.companies.amount : data.companyPayouts,
-      percent: overview?.earningsBreakdown.companies.percent,
+      amount: earningsOverview ? earningsOverview.earningsBreakdown.companies.amount : data.companyPayouts,
+      percent: earningsOverview?.earningsBreakdown.companies.percent,
       color: "var(--tk-success)",
     },
     {
       label: "Platform Fees",
-      value: overview
-        ? overview.earningsBreakdown.platformFees.percent ?? overview.earningsBreakdown.platformFees.amount ?? 0
+      value: earningsOverview
+        ? earningsOverview.earningsBreakdown.platformFees.percent ?? earningsOverview.earningsBreakdown.platformFees.amount ?? 0
         : data.platformFees,
-      amount: overview ? overview.earningsBreakdown.platformFees.amount : data.platformFees,
-      percent: overview?.earningsBreakdown.platformFees.percent,
+      amount: earningsOverview ? earningsOverview.earningsBreakdown.platformFees.amount : data.platformFees,
+      percent: earningsOverview?.earningsBreakdown.platformFees.percent,
       color: "var(--tk-warning)",
     },
     {
       label: "Demurrage",
-      value: overview
-        ? overview.earningsBreakdown.demurrage.percent ?? overview.earningsBreakdown.demurrage.amount ?? 0
+      value: earningsOverview
+        ? earningsOverview.earningsBreakdown.demurrage.percent ?? earningsOverview.earningsBreakdown.demurrage.amount ?? 0
         : data.demurrage,
-      amount: overview ? overview.earningsBreakdown.demurrage.amount : data.demurrage,
-      percent: overview?.earningsBreakdown.demurrage.percent,
+      amount: earningsOverview ? earningsOverview.earningsBreakdown.demurrage.amount : data.demurrage,
+      percent: earningsOverview?.earningsBreakdown.demurrage.percent,
       color: "var(--tk-purple)",
     },
     {
       label: "Other Costs",
-      value: overview
-        ? overview.earningsBreakdown.otherCosts.percent ?? overview.earningsBreakdown.otherCosts.amount ?? 0
+      value: earningsOverview
+        ? earningsOverview.earningsBreakdown.otherCosts.percent ?? earningsOverview.earningsBreakdown.otherCosts.amount ?? 0
         : data.otherCosts,
-      amount: overview ? overview.earningsBreakdown.otherCosts.amount : data.otherCosts,
-      percent: overview?.earningsBreakdown.otherCosts.percent,
+      amount: earningsOverview ? earningsOverview.earningsBreakdown.otherCosts.amount : data.otherCosts,
+      percent: earningsOverview?.earningsBreakdown.otherCosts.percent,
       color: "var(--tk-ink-300)",
     },
   ];
@@ -481,10 +503,10 @@ export function Dashboard() {
           : `${Number(route.percentOfTotal.toFixed(1))}%`,
       }))
     : data.routes;
-  const rating = overview ? overview.averageRating.average : data.rating;
-  const reviewCount = overview ? overview.averageRating.totalReviews : data.reviews;
-  const ratingTrend = overview?.averageRating.trendVsLastMonth;
-  const ratingBreakdown = overview?.averageRating.breakdown;
+  const rating = ratingOverview?.averageRating.average;
+  const reviewCount = ratingOverview?.averageRating.totalReviews;
+  const ratingTrend = ratingOverview?.averageRating.trendVsLastMonth;
+  const ratingBreakdown = ratingOverview?.averageRating.breakdown;
   const systemHealth = overview
     ? HEALTH.map((item) => ({
         ...item,
@@ -522,7 +544,7 @@ export function Dashboard() {
     },
   ];
 
-  if (!overview && (isOverviewLoading || isOverviewUninitialized)) {
+  if (!overview && (isOverviewLoading || isOverviewFetching || isOverviewUninitialized)) {
     return <DashboardLoading />;
   }
 
@@ -553,7 +575,7 @@ export function Dashboard() {
               options={DATE_RANGES}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
-              onChange={setDateRange}
+              onChange={(value) => { setDateRange(value); setRevenuePeriod(null); setActivityPeriod(null); setRatingPeriod(null); }}
               icon="calendar-days"
             />
           </>
@@ -565,14 +587,14 @@ export function Dashboard() {
           label="Total Drivers"
           value={overview ? overview.users.drivers.total ?? "—" : drivers.length}
           delta={overview
-            ? overview.users.drivers.monthDelta != null
-              ? String(Math.abs(overview.users.drivers.monthDelta))
+            ? overview.range?.registrations.drivers != null
+              ? String(overview.range.registrations.drivers)
               : undefined
             : "12%"}
-          direction={(overview?.users.drivers.monthDelta ?? 0) < 0 ? "down" : "up"}
+          direction="up"
           caption={overview
-            ? overview.users.drivers.monthDelta != null
-              ? "New this month"
+            ? overview.range?.registrations.drivers != null
+              ? "New in selected period"
               : undefined
             : `${drivers.filter((d) => d.registrationType?.includes("Individual")).length} Individual`}
         />
@@ -582,14 +604,14 @@ export function Dashboard() {
           label="Trucking Companies"
           value={overview ? overview.users.truckers.total ?? "—" : companies.length}
           delta={overview
-            ? overview.users.truckers.monthDelta != null
-              ? String(Math.abs(overview.users.truckers.monthDelta))
+            ? overview.range?.registrations.truckers != null
+              ? String(overview.range.registrations.truckers)
               : undefined
             : "8%"}
-          direction={(overview?.users.truckers.monthDelta ?? 0) < 0 ? "down" : "up"}
+          direction="up"
           caption={overview
-            ? overview.users.truckers.monthDelta != null
-              ? "New this month"
+            ? overview.range?.registrations.truckers != null
+              ? "New in selected period"
               : "—"
             : `${companies.filter((c) => c.status === "Active").length} Active`}
         />
@@ -599,14 +621,14 @@ export function Dashboard() {
           label="Forwarders"
           value={overview ? overview.users.forwarders.total ?? "—" : data.forwarders}
           delta={overview
-            ? overview.users.forwarders.monthDelta != null
-              ? String(Math.abs(overview.users.forwarders.monthDelta))
+            ? overview.range?.registrations.forwarders != null
+              ? String(overview.range.registrations.forwarders)
               : undefined
             : "15%"}
-          direction={(overview?.users.forwarders.monthDelta ?? 0) < 0 ? "down" : "up"}
+          direction="up"
           caption={overview
-            ? overview.users.forwarders.monthDelta != null
-              ? "New this month"
+            ? overview.range?.registrations.forwarders != null
+              ? "New in selected period"
               : undefined
             : `${Math.max(0, data.forwarders - 1)} Active`}
         />
@@ -616,8 +638,8 @@ export function Dashboard() {
           value={overview
             ? overview.users.forwarders.exporterCount ?? "—"
             : data.exporters}
-          delta={overview ? undefined : "10%"}
-          caption={overview ? undefined : `${data.exporters} Active`}
+          delta={overview ? overview.range?.registrations.exporters != null ? String(overview.range.registrations.exporters) : undefined : "10%"}
+          caption={overview ? overview.range?.registrations.exporters != null ? "New in selected period" : undefined : `${data.exporters} Active`}
         />
         <StatCard
           icon="truck"
@@ -633,28 +655,24 @@ export function Dashboard() {
         <StatCard
           icon="route"
           label="Active Trips"
-          value={overview ? overview.jobs.active ?? "—" : data.activeTrips}
-          delta={overview
-            ? overview.jobs.activeTrendPercent != null
-              ? `${Math.abs(overview.jobs.activeTrendPercent)}%`
-              : undefined
-            : "14%"}
-          direction={(overview?.jobs.activeTrendPercent ?? 0) < 0 ? "down" : "up"}
+          value={overview ? overview.trips.activeTrips ?? "—" : data.activeTrips}
+          delta={overview ? undefined : "14%"}
           caption="Live operations"
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Completed Jobs"
-          value={overview ? overview.jobs.completed ?? "—" : data.completed}
+          value={overview ? overview.range?.jobs.completed ?? "—" : data.completed}
           delta={overview
-            ? overview.jobs.completedToday != null
-              ? String(overview.jobs.completedToday)
+            ? overview.range?.jobs.completedTrendPercent != null
+              ? `${Math.abs(overview.range.jobs.completedTrendPercent)}%`
               : undefined
             : "18%"}
+          direction={(overview?.range?.jobs.completedTrendPercent ?? 0) < 0 ? "down" : "up"}
           caption={overview
-            ? overview.jobs.completedToday != null
-              ? "Completed today"
+            ? overview.range?.jobs.completedTrendPercent != null
+              ? "Compared with previous period"
               : undefined
             : `${Math.round((data.completed / (jobs.length || 1)) * 100)}% Success Rate`}
         />
@@ -663,15 +681,15 @@ export function Dashboard() {
           tint="red"
           label="Containers Moved"
           value={overview
-            ? overview.trips.containersMovedThisMonth ?? "—"
+            ? overview.range?.jobs.containersMoved ?? "—"
             : jobs.reduce((sum, job) => sum + (job.requiredTrucks || 1), 0)}
           delta={overview
-            ? overview.trips.containersMovedTrendPercent != null
-              ? `${Math.abs(overview.trips.containersMovedTrendPercent)}%`
+            ? overview.range?.jobs.containersMovedTrendPercent != null
+              ? `${Math.abs(overview.range.jobs.containersMovedTrendPercent)}%`
               : undefined
             : "11%"}
-          direction={(overview?.trips.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
-          caption="This month"
+          direction={(overview?.range?.jobs.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
+          caption="Selected period"
         />
       </section>
 
@@ -682,7 +700,7 @@ export function Dashboard() {
           action={
             <MenuSelect
               id="revenue"
-              value={revenuePeriod}
+              value={revenuePeriod ?? dateRange}
               options={["This Month", "Last Month", "This Year"]}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
@@ -819,7 +837,7 @@ export function Dashboard() {
               >
                 <span>{index + 1}</span>
                 <strong>{route.route}</strong>
-                <span>{route.trips}</span>
+                <span>{route.trips ?? "—"}</span>
                 <span>{route.pct}</span>
               </button>
             ))}
@@ -831,7 +849,7 @@ export function Dashboard() {
           action={
             <MenuSelect
               id="earnings"
-              value={revenuePeriod}
+              value={revenuePeriod ?? dateRange}
               options={["This Month", "Last Month", "This Year"]}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
@@ -839,14 +857,14 @@ export function Dashboard() {
             />
           }
         >
-          <div className={styles.earnings}>
+          {revenuePeriod != null && !earningsOverview ? (earningsQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <div className={styles.earnings}>
             <DonutChart
               size={150}
               thickness={20}
               data={earnings}
               centerValue={compactNaira(
-                overview
-                  ? overview.earningsBreakdown.totalOrders ?? 0
+                earningsOverview
+                  ? earningsOverview.earningsBreakdown.totalOrders ?? 0
                   : data.totalRevenue,
               )}
               centerLabel="Total Orders"
@@ -858,7 +876,7 @@ export function Dashboard() {
                 display: item.amount == null ? "—" : compactNaira(item.amount),
               }))}
             />
-          </div>
+          </div>}
         </SectionCard>
       </section>
 
@@ -868,7 +886,7 @@ export function Dashboard() {
           action={
             <MenuSelect
               id="activity"
-              value={activityPeriod}
+              value={activityPeriod ?? dateRange}
               options={ACTIVITY_PERIODS}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
@@ -876,7 +894,7 @@ export function Dashboard() {
             />
           }
         >
-          <div className={styles.activity}>
+          {activityPeriod != null && !activityOverview ? (activityQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <div className={styles.activity}>
             <DonutChart
               size={150}
               thickness={20}
@@ -885,14 +903,14 @@ export function Dashboard() {
               centerLabel="Total Trips"
             />
             <LegendList style={{ width: "100%" }} items={activityData} />
-          </div>
+          </div>}
         </SectionCard>
         <SectionCard
           title="Average Rating"
           action={
             <MenuSelect
               id="rating"
-              value={ratingPeriod}
+              value={ratingPeriod ?? dateRange}
               options={["All Time", "This Month", "This Year"]}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
@@ -900,12 +918,13 @@ export function Dashboard() {
             />
           }
         >
-          <StarRating
+          {ratingPeriod != null && !ratingOverview ? (ratingQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <StarRating
             rating={rating}
             reviews={reviewCount}
             trend={ratingTrend}
             breakdown={ratingBreakdown}
-          />
+            allTime={ratingPeriod === "All Time"}
+          />}
         </SectionCard>
         <SectionCard
           title="System Health"

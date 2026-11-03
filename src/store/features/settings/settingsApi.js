@@ -5,6 +5,7 @@ import { adaptSection, relatedSettingsSections, adaptPreferences, adaptSecurityA
 export { findSettingsField, preferenceFields } from './settingsContracts.js';
 const failure = (message, status = 'CUSTOM_ERROR') => ({ error: { status, error: message, data: { message } } });
 const sections = ['general', 'operations', 'finance', 'fleet', 'security', 'passwords', 'security-alerts', 'data-protection'];
+const resetAllSections = ['general', 'operations', 'finance', 'fleet', 'security', 'data-protection'];
 // Defaults explicitly documented by GET admin/notifications/settings.
 const notificationDefaults = { emailEnabled: true, pushEnabled: true, smsEnabled: false, quietHoursEnabled: false, quietHoursStart: '22:00', quietHoursEnd: '07:00' };
 function editableDefaults(dto) {
@@ -117,7 +118,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
             check();
             if (result.error) return savedSections ? failure('Some settings were saved, but another section failed. Reload before continuing.') : settingsError(result);
             savedSections += 1;
-            feedback.push(adaptSettingsSaveFeedback(result.data, submittedEvents.length > 0 || submitted.some(({ contract }) => (personal || contract.section === plan.section) && !contract.enforced)));
+            feedback.push(adaptSettingsSaveFeedback(result.data, submitted.some(({ contract }) => (personal || contract.section === plan.section) && !contract.enforced)));
             if (!personal) {
               const saved = record(unwrapApiResponseData(result.data));
               const changedKeys = submitted.filter(({ control, contract, value }) => {
@@ -163,7 +164,9 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const after = adaptSecurityAlertEvents(reread.data);
           if (!after.eventVersion || after.eventVersion === expectedVersion || !settingsEventsMatch(after.events, events)) return failure('The saved security-alert values could not be confirmed. Reload before trying again.');
           api.dispatch(settingsApi.util.updateQueryData('getAdminSettingsSecurityEvents', { owner }, () => after));
-          return { data: adaptSettingsSaveFeedback(result.data, !after.enforced) };
+          const feedback = adaptSettingsSaveFeedback(result.data, !after.enforced);
+          const unavailableEvents = events.filter(({ key }) => after.events.some((row) => row.key === key && row.delivered === false && ['inApp', 'email', 'sms'].some((channel) => row[channel] === true))).map(({ key }) => key);
+          return { data: { ...feedback, savedOnly: feedback.savedOnly || unavailableEvents.length > 0, savedOnlyFields: [...new Set([...feedback.savedOnlyFields, ...unavailableEvents])] } };
         } catch (error) { return failure(error.message); }
       }, invalidatesTags: ['AdminSettingsSecurityEvents', 'AdminSettingsStatus'],
     }),
@@ -226,7 +229,7 @@ export const settingsApi = baseApi.enhanceEndpoints({ addTagTypes: [...settingsT
           const expectedVersions = {}, defaults = {};
           // Read every section first: no reset is sent with missing defaults or
           // versions, and the backend checks all versions atomically.
-          for (const page of sections) {
+          for (const page of resetAllSections) {
             const read = await baseQuery({ url: '/admin/settings/' + page }); check(); if (read.error) return read;
             const dto = record(unwrapApiResponseData(read.data)), fields = editableDefaults(dto);
             if (!Object.keys(fields).length) continue;

@@ -2,7 +2,7 @@
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from '../router.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { PageHeader, Button, StatCard, Card, SectionCard, Tabs, Checkbox, Switch, Icon, IconButton, DropdownMenu, Pagination, Modal, Badge } from '../ds.js';
@@ -21,7 +21,7 @@ const TAB_API_VALUE = {
   'Jobs & Trips': 'jobs-trips', Fleet: 'fleet', Finance: 'finance', Ratings: 'ratings', Maintenance: 'maintenance',
 };
 const CATEGORY_API_VALUE = {
-  'Jobs & Trips': 'jobs-trips', Fleet: 'fleet', Finance: 'finance', System: 'system', Ratings: 'ratings', Maintenance: 'maintenance',
+  'Jobs & Trips': 'JOBS_TRIPS', Fleet: 'FLEET', Finance: 'FINANCE', System: 'SYSTEM', Ratings: 'RATINGS', Maintenance: 'MAINTENANCE',
 };
 const SETTING_API_FIELD = { email: 'emailEnabled', push: 'pushEnabled', sms: 'smsEnabled', quiet: 'quietHoursEnabled' };
 const settingLabels = {
@@ -62,16 +62,16 @@ export function NotificationCenter() {
   const [settingsDraft, setSettingsDraft] = useState(null);
   const [toast, setToast] = useState('');
 
-  const categoryApiTab = CATEGORY_API_VALUE[category];
-  const categoryIsServerFiltered = tab === 'All' && Boolean(categoryApiTab);
-  const priorityIsServerFiltered = tab === 'Priority'
-    || (tab === 'All' && !categoryApiTab && priorities.length === 1 && priorities[0] === 'High');
-  const statusIsServerFiltered = (tab === 'Unread' || (tab === 'All' && !categoryApiTab && !priorityIsServerFiltered
-    && statuses.length === 1 && statuses[0] === 'Unread'));
-  const apiTab = tab !== 'All' ? TAB_API_VALUE[tab]
-    : categoryApiTab || (priorityIsServerFiltered ? 'priority' : statusIsServerFiltered ? 'unread' : 'all');
+  const dateStart = new Date();
+  dateStart.setHours(0, 0, 0, 0);
+  if (range === 'This Week') dateStart.setDate(dateStart.getDate() - 6);
+  if (range === 'This Month') dateStart.setDate(1);
   const { currentData: data, isLoading, isFetching, error, refetch } = useGetAdminNotificationsQuery(
-    { page, limit: pageSize, tab: apiTab },
+    { page, limit: pageSize, tab: TAB_API_VALUE[tab], search: q.trim(),
+      status: statuses.length === 1 ? statuses[0].toLowerCase() : 'all',
+      priorities: priorities.map((value) => value.toUpperCase()).sort(),
+      category: CATEGORY_API_VALUE[category] || 'ALL', dateFrom: range === 'All Time' ? undefined : dateStart.toISOString(),
+      sort: sort === 'Oldest First' ? 'oldest' : 'newest' },
     { refetchOnMountOrArgChange: true },
   );
   const [markRead, { isLoading: markingRead }] = useMarkAdminNotificationsReadMutation();
@@ -97,25 +97,7 @@ export function NotificationCenter() {
 
 
 
-  const filtered = useMemo(() => {
-    const list = rows.filter((row) =>
-      (!q || [row.title, row.message, row.category, row.id, row.actorName || ''].some((text) => text.toLowerCase().includes(q.toLowerCase())))
-      && (!statuses.length || statuses.includes(row.read ? 'Read' : 'Unread'))
-      && (!priorities.length || priorities.includes(row.priority))
-      && (category === 'All Categories' || row.category === category)
-      && (range === 'All Time' || range === 'Today' && row.dateGroup === 'Today'
-        || range === 'This Week' && ['Today', 'This Week'].includes(row.dateGroup)
-        || range === 'This Month' && row.dateGroup !== 'Older')
-      && (tab === 'All' || tab === 'Unread' && !row.read || tab === 'Priority' && row.priority === 'High'
-        || !['All', 'Unread', 'Priority'].includes(tab) && row.category === tab),
-    );
-    return sort === 'Oldest First' ? [...list].reverse() : list;
-  }, [rows, q, statuses, priorities, category, range, tab, sort]);
-
-  const localStatusFilter = statuses.length === 1 && !(statusIsServerFiltered && statuses[0] === 'Unread');
-  const localPriorityFilter = priorities.length > 0 && !priorityIsServerFiltered;
-  const localCategoryFilter = category !== 'All Categories' && !categoryIsServerFiltered;
-  const localFilter = Boolean(q || localCategoryFilter || localPriorityFilter || range !== 'All Time' || localStatusFilter);
+  const filtered = rows;
   const pageCount = Math.max(1, data?.pagination.totalPages || 1);
 
   function notify(message) {
@@ -209,7 +191,7 @@ export function NotificationCenter() {
           <Tabs value={tab} onChange={(value) => { setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
           <div className="notify-list-head">
             <strong>{range === 'Today' ? 'Today' : 'Notifications'}</strong><span />
-            <select value={sort} onChange={(event) => setSort(event.target.value)}><option>Latest First</option><option>Oldest First</option></select>
+            <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }}><option>Latest First</option><option>Oldest First</option></select>
             <IconButton icon="list" tone="outline" onClick={() => notify('List view active')} />
           </div>
           <div className="notify-list">
@@ -227,9 +209,9 @@ export function NotificationCenter() {
                 ]} /></span>}
               </span>
             </div>)}
-            {!error && !showingLoading && !filtered.length && <div className="notify-empty"><Icon name="bell-off" size={28} /><strong>No notifications found</strong><span>{localFilter ? 'No matches on this page. Try another page or change the filters.' : 'Try changing the selected filters or search.'}</span></div>}
+            {!error && !showingLoading && !filtered.length && <div className="notify-empty"><Icon name="bell-off" size={28} /><strong>No notifications found</strong><span>Try changing the selected filters or search.</span></div>}
           </div>
-          {data && <Pagination page={page} pageCount={pageCount} pageSize={pageSize} total={localFilter ? undefined : data.pagination.total} onPage={(value) => setPage(Math.max(1, Math.min(value, pageCount)))} onPageSize={(value) => { setPageSize(value); setPage(1); }} />}
+          {data && <Pagination page={page} pageCount={pageCount} pageSize={pageSize} total={data.pagination.total} onPage={(value) => setPage(Math.max(1, Math.min(value, pageCount)))} onPageSize={(value) => { setPageSize(value); setPage(1); }} />}
         </Card>
       </main>
       <aside className="notify-rail">

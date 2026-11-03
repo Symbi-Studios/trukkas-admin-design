@@ -198,6 +198,24 @@ export const bidScreenApi=baseApi.injectEndpoints({
       },
       providesTags:['AdminBidAnalytics'],
     }),
+    exportAdminBidFunnel:builder.query({
+      async queryFn({owner,role,dateFrom,dateTo},api,_options,baseQuery) {
+        try {
+          if(!timestamp(dateFrom)||!timestamp(dateTo)||Date.parse(dateTo)<Date.parse(dateFrom)) throw failure('Choose a valid date range.');
+          const result=await transport(api,baseQuery,owner,role)({
+            url:'/admin/bids/funnel/export',params:{dateFrom,dateTo,format:'csv'},headers:{Accept:'text/csv'},
+            responseHandler:async(response)=>{
+              const body=await response.text();
+              if(!response.ok){try{return JSON.parse(body);}catch{return {message:'Unable to export the funnel report.'};}}
+              return {csv:body,contentType:response.headers.get('Content-Type')};
+            },
+          });
+          const csv=result?.csv,type=result?.contentType?.split(';')[0].trim().toLowerCase();
+          if(typeof csv!=='string'||!csv.trim()||type!=='text/csv'||/^[<{\[]/.test(csv.replace(/^\uFEFF/,'').trimStart())) throw failure('The funnel report is not a valid CSV download.');
+          return {data:csv};
+        }catch(e){return {error:e?.status?e:failure('Unable to export the funnel report.')};}
+      },
+    }),
     getAdminBidScreenOffer:builder.query({
       async queryFn({owner,role,id},api,_options,baseQuery) {
         try {
@@ -220,4 +238,4 @@ export const bidScreenApi=baseApi.injectEndpoints({
     }),
   }),
 });
-export const {useGetAdminBidScreenDirectoryQuery,useGetAdminBidScreenAnalyticsQuery,useGetAdminBidScreenTopCompaniesQuery,useGetAdminBidScreenOfferQuery}=bidScreenApi;
+export const {useGetAdminBidScreenDirectoryQuery,useGetAdminBidScreenAnalyticsQuery,useGetAdminBidScreenTopCompaniesQuery,useGetAdminBidScreenOfferQuery,useLazyExportAdminBidFunnelQuery}=bidScreenApi;

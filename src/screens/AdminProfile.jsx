@@ -1,16 +1,15 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Avatar, Badge, Button, Card, Icon, LabelValue, PageHeader, ProgressBar,
   SectionCard, Switch, Tabs, TextField, Timeline, Modal,
 } from '../ds.js';
-import { useGetAdminSelfProfileQuery, useGetAdminSelfSecurityQuery, useGetAdminSelfSessionQuery, useGetAdminSelfActivitySummaryQuery, useUpdateAdminSelfProfileMutation } from '../store/features/profile/profileApi.js';
+import { useGetAdminSelfProfileQuery, useGetAdminSelfSecurityQuery, useGetAdminSelfSessionQuery, useGetAdminSelfActivitySummaryQuery, useGetAdminSelfActivityQuery, useUpdateAdminSelfProfileMutation } from '../store/features/profile/profileApi.js';
 import { useChangeAdminSettingsPasswordMutation } from '../store/features/settings/settingsApi.js';
 import { useGetAdminTwoFactorQuery } from '../store/features/settings/twoFactorApi.js';
-import { useGetAdminAuditDirectoryQuery } from '../store/features/audit/auditApi.js';
-import { adaptAdminSelfProfile, profileActivity, profileUnavailable } from '../store/features/profile/profileValues.js';
+import { adaptAdminSelfProfile, profileUnavailable } from '../store/features/profile/profileValues.js';
 import { DriverDetailLoading, DriverLoadingNotice } from './DriversLoading.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { SettingsTwoFactorDialog } from './SettingsTwoFactorDialog.jsx';
@@ -201,8 +200,8 @@ function SecurityTab({ user, notify, admin }) {
 }
 
 function ActivityTab({ user, canRead }) {
-  const query = useGetAdminAuditDirectoryQuery({ owner: user.id }, { skip: !canRead });
-  const activity = useMemo(() => profileActivity(!query.error && canRead ? query.currentData?.rows : null, user.id), [query.currentData, query.error, canRead, user.id]);
+  const query = useGetAdminSelfActivityQuery({ owner: user.id }, { skip: !canRead });
+  const activity = !query.error && canRead ? query.currentData : null;
 
   return (
     <div className="tk-profile-activity-layout">
@@ -225,7 +224,7 @@ function ActivityTab({ user, canRead }) {
 export function AdminProfile() {
   const admin = useSelector((state) => state.auth.admin);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
-  const canRead = authenticated && admin?.role === 'SUPER_ADMIN' && Boolean(admin?.id);
+  const canRead = authenticated && Boolean(admin?.id);
   const query = useGetAdminSelfProfileQuery({ owner: admin?.id }, { skip: !authenticated || !admin?.id });
   const options = { skip: !authenticated || !admin?.id };
   const security = useGetAdminSelfSecurityQuery({ owner: admin?.id }, options);

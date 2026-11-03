@@ -31,7 +31,7 @@ export function SettingsSecurity() {
   const updateDataProtectionOverview = editor.change('settingsDataProtectionOverview');
   const updateSecurityAlertsOverview = editor.change('settingsSecurityAlertsOverview');
   const saveSecuritySettings = () => editor.save();
-  const resetSecuritySettings = () => editor.unavailable('Reset Security Settings');
+  const resetSecuritySettings = () => editor.reset();
   const securityStatus = editor.status(securityStatusTemplate);
   const recentSecurityEvents = editor.events;
   const auth = editor.group('settingsAuth');

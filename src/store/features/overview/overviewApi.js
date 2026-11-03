@@ -78,6 +78,11 @@ function mapAdminOverviewResponse(response) {
   const jobs = data.jobs || {};
 
   return {
+    range: data.range ? {
+      from: data.range.from, to: data.range.to,
+      registrations: Object.fromEntries(['drivers', 'truckers', 'forwarders', 'exporters'].map((key) => [key, numberOrNull(data.range.registrations?.[key])])),
+      jobs: Object.fromEntries(['completed', 'completedTrendPercent', 'containersMoved', 'containersMovedTrendPercent'].map((key) => [key, numberOrNull(data.range.jobs?.[key])])),
+    } : null,
     jobs: {
       total: numberOrNull(jobs.totalJobs),
       totalTrendPercent: numberOrNull(jobs.totalJobsTrendPercent),
@@ -113,7 +118,7 @@ function mapAdminOverviewResponse(response) {
     topRoutesByVolume: Array.isArray(data.topRoutesByVolume)
       ? data.topRoutesByVolume.map((route) => ({
           route: route?.route || '—',
-          trips: numberOrNull(route?.trips) ?? 0,
+          trips: numberOrNull(route?.trips),
           percentOfTotal: numberOrNull(route?.percentOfTotal),
         }))
       : [],
@@ -208,8 +213,14 @@ function mapAdminOverviewResponse(response) {
 export const overviewApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getAdminOverview: builder.query({
-      query: () => ({ url: '/admin/overview', method: 'GET' }),
-      transformResponse: mapAdminOverviewResponse,
+      query: (range) => ({ url: '/admin/overview', method: 'GET', params: { topRoutesLimit: 10, ...(range?.from && range?.to ? { from: range.from, to: range.to } : {}) } }),
+      transformResponse: (response, _meta, range) => {
+        const mapped = mapAdminOverviewResponse(response);
+        if (range?.from && range?.to && (mapped.range?.from !== range.from || mapped.range?.to !== range.to)) {
+          throw new Error('The selected dashboard period could not be loaded.');
+        }
+        return mapped;
+      },
       providesTags: [{ type: 'AdminFleet', id: 'OVERVIEW' }],
     }),
   }),

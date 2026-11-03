@@ -13,7 +13,7 @@ export function adaptSettingsSaveFeedback(response, fallbackSavedOnly = false) {
   const fields = Array.isArray(dto.savedOnlyFields) && dto.savedOnlyFields.every(field => text(field))
     ? [...new Set(dto.savedOnlyFields.map(text))] : null;
   const warning = text(dto.warning);
-  return { savedOnlyFields: fields || [], warning, savedOnly: Boolean(warning) || (fields ? fields.length > 0 : fallbackSavedOnly) };
+  return { savedOnlyFields: fields || [], warning, savedOnly: Boolean(warning) || Boolean(fields?.length) || fallbackSavedOnly };
 }
 export const securityEventKeys = ['successfulLogin', 'failedLoginAttempts', 'newDeviceLogin', 'newIpAddress', 'passwordChanged', 'accountRecoveryRequests', 'adminRoleChanges', 'sensitiveDataAccess', 'multipleFailedAttempts', 'suspiciousActivity'];
 export function dateLabel(value) { return timestamp(value) ? new Date(value).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; }
@@ -24,10 +24,18 @@ const displayCodes = {
   timezone: { 'Africa/Lagos': '(GMT+01:00) Lagos, Nigeria' },
   distanceUnit: { km: 'Kilometers (km)' },
 };
-export const editableRoles = (section) => section === 'finance' ? ['SUPER_ADMIN', 'FINANCE_ADMIN'] : ['general', 'operations', 'fleet'].includes(section) ? ['SUPER_ADMIN', 'OPS_ADMIN'] : section === 'data-protection' ? ['SUPER_ADMIN'] : [];
+export const editableRoles = (section) => section === 'finance' ? ['SUPER_ADMIN', 'FINANCE_ADMIN'] : ['general', 'operations', 'fleet'].includes(section) ? ['SUPER_ADMIN', 'OPS_ADMIN'] : ['data-protection', 'security', 'passwords'].includes(section) ? ['SUPER_ADMIN'] : [];
 export const canEditSettings = (section, role) => section === 'notifications' ? ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(role) : editableRoles(section).includes(role);
 export function findSettingsField(page, group, field) { return settingsControls.find((control) => control.page === page && control.group === group && control.field === field); }
 function enumChoices(control, descriptor) {
+  if (control.page === 'operations' && control.field === 'trackingUpdateInterval' && descriptor.type === 'number' && descriptor.unit === 'seconds') {
+    const min = numeric(descriptor.min), max = numeric(descriptor.max);
+    return (control.options || []).flatMap((label) => {
+      const match = /^(\d+) minutes?$/.exec(label);
+      const value = match ? Number(match[1]) * 60 : null;
+      return value != null && (min == null || value >= min) && (max == null || value <= max) ? [{ label, value }] : [];
+    });
+  }
   const options = Array.isArray(descriptor.options) ? descriptor.options : [];
   return options.flatMap((option) => {
     const item = record(option), value = typeof option === 'string' || typeof option === 'number' ? option : item.value;
@@ -74,7 +82,7 @@ export function adaptSection(response, page, related = {}) {
     const descriptor = matchDescriptor(control, descriptors);
     // String facts may fit an existing select. Editing still requires explicit
     // backend options so the control cannot invent wire values.
-    const compatible = descriptor && (descriptor.type === control.type || (control.type === 'enum' && descriptor.type === 'string'));
+    const compatible = descriptor && (descriptor.type === control.type || (control.type === 'enum' && descriptor.type === 'string') || (page === 'operations' && control.field === 'trackingUpdateInterval' && descriptor.type === 'number' && descriptor.unit === 'seconds'));
     const raw = descriptor && Object.hasOwn(flat, descriptor.key) ? flat[descriptor.key] : descriptor?.value;
     values[control.group][control.field] = compatible ? decode(control, descriptor, raw) : null;
     if (compatible) contracts[control.group + '.' + control.field] = {
@@ -146,7 +154,7 @@ export function adaptPreferences(response) {
   for (const field of preferenceFields) {
     values[field.group] ||= {};
     values[field.group][field.field] = field.time ? timeLabel(dto[field.key]) : typeof dto[field.key] === 'boolean' ? dto[field.key] : null;
-    contracts[field.group + '.' + field.field] = { ...field, editable: !field.fixed, enforced: field.fixed };
+    contracts[field.group + '.' + field.field] = { ...field, editable: !field.fixed, enforced: true };
   }
   values.settingsQuietHours ||= {};
   values.settingsQuietHours.timeZone = dto.timeZone === 'Africa/Lagos' ? '(GMT+01:00) Lagos, Nigeria' : null;
@@ -155,7 +163,7 @@ export function adaptPreferences(response) {
 export const eventFrequencies = { INSTANT: 'Instant', HOURLY: 'Hourly Digest', DAILY: 'Daily Digest', OFF: 'Off' };
 function settingsEventRows(raw) {
   if (!Array.isArray(raw) || raw.some(row => !safeKey(row?.key)) || new Set(raw.map(row => row.key)).size !== raw.length) return null;
-  return raw.map(row => ({ key: row.key, label: text(row.label), ...Object.fromEntries(['inApp', 'email', 'sms'].map(channel => [channel, typeof row[channel] === 'boolean' ? row[channel] : null])), frequency: Object.hasOwn(eventFrequencies, row.frequency) ? row.frequency : null }));
+  return raw.map(row => ({ key: row.key, label: text(row.label), delivered: typeof row.delivered === 'boolean' ? row.delivered : null, ...Object.fromEntries(['inApp', 'email', 'sms'].map(channel => [channel, typeof row[channel] === 'boolean' ? row[channel] : null])), frequency: Object.hasOwn(eventFrequencies, row.frequency) ? row.frequency : null }));
 }
 export function adaptSecurityAlertEvents(response) {
   const dto = record(unwrapApiResponseData(response));

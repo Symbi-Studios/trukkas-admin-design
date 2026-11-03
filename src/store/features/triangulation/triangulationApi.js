@@ -4,8 +4,9 @@ const record = (value) => value && typeof value === 'object' && !Array.isArray(v
 const text = (...values) => values.find((value) => typeof value === 'string' && value.trim())?.trim() || null;
 const number = (...values) => {
   const value = values.find((item) => item !== null && item !== undefined && item !== '');
+  if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return null;
   const result = Number(value);
-  return value === undefined || !Number.isFinite(result) ? null : result;
+  return Number.isFinite(result) ? result : null;
 };
 
 function location(value) {
@@ -24,7 +25,7 @@ function route(value, pickup, delivery) {
   return from && to ? `${from} → ${to}` : from || to || null;
 }
 
-function mapOpportunity(value, index) {
+function mapOpportunity(value) {
   const item = record(value);
   const current = record(item.finishingJob || item.currentJob || item.currentSegment || item.completingJob || item.activeJob);
   const proposed = record(item.openJob || item.matchedJob || item.proposedJob || item.proposedSegment || item.nextJob || item.job);
@@ -32,17 +33,14 @@ function mapOpportunity(value, index) {
   const trucker = record(item.trucker || item.truckingCompany || truck.trucker);
   const currentPickup = text(current.pickupLocation, current.pickup, current.origin);
   const currentDelivery = text(current.deliveryLocation, current.delivery, current.destination);
-  const proposedPickup = text(proposed.pickupLocation, proposed.pickup, proposed.origin);
-  const proposedDelivery = text(proposed.deliveryLocation, proposed.delivery, proposed.destination);
+  const proposedPickup = text(record(proposed.pickup).address, proposed.pickupLocation, proposed.pickup, proposed.origin);
+  const proposedDelivery = text(record(proposed.delivery).address, proposed.deliveryLocation, proposed.delivery, proposed.destination);
   const currentJobId = text(current.id, current.jobId, item.currentJobId, item.tripJobId);
   const jobId = text(proposed.id, proposed.jobId, item.jobId, item.matchedJobId, item.openJobId);
   const truckerId = text(current.truckerId, trucker.id, trucker.userId, item.truckerId, item.truckingCompanyId);
   const serverId = text(item.id, item.opportunityId, item.matchId);
-  const id = serverId || [currentJobId, jobId, truckerId].filter(Boolean).join(':') || `opportunity-${index}`;
-  const position = location(current.deliveryPosition) || location(current.deliveryCoordinates) || location(current.delivery)
-    || location(current.destinationPosition) || location(current.destinationCoordinates)
-    || location(item.truckPosition) || location(truck.position) || location(truck.location)
-    || location({ latitude: truck.lastLatitude, longitude: truck.lastLongitude });
+  const id = serverId;
+  const position = record(current.endPoint).kind === 'DELIVERY' ? location(current.endPoint) : null;
   const pickupPosition = location(proposed.pickupPosition) || location(proposed.pickupCoordinates) || location(proposed.pickup)
     || location(proposed.originPosition) || location(proposed.originCoordinates)
     || location(item.pickupPosition) || location(item.pickupCoordinates);
@@ -69,7 +67,8 @@ function mapOpportunity(value, index) {
     currentCargo: text(current.cargo, current.cargoType),
     proposedCargo: text(proposed.cargo, proposed.cargoType),
     container: text(proposed.containerType, proposed.container, current.containerType, item.containerType),
-    containerNumber: text(current.containerNumber, proposed.containerNumber, item.containerNumber)
+    currentContainerNumber: text(current.containerNumber),
+    containerNumber: text(proposed.containerNumber, item.containerNumber)
       || (Array.isArray(proposed.containerNumbers) ? proposed.containerNumbers.filter(Boolean).join(', ') : null),
     forwarder: text(proposed.forwarderName, record(proposed.forwarder).name, item.forwarderName),
     currentJobNumber: text(current.jobNumber),
@@ -96,7 +95,7 @@ function mapOpportunities(response, args = {}) {
   const data = unwrapApiResponseData(response);
   const source = Array.isArray(data) ? data : data?.opportunities ?? data?.matches;
   if (!Array.isArray(source)) throw new Error('The triangulation response is missing its opportunities list.');
-  const rows = source.map(mapOpportunity);
+  const rows = source.map(mapOpportunity).filter((row) => row.id);
   const pagination = record(data?.pagination);
   const total = number(pagination.total, data?.total) ?? rows.length;
   const limit = (number(pagination.limit) ?? args.limit ?? rows.length) || 20;
@@ -122,6 +121,24 @@ export const triangulationApi = baseApi.injectEndpoints({
       transformResponse: (response, _meta, args) => mapOpportunities(response, args),
       providesTags: ['AdminTriangulation'],
     }),
+    getAdminTriangulationOpportunity: builder.query({
+      query: ({ id, radiusKm = 150 }) => ({
+        url: `/admin/triangulation/opportunities/${encodeURIComponent(id)}`,
+        params: { radiusKm },
+      }),
+      transformResponse: (response, _meta, args) => {
+        const data = record(unwrapApiResponseData(response));
+        const opportunity = mapOpportunity(data.opportunity);
+        if (!opportunity.id || opportunity.id !== args.id) throw new Error('The opportunity response has an invalid ID.');
+        const factors = record(data.matchFactors), financial = record(data.financial);
+        return { opportunity: { ...opportunity,
+          score: number(factors.matchScore, opportunity.score),
+          distanceKm: number(factors.distanceKm, opportunity.distanceKm),
+          revenue: number(financial.estimatedRevenue, opportunity.revenue),
+        } };
+      },
+      providesTags: ['AdminTriangulation'],
+    }),
     notifyAdminTriangulationMatch: builder.mutation({
       query: ({ jobId, truckerId }) => ({
         url: '/admin/triangulation/notify',
@@ -143,6 +160,7 @@ export const triangulationApi = baseApi.injectEndpoints({
 
 export const {
   useGetAdminTriangulationOpportunitiesQuery,
+  useGetAdminTriangulationOpportunityQuery,
   useNotifyAdminTriangulationMatchMutation,
   useInterveneAdminTriangulationJobMutation,
 } = triangulationApi;

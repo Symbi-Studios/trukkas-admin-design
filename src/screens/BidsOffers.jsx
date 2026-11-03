@@ -8,7 +8,7 @@ import { useNavigate } from "../router.js";
 import { Badge, Banner, Button, Card, DataTable, DonutChart, DropdownMenu, Icon, Modal, PageHeader, Pagination, SearchField, Skeleton, Sparkline, Tabs } from "../ds.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
-import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenTopCompaniesQuery, useGetAdminBidScreenOfferQuery } from "../store/features/bids/bidScreenApi.js";
+import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenTopCompaniesQuery, useGetAdminBidScreenOfferQuery, useLazyExportAdminBidFunnelQuery } from "../store/features/bids/bidScreenApi.js";
 import "./Operations.css";
 
 const tones = { "Pending Evaluation":"warning", "Bid Accepted":"success", "In Transit":"info", "At Delivery":"orange", "Returning Container":"teal", Bidding:"purple", Completed:"success", Expired:"danger", Cancelled:"neutral" };
@@ -104,6 +104,7 @@ function BidsOffersContent({owner,role,authenticated}) {
   const analyticsQuery=useGetAdminBidScreenAnalyticsQuery({...session,...dates},{skip:!authenticated,refetchOnMountOrArgChange:true});
   const topQuery=useGetAdminBidScreenTopCompaniesQuery({...session,dateFrom:dateOptions[0].dateFrom,dateTo:dateOptions[0].dateTo},{skip:!authenticated,refetchOnMountOrArgChange:true});
   const offerQuery=useGetAdminBidScreenOfferQuery({...session,id:offerModal?.bidId},{skip:!authenticated||!offerModal?.bidId,refetchOnMountOrArgChange:true});
+  const [exportFunnel]=useLazyExportAdminBidFunnelQuery();
   const data=directoryQuery.error?null:directoryQuery.currentData;
   const analytics=analyticsQuery.error?null:analyticsQuery.currentData;
   const analyticsLoading=authenticated&&analyticsQuery.isFetching&&!analytics;
@@ -128,6 +129,13 @@ function BidsOffersContent({owner,role,authenticated}) {
     setOfferError(title);setToast({tone:"info",title});
   }
   function openOffer(row){setOfferError("");setOfferModal(row);setMenu(null);}
+  async function exportFunnelReport(){
+    try {
+      const csv=await exportFunnel({...session,...dates}).unwrap();
+      const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})),link=document.createElement("a");
+      link.href=url;link.download="bid-funnel.csv";document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),0);
+    } catch(error) { setToast({tone:"warning",title:getApiErrorMessage(error)}); }
+  }
   function exportRows(){
     if(!rowsKnown)return;
     const header=isCounterTab?["Job ID","Bidding Company","Offer Amount (₦)","Δ vs Lowest"]:["Job ID","Route","Customer","Bids","Lowest Bid (₦)","Winning Bid (₦)","Status","Created At","Time"];
@@ -423,12 +431,7 @@ function BidsOffersContent({owner,role,authenticated}) {
               <h3>Bid Conversion Funnel</h3>
             </div>
             <a
-              onClick={() =>
-                setToast({
-                  tone: "info",
-                  title: "A full funnel report is not available.",
-                })
-              }
+              onClick={exportFunnelReport}
             >
               View Report
             </a>

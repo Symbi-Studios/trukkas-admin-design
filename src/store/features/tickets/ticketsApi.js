@@ -68,8 +68,12 @@ export const emptyTicket = {
   id: '—', subject: '—', subjectValue: null, userId: null, customer: '—', email: '—', company: '—', category: '—', categoryKnown: false, categoryCode: null,
   subcategory: '—', priority: '—', priorityCode: null, status: '—', statusCode: null, assignee: '—', assignedTo: null,
   source: '—', created: '—', createdBy: '—', createdAge: '—', updated: '—', description: '—', attachments: [], attachmentsKnown: false,
-  messages: [], messagesKnown: false, history: [], mergedInto: null, sourceData: {},
+  messages: [], messagesKnown: false, history: [], mergedInto: null, canManage: false, paymentRestricted: false, sourceData: {},
 };
+function ticketCanManage(dto) {
+  const handling = record(dto.handling);
+  return typeof handling.canManage === 'boolean' ? handling.canManage : Boolean(CATEGORY_LABELS[dto.category]) && dto.category !== 'PAYMENT_ISSUE';
+}
 function adaptTicket(dto, currentAdmin) {
   const user = record(dto.user), assignedAdmin = record(dto.assignedAdmin);
   const statusCode = text(dto.status), priorityCode = text(dto.priority), categoryCode = text(dto.category);
@@ -108,7 +112,8 @@ function adaptTicket(dto, currentAdmin) {
       : assignedTo && assignedTo === currentAdmin?.id ? personName(record(currentAdmin)) : '—',
     source: SOURCE_LABELS[dto.source] || '—', created: date(dto.createdAt), createdBy: ticketActorName(dto.createdBy), createdAge: age(dto.createdAt), updated: date(dto.updatedAt),
     description: text(dto.description) || '—', messages, messagesKnown: publicKnown && notesKnown && entriesKnown,
-    attachments: [...files.values()], attachmentsKnown, history, mergedInto: mergedTicketId(dto.mergedInto), sourceData: dto,
+    attachments: [...files.values()], attachmentsKnown, history, mergedInto: mergedTicketId(dto.mergedInto),
+    canManage: ticketCanManage(dto), paymentRestricted: categoryCode === 'PAYMENT_ISSUE' || record(dto.handling).restricted === true, sourceData: dto,
   };
 }
 export function ticketWithAgents(ticket, agents = []) {
@@ -204,7 +209,7 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
       async queryFn(_args, api, _options, baseQuery) {
         const owner = account(api), result = await readAll(baseQuery, '/admin/support/agents', 'agents', { includeInactive: 'false' });
         if (!owns(api, owner)) return sessionError();
-        return result.error ? result : { data: result.data.filter((agent) => text(agent.name)).map((agent) => ({ id: agent.id, name: agent.name.trim(), isActive: typeof agent.isActive === 'boolean' ? agent.isActive : null })) };
+        return result.error ? result : { data: result.data.filter((agent) => text(agent.name)).map((agent) => ({ id: agent.id, name: agent.name.trim(), role: text(agent.role), isActive: typeof agent.isActive === 'boolean' ? agent.isActive : null })) };
       }, providesTags: ['AdminTicketAgents'],
     }),
     createAdminSupportTicket: builder.mutation({
@@ -241,6 +246,7 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
         const current = await readTicket(id, baseQuery);
         if (!owns(api, owner)) return sessionError();
         if (current.error) return current;
+        if (!ticketCanManage(current.data)) return failure('You can view this ticket and add internal notes, but cannot make this change.', 403);
         if (isMergedTicket(current.data)) return failure('Merged tickets cannot be edited.', 409);
         if (expectedUpdatedAt && current.data.updatedAt !== expectedUpdatedAt) return failure('The ticket changed. Refresh and review it before saving.', 409);
         const result = await baseQuery({ url: path(id), method: 'PATCH', body });
@@ -291,6 +297,7 @@ export const ticketsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSupport
         const target = await readTicket(targetThreadId, baseQuery);
         if (!owns(api, owner)) return sessionError();
         if (target.error) return target;
+        if (!ticketCanManage(source.data) || !ticketCanManage(target.data)) return failure('You cannot merge one of these tickets.', 403);
         const userId = text(source.data.userId) || text(record(source.data.user).id), targetUser = text(target.data.userId) || text(record(target.data.user).id);
         if (!userId || userId !== targetUser || isMergedTicket(source.data) || isMergedTicket(target.data)) return failure('Both tickets must belong to the same customer and must not already be merged.');
         const sourceEntries = ticketEntryIds(source.data);
@@ -320,6 +327,12 @@ async function sendEntry({ id, content, attachmentUrls = [] }, internal, api, ba
   const owner = account(api);
   if (!owns(api, owner)) return sessionError();
   if (!text(id) || !text(content) || !Array.isArray(attachmentUrls) || !attachmentUrls.every((url) => ticketFileUrl(url))) return failure('Enter a message and valid attachments.');
+  if (!internal) {
+    const ticket = await readTicket(id, baseQuery);
+    if (!owns(api, owner)) return sessionError();
+    if (ticket.error) return ticket;
+    if (!ticketCanManage(ticket.data)) return failure('You can add an internal note to this ticket.', 403);
+  }
   const body = { content: content.trim(), attachmentUrls }, section = internal ? 'notes' : 'messages';
   const result = await baseQuery({ url: path(id) + '/' + section, method: 'POST', body });
   if (!owns(api, owner)) return sessionError();

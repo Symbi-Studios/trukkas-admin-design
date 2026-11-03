@@ -28,6 +28,28 @@ export const profileApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSelfPro
     getAdminSelfSecurity: builder.query(personalQuery('/security')),
     getAdminSelfSession: builder.query(personalQuery('/session')),
     getAdminSelfActivitySummary: builder.query(personalQuery('/activity/summary')),
+    getAdminSelfActivity: builder.query({
+      async queryFn({ owner }, api, _options, baseQuery) {
+        const current = guard(api, owner);
+        if (!current) return failure('Please sign in again.');
+        const result = await baseQuery({ url: profilePath + '/activity', params: { page: 1, limit: 5 } });
+        if (!current()) return failure('Your session changed. Please reload.');
+        if (result.error) return result;
+        const data = unwrapApiResponseData(result.data);
+        if (!Array.isArray(data?.activity)) return failure('Your recent activity could not be loaded.');
+        return { data: data.activity.map((entry) => {
+          const date = typeof entry.timestamp === 'string' ? new Date(entry.timestamp) : null;
+          return {
+            title: text(entry.title) || text(entry.action) || '—',
+            description: [text(entry.description), text(entry.location), text(entry.ipAddress)].filter(Boolean).join(' · ') || '—',
+            time: date && Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short' }).format(date) : '—',
+            state: entry.result === 'SUCCESS' ? 'done' : entry.result === 'FAILED' ? 'danger' : 'pending',
+          };
+        }) };
+      },
+      keepUnusedDataFor: 0,
+      providesTags: ['AdminSelfProfile'],
+    }),
     getAdminSelfProfile: builder.query({
       async queryFn({ owner }, api, _options, baseQuery) {
         const current = guard(api, owner);
@@ -60,4 +82,4 @@ export const profileApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminSelfPro
   }),
 });
 
-export const { useGetAdminSelfProfileQuery, useGetAdminSelfSecurityQuery, useGetAdminSelfSessionQuery, useGetAdminSelfActivitySummaryQuery, useUpdateAdminSelfProfileMutation } = profileApi;
+export const { useGetAdminSelfProfileQuery, useGetAdminSelfSecurityQuery, useGetAdminSelfSessionQuery, useGetAdminSelfActivitySummaryQuery, useGetAdminSelfActivityQuery, useUpdateAdminSelfProfileMutation } = profileApi;

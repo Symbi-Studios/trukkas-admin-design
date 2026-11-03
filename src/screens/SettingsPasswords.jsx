@@ -26,7 +26,7 @@ export function SettingsPasswords() {
     setSessionDialog({ admin: editor.admin, session });
   };
   const savePasswordSettings = () => editor.save();
-  const resetPasswordSettings = () => editor.unavailable('Reset Password Settings');
+  const resetPasswordSettings = () => editor.reset();
   const resetAllUserSessions = () => {
     if (editor.admin?.role !== 'SUPER_ADMIN') { window.alert('Only Super Admins can terminate all app-user sessions.'); return; }
     setSessionDialog({ admin: editor.admin, all: true });

@@ -111,11 +111,35 @@ function mapResponse(response) {
 export const notificationsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getAdminNotifications: builder.query({
-      query: ({ page = 1, limit = 20, tab = 'all' } = {}) => ({
-        url: '/admin/notifications',
-        params: { page, limit, tab },
-      }),
-      transformResponse: mapResponse,
+      async queryFn({ page = 1, limit = 20, tab = 'all', priorities = [], ...filters } = {}, _api, _options, baseQuery) {
+        const params = Object.fromEntries(Object.entries({ page, limit, tab, ...filters }).filter(([, value]) => value != null && value !== ''));
+        if (priorities.length !== 2) {
+          const result = await baseQuery({ url: '/admin/notifications', params: { ...params, ...(priorities.length === 1 ? { priority: priorities[0] } : {}) } });
+          if (result.error) return result;
+          try { return { data: mapResponse(result.data) }; } catch (error) { return { error: { status: 'CUSTOM_ERROR', error: error.message } }; }
+        }
+        const groups = await Promise.all(priorities.map(async (priority) => {
+          const rows = [];
+          let first;
+          for (let currentPage = 1; ; currentPage++) {
+            const result = await baseQuery({ url: '/admin/notifications', params: { ...params, priority, page: currentPage, limit: 100 } });
+            if (result.error) return { error: result.error };
+            let data;
+            try { data = mapResponse(result.data); } catch (error) { return { error: { status: 'CUSTOM_ERROR', error: error.message } }; }
+            first ||= data;
+            rows.push(...data.rows);
+            if (currentPage >= data.pagination.totalPages) break;
+          }
+          return { data: first, rows };
+        }));
+        const failed = groups.find((group) => group.error);
+        if (failed) return { error: failed.error };
+        const rows = groups.flatMap((group) => group.rows).sort((a, b) => {
+          const order = (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0);
+          return params.sort === 'oldest' ? order : -order;
+        });
+        return { data: { ...groups[0].data, rows: rows.slice((page - 1) * limit, page * limit), pagination: { page, limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) } } };
+      },
       providesTags: ['AdminNotifications'],
     }),
     markAdminNotificationsRead: builder.mutation({

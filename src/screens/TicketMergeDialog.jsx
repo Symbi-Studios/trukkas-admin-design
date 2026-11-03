@@ -8,7 +8,7 @@ import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 export function TicketMergeDialog({ ticket, authenticated, saving, onMerge, onClose }) {
   const [target, setTarget] = useState('');
   const query = useGetAdminSupportTicketDirectoryQuery(undefined, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const candidates = authenticated && !query.error && ticket.userId ? (query.currentData || []).filter((row) => row.id !== ticket.id && row.userId === ticket.userId && !row.mergedInto) : [];
+  const candidates = authenticated && !query.error && ticket.userId ? (query.currentData || []).filter((row) => row.id !== ticket.id && row.userId === ticket.userId && !row.mergedInto && row.canManage) : [];
   const valid = !query.isFetching && candidates.some((row) => row.id === target);
   return <Modal open title="Merge Ticket" description="Move this ticket’s messages, internal notes and attachments into another ticket for the same customer. The selected ticket will remain in the directory." width={560} onClose={() => { if (!saving) onClose(); }} footer={<>
     <Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
