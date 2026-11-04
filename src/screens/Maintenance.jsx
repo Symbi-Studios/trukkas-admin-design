@@ -392,7 +392,7 @@ export function Maintenance() {
             </div>
           ))}
         </SectionCard>
-        <SectionCard title="Maintenance Approvals" count={value(stats?.approvals.total)}>
+        <SectionCard className="maint-approvals" title="Maintenance Approvals" count={value(stats?.approvals.total)}>
           {maintenanceApprovals.map((r) => (
             <ListRow
               key={r.id}

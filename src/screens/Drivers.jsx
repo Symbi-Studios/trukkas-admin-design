@@ -3,6 +3,7 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from '../router.js';
 import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import {
@@ -19,6 +20,7 @@ import {
   useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery, useGetAdminDriverRankingsQuery,
   useCreateAdminDriverMutation, useImportAdminDriversMutation, useLazyExportAdminDriverComplianceQuery,
 } from '../store/features/drivers/driversApi.js';
+import './Drivers.css';
 
 const STATUS_TONE = { 'Pending Review': 'warning', Rejected: 'danger', Active: 'success', 'On Trip': 'info' };
 const REG_TYPES = ['Individual Driver', 'Company Driver'];
@@ -63,6 +65,37 @@ function download(name, text) {
 }
 
 function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
+
+function DriverRowMenu({ anchor, items, onClose }) {
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState(null);
+  useEffect(() => {
+    const update = () => {
+      if (!anchor?.isConnected || !menuRef.current) { onClose(null); return; }
+      const button = anchor.getBoundingClientRect(), menu = menuRef.current.getBoundingClientRect();
+      setPosition({
+        left: Math.max(8, Math.min(button.right - menu.width, window.innerWidth - menu.width - 8)),
+        top: button.bottom + 6 + menu.height <= window.innerHeight - 8 ? button.bottom + 6 : Math.max(8, button.top - menu.height - 6),
+      });
+    };
+    const outside = (event) => { if (!anchor?.contains(event.target) && !menuRef.current?.contains(event.target)) onClose(null); };
+    const escape = (event) => { if (event.key === 'Escape') onClose(null); };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [anchor, onClose]);
+  return createPortal(<div ref={menuRef} style={{ position: 'fixed', zIndex: 95, top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden' }}>
+    <DropdownMenu width={205} items={items} />
+  </div>, document.body);
+}
 
 export function Drivers() {
   const [tab, setTab] = useState('All Drivers');
@@ -262,7 +295,7 @@ export function Drivers() {
 
   if (!driversQuery.data && driversQuery.isFetching) return <DriversLoading />;
 
-  return <>
+  return <div className="drivers-page">
     <PageHeader
       crumbs={['Fleet Management', 'Drivers']}
       title="Drivers"
@@ -287,7 +320,7 @@ export function Drivers() {
     {driversQuery.isFetching && <DriverLoadingNotice>Loading drivers…</DriverLoadingNotice>}
     {pendingQuery.error && <Banner tone="warning" title="Pending driver review data unavailable">{adminDriverError(pendingQuery.error)}</Banner>}
 
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--tk-space-4)' }}>
+    <div className="drivers-metrics">
       <StatCard icon="users" label="Total Drivers" value={metricValue(counts.total, !statsQuery.data && statsQuery.isFetching)} caption={statsQuery.isLoading ? <Skeleton as="span" width={86} height={11} /> : counts.total == null ? 'Not available' : 'All registered drivers'} />
       <StatCard icon="user" tint="green" label="Individual Drivers" value={metricValue(counts.individual, statsQuery.isLoading)} caption="Individual registrations" />
       <StatCard icon="building-2" tint="navy" label="Company Drivers" value={metricValue(counts.company, statsQuery.isLoading)} caption="Company registrations" />
@@ -295,7 +328,7 @@ export function Drivers() {
       <StatCard icon="circle-check" tint="green" label="Approved / Active" value={metricValue(counts.approved, statsQuery.isLoading)} caption="ACTIVE account status" />
     </div>
 
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--tk-space-4)' }}>
+    <div className="drivers-metrics drivers-metrics-secondary">
       <StatCard icon="route" label="On Trip" value={metricValue(counts.onTrip, statsQuery.isLoading)} caption="Drivers on active trips" />
       <StatCard icon="circle-minus" tint="navy" label="Inactive" value={metricValue(counts.inactive, inactiveCountLoading)} caption="INACTIVE, SUSPENDED, and BANNED" />
       <StatCard icon="circle-x" tint="red" label="Rejected" value={metricValue(counts.rejected, statsQuery.isLoading)} caption="Rejected applications" />
@@ -304,7 +337,7 @@ export function Drivers() {
       <StatCard icon="star" tint="amber" label="Average Rating" value={counts.avgRating == null ? '—' : counts.avgRating.toFixed(1)} caption={counts.totalReviews == null ? '—' : `${counts.totalReviews} reviews`} />
     </div>
 
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+    <div className="drivers-layout">
       <Card pad="none">
         <TableToolbar
           search={<SearchField placeholder="Search by driver name, license number, phone, or company..." value={q} onChange={(event) => setQ(event.target.value)} />}
@@ -340,23 +373,13 @@ export function Drivers() {
                 { key: 'rating', header: 'Rating', render: (driver) => driver.rating != null ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="star" size={13} color="var(--tk-warning)" />{driver.rating.toFixed(1)}</span> : <span className="tk-meta">—</span> },
                 { key: 'actions', header: 'Actions', width: 130, render: (driver) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Link to={driverDetailUrl(driver.id)}><Button size="sm" variant="outline">View</Button></Link>
-                  <span style={{ position: 'relative' }}><IconButton icon="ellipsis-vertical" onClick={() => setRowMenu(rowMenu === driver.id ? null : driver.id)} />
-                    {rowMenu === driver.id && <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }}><DropdownMenu width={205} items={[
-                      { label: 'Review License', icon: 'file-check', onClick: () => { setRowMenu(null); setLicenseDriverId(driver.id); } },
-                      ...(driver.canReview ? [
-                        { label: 'Approve Driver', icon: 'circle-check', onClick: () => openAction('approve', driver) },
-                        { label: 'Reject Driver', icon: 'circle-x', tone: 'danger', onClick: () => openAction('reject', driver) },
-                      ] : []),
-                      ...(driver.canSuspend ? [{ label: 'Suspend Driver', icon: 'user-x', tone: 'danger', onClick: () => openAction('suspend', driver) }] : []),
-                      ...(driver.canActivate ? [{ label: 'Reactivate Driver', icon: 'circle-check', onClick: () => openAction('activate', driver) }] : []),
-                    ]} /></span>}
-                  </span>
+                  <IconButton icon="ellipsis-vertical" label={`Actions for ${driver.name}`} onClick={(event) => setRowMenu((current) => current?.driver.id === driver.id ? null : { driver, anchor: event.currentTarget })} />
                 </span> },
               ]} />}
         {!driversQuery.isFetching && !driversQuery.error && <Pagination page={page} pageSize={pageSize} pageCount={pageCount} total={total} onPage={(next) => setPage(Math.max(1, Math.min(pageCount, next)))} onPageSize={(size) => { setPageSize(size); setPage(1); }} />}
       </Card>
 
-      <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
+      <div className="drivers-rail">
         <SectionCard title="Driver Status">
           <div style={{ display: 'grid', gap: 12 }}>
             {[
@@ -387,6 +410,16 @@ export function Drivers() {
         ]} />
       </div>
     </div>
+
+    {rowMenu && <DriverRowMenu anchor={rowMenu.anchor} onClose={setRowMenu} items={[
+      { label: 'Review License', icon: 'file-check', onClick: () => { setLicenseDriverId(rowMenu.driver.id); setRowMenu(null); } },
+      ...(rowMenu.driver.canReview ? [
+        { label: 'Approve Driver', icon: 'circle-check', onClick: () => openAction('approve', rowMenu.driver) },
+        { label: 'Reject Driver', icon: 'circle-x', tone: 'danger', onClick: () => openAction('reject', rowMenu.driver) },
+      ] : []),
+      ...(rowMenu.driver.canSuspend ? [{ label: 'Suspend Driver', icon: 'user-x', tone: 'danger', onClick: () => openAction('suspend', rowMenu.driver) }] : []),
+      ...(rowMenu.driver.canActivate ? [{ label: 'Reactivate Driver', icon: 'circle-check', onClick: () => openAction('activate', rowMenu.driver) }] : []),
+    ]} />}
 
     <input ref={importInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importCsv(event)} />
     <Modal open={addOpen} onClose={() => { if (!createState.isLoading) setAddOpen(false); }} title="Add Driver" footer={<>
@@ -425,5 +458,5 @@ export function Drivers() {
         {!license.licenseUrl && <EmptyState icon="file-text" title="No license file provided" description="The license document is not available." style={{ padding: '18px 8px' }} />}
       </div> : null}
     </Modal>
-  </>;
+  </div>;
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
@@ -10,6 +11,8 @@ import {
 } from '../ds.js';
 import {
   useGetAdminTriangulationOpportunityQuery,
+  useGetAdminTriangulationActivityQuery,
+  useReviewAdminTriangulationOpportunityMutation,
   useNotifyAdminTriangulationMatchMutation,
   useInterveneAdminTriangulationJobMutation,
 } from '../store/features/triangulation/triangulationApi.js';
@@ -26,13 +29,21 @@ export function TriangulationApiDetail() {
   const params = useSearchParams();
   const navigate = useNavigate();
   const opportunityId = params.get('opportunityId');
+  const role = useSelector((state) => state.auth.admin?.role);
+  const canReview = ['SUPER_ADMIN', 'OPS_ADMIN'].includes(role);
   const radiusKm = Math.max(1, Number(params.get('radiusKm')) || 150);
   const { currentData: response, isLoading, isFetching, error, refetch } =
     useGetAdminTriangulationOpportunityQuery({ id: opportunityId, radiusKm }, { skip: !opportunityId });
   const opportunity = response?.opportunity;
   const [notifyCompany, { isLoading: notifying }] = useNotifyAdminTriangulationMatchMutation();
   const [intervene, { isLoading: intervening }] = useInterveneAdminTriangulationJobMutation();
+  const [review, { isLoading: reviewing }] = useReviewAdminTriangulationOpportunityMutation();
+  const [reviewAction, setReviewAction] = useState(null);
+  const [reviewReason, setReviewReason] = useState('TRUCK_UNAVAILABLE');
+  const [reviewNote, setReviewNote] = useState('');
+  const reviewLock = useRef(false);
   const [tab, setTab] = useState('related');
+  const activityQuery = useGetAdminTriangulationActivityQuery({ id: opportunityId }, { skip: !opportunityId || tab !== 'notes' });
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [interveneOpen, setInterveneOpen] = useState(false);
   const [targetJob, setTargetJob] = useState('open');
@@ -57,6 +68,19 @@ export function TriangulationApiDetail() {
     } catch (requestFailure) {
       setNotice({ tone: 'danger', message: apiError(requestFailure) });
     }
+  }
+
+  async function submitReview() {
+    if (!canReview || !opportunity?.id || !opportunity.reviewVersion || reviewing || reviewLock.current || !reviewAction || (reviewAction === 'reject' && reviewReason === 'OTHER' && !reviewNote.trim())) return;
+    reviewLock.current = true;
+    try {
+      await review({ id: opportunity.id, action: reviewAction, radiusKm, expectedVersion: opportunity.reviewVersion, reason: reviewReason, note: reviewNote.trim() }).unwrap();
+      setNotice({ tone: 'success', message: reviewAction === 'propose' ? 'The trucking company was notified of the opportunity.' : 'Opportunity rejected.' });
+      setReviewAction(null);
+      setReviewNote('');
+    } catch (requestFailure) {
+      setNotice({ tone: 'danger', message: apiError(requestFailure) });
+    } finally { reviewLock.current = false; }
   }
 
   async function submitIntervention() {
@@ -88,7 +112,6 @@ export function TriangulationApiDetail() {
       description="Review the match and coordinate the next steps."
       actions={<>
         <Button variant="outline" icon="arrow-left" onClick={() => navigate('/triangulation')}>Back to Opportunities</Button>
-        <Button icon="check-check" disabled title="Creating a match is not available.">Create Match</Button>
       </>} />
     {notice && <Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner>}
     {isFetching && <Banner tone="info">Refreshing opportunity…</Banner>}
@@ -135,8 +158,8 @@ export function TriangulationApiDetail() {
             <Button fullWidth icon="building-2" disabled={!opportunity.jobId || !opportunity.truckerId}
               onClick={() => setNotifyOpen(true)}>Notify Trucking Company</Button>
             <Button fullWidth variant="outline" icon="shield" onClick={() => setInterveneOpen(true)}>Intervene on Job</Button>
-            <Button fullWidth variant="outline" disabled title="Proposing to a forwarder is not available.">Propose to Forwarder</Button>
-            <Button fullWidth variant="danger" disabled title="Rejecting an opportunity is not available.">Reject Opportunity</Button>
+            <Button fullWidth variant="outline" disabled={!canReview || !opportunity.reviewVersion || opportunity.status === 'PROPOSED'} onClick={() => { setReviewNote(''); setReviewAction('propose'); }}>Propose to Trucking Company</Button>
+            <Button fullWidth variant="danger" disabled={!canReview || !opportunity.reviewVersion || opportunity.status === 'REJECTED'} onClick={() => { setReviewNote(''); setReviewReason('TRUCK_UNAVAILABLE'); setReviewAction('reject'); }}>Reject Opportunity</Button>
           </div>
         </SectionCard>
       </div>
@@ -157,7 +180,7 @@ export function TriangulationApiDetail() {
         <LabelValue label="Estimated Trip Revenue" value={naira(opportunity.revenue)} />
         <LabelValue label="Estimated Cost (Variable)" value="—" />
         <LabelValue label="Estimated Margin" value="—" />
-        <LabelValue label="Platform Commission" value="—" />
+        <LabelValue label="Platform Commission" value={naira(opportunity.platformFee)} />
         <LabelValue label="Net to Trucking Company" value="—" />
       </SectionCard>
     </div>
@@ -172,7 +195,11 @@ export function TriangulationApiDetail() {
         <div style={{ padding: 24 }} className="tk-meta">
           {tab === 'related' ? 'Related opportunities are not available.'
             : tab === 'compliance' ? 'Compliance and document status are not available.'
-              : 'Notes and activity are not available.'}
+              : activityQuery.isFetching ? 'Loading activity…' : activityQuery.error ? apiError(activityQuery.error)
+                : activityQuery.currentData?.length ? activityQuery.currentData.map((entry) => <div key={entry.id} style={{ marginBottom: 12 }}>
+                    <strong>{entry.title || '—'}</strong><div>{[entry.by, entry.at && !Number.isNaN(Date.parse(entry.at)) ? new Date(entry.at).toLocaleString('en-NG') : null].filter(Boolean).join(' · ') || '—'}</div>
+                    {entry.note && <div>{entry.note}</div>}
+                  </div>) : 'Notes and activity are not available.'}
         </div>
       </SectionCard>
       <SectionCard title="Opportunity Details">
@@ -185,6 +212,17 @@ export function TriangulationApiDetail() {
       </SectionCard>
     </div>
 
+    <Modal open={Boolean(reviewAction)} onClose={() => { if (!reviewing) setReviewAction(null); }} title={reviewAction === 'propose' ? 'Propose to Trucking Company' : 'Reject Opportunity'}
+      description={reviewAction === 'propose' ? 'The company will be notified and can bid through the normal process. This does not assign the job.' : 'Choose why this opportunity should be rejected.'}
+      footer={<><Button variant="outline" disabled={reviewing} onClick={() => setReviewAction(null)}>Cancel</Button><Button variant={reviewAction === 'reject' ? 'danger' : 'primary'} disabled={reviewing || !opportunity.reviewVersion || (reviewAction === 'reject' && reviewReason === 'OTHER' && !reviewNote.trim())} onClick={submitReview}>{reviewing ? 'Saving…' : reviewAction === 'propose' ? 'Send proposal' : 'Reject opportunity'}</Button></>}>
+      {reviewAction === 'reject' && <Select label="Reason" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} options={[
+        { value: 'TRUCK_UNAVAILABLE', label: 'Truck or driver unavailable' }, { value: 'EQUIPMENT_MISMATCH', label: 'Equipment mismatch' },
+        { value: 'TIMING_CONFLICT', label: 'Timing conflict' }, { value: 'ROUTE_NOT_VIABLE', label: 'Route not viable' },
+        { value: 'COMPLIANCE_ISSUE', label: 'Compliance issue' }, { value: 'CUSTOMER_PREFERENCE', label: 'Customer preference' },
+        { value: 'OTHER', label: 'Other' },
+      ]} />}
+      <Textarea label={reviewAction === 'reject' && reviewReason === 'OTHER' ? 'Note (required)' : 'Note (optional)'} value={reviewNote} maxLength={500} onChange={(event) => setReviewNote(event.target.value)} rows={3} />
+    </Modal>
     <Modal open={notifyOpen} onClose={() => setNotifyOpen(false)} title="Notify Trucking Company"
       description={`Tell ${opportunity.company || 'the trucking company'} about ${opportunity.jobNumber || opportunity.jobId}?`}
       footer={<><Button variant="outline" disabled={notifying} onClick={() => setNotifyOpen(false)}>Cancel</Button>

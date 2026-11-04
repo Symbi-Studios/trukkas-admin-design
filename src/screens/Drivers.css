@@ -1,0 +1,106 @@
+.drivers-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tk-section-gap);
+  min-width: 0;
+}
+
+.drivers-page .tk-page-header-copy {
+  min-width: min(100%, 340px) !important;
+}
+
+.drivers-page .tk-page-header-actions,
+.drivers-page .tk-tabs {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.drivers-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: var(--tk-space-4);
+  min-width: 0;
+}
+
+.drivers-metrics-secondary {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+}
+
+.drivers-metrics > .tk-card {
+  container: driver-metric / inline-size;
+}
+
+.drivers-metrics .tk-metric {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+@container driver-metric (max-width: 320px) {
+  .drivers-metrics .tk-card > div:first-child {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .drivers-metrics .tk-metric {
+    font-size: clamp(14px, 7cqi, 24px);
+  }
+}
+
+.drivers-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--tk-grid-gap);
+  align-items: start;
+  min-width: 0;
+}
+
+.drivers-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tk-grid-gap);
+  align-content: start;
+  min-width: 0;
+}
+
+.drivers-page .tk-table-toolbar-search,
+.drivers-page .tk-table-toolbar-filters {
+  min-width: 0 !important;
+  max-width: 100%;
+}
+
+.drivers-page .tk-table-toolbar-filters > span {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.drivers-page .tk-table-toolbar-filters > span > button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drivers-page .tk-table-toolbar-filters > span:nth-child(n + 3) > span {
+  left: auto !important;
+  right: 0;
+}
+
+@media (max-width: 1450px) {
+  .drivers-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .drivers-rail {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .drivers-page .tk-page-header-actions > span > button {
+    width: 100%;
+  }
+  .drivers-page .tk-table-toolbar-filters > span > button {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

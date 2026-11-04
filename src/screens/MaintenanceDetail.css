@@ -1,6 +1,15 @@
+.mdet-page .tk-page-header-copy {
+  min-width: min(100%, 340px) !important;
+}
+.mdet-page .tk-page-header-actions,
+.mdet-page .tk-tabs {
+  min-width: 0;
+  max-width: 100%;
+}
 .mdet-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
+  min-width: 0;
 }
 .mdet-hero-left {
   display: flex;
@@ -8,6 +17,18 @@
   align-items: center;
   flex-wrap: wrap;
   padding: 20px;
+  min-width: 0;
+}
+.mdet-identity {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.mdet-identity-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mdet-identity-title {
+  flex-wrap: wrap;
 }
 .mdet-photo {
   width: 112px;
@@ -26,12 +47,12 @@
   left: 7px;
 }
 .mdet-hero-facts {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
   border-top: 1px solid var(--tk-line);
+  min-width: 0;
 }
 .mdet-fact {
-  flex: 1 1 170px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -41,6 +62,10 @@
 }
 .mdet-fact:first-child {
   border-left: 0;
+}
+.mdet-fact > span:not(.ico) {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .mdet-fact .ico {
   width: 32px;
@@ -74,6 +99,10 @@
   font-size: 12px;
   color: var(--tk-ink-500);
 }
+.mdet-fit-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .mdet-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -89,6 +118,7 @@
   display: grid;
   gap: var(--tk-grid-gap);
   align-content: start;
+  min-width: 0;
 }
 .mdet-row1 {
   display: grid;
@@ -144,6 +174,11 @@
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap: 24px;
 }
+.mdet-record-grid > *,
+.mdet-page .maint-info > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .mdet-upcoming-row {
   display: flex;
   align-items: center;
@@ -195,7 +230,7 @@
     grid-template-columns: 1fr;
   }
   .mdet-hero-facts {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
   }
   .mdet-fact {
     border-left: 0;
@@ -203,5 +238,10 @@
   }
   .mdet-fact:first-child {
     border-top: 0;
+  }
+}
+@media (max-width: 639px) {
+  .mdet-page .tk-page-header-actions > span > button {
+    width: 100%;
   }
 }

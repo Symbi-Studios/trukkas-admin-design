@@ -43,7 +43,6 @@ const TABS = [
   "Fee Rules",
   "Commission Rules",
   "Deductions",
-  "Fee Schemes",
   "Transactions",
   "Payouts",
   "Analytics",
@@ -181,7 +180,6 @@ export function FeesCommission() {
         description="Configure platform fees, commissions and deductions."
         actions={
           <>
-            <Button icon="plus" disabled>Add Fee Rule</Button>
             <span style={{ position: "relative" }}>
               <Button
                 variant="outline"
@@ -235,7 +233,6 @@ export function FeesCommission() {
                     width={220}
                     items={[
                       { label: "Bulk Update Fees", icon: "list-checks", onClick: openBulk },
-                      { label: "Import Fee Rules", icon: "upload", onClick: () => { setMenuFor(null); operations.unavailable("Importing fee rules"); } },
                       { divider: true },
                       { label: "Export Fee Report", icon: "file-text", onClick: () => { setMenuFor(null); void operations.download("report", 'csv', null, { period: summaryPeriod }); } },
                     ]}
@@ -474,7 +471,6 @@ export function FeesCommission() {
                                   },
                                 },
                                 { label: "Edit Rule", icon: "pencil", disabled: catalogQuery.isFetching || operations.busy || !operations.canManage || !editableFeeRule(r), onClick: () => { setMenuFor(null); setEditRule(r); } },
-                                { label: "Duplicate Rule", icon: "copy", onClick: () => { setMenuFor(null); operations.unavailable("Duplicating fee rules"); } },
                                 { divider: true },
                                 {
                                   label:
@@ -597,24 +593,6 @@ export function FeesCommission() {
 
           <QuickActionsCard
             items={[
-              {
-                icon: "plus",
-                label: "Add New Fee Rule",
-                hint: "Create a fee rule",
-                onClick: () => operations.unavailable("Adding fee rules"),
-              },
-              {
-                icon: "handshake",
-                label: "Add Commission Rule",
-                hint: "Create a commission rule",
-                onClick: () => operations.unavailable("Adding commission rules"),
-              },
-              {
-                icon: "layout-template",
-                label: "Create Fee Scheme",
-                hint: "Bundle rules together",
-                onClick: () => operations.unavailable("Creating fee schemes"),
-              },
               {
                 icon: "list-checks",
                 label: "Bulk Update Fees",

@@ -72,6 +72,13 @@ export function adaptCompanyTruck(truck = {}) {
     date: companyDate(truck.lastActiveAt), loc: companyPosition(truck.currentLocation), driver: text(truck.assignedDriver?.name), ownerId: text(truck.ownerId),
     maintenanceRecordId: Array.isArray(truck.maintenance?.records) ? text(truck.maintenance.records.find(row => text(row?.id))?.id) : null };
 }
+export function companyTruckActivityValues(truck, detail) {
+  const available = (value) => text(value) && value !== '—' ? value : null;
+  return {
+    date: available(truck?.date) || available(detail?.date),
+    location: available(truck?.loc) || available(detail?.loc),
+  };
+}
 
 function companyMonthlyComparison(value) {
   const period = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
