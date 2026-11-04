@@ -252,7 +252,7 @@ export function LiveTracking() {
   }
 
   const mapContent = (big) => (
-    <div className="lt-map-wrap" style={big ? { height: 560 } : undefined}>
+    <div className={'lt-map-wrap' + (big ? ' lt-map-wrap--fullscreen' : '')}>
       <TriangulationGoogleMap points={layer === 'Clusters' ? clusterPoints : mapPoints} selectedId={selectedId} onSelect={setSelectedId}
         ariaLabel="Live truck tracking map"
         emptyMessage={tripsLoading ? 'Loading truck locations…' : 'Truck locations are not available.'}
@@ -359,7 +359,7 @@ export function LiveTracking() {
               <div key={t.id} className={'lt-trip-row' + (t.id === selectedId ? ' active' : '')} onClick={() => setSelectedId(t.id)}>
                 <div className="lt-trip-top">
                   <span className="lt-trip-icon" style={{ background: t.statusColor || STATUS_COLOR[t.status] || STATUS_COLOR['In Transit'] }}><Icon name="truck" size={15} color="#fff" /></span>
-                  <strong style={{ flex: 1, font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{t.id}</strong>
+                  <strong style={{ flex: 1, font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{t.jobNumber || '—'}</strong>
                   <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: t.status === 'Delayed' ? 'var(--tk-danger)' : 'var(--tk-ink-700)' }}>{t.speed == null ? '—' : `${t.speed} km/h`}</span>
                 </div>
                 <div className="lt-trip-bottom">
@@ -389,7 +389,7 @@ export function LiveTracking() {
           ) : (
             <div className="lt-trip-details" style={{ display: 'grid', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <strong style={{ font: '700 16px/22px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{selected.id}</strong>
+                <strong style={{ font: '700 16px/22px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{selected.jobNumber || '—'}</strong>
                 <Badge tone={STATUS_BADGE[selected.status] || 'neutral'}>{selected.status}</Badge>
               </div>
               <strong style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{selected.from} → {selected.to}</strong>
@@ -476,11 +476,13 @@ export function LiveTracking() {
         </SectionCard>
       </div>
 
-      <Modal open={fullScreen} onClose={() => setFullScreen(false)} title="Live Tracking — Full Screen" width={1100}>
+      <Modal open={fullScreen} onClose={() => setFullScreen(false)} title="Live Tracking — Full Screen"
+        width="min(1100px, calc(100vw - 48px))"
+        style={{ height: 'min(760px, calc(100dvh - 48px))', maxHeight: 'calc(100dvh - 48px)', minWidth: 0 }}>
         {mapContent(true)}
       </Modal>
 
-      <Modal open={messageOpen} onClose={() => setMessageOpen(false)} title="Send Message" description={selected ? `To ${selected.driver} · ${selected.id}` : ''}
+      <Modal open={messageOpen} onClose={() => setMessageOpen(false)} title="Send Message" description={selected ? `To ${selected.driver} · ${selected.jobNumber || '—'}` : ''}
         footer={<><Button variant="outline" onClick={() => setMessageOpen(false)}>Cancel</Button>
           <Button icon="send" disabled={!message.trim() || sendingMessage} onClick={() => void sendDriverMessage()}>{sendingMessage ? 'Sending…' : 'Send Message'}</Button></>}>
         <Textarea label="Message" rows={5} maxLength={2000} placeholder="Write a message to the driver..." value={message} onChange={(e) => setMessage(e.target.value)} />

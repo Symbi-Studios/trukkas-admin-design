@@ -136,6 +136,15 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
+.job-document-detail-grid .document-detail-main,
+.job-document-detail-grid .document-detail-rail {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.job-document-detail-grid .document-info-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .document-entity-head {
   display: grid;
   grid-template-columns: 1.6fr repeat(4, 1fr);

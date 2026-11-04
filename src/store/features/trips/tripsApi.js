@@ -81,6 +81,7 @@ function mapTrackingTrip(trip) {
   return {
     id: trip.id,
     jobId: trip.jobId,
+    jobNumber: trip.displayJobNumber,
     segment: trip.segment,
     from: trip.origin || '—',
     to: trip.destination || '—',
@@ -149,6 +150,7 @@ function mapTrip(trip) {
     id: identifier(trip.tripId),
     jobId: identifier(trip.jobId),
     jobNumber: text(trip.jobNumber) || identifier(trip.jobId) || '—',
+    displayJobNumber: text(trip.jobNumber),
     containerNumber: text(trip.containerNumber),
     route: route || '—',
     origin: text(trip.origin) || routePoints.origin,

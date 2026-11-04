@@ -50,8 +50,7 @@ function profileType(profile) {
 function requestFields(value) {
   const dto = record(value), beneficiary = record(dto.beneficiary), bank = record(dto.bank), requestedBy = record(dto.requestedBy);
   const related = record(dto.related), eligibility = record(dto.eligibility);
-  const deductions = Array.isArray(dto.deductions) && dto.deductions.length === 1 ? money(dto.deductions[0]?.amount)
-    : Array.isArray(dto.deductions) && dto.deductions.length === 0 ? 0 : null;
+  const deductions = money(dto.totalDeductions);
   const jobs = records(dto.jobs), singleJob = jobs.length === 1 ? jobs[0] : {};
   const jobIds = Array.isArray(dto.jobIds) ? dto.jobIds.filter((id) => text(id)) : null;
   const trips = records(singleJob.trips), singleTrip = trips.length === 1 ? trips[0] : {};
