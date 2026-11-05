@@ -376,7 +376,6 @@ export function RequestedPayouts() {
                         {r.companyId ? (
                           <Link to={payoutCompanyUrl(r.companyId)} onClick={(e) => e.stopPropagation()}>{r.party}</Link>
                         ) : <span className="tk-label">{r.party}</span>}
-                        <span className="tk-meta">{r.partyId}</span>
                       </span>
                     </span>
                   ),
@@ -411,7 +410,7 @@ export function RequestedPayouts() {
                   key: "amount",
                   header: "Gross / Net",
                   align: "right",
-                  render: (r) => <span style={{ display: "grid", gap: 2 }}><span className="tk-meta">{formatNaira(r.grossAmount)}</span><b>{formatNaira(r.netAmount)}</b></span>,
+                  render: (r) => <span className="payout-amount-cell"><span className="tk-meta">{formatNaira(r.grossAmount)}</span><b>{formatNaira(r.netAmount)}</b></span>,
                 },
                 {
                   key: "eligibility",

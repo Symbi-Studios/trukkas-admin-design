@@ -65,9 +65,10 @@ function companyPosition(location) {
   return lat!=null&&lng!=null&&lat>=-90&&lat<=90&&lng>=-180&&lng<=180 ? lat.toFixed(5)+', '+lng.toFixed(5) : null;
 }
 export function adaptCompanyTruck(truck = {}) {
-  return { id: text(truck.id), ref: text(truck.id), plate: text(truck.plateNumber), type: named(truck.containerType), tag: named(truck.containerSize),
+  const capacity = number(truck.loadCapacityTonnes);
+  return { id: text(truck.id), ref: text(truck.id), plate: text(truck.plateNumber), type: text(truck.fleetType), tag: named(truck.containerSize),
     year: count(truckNumber(truck.year)) == null ? null : String(truckNumber(truck.year)), status: truck.availability === 'UNDER_MAINTENANCE' || truck.status === 'MAINTENANCE' ? 'In Maintenance' : truck.status === 'ACTIVE' && truck.availability === 'ON_TRIP' ? 'On Trip' : truck.status === 'ACTIVE' && truck.availability === 'AVAILABLE' ? 'Available' : label(truck.status), statusCode: text(truck.status), availability: text(truck.availability),
-    weight: truckNumber(truck.containerWeight) == null ? null : (truckNumber(truck.containerWeight)*1000).toLocaleString('en-NG')+' kg', containerWeight: truckNumber(truck.containerWeight) == null ? null : String(truckNumber(truck.containerWeight)),
+    weight: capacity == null || capacity < 0 || !Number.isFinite(capacity * 1000) ? null : (capacity * 1000).toLocaleString('en-NG')+' kg', containerWeight: truckNumber(truck.containerWeight) == null ? null : String(truckNumber(truck.containerWeight)),
     make: text(truck.make), model: text(truck.model), vin: text(truck.vin), engineNumber: text(truck.engineNumber), fuelType: label(truck.fuelType),
     date: companyDate(truck.lastActiveAt), loc: companyPosition(truck.currentLocation), driver: text(truck.assignedDriver?.name), ownerId: text(truck.ownerId),
     maintenanceRecordId: Array.isArray(truck.maintenance?.records) ? text(truck.maintenance.records.find(row => text(row?.id))?.id) : null };
