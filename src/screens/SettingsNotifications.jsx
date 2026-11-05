@@ -1,17 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { useNavigate } from "../router.js";
-import { PageHeader, Button, SectionCard, Card, Tabs, Badge, QuickActionsCard, Icon, EmptyState } from '../ds.js';
+;
+import { Button, Badge, Icon } from '../ds.js';
 import { SettingsCheckbox as Checkbox, SettingsSwitch as Switch, SettingsTextField as TextField, SettingsSelect as Select, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
-import { DriverDetailLoading } from './DriversLoading.jsx';
-import { SettingsNotificationInbox } from './SettingsNotificationInbox.jsx';
+import { SettingsSectionHeader, SettingsPanelLoading, SettingsGrid, SettingsCard, SettingsCardSave } from './settingsShared.jsx';
 
-import { NOTIFICATION_FREQUENCIES, notificationQuickActions, NOTIFICATION_TABS, eventNotificationGroups as notificationEventControls, notificationChannelsStatus as notificationChannelControls } from '../mock/fixtures/settings.js';
+import { NOTIFICATION_FREQUENCIES, eventNotificationGroups as notificationEventControls, notificationChannelsStatus as notificationChannelControls } from '../mock/fixtures/settings.js';
 
 
-const visibleNotificationTabs = NOTIFICATION_TABS.filter((tab) => !['Email Templates', 'SMS Templates', 'Notification Groups'].includes(tab));
 
 const TIMEZONES = [
   "(GMT+01:00) Lagos, Nigeria",
@@ -69,35 +66,20 @@ export function SettingsNotifications() {
   const eventControl = key => notificationEventControls.flatMap(group => group.events).find(event => event.key === key);
   const toggleEventNotification = (key, channel, value) => editor.changeEvent(eventControl(key), channel, value);
   const setEventNotificationFrequency = (key, value) => editor.changeEvent(eventControl(key), 'frequency', value);
-  const saveNotificationPreferences = () => editor.save();
   const resetNotificationPreferences = () => editor.reset();
   const notificationChannelsStatus = notificationChannelControls.map(({ label, icon }) => ({ label, icon, ...(editor.channels?.[({ 'Email Notifications': 'email', 'SMS Notifications': 'sms', 'In-App Notifications': 'inApp' })[label]] || { detail: '—', status: '—' }) }));
-  const navigate = useNavigate();
   const channels = editor.group('settingsNotificationChannels');
   const quiet = editor.group('settingsQuietHours');
   const groups = notificationEventControls.map(({ group, icon, events }) => ({ group, icon, events: events.map(({ key, label, hint }) => ({ key, label, hint, ...editor.event({ key, label }) })) }));
-  const [subTab, setSubTab] = useState("Notification Preferences");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
-  if (editor.loading) return <DriverDetailLoading />;
+  if (editor.loading) return <SettingsPanelLoading />;
   if (!channels || !quiet) return null;
 
-  async function handleSave() {
-    setSaving(true);
-    const confirmed = await saveNotificationPreferences();
-    setSaving(false);
-    if (confirmed) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
-  }
 
   return (
     <>
-      <PageHeader
-        crumbs={[
-          { label: "System Settings", onClick: () => navigate("/settings") },
-          "Notifications",
-        ]}
-        title="Notification Settings"
+      <SettingsSectionHeader
+        title="Notifications"
         description="Configure how and when you and your team receive notifications across the platform."
         actions={
           <>
@@ -108,290 +90,242 @@ export function SettingsNotifications() {
             >
               Reset to Default
             </Button>
-            <Button icon="save" disabled={saving} onClick={handleSave}>
-              {saved ? "Saved ✓" : saving ? "Saving…" : "Save Changes"}
-            </Button>
           </>
         }
       />
 
       <SettingsReadNotice error={editor.error} />
-      <Card pad="none">
-        <Tabs
-          value={subTab}
-          onChange={setSubTab}
-          style={{ padding: "0 var(--tk-card-pad)" }}
-          items={visibleNotificationTabs}
-        />
-      </Card>
-
-      {subTab === "In-App Notifications" ? <SettingsNotificationInbox /> : subTab !== "Notification Preferences" ? (
-        <Card>
-          <EmptyState
-            icon="hammer"
-            title={`${subTab} isn't built yet`}
-            description="This tab is wired into navigation, but its screen hasn't been transcribed from the source screenshots yet."
-          />
-        </Card>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 320px",
-            gap: "var(--tk-grid-gap)",
-            alignItems: "start",
-          }}
-        >
-          <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
-            <SectionCard title="General Notification Settings" icon="settings">
+      <SettingsGrid>
+        <SettingsCard description="Set your overall notification preferences and quiet hours." title="General Notification Settings" save={<SettingsCardSave editor={editor} />}>
+          <div
+            className="tk-notification-event-grid tk-notification-event-header"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+              gap: 24,
+            }}
+          >
+            <div style={{ display: "grid", gap: 14 }}>
               <span
-                className="tk-meta"
-                style={{ display: "block", marginTop: -10, marginBottom: 14 }}
+                style={{
+                  font: "500 13px/18px var(--tk-font-sans)",
+                  color: "var(--tk-ink-500)",
+                }}
               >
-                Set your overall notification preferences and quiet hours.
+                Default Notification Channels
               </span>
+              <Checkbox
+                checked={channels.inApp}
+                label="In-App Notifications"
+                hint="Receive notifications within the platform"
+                onChange={(v) => updateNotificationChannels({ inApp: v })}
+              />
+              <Checkbox
+                checked={channels.email}
+                label="Email Notifications"
+                hint="Receive notifications via email"
+                onChange={(v) => updateNotificationChannels({ email: v })}
+              />
+              <Checkbox
+                checked={channels.sms}
+                label="SMS Notifications"
+                hint="Receive important alerts via SMS"
+                onChange={(v) => updateNotificationChannels({ sms: v })}
+              />
+            </div>
+            <div
+              style={{ display: "grid", gap: 14, alignContent: "start" }}
+            >
+              <Switch
+                checked={quiet.enabled}
+                label="Enable quiet hours"
+                hint="Pause non-critical notifications during specific hours."
+                onChange={(v) => updateQuietHours({ enabled: v })}
+              />
               <div
-                className="tk-notification-event-grid tk-notification-event-header"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-                  gap: 24,
+                  gap: 12,
                 }}
               >
-                <div style={{ display: "grid", gap: 14 }}>
-                  <span
-                    style={{
-                      font: "500 13px/18px var(--tk-font-sans)",
-                      color: "var(--tk-ink-500)",
-                    }}
-                  >
-                    Default Notification Channels
-                  </span>
-                  <Checkbox
-                    checked={channels.inApp}
-                    label="In-App Notifications"
-                    hint="Receive notifications within the platform"
-                    onChange={(v) => updateNotificationChannels({ inApp: v })}
-                  />
-                  <Checkbox
-                    checked={channels.email}
-                    label="Email Notifications"
-                    hint="Receive notifications via email"
-                    onChange={(v) => updateNotificationChannels({ email: v })}
-                  />
-                  <Checkbox
-                    checked={channels.sms}
-                    label="SMS Notifications"
-                    hint="Receive important alerts via SMS"
-                    onChange={(v) => updateNotificationChannels({ sms: v })}
-                  />
-                </div>
-                <div
-                  style={{ display: "grid", gap: 14, alignContent: "start" }}
-                >
-                  <Switch
-                    checked={quiet.enabled}
-                    label="Enable quiet hours"
-                    hint="Pause non-critical notifications during specific hours."
-                    onChange={(v) => updateQuietHours({ enabled: v })}
-                  />
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-                      gap: 12,
-                    }}
-                  >
-                    <TextField
-                      label="From"
-                      value={quiet.from}
-                      suffix={
-                        <Icon
-                          name="clock"
-                          size={15}
-                          color="var(--tk-ink-300)"
-                        />
-                      }
-                      onChange={(e) =>
-                        updateQuietHours({ from: e.target.value })
-                      }
+                <TextField
+                  label="From"
+                  value={quiet.from}
+                  suffix={
+                    <Icon
+                      name="clock"
+                      size={15}
+                      color="var(--tk-ink-300)"
                     />
-                    <TextField
-                      label="To"
-                      value={quiet.to}
-                      suffix={
-                        <Icon
-                          name="clock"
-                          size={15}
-                          color="var(--tk-ink-300)"
-                        />
-                      }
-                      onChange={(e) => updateQuietHours({ to: e.target.value })}
+                  }
+                  onChange={(e) =>
+                    updateQuietHours({ from: e.target.value })
+                  }
+                />
+                <TextField
+                  label="To"
+                  value={quiet.to}
+                  suffix={
+                    <Icon
+                      name="clock"
+                      size={15}
+                      color="var(--tk-ink-300)"
                     />
-                  </div>
-                  <Select
-                    label="Time Zone"
-                    options={TIMEZONES}
-                    value={quiet.timeZone}
-                    onChange={(e) =>
-                      updateQuietHours({ timeZone: e.target.value })
-                    }
-                  />
-                </div>
+                  }
+                  onChange={(e) => updateQuietHours({ to: e.target.value })}
+                />
               </div>
-            </SectionCard>
+              <Select
+                label="Time Zone"
+                options={TIMEZONES}
+                value={quiet.timeZone}
+                onChange={(e) =>
+                  updateQuietHours({ timeZone: e.target.value })
+                }
+              />
+            </div>
+          </div>
+        </SettingsCard>
 
-            <SectionCard title="Event Notification Settings" icon="bell">
-              <span
-                className="tk-meta"
-                style={{ display: "block", marginTop: -10, marginBottom: 6 }}
-              >
-                Choose which events trigger notifications and how you want to be
-                notified.
-              </span>
+        <SettingsCard description="Choose which events trigger notifications and how you want to be notified." title="Event Notification Settings" className="tk-settings-wide" save={<SettingsCardSave editor={editor} />}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) 70px 70px 70px 140px",
+              gap: 8,
+              padding: "10px 4px",
+              borderBottom: "1px solid var(--tk-line)",
+            }}
+          >
+            <span
+              style={{
+                font: "600 12px/16px var(--tk-font-sans)",
+                color: "var(--tk-ink-400)",
+              }}
+            >
+              Event Type
+            </span>
+            <span
+              style={{
+                font: "600 12px/16px var(--tk-font-sans)",
+                color: "var(--tk-ink-400)",
+                textAlign: "center",
+              }}
+            >
+              In-App
+            </span>
+            <span
+              style={{
+                font: "600 12px/16px var(--tk-font-sans)",
+                color: "var(--tk-ink-400)",
+                textAlign: "center",
+              }}
+            >
+              Email
+            </span>
+            <span
+              style={{
+                font: "600 12px/16px var(--tk-font-sans)",
+                color: "var(--tk-ink-400)",
+                textAlign: "center",
+              }}
+            >
+              SMS
+            </span>
+            <span
+              style={{
+                font: "600 12px/16px var(--tk-font-sans)",
+                color: "var(--tk-ink-400)",
+              }}
+            >
+              Frequency
+            </span>
+          </div>
+          {groups.map((g) => (
+            <div key={g.group}>
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) 70px 70px 70px 140px",
+                  display: "flex",
+                  alignItems: "center",
                   gap: 8,
                   padding: "10px 4px",
-                  borderBottom: "1px solid var(--tk-line)",
+                  background: "var(--tk-surface-sunk)",
+                }}
+              >
+                <Icon name={g.icon} size={15} color="var(--tk-ink-500)" />
+                <span
+                  style={{
+                    font: "600 13px/18px var(--tk-font-sans)",
+                    color: "var(--tk-ink-900)",
+                  }}
+                >
+                  {g.group}
+                </span>
+              </div>
+              {g.events.map((ev) => (
+                <EventRow
+                  key={ev.key}
+                  event={ev}
+                  onToggle={(channel, v) =>
+                    toggleEventNotification(ev.key, channel, v)
+                  }
+                  onFrequency={(f) =>
+                    setEventNotificationFrequency(ev.key, f)
+                  }
+                />
+              ))}
+            </div>
+          ))}
+        </SettingsCard>
+        
+        <SettingsCard title="Notification Channels">
+          <div style={{ display: "grid" }}>
+            {notificationChannelsStatus.map((c, i) => (
+              <div
+                key={c.label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 2px",
+                  border: 0,
+                  borderTop: i ? "1px solid var(--tk-line)" : "none",
+                  background: "transparent",
+                  textAlign: "left",
                 }}
               >
                 <span
                   style={{
-                    font: "600 12px/16px var(--tk-font-sans)",
-                    color: "var(--tk-ink-400)",
+                    width: 32,
+                    height: 32,
+                    borderRadius: "var(--tk-r-sm)",
+                    background: "var(--tk-blue-soft)",
+                    color: "var(--tk-blue)",
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 auto",
                   }}
                 >
-                  Event Type
+                  <Icon name={c.icon} size={16} />
                 </span>
-                <span
-                  style={{
-                    font: "600 12px/16px var(--tk-font-sans)",
-                    color: "var(--tk-ink-400)",
-                    textAlign: "center",
-                  }}
-                >
-                  In-App
-                </span>
-                <span
-                  style={{
-                    font: "600 12px/16px var(--tk-font-sans)",
-                    color: "var(--tk-ink-400)",
-                    textAlign: "center",
-                  }}
-                >
-                  Email
-                </span>
-                <span
-                  style={{
-                    font: "600 12px/16px var(--tk-font-sans)",
-                    color: "var(--tk-ink-400)",
-                    textAlign: "center",
-                  }}
-                >
-                  SMS
-                </span>
-                <span
-                  style={{
-                    font: "600 12px/16px var(--tk-font-sans)",
-                    color: "var(--tk-ink-400)",
-                  }}
-                >
-                  Frequency
-                </span>
-              </div>
-              {groups.map((g) => (
-                <div key={g.group}>
-                  <div
+                <span style={{ flex: 1, display: "grid", gap: 1 }}>
+                  <span
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "10px 4px",
-                      background: "var(--tk-surface-sunk)",
+                      font: "600 13px/18px var(--tk-font-sans)",
+                      color: "var(--tk-ink-900)",
                     }}
                   >
-                    <Icon name={g.icon} size={15} color="var(--tk-ink-500)" />
-                    <span
-                      style={{
-                        font: "600 13px/18px var(--tk-font-sans)",
-                        color: "var(--tk-ink-900)",
-                      }}
-                    >
-                      {g.group}
-                    </span>
-                  </div>
-                  {g.events.map((ev) => (
-                    <EventRow
-                      key={ev.key}
-                      event={ev}
-                      onToggle={(channel, v) =>
-                        toggleEventNotification(ev.key, channel, v)
-                      }
-                      onFrequency={(f) =>
-                        setEventNotificationFrequency(ev.key, f)
-                      }
-                    />
-                  ))}
-                </div>
-              ))}
-            </SectionCard>
-          </div>
-
-          <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
-            <SectionCard title="Notification Channels" icon="send">
-              <div style={{ display: "grid" }}>
-                {notificationChannelsStatus.map((c, i) => (
-                  <div
-                    key={c.label}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "12px 2px",
-                      border: 0,
-                      borderTop: i ? "1px solid var(--tk-line)" : "none",
-                      background: "transparent",
-                      textAlign: "left",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: "var(--tk-r-sm)",
-                        background: "var(--tk-blue-soft)",
-                        color: "var(--tk-blue)",
-                        display: "grid",
-                        placeItems: "center",
-                        flex: "0 0 auto",
-                      }}
-                    >
-                      <Icon name={c.icon} size={16} />
-                    </span>
-                    <span style={{ flex: 1, display: "grid", gap: 1 }}>
-                      <span
-                        style={{
-                          font: "600 13px/18px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        {c.label}
-                      </span>
-                      <span className="tk-meta">{c.detail}</span>
-                    </span>
-                    <Badge tone="success">{c.status}</Badge>
-                  </div>
-                ))}
+                    {c.label}
+                  </span>
+                  <span className="tk-meta">{c.detail}</span>
+                </span>
+                <Badge tone="success">{c.status}</Badge>
               </div>
-            </SectionCard>
-
-            <QuickActionsCard items={editor.quickActions(notificationQuickActions)} />
+            ))}
           </div>
-        </div>
-      )}
+        </SettingsCard>
+      </SettingsGrid>
     </>
   );
 }

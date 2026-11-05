@@ -36,13 +36,6 @@ export const platformVersion = {
   environment: 'Production', buildNumber: '2026.05.15.1',
 };
 
-export const generalQuickActions = [
-  { icon: 'database-zap', label: 'Clear System Cache', hint: 'Refresh cached data across the platform.' },
-  { icon: 'hard-drive-download', label: 'Backup Database', hint: 'Create a manual backup of the system.' },
-  { icon: 'file-text', label: 'View System Logs', hint: 'Check error logs and system events.' },
-  { icon: 'rotate-cw', label: 'Restart Services', hint: 'Restart system services (requires confirmation).' },
-];
-
 export const settingsMeta = { lastUpdated: 'May 30, 2026, 09:46 AM', updatedBy: 'Trukkas Admin' };
 
 // ---- Operations Settings --------------------------------------------------
@@ -202,7 +195,6 @@ export const notificationQuickActions = [
   { icon: 'bell', label: 'Test Notification', hint: 'Send a test notification to your channels.' },
 ];
 
-export const NOTIFICATION_TABS = ['Notification Preferences', 'Email Templates', 'SMS Templates', 'In-App Notifications', 'Notification Groups'];
 
 // ---- Company Settings ------------------------------------------------------
 export const COMPANY_TABS = ['Company Profile', 'Business Information', 'Banking & Payouts', 'Contacts', 'Documents', 'Preferences', 'Subscription & Billing'];

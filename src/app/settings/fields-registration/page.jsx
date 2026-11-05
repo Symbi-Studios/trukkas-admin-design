@@ -1,10 +1,5 @@
-import { SettingsFieldsRegistration } from '../../../screens/SettingsFieldsRegistration.jsx';
+import { SettingsRedirect } from "../../../screens/SettingsRedirect.jsx";
 
-export const metadata = {
-  title: 'Fields Registration',
-  description: 'Manage the data fields collected from Drivers, Forwarders and Companies during registration and profile updates.',
-};
-
-export default function SettingsFieldsRegistrationPage() {
-  return <SettingsFieldsRegistration />;
+export default function Page() {
+  return <SettingsRedirect tab="fields-registration" />;
 }

@@ -1,168 +1,54 @@
 'use client';
 
-import { useState } from 'react';
-import { PageHeader, Button, SectionCard, QuickActionsCard, Logo } from '../ds.js';
-import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
-import { useSettingsEditor } from './useSettingsEditor.js';
-import { DriverDetailLoading } from './DriversLoading.jsx';
-import { SettingsSystemLogsDialog } from './SettingsActionDialogs.jsx';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { PageHeader } from '../ds.js';
+import { SETTINGS_TABS, SettingsNav, resolveSettingsTab, settingsTabPath } from './settingsShared.jsx';
+import { SettingsGeneral } from './SettingsGeneral.jsx';
+import { SettingsFieldsRegistration } from './SettingsFieldsRegistration.jsx';
+import { SettingsOperations } from './SettingsOperations.jsx';
+import { SettingsFleet } from './SettingsFleet.jsx';
+import { SettingsFinance } from './SettingsFinance.jsx';
+import { SettingsNotifications } from './SettingsNotifications.jsx';
+import { SettingsIntegrations } from './SettingsIntegrations.jsx';
+import { SettingsSecurity } from './SettingsSecurity.jsx';
+import { SettingsPasswords } from './SettingsPasswords.jsx';
+import { SettingsSecurityAlerts } from './SettingsSecurityAlerts.jsx';
+import { SettingsDataProtection } from './SettingsDataProtection.jsx';
 
-import { systemStatus as systemStatusTemplate, generalQuickActions } from '../mock/fixtures/settings.js';
+// Each tab stacks one or more settings areas; every area keeps its own Save.
+const TAB_SECTIONS = {
+  general: [SettingsGeneral],
+  operations: [SettingsOperations, SettingsFleet],
+  finance: [SettingsFinance],
+  notifications: [SettingsNotifications],
+  onboarding: [SettingsFieldsRegistration],
+  integrations: [SettingsIntegrations],
+  security: [SettingsSecurity, SettingsPasswords, SettingsSecurityAlerts, SettingsDataProtection],
+};
 
-import { SettingsTabStrip, SettingsStatusCard, SettingsDangerZone } from './settingsShared.jsx';
+function SettingsTabs() {
+  const active = resolveSettingsTab(useSearchParams().get('tab'));
+  const label = SETTINGS_TABS.find((t) => t.key === active).label;
+  // Switch in place; history.pushState keeps the URL shareable without a page load.
+  const select = (key) => window.history.pushState(null, '', settingsTabPath(key));
 
-const TIMEZONES = ['(GMT+01:00) Lagos, Nigeria', '(GMT+00:00) Accra, Ghana', '(GMT+03:00) Nairobi, Kenya', '(GMT+02:00) Johannesburg, South Africa'];
-const LANGUAGES = ['English (EN)', 'French (FR)', 'Portuguese (PT)'];
-const CURRENCIES = ['Nigerian Naira (NGN)', 'US Dollar (USD)', 'Ghanaian Cedi (GHS)', 'Kenyan Shilling (KES)'];
-const DISTANCE_UNITS = ['Kilometers (km)', 'Miles (mi)'];
-
-function ToggleGrid({ items, onToggle, visible }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '16px 20px' }}>
-      {items.filter((it) => visible(it.key)).map((it) => (
-        <Switch key={it.key} checked={it.value} onChange={(v) => onToggle(it.key, v)}
-          label={it.label} hint={it.hint} />
-      ))}
-    </div>
-  );
-}
-
-function ColorField({ label, value, onChange }) {
-  return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 'var(--tk-h-input)',
-                   padding: '0 12px', border: '1px solid var(--tk-line-strong)', borderRadius: 'var(--tk-r-md)' }}>
-        <span style={{ width: 22, height: 22, borderRadius: 999, background: value, flex: '0 0 auto',
-                       border: '1px solid var(--tk-line-strong)' }} />
-        <input value={value} onChange={(e) => onChange(e.target.value)}
-          style={{ flex: 1, border: 0, outline: 'none', font: '400 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }} />
+    <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
+      <PageHeader
+        crumbs={[{ label: 'System Settings', onClick: () => select('general') }, label]}
+        title="System Settings"
+        description="Configure and manage your Trukkas platform settings, integrations, and preferences." />
+      <div className="tk-settings-layout">
+        <SettingsNav active={active} onChange={select} />
+        <div className="tk-settings-content">
+          {TAB_SECTIONS[active].map((Section, i) => <section key={`${active}-${i}`} className="tk-settings-area"><Section /></section>)}
+        </div>
       </div>
     </div>
   );
 }
 
 export function SystemSettings() {
-  const editor = useSettingsEditor('general');
-  const [logsAdmin, setLogsAdmin] = useState(null);
-  const quickActions = editor.quickActions(generalQuickActions, { 'View System Logs': () => setLogsAdmin(editor.admin) });
-  const updatePlatformInfo = editor.change('settingsPlatformInfo');
-  const updateOperationalGeneral = editor.change('settingsOperationalGeneral');
-  const updateNotificationGeneral = editor.change('settingsNotificationGeneral');
-  const resetPlatformSettings = () => editor.resetAll();
-  const systemStatus = editor.status(systemStatusTemplate);
-  const platformVersion = editor.platformVersion || { currentVersion: '—', lastUpdated: '—', environment: '—', buildNumber: '—' };
-  const platformInfo = editor.group('settingsPlatformInfo');
-  const operational = editor.group('settingsOperationalGeneral');
-  const notif = editor.group('settingsNotificationGeneral');
-  const [saved, setSaved] = useState(null);
-
-  if (editor.loading) return <DriverDetailLoading />;
-  if (!platformInfo || !operational || !notif) return null;
-
-  function flash(key) { setSaved(key); setTimeout(() => setSaved(null), 1500); }
-
-  return (
-    <>
-      <PageHeader title="System Settings"
-        description="Configure and manage your Trukkas platform settings, integrations, and preferences." />
-      <SettingsTabStrip active="general" />
-      <SettingsReadNotice error={editor.error} />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-          {editor.groupVisible('settingsPlatformInfo') && (<SectionCard title="Platform Information" icon="building-2"
-            action={editor.groupEditable('settingsPlatformInfo') && <Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsPlatformInfo')) flash('platform'); }}>
-              {saved === 'platform' ? 'Saved ✓' : 'Save Changes'}</Button>}>
-            <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Basic information about your Trukkas platform.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
-              {editor.visible('settingsPlatformInfo', 'platformName') && (<TextField label="Platform Name" value={platformInfo.platformName}
-                onChange={(e) => updatePlatformInfo({ platformName: e.target.value })} />) }
-              {editor.visible('settingsPlatformInfo', 'companyEmail') && (<TextField label="Company Email" value={platformInfo.companyEmail}
-                onChange={(e) => updatePlatformInfo({ companyEmail: e.target.value })} />) }
-              {editor.visible('settingsPlatformInfo', 'timezone') && (<Select label="Timezone" options={TIMEZONES} value={platformInfo.timezone}
-                onChange={(e) => updatePlatformInfo({ timezone: e.target.value })} />) }
-              {editor.visible('settingsPlatformInfo', 'website') && (<TextField label="Website" value={platformInfo.website}
-                onChange={(e) => updatePlatformInfo({ website: e.target.value })} />) }
-              {editor.visible('settingsPlatformInfo', 'phoneNumber') && (<TextField label="Phone Number" value={platformInfo.phoneNumber}
-                onChange={(e) => updatePlatformInfo({ phoneNumber: e.target.value })} />) }
-              {editor.visible('settingsPlatformInfo', 'defaultLanguage') && (<Select label="Default Language" options={LANGUAGES} value={platformInfo.defaultLanguage}
-                onChange={(e) => updatePlatformInfo({ defaultLanguage: e.target.value })} />) }
-            </div>
-          </SectionCard>) }
-
-          {editor.groupVisible('settingsOperationalGeneral') && (<SectionCard title="Operational Settings" icon="settings"
-            action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsOperationalGeneral')) flash('operational'); }}>
-              {saved === 'operational' ? 'Saved ✓' : 'Save Changes'}</Button>}>
-            <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Configure core operational preferences.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
-              {editor.visible('settingsOperationalGeneral', 'defaultJobExpiryHours') && (<TextField label="Default Job Expiry (Hours)" type="number" value={operational.defaultJobExpiryHours}
-                hint="How long a job stays open for bids."
-                onChange={(e) => updateOperationalGeneral({ defaultJobExpiryHours: e.target.value })} />) }
-              {editor.visible('settingsOperationalGeneral', 'defaultCurrency') && (<Select label="Default Currency" options={CURRENCIES} value={operational.defaultCurrency}
-                onChange={(e) => updateOperationalGeneral({ defaultCurrency: e.target.value })} />) }
-              {editor.visible('settingsOperationalGeneral', 'distanceUnit') && (<Select label="Distance Unit" options={DISTANCE_UNITS} value={operational.distanceUnit}
-                onChange={(e) => updateOperationalGeneral({ distanceUnit: e.target.value })} />) }
-            </div>
-            <ToggleGrid visible={(key) => editor.visible('settingsOperationalGeneral', key)} onToggle={(key, v) => updateOperationalGeneral({ [key]: v })} items={[
-              { key: 'autoAssignJobs', value: operational.autoAssignJobs, label: 'Auto-assign jobs', hint: 'Automatically assign jobs to preferred partners.' },
-              { key: 'allowPartialBids', value: operational.allowPartialBids, label: 'Allow partial bids', hint: 'Allow bidders to submit partial bids.' },
-              { key: 'autoCompleteTrips', value: operational.autoCompleteTrips, label: 'Auto-complete trips', hint: 'Mark trip as completed after POD upload.' },
-              { key: 'requireDocumentVerification', value: operational.requireDocumentVerification, label: 'Require document verification', hint: 'Require verified documents before a job can start.' },
-              { key: 'enableDriverRatings', value: operational.enableDriverRatings, label: 'Enable driver ratings', hint: 'Allow shippers to rate drivers after delivery.' },
-              { key: 'enableGeofencing', value: operational.enableGeofencing, label: 'Enable geofencing', hint: 'Use location-based checks for trip updates.' },
-            ]} />
-          </SectionCard>) }
-
-          {editor.groupVisible('settingsNotificationGeneral') && (<SectionCard title="Notification Settings" icon="bell"
-            action={<Button size="sm" disabled={editor.saving} onClick={async () => { if (await editor.save('settingsNotificationGeneral')) flash('notif'); }}>
-              {saved === 'notif' ? 'Saved ✓' : 'Save Changes'}</Button>}>
-            <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 12 }}>Manage system notifications and alerts.</span>
-            <ToggleGrid visible={(key) => editor.visible('settingsNotificationGeneral', key)} onToggle={(key, v) => updateNotificationGeneral({ [key]: v })} items={[
-              { key: 'emailNotifications', value: notif.emailNotifications, label: 'Email Notifications', hint: 'Send system emails to users.' },
-              { key: 'smsNotifications', value: notif.smsNotifications, label: 'SMS Notifications', hint: 'Send SMS alerts for key events.' },
-              { key: 'inAppNotifications', value: notif.inAppNotifications, label: 'In-App Notifications', hint: 'Show in-app notifications.' },
-              { key: 'jobAlerts', value: notif.jobAlerts, label: 'Job Alerts', hint: 'Notify relevant parties about new jobs.' },
-              { key: 'payoutNotifications', value: notif.payoutNotifications, label: 'Payout Notifications', hint: 'Notify users about payout status.' },
-              { key: 'incidentAlerts', value: notif.incidentAlerts, label: 'Incident Alerts', hint: 'Notify about incidents and exceptions.' },
-              { key: 'pushNotificationsEnabled', value: notif.pushNotificationsEnabled, label: 'Push Notifications', hint: 'Send mobile push notifications. Turning this off does not affect in-app notifications or email.' },
-            ]} />
-          </SectionCard>) }
-
-       
-        </div>
-
-        <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-          <SettingsStatusCard title="System Status" headline={systemStatus.headline} caption={systemStatus.lastChecked}
-            items={systemStatus.items.map((i) => ({ label: i.label, status: i.status }))} />
-
-          <SectionCard title="Platform Version" icon="package">
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px 12px', marginBottom: 14 }}>
-              <div style={{ display: 'grid', gap: 2 }}>
-                <span className="tk-meta">Current Version</span>
-                <span style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{platformVersion.currentVersion}</span>
-              </div>
-              <div style={{ display: 'grid', gap: 2 }}>
-                <span className="tk-meta">Last Updated</span>
-                <span style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{platformVersion.lastUpdated}</span>
-              </div>
-              <div style={{ display: 'grid', gap: 2 }}>
-                <span className="tk-meta">Environment</span>
-                <span style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{platformVersion.environment}</span>
-              </div>
-              <div style={{ display: 'grid', gap: 2 }}>
-                <span className="tk-meta">Build Number</span>
-                <span style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{platformVersion.buildNumber}</span>
-              </div>
-            </div>
-          </SectionCard>
-
-          {quickActions.length > 0 && <QuickActionsCard items={quickActions} />}
-
-          <SettingsDangerZone onConfirm={() => resetPlatformSettings()} />
-        </div>
-      </div>
-      {logsAdmin && logsAdmin === editor.admin && editor.authenticated && <SettingsSystemLogsDialog admin={logsAdmin} onClose={() => setLogsAdmin(null)} />}
-    </>
-  );
+  return <Suspense fallback={null}><SettingsTabs /></Suspense>;
 }
