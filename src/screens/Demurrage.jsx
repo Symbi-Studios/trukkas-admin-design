@@ -29,6 +29,7 @@ import {
 } from "../store/features/demurrage/demurrageApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
+import styles from "./Demurrage.module.css";
 const PAGE_SIZE = 8;
 const EMPTY_ROWS = [];
 const STATUS_TONE = {
@@ -212,7 +213,7 @@ function DemurrageScreen() {
           </Button>
         }
       />
-      <div className="grid grid-cols-[repeat(5,minmax(150px,1fr))] gap-3 min-w-0 max-[1440px]:grid-cols-3 max-[760px]:grid-cols-2 max-[480px]:grid-cols-1">
+      <div className={styles.stats}>
         <StatCard
           icon="calendar-x"
           tint="red"
