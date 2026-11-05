@@ -138,7 +138,7 @@ export function ForwarderDetail() {
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: '1px solid var(--tk-line)', marginTop: 18, paddingTop: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', rowGap: 16, borderTop: '1px solid var(--tk-line)', marginTop: 18, paddingTop: 16 }}>
           {[
             { label: 'Status', value: <Badge tone={FORWARDER.statusCode === 'ACTIVE' ? 'success' : FORWARDER.statusCode === 'SUSPENDED' ? 'danger' : 'neutral'}>{FORWARDER.status}</Badge> },
             { label: 'Verification Status', value: <Badge tone={DOC_TONE[FORWARDER.verification] || 'neutral'}>{FORWARDER.verification}</Badge> },
@@ -148,7 +148,7 @@ export function ForwarderDetail() {
             { label: 'Member Since', value: FORWARDER.memberSince },
             { label: 'Last Login', value: FORWARDER.lastActivity },
           ].map((f, i) => (
-            <div key={f.label} style={{ flex: '1 1 140px', padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
+            <div key={f.label} style={{ minWidth: 0, padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
               <div className="tk-meta" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                 {f.label}{f.hint && <Icon name="info" size={12} color="var(--tk-ink-300)" />}
               </div>
@@ -282,7 +282,7 @@ export function ForwarderDetail() {
               <LabelValue layout="stack" label="Years of Experience" value={FORWARDER.yearsExperience} />
             </div>
           </SectionCard>
-          <SectionCard title="Contact Details" icon="phone">
+          <SectionCard title="Contact Details" icon="phone" className="fd-contact">
             <LabelValue label="Phone" value={FORWARDER.phone} />
             <LabelValue label="Alt Phone" value={FORWARDER.altPhone} />
             <LabelValue label="Email" value={FORWARDER.email} />
@@ -348,7 +348,7 @@ export function ForwarderDetail() {
 
       {tab === 'Jobs & Shipments' && (
         <SectionCard title="Jobs & Shipments" pad="none" count={!jobsQuery.error ? jobsQuery.currentData?.pagination?.total : undefined}>
-          <Tabs items={['all', 'active', 'completed', 'cancelled']} value={jobTab} onChange={(next) => { setJobTab(next); setPage(1); }} />
+          <Tabs items={['all', 'active', 'completed', 'cancelled']} value={jobTab} onChange={(next) => { setJobTab(next); setPage(1); }} style={{ paddingInline: 'var(--tk-card-pad)' }} />
           {jobsQuery.isFetching ? <DriverTableLoading columns={6} label="Loading jobs" /> : jobsQuery.error ? <QueryError query={jobsQuery} title="Unable to load jobs" /> : <><JobsTable rows={JOBS} /><Pagination page={page} pageSize={10} pageCount={Math.max(1, jobsQuery.currentData?.pagination?.totalPages || 1)} total={jobsQuery.currentData?.pagination?.total} onPage={(next) => setPage(Math.max(1, Math.min(jobsQuery.currentData?.pagination?.totalPages || 1, next)))} /></>}
         </SectionCard>
       )}

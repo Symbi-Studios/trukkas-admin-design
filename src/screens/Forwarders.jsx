@@ -61,7 +61,6 @@ function ForwarderCell({ f }) {
         >
           {f.name}
         </Link>
-        <span className="tk-meta">{f.id}</span>
       </span>
     </span>
   );

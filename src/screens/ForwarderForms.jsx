@@ -83,13 +83,12 @@ export function ForwarderProfileModal({
   }
   function field([key, label, type = 'text']) {
     const props = {
-      key,
       label,
       value: values[key],
       disabled: blocked,
       onChange: edit(key)
     };
-    return type === 'list' || type === 'textarea' ? <Textarea {...props} rows={3} hint={type === 'list' ? 'One item per line' : undefined} /> : <TextField {...props} type={type} min={type === 'number' ? 0 : undefined} step={type === 'number' ? 1 : undefined} required={!editing && key !== 'businessName'} />;
+    return type === 'list' || type === 'textarea' ? <Textarea key={key} {...props} rows={3} hint={type === 'list' ? 'One item per line' : undefined} /> : <TextField key={key} {...props} type={type} min={type === 'number' ? 0 : undefined} step={type === 'number' ? 1 : undefined} required={!editing && key !== 'businessName'} />;
   }
   return <Modal open title={editing ? 'Edit Forwarder' : 'Add Forwarder'} description={forwarder?.name} width={editing ? 760 : 600} onClose={save.close} footer={<><Button variant="outline" disabled={busy} onClick={save.close}>Cancel</Button><Button type="submit" form="forwarder-profile-form" disabled={blocked || editing && !Object.keys(changes()).length}>{busy ? 'Saving…' : editing ? 'Save Changes' : 'Add Forwarder'}</Button></>}>
     <form id="forwarder-profile-form" onSubmit={submit} style={{
