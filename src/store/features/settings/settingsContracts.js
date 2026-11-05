@@ -59,10 +59,15 @@ function matchDescriptor(control, descriptors) {
   // Never choose arbitrarily between identically labelled fields.
   return byLabel.length === 1 ? byLabel[0] : null;
 }
-// The General page repeats four Operations controls; their values and versions
-// belong to Operations. Do not alias unrelated settings across sections.
-export const relatedSettingsSections = { general: ['operations'], operations: ['general'] };
-const operationsOnGeneral = ['autoAssignJobs', 'allowPartialBids', 'autoCompleteTrips', 'enableGeofencing'];
+// Controls shown on one tab whose value and version are stored in another
+// backend section. Do not alias unrelated settings across sections.
+const crossSectionFields = {
+  operations: { requireDocumentVerification: 'general', enableDriverRatings: 'general' },
+  passwords: { terminateAllSessionsOnPasswordChange: 'security' },
+  'data-protection': { enableDataMasking: 'security', allowDataExport: 'security' },
+};
+export const relatedSettingsSections = Object.fromEntries(Object.entries(crossSectionFields)
+  .map(([page, fields]) => [page, [...new Set(Object.values(fields))]]));
 export function adaptSection(response, page, related = {}) {
   const dto = record(unwrapApiResponseData(response));
   if (dto.section && dto.section !== page) throw new Error('The settings response belongs to a different section.');
@@ -75,8 +80,7 @@ export function adaptSection(response, page, related = {}) {
   const values = {}, contracts = {};
   for (const control of settingsControls.filter((field) => field.page === page)) {
     values[control.group] ||= {};
-    const section = page === 'general' && operationsOnGeneral.includes(control.field) ? 'operations'
-      : page === 'operations' && control.field === 'requireDocumentVerification' ? 'general' : page;
+    const section = crossSectionFields[page]?.[control.field] || page;
     const source = sources[section] || {};
     const descriptors = Array.isArray(source.fields) ? source.fields.filter((field) => safeKey(field?.key) && ['number', 'boolean', 'enum', 'string'].includes(field.type)) : [];
     const flat = record(source.values);

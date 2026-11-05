@@ -15,10 +15,12 @@ export function SectionCard({
   children,
   pad = "md",
   className,
+  id,
   style,
 }) {
   return (
     <Card
+      id={id}
       pad="none"
       className={`tk-section-card${className ? ` ${className}` : ""}`}
       style={{ display: "flex", flexDirection: "column", ...style }}
@@ -26,50 +28,46 @@ export function SectionCard({
       <div className="tk-section-card-header"
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 10,
+          alignItems: description ? "flex-start" : "center",
+          gap: 12,
           padding: "16px var(--tk-card-pad) 0",
         }}
       >
-        {icon && <Icon name={icon} size={18} color="var(--tk-blue)" />}
-        <div>
-          <h3
-            className="tk-section"
-            style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: description ? 4 : 0 }}
-          >
-            {title}
-            {tooltip && (
-              <Tooltip label={tooltip}>
-                <Icon name="info" size={14} color="var(--tk-ink-300)" />
-              </Tooltip>
-            )}
-          </h3>
-          <p className="tk-meta">{description}</p>
-        </div>
-        <div className="tk-section-card-action"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "8px ",
-          }}
-        >
-          {count != null && (
-            <span
-              style={{
-                font: "600 12px/1 var(--tk-font-sans)",
-                color: "var(--tk-blue)",
-                background: "var(--tk-blue-soft)",
-                padding: "4px 8px",
-                borderRadius: "var(--tk-r-xs)",
-              }}
+        <div style={{ display: "flex", alignItems: description ? "flex-start" : "center", gap: 10, flex: 1, minWidth: 0 }}>
+          {icon && <Icon name={icon} size={18} color="var(--tk-blue)" style={{ flex: "0 0 auto", marginTop: description ? 1 : 0 }} />}
+          <div style={{ minWidth: 0 }}>
+            <h3
+              className="tk-section"
+              style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: description ? 4 : 0 }}
             >
-              {count}
-            </span>
-          )}
-          {action}
+              {title}
+              {tooltip && (
+                <Tooltip label={tooltip}>
+                  <Icon name="info" size={14} color="var(--tk-ink-300)" />
+                </Tooltip>
+              )}
+            </h3>
+            {description && <p className="tk-meta" style={{ margin: 0 }}>{description}</p>}
+          </div>
         </div>
+        {(count != null || action) && (
+          <div className="tk-section-card-action" style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" }}>
+            {count != null && (
+              <span
+                style={{
+                  font: "600 12px/1 var(--tk-font-sans)",
+                  color: "var(--tk-blue)",
+                  background: "var(--tk-blue-soft)",
+                  padding: "4px 8px",
+                  borderRadius: "var(--tk-r-xs)",
+                }}
+              >
+                {count}
+              </span>
+            )}
+            {action}
+          </div>
+        )}
       </div>
       <div className="tk-section-card-body"
         style={{

@@ -1,0 +1,106 @@
+/* System Settings: side nav + one centred column of cards, each saving from its footer. */
+
+.tk-settings-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.tk-settings-content {
+  display: grid;
+  gap: 40px;
+  width: 100%;
+  max-width: 880px;
+  min-width: 0;
+  justify-self: center;
+}
+/* Registration fields fit the column: the field editor stacks below the table. */
+.tk-settings-content .fr-layout.has-editor { grid-template-columns: minmax(0, 1fr); }
+.tk-settings-content .fr-editor { position: static; max-height: none; }
+.tk-settings-area { display: grid; gap: 16px; min-width: 0; }
+
+.tk-settings-nav {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 2px;
+}
+.tk-settings-nav button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: var(--tk-r-md);
+  font: 500 14px/20px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+  cursor: pointer;
+}
+.tk-settings-nav button:hover { background: var(--tk-surface-soft); color: var(--tk-ink-900); }
+.tk-settings-nav button[aria-current="page"] { background: var(--tk-surface-sunk); color: var(--tk-ink-900); font-weight: 600; }
+.tk-settings-nav button:focus-visible { outline: 2px solid var(--tk-blue); outline-offset: -2px; }
+
+.tk-settings-area-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.tk-settings-area-header > div:first-child { display: grid; gap: 4px; min-width: 0; flex: 1 1 280px; }
+.tk-settings-area-header h2 { margin: 0; font: 700 20px/28px var(--tk-font-sans); color: var(--tk-ink-900); }
+.tk-settings-area-header p { margin: 0; font: 400 14px/20px var(--tk-font-sans); color: var(--tk-ink-400); }
+.tk-settings-area-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.tk-settings-stack { display: grid; gap: 16px; min-width: 0; }
+
+.tk-settings-card { overflow: hidden; }
+.tk-settings-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px var(--tk-card-pad) 0;
+}
+.tk-settings-card-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: 600 16px/24px var(--tk-font-sans);
+  color: var(--tk-ink-900);
+}
+.tk-settings-card-head p { margin: 4px 0 0; font: 400 13px/20px var(--tk-font-sans); color: var(--tk-ink-400); }
+.tk-settings-card-count {
+  font: 600 12px/1 var(--tk-font-sans);
+  color: var(--tk-blue);
+  background: var(--tk-blue-soft);
+  padding: 4px 8px;
+  border-radius: var(--tk-r-xs);
+}
+.tk-settings-card-action { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.tk-settings-card-body { padding: 16px var(--tk-card-pad) 20px; min-width: 0; }
+.tk-settings-card-body[data-pad="none"] { padding: 16px 0 0; }
+.tk-settings-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 10px var(--tk-card-pad);
+  border-top: 1px solid var(--tk-line);
+  background: var(--tk-surface-soft);
+}
+
+@media (max-width: 900px) {
+  .tk-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .tk-settings-nav {
+    position: static;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--tk-line);
+    padding-bottom: 8px;
+  }
+  .tk-settings-nav button { white-space: nowrap; }
+}

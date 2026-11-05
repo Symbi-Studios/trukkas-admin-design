@@ -1,66 +1,119 @@
 "use client";
 
-import { usePathname } from "next/navigation.js";
-import { useNavigate } from "../router.js";
-import { Tabs, Card, Badge, Icon } from "../ds.js";
+import { useState } from "react";
+;
+import { Card, Badge, Icon, Skeleton, Button } from "../ds.js";
+import "./Settings.css";
 
 export const SETTINGS_TABS = [
-  { key: "general", label: "General", path: "/settings" },
-  // { key: 'company', label: 'Company', path: '/settings/company' },
-  { key: "operations", label: "Operations", path: "/settings/operations" },
-  { key: "finance", label: "Finance", path: "/settings/finance" },
-  { key: "fleet", label: "Fleet", path: "/settings/fleet" },
-  {
-    key: "notifications",
-    label: "Notifications",
-    path: "/settings/notifications",
-  },
-  {
-    key: "fields-registration",
-    label: "Fields Registration",
-    path: "/settings/fields-registration",
-  },
-  {
-    key: "integrations",
-    label: "Integrations",
-    path: "/settings/integrations",
-  },
-  { key: "security", label: "Security", path: "/settings/security" },
-  { key: "passwords", label: "Passwords", path: "/settings/passwords" },
-  {
-    key: "security-alerts",
-    label: "Security Alerts",
-    path: "/settings/security-alerts",
-  },
-  {
-    key: "data-protection",
-    label: "Data Protection",
-    path: "/settings/data-protection",
-  },
+  { key: "general", label: "General" },
+  { key: "operations", label: "Operations" },
+  { key: "finance", label: "Finance" },
+  { key: "notifications", label: "Notifications" },
+  { key: "onboarding", label: "Onboarding" },
+  { key: "integrations", label: "Integrations" },
+  { key: "security", label: "Security & Privacy" },
 ];
 
-export function SettingsTabStrip({ active, style }) {
-  const navigate = useNavigate();
+// Tabs that were merged into another; old links and bookmarks still resolve.
+const MERGED_TABS = {
+  fleet: "operations",
+  "fields-registration": "onboarding",
+  passwords: "security",
+  "security-alerts": "security",
+  "data-protection": "security",
+};
+
+export function resolveSettingsTab(key) {
+  const tab = MERGED_TABS[key] || key;
+  return SETTINGS_TABS.some((t) => t.key === tab) ? tab : "general";
+}
+
+export function settingsTabPath(key) {
+  const tab = resolveSettingsTab(key);
+  return tab === "general" ? "/settings" : `/settings?tab=${tab}`;
+}
+
+/** Vertical list of settings tabs, shown beside the content (a scrolling row on narrow screens). */
+export function SettingsNav({ active, onChange }) {
   return (
-    <Card pad="none" style={style}>
-      <Tabs
-        value={active}
-        onChange={(key) =>
-          navigate(
-            SETTINGS_TABS.find((t) => t.key === key)?.path || "/settings",
-          )
-        }
-        style={{ padding: "0 var(--tk-card-pad)" }}
-        items={SETTINGS_TABS.map((t) => ({ value: t.key, label: t.label }))}
-      />
+    <nav className="tk-settings-nav" aria-label="Settings">
+      {SETTINGS_TABS.map((t) => (
+        <button key={t.key} type="button" aria-current={t.key === active ? "page" : undefined}
+          onClick={() => onChange(t.key)}>
+          {t.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** Heading for one settings area inside a tab. */
+export function SettingsSectionHeader({ title, description, actions }) {
+  return (
+    <div className="tk-settings-area-header">
+      <div>
+        <h2>{title}</h2>
+        {description && <p>{description}</p>}
+      </div>
+      {actions && <div className="tk-settings-area-actions">{actions}</div>}
+    </div>
+  );
+}
+
+/** Saves one card. `group` limits the save to that card's settings; without it the whole area is saved. */
+export function SettingsCardSave({ editor, group, label = "Save" }) {
+  const [state, setState] = useState("idle");
+  const dirty = editor.dirty(group);
+  async function save() {
+    setState("saving");
+    const ok = await editor.save(group);
+    setState(ok ? "saved" : "idle");
+    if (ok) setTimeout(() => setState("idle"), 1500);
+  }
+  return (
+    <Button size="sm" variant={dirty ? "primary" : "outline"} disabled={!dirty || state === "saving" || editor.saving} onClick={save}>
+      {state === "saving" ? "Saving…" : state === "saved" ? "Saved ✓" : label}
+    </Button>
+  );
+}
+
+/** Settings card: title and description, controls, then a footer bar with a note and the card's own action. */
+export function SettingsCard({ title, description, action, count, note, save, pad = "md", className, children }) {
+  return (
+    <Card pad="none" className={"tk-settings-card" + (className ? " " + className : "")}>
+      <div className="tk-settings-card-head">
+        <div style={{ minWidth: 0 }}>
+          <h3>{title}{count != null && <span className="tk-settings-card-count">{count}</span>}</h3>
+          {description && <p>{description}</p>}
+        </div>
+        {action && <div className="tk-settings-card-action">{action}</div>}
+      </div>
+      <div className="tk-settings-card-body" data-pad={pad}>{children}</div>
+      {(note || save) && (
+        <div className="tk-settings-card-foot">
+          <span className="tk-meta">{note}</span>
+          {save}
+        </div>
+      )}
     </Card>
   );
 }
 
-export function useSettingsActiveTab() {
-  const pathname = usePathname();
-  const seg = pathname.split("/")[2];
-  return seg || "general";
+/** Single column of settings cards. */
+export function SettingsGrid({ children }) {
+  return <div className="tk-settings-stack">{children}</div>;
+}
+
+export function SettingsPanelLoading() {
+  return (
+    <Card aria-busy="true" style={{ display: "grid", gap: 14 }}>
+      <Skeleton width={180} height={20} />
+      <Skeleton width="60%" height={14} />
+      <Skeleton width="45%" height={14} />
+      <span className="tk-meta">Loading settings…</span>
+    </Card>
+  );
 }
 
 /** The green "All Systems Operational" style status card used across settings screens. */
