@@ -1,6 +1,7 @@
 'use client';
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { useNavigate, useParams } from '../router.js';
@@ -159,8 +160,38 @@ function CompanyJobs({ query, rows }) {
   return <><DataTable rows={rows} rowKey={(row) => row.id} columns={[{ key: 'id', header: 'Job ID', render: (row) => <strong className="company-blue">{row.reference}</strong> }, { key: 'route', header: 'Route' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'date', header: 'Date' }, { key: 'amount', header: 'Amount', render: (row) => companyMoney(row.amount) }]} />{!rows.length && <EmptyRecords label="No company jobs found" />}</>;
 }
 
+function TruckRowMenu({ anchor, onClose, onView }) {
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState(null);
+  useEffect(() => {
+    const update = () => {
+      if (!anchor?.isConnected || !menuRef.current) { onClose(null); return; }
+      const button = anchor.getBoundingClientRect(), menu = menuRef.current.getBoundingClientRect();
+      setPosition({
+        left: Math.max(8, Math.min(button.right - menu.width, window.innerWidth - menu.width - 8)),
+        top: button.bottom + 6 + menu.height <= window.innerHeight - 8 ? button.bottom + 6 : Math.max(8, button.top - menu.height - 6),
+      });
+    };
+    const outside = event => { if (!anchor?.contains(event.target) && !menuRef.current?.contains(event.target)) onClose(null); };
+    const escape = event => { if (event.key === 'Escape') onClose(null); };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [anchor, onClose]);
+  return createPortal(<div ref={menuRef} style={{ position: 'fixed', zIndex: 95, top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden' }}><DropdownMenu width={205} items={[{ label: 'View Full Details', icon: 'eye', onClick: onView }]} /></div>, document.body);
+}
+
 function TrucksTab({ onActivity, company, trucks, available, query, setQuery, filter, setFilter, page, setPage, selected, setSelected, checked, setChecked, navigate }) {
   const [type, setType] = useState('All Fleet Types');
+  const [rowMenu, setRowMenu] = useState(null);
   const filtered = trucks.filter((truck) => (!query || [truck.plate, truck.type, truck.ref, truck.vin].some((value) => value?.toLowerCase().includes(query.toLowerCase()))) && (filter === 'All Statuses' || truck.status === filter) && (type === 'All Fleet Types' || truck.type === type));
   const pages = Math.max(1, Math.ceil(filtered.length / 10)), currentPage = Math.min(page, pages);
   return <div className="company-tab">
@@ -170,9 +201,9 @@ function TrucksTab({ onActivity, company, trucks, available, query, setQuery, fi
       <div className="company-toolbar"><SearchField value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search trucks by plate number, type, VIN..." /><Select value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }} options={['All Statuses', 'Available', 'On Trip', 'In Maintenance', 'Inactive']} /><Select value={type} onChange={(event) => { setType(event.target.value); setPage(1); }} options={['All Fleet Types', 'Trailer', 'Container', 'Flatbed', 'Tanker']} /><Button variant="outline" icon="sliders-horizontal" onClick={() => { setQuery(''); setFilter('All Statuses'); setType('All Fleet Types'); setPage(1); }}>Reset</Button></div>
       {!available ? <Banner tone="warning" title="Company fleet unavailable">Fleet records are not available.</Banner> : <><DataTable rows={filtered.slice((currentPage - 1) * 10, currentPage * 10)} rowKey={(row) => row.id} selectable selected={checked} onSelect={setChecked} onRowClick={setSelected} coloredHeader columns={[
         { key: 'plate', header: 'Plate Number', render: (row) => <span className="company-vehicle"><span><Icon name="truck" size={20} /></span><strong>{row.plate || '—'}</strong></span> },
-        { key: 'type', header: 'Truck Type' }, { key: 'model', header: 'Make / Model', render: (row) => [row.make, row.model].filter(Boolean).join(' ') || '—' }, { key: 'year', header: 'Year' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'date', header: 'Last Active', render: (row) => row.date || '—' }, { key: 'actions', header: 'Actions', render: (row) => <IconButton icon="ellipsis" onClick={(event) => { event.stopPropagation(); setSelected(row); }} /> }
+        { key: 'type', header: 'Truck Type' }, { key: 'model', header: 'Make / Model', render: (row) => [row.make, row.model].filter(Boolean).join(' ') || '—' }, { key: 'year', header: 'Year' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'date', header: 'Last Active', render: (row) => row.date || '—' }, { key: 'actions', header: 'Actions', render: (row) => <IconButton icon="ellipsis" label="Truck actions" aria-haspopup="menu" aria-expanded={rowMenu?.id === row.id} onClick={(event) => { event.stopPropagation(); setSelected(row); setRowMenu(current => current?.id === row.id ? null : { id: row.id, anchor: event.currentTarget }); }} /> }
       ]} />{!filtered.length && <EmptyRecords label="No records match these filters" />}<Pagination page={currentPage} pageCount={pages} pageSize={10} total={filtered.length} onPage={setPage} /></>}
-    </Card>{selected && <CompanyTruckRail key={selected.id} companyId={company.id} truck={selected} navigate={navigate} onActivity={onActivity} />}</div>
+    </Card>{rowMenu && <TruckRowMenu anchor={rowMenu.anchor} onClose={setRowMenu} onView={() => { navigate('/fleet/detail?id='+encodeURIComponent(rowMenu.id)); setRowMenu(null); }} />}{selected && <CompanyTruckRail key={selected.id} companyId={company.id} truck={selected} navigate={navigate} onActivity={onActivity} />}</div>
   </div>;
 }
 function DriversTab({ onActivity, company, drivers, dataQuery, query, setQuery, filter, setFilter, page, setPage, selected, setSelected, checked, setChecked, navigate }) {
