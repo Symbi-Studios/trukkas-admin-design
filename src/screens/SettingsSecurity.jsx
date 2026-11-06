@@ -6,6 +6,7 @@ import { SettingsTextField as TextField, SettingsSelect as Select, SettingsTexta
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { SettingsEventsDialog } from './SettingsActionDialogs.jsx';
 import { DriverDetailLoading } from './DriversLoading.jsx';
+import styles from './SettingsSecurity.module.css';
 
 import { ACCESS_CONTROL_OPTIONS, securityStatus as securityStatusTemplate, securityQuickActions } from '../mock/fixtures/settings.js';
 
@@ -65,8 +66,8 @@ export function SettingsSecurity() {
       <SettingsTabStrip active="security" />
       <SettingsReadNotice error={editor.error} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--tk-grid-gap)' }}>
+      <div className={styles.layout}>
+        <div className={styles.settingsGrid}>
           {editor.groupVisible('settingsAuth') && (<SectionCard title="Authentication Settings" icon="lock">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Configure how users authenticate and access the platform.</span>
             {editor.visible('settingsAuth', 'requireTwoFactorAuth') && (<Field><Switch checked={auth.requireTwoFactorAuth} label="Require Two-Factor Authentication (2FA)"
@@ -109,7 +110,7 @@ export function SettingsSecurity() {
 
           {editor.groupVisible('settingsSessionManagementOverview') && (<SectionCard title="Session Management" icon="monitor-smartphone">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Control user sessions and inactivity settings.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
               {editor.visible('settingsSessionManagementOverview', 'sessionTimeoutMinutes') && (<TextField label="Session timeout (minutes)" type="number" value={sessionMgmt.sessionTimeoutMinutes}
                 hint="Automatically log out inactive users."
                 onChange={(e) => updateSessionManagementOverview({ sessionTimeoutMinutes: e.target.value })} />) }

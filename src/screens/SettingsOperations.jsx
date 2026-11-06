@@ -5,6 +5,7 @@ import { PageHeader, Button, SectionCard, QuickActionsCard } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { DriverDetailLoading } from './DriversLoading.jsx';
+import styles from './SettingsOperations.module.css';
 
 import { operationsStatus as operationsStatusTemplate, operationsQuickActions } from '../mock/fixtures/settings.js';
 
@@ -96,21 +97,8 @@ export function SettingsOperations() {
       <SettingsTabStrip active="operations" />
       <SettingsReadNotice error={editor.error} />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 300px",
-          gap: "var(--tk-grid-gap)",
-          alignItems: "start",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: "var(--tk-grid-gap)",
-          }}
-        >
+      <div className={styles.layout}>
+        <div className={styles.settingsGrid}>
           {editor.groupVisible('settingsJobTrip') && (<SectionCard title="Job & Trip Settings" icon="briefcase">
             <span
               className="tk-meta"

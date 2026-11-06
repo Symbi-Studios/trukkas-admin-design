@@ -5,6 +5,7 @@ import { PageHeader, Button, SectionCard, Banner, Icon } from '../ds.js';
 import { SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { DriverDetailLoading } from './DriversLoading.jsx';
+import styles from './SettingsDataProtection.module.css';
 
 import { dataProtectionStatus as dataProtectionStatusTemplate } from '../mock/fixtures/settings.js';
 
@@ -65,7 +66,7 @@ export function SettingsDataProtection() {
       <SettingsTabStrip active="data-protection" />
       <SettingsReadNotice error={editor.error} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr)) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+      <div className={styles.layout}>
         <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
           {editor.groupVisible('settingsDataPrivacyConsent') && (<SectionCard title="Data Privacy & Consent" icon="shield">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Manage user consent and data collection preferences.</span>

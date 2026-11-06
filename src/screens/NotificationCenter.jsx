@@ -1,4 +1,6 @@
 'use client';
+import { CustomSelect } from '../ds/components/forms/Select.jsx';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -191,7 +193,7 @@ export function NotificationCenter() {
           <Tabs value={tab} onChange={(value) => { setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
           <div className="notify-list-head">
             <strong>{range === 'Today' ? 'Today' : 'Notifications'}</strong><span />
-            <select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }}><option>Latest First</option><option>Oldest First</option></select>
+            <CustomSelect value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }}><option>Latest First</option><option>Oldest First</option></CustomSelect>
             <IconButton icon="list" tone="outline" onClick={() => notify('List view active')} />
           </div>
           <div className="notify-list">
@@ -218,8 +220,8 @@ export function NotificationCenter() {
         <SectionCard title="Filters" action={<button className="notify-link" onClick={() => { setStatuses([]); setPriorities([]); setCategory('All Categories'); setRange('All Time'); setTab('All'); setPage(1); }}>Clear all</button>}>
           <FilterTitle>Status</FilterTitle><div className="notify-checks">{['Unread', 'Read'].map((value) => <Checkbox key={value} label={value} checked={statuses.includes(value)} onChange={() => toggle(statuses, setStatuses, value)} />)}</div>
           <FilterTitle>Priority</FilterTitle><div className="notify-checks">{['High', 'Medium', 'Low'].map((value) => <Checkbox key={value} label={value} checked={priorities.includes(value)} onChange={() => toggle(priorities, setPriorities, value)} />)}</div>
-          <FilterTitle>Category</FilterTitle><select className="notify-select" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }}>{['All Categories', 'Maintenance', 'Jobs & Trips', 'Fleet', 'Finance', 'System', 'Ratings'].map((value) => <option key={value}>{value}</option>)}</select>
-          <FilterTitle>Date Range</FilterTitle><select className="notify-select" value={range} onChange={(event) => { setRange(event.target.value); setPage(1); }}>{['All Time', 'Today', 'This Week', 'This Month'].map((value) => <option key={value}>{value}</option>)}</select>
+          <FilterTitle>Category</FilterTitle><CustomSelect className="notify-select" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }}>{['All Categories', 'Maintenance', 'Jobs & Trips', 'Fleet', 'Finance', 'System', 'Ratings'].map((value) => <option key={value}>{value}</option>)}</CustomSelect>
+          <FilterTitle>Date Range</FilterTitle><CustomSelect className="notify-select" value={range} onChange={(event) => { setRange(event.target.value); setPage(1); }}>{['All Time', 'Today', 'This Week', 'This Month'].map((value) => <option key={value}>{value}</option>)}</CustomSelect>
         </SectionCard>
         <SectionCard title="Notification Settings">
           {settingsError && <div className="notify-settings-error" role="alert">{errorMessage(settingsError, 'Could not load notification settings.')} <button className="notify-link" onClick={refetchSettings}>Try again</button></div>}

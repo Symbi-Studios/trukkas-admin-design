@@ -16,6 +16,7 @@ import {
 } from '../store/features/users/usersApi.js';
 import { DriverTableLoading, DriverLoadingNotice } from './DriversLoading.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import styles from './UserManagement.module.css';
 
 import { UserActionDialogs, useManagedUserOperations } from './UserActionDialogs.jsx';
 
@@ -166,7 +167,7 @@ export function UserManagement() {
           <Button icon="plus" onClick={() => setAddOpen(true)}>Add New User</Button>
         </>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>
+      <div className={styles.stats}>
         <StatCard icon="users-round" tint="amber" label="Total Users" value={metric(usersSummary.total)}
           delta={usersSummary.totalCaption} direction={usersSummary.totalDirection} />
         <StatCard icon="shield-check" tint="green" label="Active Users" value={metric(usersSummary.active)}
@@ -198,7 +199,7 @@ export function UserManagement() {
           {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
             columns={[
               { key: 'user', header: 'User', render: (r) => (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', minWidth: 240 }}
                       onClick={() => navigate(profilePath(r))}>
                   <Avatar name={r.name} size={36} />
                   <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
@@ -206,7 +207,7 @@ export function UserManagement() {
                       <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.name}</span>
                       {r.source === 'admin' && r.backendId === admin?.id && <Tag tone="blue">You</Tag>}
                     </span>
-                    <span className="tk-meta">{r.email}</span>
+                    <span className="tk-meta" style={{ overflowWrap: 'anywhere' }}>{r.email}</span>
                   </span>
                 </span>) },
               { key: 'role', header: 'Role', render: (r) => <Badge tone={r.roleTone}>{r.role}</Badge> },

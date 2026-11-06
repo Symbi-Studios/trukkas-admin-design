@@ -1,4 +1,6 @@
 "use client";
+import { CustomSelect } from '../ds/components/forms/Select.jsx';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -174,7 +176,7 @@ export function SupportTickets() {
               setPage(1);
             }}
           />
-          <select
+          <CustomSelect
             aria-label="Filter by status"
             className="support-select"
             value={status}
@@ -193,8 +195,8 @@ export function SupportTickets() {
             ].map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </select>
-          <select
+          </CustomSelect>
+          <CustomSelect
             aria-label="Filter by priority"
             className="support-select"
             value={priority}
@@ -206,8 +208,8 @@ export function SupportTickets() {
             {["All", "High", "Medium", "Low"].map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </select>
-          <select
+          </CustomSelect>
+          <CustomSelect
             aria-label="Filter by category"
             className="support-select"
             value={category}
@@ -220,7 +222,7 @@ export function SupportTickets() {
             {categories.map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </select>
+          </CustomSelect>
           <Button
             variant="outline"
             icon="rotate-ccw"

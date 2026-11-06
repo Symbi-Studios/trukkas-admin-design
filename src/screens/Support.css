@@ -802,3 +802,60 @@
     align-items: flex-start;
   }
 }
+
+/* Keep the article editor and its controls within the available content width. */
+.article-form-grid,
+.article-form-main,
+.article-form-rail,
+.article-form-grid .form-card,
+.article-form-grid .form-card > label,
+.article-form-grid .form-row > label {
+  min-width: 0;
+}
+
+.article-form-grid .form-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.article-form-grid .dropzone {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.article-form-grid .tag-chip {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.article-form-grid .settings-row > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.article-publish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.article-publish-actions > button {
+  min-width: max-content;
+}
+
+@media (max-width: 760px) {
+  .article-form-grid .form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .article-form-grid .editor-tools > span {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .article-form-grid .sticky-actions > * {
+    flex: 1 1 100%;
+  }
+}

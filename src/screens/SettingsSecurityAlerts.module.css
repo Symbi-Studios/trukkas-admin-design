@@ -1,0 +1,17 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--tk-grid-gap);
+  align-items: start;
+  min-width: 0;
+}
+.layout > div, .layout :global(.tk-field), .layout :global(.tk-field) > div { min-width: 0; }
+.eventScroll { overflow-x: auto; overscroll-behavior-inline: contain; }
+.eventRow {
+  min-width: 570px;
+  grid-template-columns: minmax(160px, 1.1fr) repeat(3, 56px) minmax(180px, 1.3fr);
+}
+.eventRow > * { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,0 +1,16 @@
+.layout, .settingsGrid {
+  display: grid;
+  gap: var(--tk-grid-gap);
+  min-width: 0;
+  align-items: start;
+}
+.layout { grid-template-columns: minmax(0, 1fr) 300px; }
+.settingsGrid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.settingsGrid :global(.tk-field),
+.settingsGrid :global(.tk-field) > div { min-width: 0; }
+.settingsGrid :global(.tk-field) input,
+.settingsGrid :global(.tk-field) textarea,
+.settingsGrid :global(.tk-field) select { min-width: 0; max-width: 100%; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}

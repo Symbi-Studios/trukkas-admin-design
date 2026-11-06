@@ -7,6 +7,7 @@ import { SettingsCheckbox as Checkbox, SettingsSwitch as Switch, SettingsTextFie
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { DriverDetailLoading } from './DriversLoading.jsx';
 import { SettingsNotificationInbox } from './SettingsNotificationInbox.jsx';
+import styles from './SettingsNotifications.module.css';
 
 import { NOTIFICATION_FREQUENCIES, notificationQuickActions, NOTIFICATION_TABS, eventNotificationGroups as notificationEventControls, notificationChannelsStatus as notificationChannelControls } from '../mock/fixtures/settings.js';
 
@@ -23,10 +24,9 @@ const TIMEZONES = [
 function EventRow({ event, onToggle, onFrequency }) {
   return (
     <div
-      className="tk-notification-event-grid"
+      className={styles.eventRow}
       style={{
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) 70px 70px 70px 140px",
         alignItems: "center",
         padding: "12px 4px",
         borderBottom: "1px solid var(--tk-line)",
@@ -134,14 +134,7 @@ export function SettingsNotifications() {
           />
         </Card>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 320px",
-            gap: "var(--tk-grid-gap)",
-            alignItems: "start",
-          }}
-        >
+        <div className={styles.layout}>
           <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
             <SectionCard title="General Notification Settings" icon="settings">
               <span
@@ -150,14 +143,7 @@ export function SettingsNotifications() {
               >
                 Set your overall notification preferences and quiet hours.
               </span>
-              <div
-                className="tk-notification-event-grid tk-notification-event-header"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-                  gap: 24,
-                }}
-              >
+              <div className={styles.generalGrid}>
                 <div style={{ display: "grid", gap: 14 }}>
                   <span
                     style={{
@@ -198,7 +184,7 @@ export function SettingsNotifications() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 125px), 1fr))",
                       gap: 12,
                     }}
                   >
@@ -249,10 +235,10 @@ export function SettingsNotifications() {
                 Choose which events trigger notifications and how you want to be
                 notified.
               </span>
-              <div
+              <div className={styles.eventScroll} role="region" aria-label="Event notification settings" tabIndex={0}>
+              <div className={styles.eventHeader}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) 70px 70px 70px 140px",
                   gap: 8,
                   padding: "10px 4px",
                   borderBottom: "1px solid var(--tk-line)",
@@ -337,6 +323,7 @@ export function SettingsNotifications() {
                   ))}
                 </div>
               ))}
+              </div>
             </SectionCard>
           </div>
 
@@ -346,6 +333,7 @@ export function SettingsNotifications() {
                 {notificationChannelsStatus.map((c, i) => (
                   <div
                     key={c.label}
+                    className={styles.channelRow}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -371,7 +359,7 @@ export function SettingsNotifications() {
                     >
                       <Icon name={c.icon} size={16} />
                     </span>
-                    <span style={{ flex: 1, display: "grid", gap: 1 }}>
+                    <span className={styles.channelInfo} style={{ flex: 1, display: "grid", gap: 1 }}>
                       <span
                         style={{
                           font: "600 13px/18px var(--tk-font-sans)",

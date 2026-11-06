@@ -82,7 +82,7 @@ export function SettingsPasswords() {
               {editor.visible('settingsPasswordRequirements', 'preventPreviousPasswords') && (<Checkbox checked={req.preventPreviousPasswords} label="Prevent use of previous passwords"
                 onChange={(v) => updatePasswordRequirements({ preventPreviousPasswords: v })} />) }
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14, marginBottom: 14 }}>
               {editor.visible('settingsPasswordRequirements', 'passwordHistory') && (<TextField label="Password history" type="number" value={req.passwordHistory}
                 hint="Number of previous passwords to remember and prevent reuse."
                 onChange={(e) => updatePasswordRequirements({ passwordHistory: e.target.value })} />) }

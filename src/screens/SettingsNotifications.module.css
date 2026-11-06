@@ -1,0 +1,28 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--tk-grid-gap);
+  align-items: start;
+  min-width: 0;
+}
+.layout > div { min-width: 0; }
+.generalGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 24px;
+  min-width: 0;
+}
+.generalGrid > div, .generalGrid :global(.tk-field),
+.generalGrid :global(.tk-field) > div { min-width: 0; }
+.eventScroll { overflow-x: auto; overscroll-behavior-inline: contain; }
+.eventHeader, .eventRow {
+  grid-template-columns: minmax(200px, 1fr) repeat(3, 70px) 140px;
+  min-width: 590px;
+}
+.eventRow > *, .eventHeader > * { min-width: 0; }
+.eventScroll > div { min-width: 590px; }
+.channelRow { flex-wrap: wrap; }
+.channelInfo { flex: 1 1 130px !important; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}

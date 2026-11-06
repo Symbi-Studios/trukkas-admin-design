@@ -147,10 +147,10 @@ function VerificationDetailScreen() {
                   'Information', 'Assessment', { value: 'Comments', label: 'Comments', count: commentEntries ? commentEntries.length : v.commentCount ?? '—' }, 'History']} />
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--tk-grid-gap)' }}>
-            <SectionCard title="Verification Overview">
+      <div style={{ display: 'grid', gridTemplateColumns: tab === 'Verification Overview' ? 'minmax(0, 1fr) 320px' : 'minmax(0, 1fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+        {['Verification Overview', 'Information', 'Assessment', 'Documents'].includes(tab) && <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
+          {tab !== 'Documents' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 'var(--tk-grid-gap)' }}>
+            {['Verification Overview', 'Information'].includes(tab) && <SectionCard title={tab === 'Information' ? 'Information' : 'Verification Overview'}>
               <LabelValue label="Verification ID" value={v.id} />
               <LabelValue label="Submission Date" value={v.submittedOn} />
               <LabelValue label="Submitted By" value={v.submittedBy} hint={v.contactHint} layout="stack" />
@@ -158,8 +158,8 @@ function VerificationDetailScreen() {
               <LabelValue label="Assigned To" value={v.assignedTo} hint={v.assignedRole} layout="stack" />
               <LabelValue label="Due Date" value={v.dueDate} valueTone={v.dueDate !== '—' ? 'var(--tk-danger)' : undefined} />
               <LabelValue label="Priority" value={<Badge tone="warning">{v.priority}</Badge>} />
-            </SectionCard>
-            <SectionCard title="Verification Progress" footer={<a href="#" onClick={(event) => { event.preventDefault(); setTab('History'); }}>View Full Progress →</a>}>
+            </SectionCard>}
+            {tab === 'Verification Overview' && <SectionCard title="Verification Progress" footer={<a href="#" onClick={(event) => { event.preventDefault(); setTab('History'); }}>View Full Progress →</a>}>
               <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
                 <DonutChart size={116} thickness={16} centerValue={pct == null ? '—' : `${pct}%`} centerLabel="Complete"
                   data={v.progress ? [{ label: 'Completed', value: completed, color: 'var(--tk-success)' },
@@ -170,8 +170,8 @@ function VerificationDetailScreen() {
                           { label: 'In Review', value: inReview, display: inReview == null || total == null ? '—' : `${inReview} / ${total}`, color: 'var(--tk-warning)' },
                           { label: 'Pending', value: pending, display: pending == null || total == null ? '—' : `${pending} / ${total}`, color: 'var(--tk-blue)' }]} />
               </div>
-            </SectionCard>
-            <SectionCard title="Overall Assessment">
+            </SectionCard>}
+            {['Verification Overview', 'Assessment'].includes(tab) && <SectionCard title="Overall Assessment">
               <div style={{ display: 'grid', justifyItems: 'center', gap: 8, textAlign: 'center' }}>
                 <span style={{ font: '600 18px/24px var(--tk-font-sans)',
                                color: v.status === 'Non-Compliant' ? 'var(--tk-danger)' : 'var(--tk-success)' }}>
@@ -184,10 +184,10 @@ function VerificationDetailScreen() {
               <Banner tone={v.riskLevel === 'High' ? 'danger' : 'success'} title={`Risk Level: ${v.riskLevel}`} style={{ marginTop: 12 }}>
                 {v.riskDescription}
               </Banner>
-            </SectionCard>
-          </div>
+            </SectionCard>}
+          </div>}
 
-          <SectionCard title="Requirements Checklist" pad="none" style={{ marginTop: 16 }}
+          {['Verification Overview', 'Documents'].includes(tab) && <SectionCard title="Requirements Checklist" pad="none" style={{ marginTop: 16 }}
             footer={<a href="#" onClick={(event) => { event.preventDefault(); setTab('Documents'); }}>View All Requirements</a>}>
             <DataTable rows={requirements} rowKey={(r) => r.key}
               columns={[
@@ -207,24 +207,24 @@ function VerificationDetailScreen() {
                   </span>) },
               ]} />
             {!requirements.length && <EmptyState title="—" />}
-          </SectionCard>
-        </div>
+          </SectionCard>}
+        </div>}
 
-        <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
-          <SectionCard title="Verification Status" icon="shield-check" action={<Badge tone={stagePillTone}>{stagePillLabel}</Badge>}>
+        {['Verification Overview', 'History', 'Comments'].includes(tab) && <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
+          {tab !== 'Comments' && <SectionCard title="Verification Status" icon="shield-check" action={<Badge tone={stagePillTone}>{stagePillLabel}</Badge>}>
             <Timeline items={verificationTimeline(v, events)} />
-          </SectionCard>
-          <SectionCard title="Risk Indicators" icon="triangle-alert">
+          </SectionCard>}
+          {tab === 'Verification Overview' && <SectionCard title="Risk Indicators" icon="triangle-alert">
             <ProgressBar value={null} label="Sanctions Check" caption="—" color="var(--tk-success)" />
             <ProgressBar style={{ marginTop: 12 }} value={null} label="PEP Screening" caption="—" color="var(--tk-success)" />
             <ProgressBar style={{ marginTop: 12 }} value={null} label="Adverse Media" caption="—" color="var(--tk-success)" />
             <ProgressBar style={{ marginTop: 12 }} value={null} label="Credit History" caption="—" color="var(--tk-blue)" />
-          </SectionCard>
-          <SectionCard title="Activity Log" action={<a href="#" onClick={(event) => { event.preventDefault(); setTab('History'); }}>View All</a>}>
+          </SectionCard>}
+          <SectionCard title={tab === 'Comments' ? 'Comments' : 'Activity Log'} action={tab === 'Verification Overview' ? <a href="#" onClick={(event) => { event.preventDefault(); setTab('History'); }}>View All</a> : undefined}>
             <ActivityFeed items={activity} />
             {!activity.length && <span className="tk-meta">—</span>}
           </SectionCard>
-        </div>
+        </div>}
       </div>
 
       <Card style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>

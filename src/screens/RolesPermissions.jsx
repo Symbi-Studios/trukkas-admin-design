@@ -2,7 +2,7 @@
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
   PageHeader, Button, StatCard, SectionCard, Card, TableToolbar, SearchField, FilterSelect,
@@ -87,6 +87,7 @@ export function RolesPermissions() {
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [menuFor, setMenuFor] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const roleDetailRef = useRef(null);
   const [panelTab, setPanelTab] = useState('Permissions');
   const [openModule, setOpenModule] = useState('Jobs & Trips');
   const [permQ, setPermQ] = useState('');
@@ -163,7 +164,7 @@ export function RolesPermissions() {
                   {menuFor === r.id && (
                     <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
                       <DropdownMenu width={200} items={[
-                        { label: 'View Role', icon: 'eye', onClick: () => { setSelectedId(r.id); setMenuFor(null); } },
+                        { label: 'View Role', icon: 'eye', onClick: () => { setSelectedId(r.id); setPanelTab('Permissions'); setPermQ(''); setMenuFor(null); roleDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
                         { label: 'Edit Role', icon: 'pencil', disabled: !operations.canManage || operations.saving, onClick: () => { setMenuFor(null); setEditId(r.id); } },
                         { label: 'Duplicate Role', icon: 'copy', disabled: !operations.canManage || operations.saving, onClick: async () => { setMenuFor(null); const saved = await operations.performWithAlert({ action: 'duplicate', id: r.id }); if (saved) setSelectedId(saved.id); } },
                         { divider: true },
@@ -179,6 +180,7 @@ export function RolesPermissions() {
         </SectionCard>
 
         {selected && (
+          <div ref={roleDetailRef} style={{ minWidth: 0, scrollMarginTop: 80 }}>
           <Card style={{ display: 'grid', gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <span style={{ width: 44, height: 44, borderRadius: 'var(--tk-r-lg)', flex: '0 0 auto',
@@ -229,6 +231,7 @@ export function RolesPermissions() {
               <span className="tk-meta">Role last updated {selected.lastUpdated} by {selected.updatedBy}.</span>
             )}
           </Card>
+          </div>
         )}
       </div>
       {editId && <RoleEditDialog key={owner + ":" + editId} id={editId} catalog={catalog} operations={operations} onClose={() => { if (!operations.saving) setEditId(null); }} onSaved={(saved) => setSelectedId(saved.id)} />}

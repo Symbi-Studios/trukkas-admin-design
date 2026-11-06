@@ -1,4 +1,6 @@
 "use client";
+import { CustomSelect } from '../ds/components/forms/Select.jsx';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -279,7 +281,7 @@ function DemurrageScreen() {
                   setPage(1);
                 }}
               />
-              <select
+              <CustomSelect
                 className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
                 aria-label="Status filter"
                 value={status}
@@ -293,8 +295,8 @@ function DemurrageScreen() {
                     <option key={x}>{x}</option>
                   ),
                 )}
-              </select>
-              <select
+              </CustomSelect>
+              <CustomSelect
                 className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
                 aria-label="Job type filter"
                 value={jobType}
@@ -307,7 +309,7 @@ function DemurrageScreen() {
                 {[...new Set(rows.map((r) => r.jobType).filter((value) => value !== "—"))].map((x) => (
                   <option key={x}>{x}</option>
                 ))}
-              </select>
+              </CustomSelect>
               <input
                 className="h-[38px] border border-tk-line-strong rounded-[7px] px-2.5 box-border w-full text-xs font-tk-sans outline-none focus:border-tk-blue focus:shadow-tk-focus"
                 aria-label="Date range"
@@ -505,7 +507,7 @@ function DemurrageScreen() {
           <SectionCard
             title="Demurrage Summary"
             action={
-              <select
+              <CustomSelect
                 aria-label="Summary period"
                 className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
                 value={period}
@@ -514,7 +516,7 @@ function DemurrageScreen() {
                 <option>This Month</option>
                 <option>Last Month</option>
                 <option>This Year</option>
-              </select>
+              </CustomSelect>
             }
           >
             <div className="flex flex-col items-center gap-4 w-full">

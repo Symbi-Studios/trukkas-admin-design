@@ -1,7 +1,10 @@
 "use client";
+import { CustomSelect } from '../ds/components/forms/Select.jsx';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
@@ -58,6 +61,23 @@ function csvExport(rows) {
   a.click();
   URL.revokeObjectURL(u);
 }
+function AnnouncementMenuPortal({ anchor, onClose, children }) {
+  const menuRef = useRef(null);
+  const [position, setPosition] = useState(null);
+  useEffect(() => {
+    const update = () => {
+      if (!anchor?.isConnected || !menuRef.current) { onClose(null); return; }
+      const button = anchor.getBoundingClientRect(), menu = menuRef.current.getBoundingClientRect();
+      setPosition({ left: Math.max(8, Math.min(button.right - menu.width, window.innerWidth - menu.width - 8)), top: button.bottom + 6 + menu.height <= window.innerHeight - 8 ? button.bottom + 6 : Math.max(8, button.top - menu.height - 6) });
+    };
+    const outside = event => { if (!anchor?.contains(event.target) && !menuRef.current?.contains(event.target)) onClose(null); };
+    const escape = event => { if (event.key === 'Escape') { onClose(null); anchor?.focus(); } };
+    update(); window.addEventListener('scroll', update, true); window.addEventListener('resize', update); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
+    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
+  }, [anchor, onClose]);
+  return createPortal(<div ref={menuRef} onClick={event => event.stopPropagation()} style={{ position: 'fixed', zIndex: 95, left: position?.left ?? 0, top: position?.top ?? -10000, visibility: position ? 'visible' : 'hidden' }}>{children}</div>, document.body);
+}
+
 export function Announcements() {
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
@@ -70,6 +90,7 @@ export function Announcements() {
     [page, setPage] = useState(1),
     [menu, setMenu] = useState(null),
     [toast, setToast] = useState("");
+  const menuAnchor = useRef(null);
   const operations = useAnnouncementOperations();
   const [reasonDialog, setReasonDialog] = useState(null);
   const period = useMemo(() => { const now = Date.now(); return { dateFrom: new Date(now - 30 * 86400000).toISOString(), dateTo: new Date(now).toISOString() }; }, []);
@@ -213,7 +234,7 @@ export function Announcements() {
                 setPage(1);
               }}
             />
-            <select
+            <CustomSelect
               aria-label="Status filter"
               className="engagement-select"
               value={status}
@@ -227,8 +248,8 @@ export function Announcements() {
                   <option key={x}>{x}</option>
                 ),
               )}
-            </select>
-            <select
+            </CustomSelect>
+            <CustomSelect
               aria-label="Type filter"
               className="engagement-select"
               value={type}
@@ -241,8 +262,8 @@ export function Announcements() {
               {Object.keys(ICON).map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </select>
-            <select
+            </CustomSelect>
+            <CustomSelect
               aria-label="Audience filter"
               className="engagement-select"
               value={audience}
@@ -255,7 +276,7 @@ export function Announcements() {
               {[...new Set((allRows || []).filter((r) => r.audienceKnown).map((r) => r.aud))].map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </select>
+            </CustomSelect>
             <Button
               variant="outline"
               icon="rotate-ccw"
@@ -329,19 +350,12 @@ export function Announcements() {
                       aria-label={"Actions for " + r.t}
                       onClick={(e) => {
                         e.stopPropagation();
+                        menuAnchor.current = e.currentTarget;
                         setMenu(menu === r.id ? null : r.id);
                       }}
                     />
                     {menu === r.id && (
-                      <span
-                        style={{
-                          position: "absolute",
-                          right: 0,
-                          top: 34,
-                          zIndex: 30,
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <AnnouncementMenuPortal anchor={menuAnchor.current} onClose={setMenu}>
                         <DropdownMenu
                           width={210}
                           items={[
@@ -380,7 +394,7 @@ export function Announcements() {
                             },
                           ]}
                         />
-                      </span>
+                      </AnnouncementMenuPortal>
                     )}
                   </span>
                 ),

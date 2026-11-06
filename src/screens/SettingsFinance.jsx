@@ -5,6 +5,7 @@ import { PageHeader, Button, SectionCard, QuickActionsCard } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
 import { DriverDetailLoading } from './DriversLoading.jsx';
+import styles from './SettingsFinance.module.css';
 
 import { financeStatus as financeStatusTemplate, financeQuickActions } from '../mock/fixtures/settings.js';
 
@@ -75,11 +76,11 @@ export function SettingsFinance() {
       <SettingsTabStrip active="finance" />
       <SettingsReadNotice error={editor.error} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--tk-grid-gap)' }}>
+      <div className={styles.layout}>
+        <div className={styles.settingsGrid}>
           {editor.groupVisible('settingsFinancialPolicies') && (<SectionCard title="Financial Policies" icon="landmark">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Set default financial rules and currency preferences.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 18 }}>
               {editor.visible('settingsFinancialPolicies', 'defaultCurrency') && (<Select label="Default Currency" options={CURRENCIES} value={policies.defaultCurrency}
                 onChange={(e) => updateFinancialPolicies({ defaultCurrency: e.target.value })} />) }
               {editor.visible('settingsFinancialPolicies', 'currencyFormat') && (<Select label="Currency Format" options={CURRENCY_FORMATS} value={policies.currencyFormat}
@@ -87,7 +88,7 @@ export function SettingsFinance() {
               {editor.visible('settingsFinancialPolicies', 'decimalPlaces') && (<Select label="Decimal Places" options={DECIMAL_PLACES} value={policies.decimalPlaces}
                 onChange={(e) => updateFinancialPolicies({ decimalPlaces: e.target.value })} />) }
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px 20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '14px 20px' }}>
               {editor.visible('settingsFinancialPolicies', 'allowPartialPayments') && (<Switch checked={policies.allowPartialPayments} label="Allow partial payments"
                 hint="Permit customers to make partial payments for jobs."
                 onChange={(v) => updateFinancialPolicies({ allowPartialPayments: v })} />) }
@@ -105,7 +106,7 @@ export function SettingsFinance() {
 
           {editor.groupVisible('settingsPlatformFees') && (<SectionCard title="Platform Fees & Commission" icon="percent">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Configure platform fees, commissions, and additional charges.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 6 }}>
               {editor.visible('settingsPlatformFees', 'platformCommissionType') && (<Select label="Platform Commission Type" options={COMMISSION_TYPES} value={fees.platformCommissionType}
                 onChange={(e) => updatePlatformFees({ platformCommissionType: e.target.value })} />) }
               {editor.visible('settingsPlatformFees', 'commissionRate') && (<TextField label="Commission Rate (%)" value={fees.commissionRate} suffix={<span className="tk-meta">%</span>}
@@ -131,7 +132,7 @@ export function SettingsFinance() {
 
           {editor.groupVisible('settingsEscrow') && (<SectionCard title="Escrow Settings" icon="lock">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Manage how escrow payments are handled.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
               {editor.visible('settingsEscrow', 'escrowHoldPeriodDays') && (<TextField label="Escrow Hold Period (Days)" type="number" value={escrow.escrowHoldPeriodDays}
                 hint="Period to hold funds after job completion."
                 onChange={(e) => updateEscrowSettingsForm({ escrowHoldPeriodDays: e.target.value })} />) }
@@ -155,7 +156,7 @@ export function SettingsFinance() {
 
           {editor.groupVisible('settingsPayout') && (<SectionCard title="Payout Settings" icon="banknote">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Manage driver and vendor payouts.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
               {editor.visible('settingsPayout', 'defaultPayoutMethod') && (<Select label="Default Payout Method" options={PAYOUT_METHODS} value={payout.defaultPayoutMethod}
                 onChange={(e) => updatePayoutSettingsForm({ defaultPayoutMethod: e.target.value })} />) }
               {editor.visible('settingsPayout', 'payoutProcessingTime') && (<Select label="Payout Processing Time" options={PROCESSING_TIMES} value={payout.payoutProcessingTime}
@@ -175,7 +176,7 @@ export function SettingsFinance() {
 
           {editor.groupVisible('settingsInvoicing') && (<SectionCard title="Invoicing & Receipts" icon="receipt">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Configure invoice, receipt, and billing preferences.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
               {editor.visible('settingsInvoicing', 'invoiceNumberFormat') && (<TextField label="Invoice Number Format" value={invoicing.invoiceNumberFormat}
                 hint="Example: INV-2026-0001"
                 onChange={(e) => updateInvoicingReceipts({ invoiceNumberFormat: e.target.value })} />) }
@@ -197,7 +198,7 @@ export function SettingsFinance() {
 
           {editor.groupVisible('settingsAccountingTax') && (<SectionCard title="Accounting & Tax" icon="calculator">
             <span className="tk-meta" style={{ display: 'block', marginTop: -10, marginBottom: 14 }}>Configure tax settings and accounting integration.</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
               <div style={{ display: 'grid', gap: 6 }}>
                 {editor.visible('settingsAccountingTax', 'taxCalculation') && (<Select label="Tax Calculation" options={TAX_CALC} value={tax.taxCalculation}
                   onChange={(e) => updateAccountingTax({ taxCalculation: e.target.value })} />) }
