@@ -83,6 +83,29 @@ const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFaqs', 'AdminFa
 export const faqApi = taggedApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: builder => ({
+    getAdminFaqCategories: builder.query({
+      query: () => ({ url: '/admin/faq' }),
+      transformResponse: response => {
+        const dto = unwrapApiResponseData(response);
+        return Array.isArray(dto?.categories) ? dto.categories.filter(value => typeof value === 'string' && value.trim()) : [];
+      },
+      providesTags: [{ type: 'AdminFaqs', id: 'LIST' }],
+    }),
+    createAdminFaq: builder.mutation({
+      async queryFn(fields, api, _options, baseQuery) {
+        const owner = api.getState().auth.admin?.id;
+        const body = { category: fields.category.trim(), question: fields.question.trim(), answer: fields.answer.trim() };
+        if (fields.sortOrder !== '') body.sortOrder = Number(fields.sortOrder);
+        if (!owner || !api.getState().auth.accessToken || !body.category || !body.question || !body.answer || body.category.length > 100 || body.question.length > 300 || body.answer.length > 5000 || ('sortOrder' in body && (!Number.isInteger(body.sortOrder) || body.sortOrder < 0 || body.sortOrder > 10000))) return failure('Please enter valid FAQ details.');
+        const result = await baseQuery({ url: '/admin/faq', method: 'POST', body });
+        if (result.error) return result;
+        if (api.signal.aborted || api.getState().auth.admin?.id !== owner) return failure('The session changed. Check the FAQ list before trying again.');
+        const faq = unwrapApiResponseData(result.data)?.faq;
+        if (!text(faq?.id) || !text(faq?.category) || !text(faq?.question) || !text(faq?.answer) || !Number.isInteger(faq?.sortOrder) || faq.category.trim().toLowerCase() !== body.category.toLowerCase() || faq.question.trim() !== body.question || faq.answer.trim() !== body.answer) return failure('The FAQ may have been created, but the result could not be confirmed. Check the FAQ list before trying again.');
+        return { data: faq };
+      },
+      invalidatesTags: [{ type: 'AdminFaqs', id: 'LIST' }],
+    }),
     getAdminFaqDirectory: builder.query({
       async queryFn({ owner }, api, options, baseQuery) {
         const account = api.getState().auth.admin;
@@ -114,4 +137,4 @@ export const faqApi = taggedApi.injectEndpoints({
     }),
   }),
 });
-export const { useGetAdminFaqDirectoryQuery, useGetAdminFaqHelpLinksQuery } = faqApi;
+export const { useGetAdminFaqDirectoryQuery, useGetAdminFaqHelpLinksQuery, useGetAdminFaqCategoriesQuery, useCreateAdminFaqMutation } = faqApi;
