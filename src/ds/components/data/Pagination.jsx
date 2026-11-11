@@ -36,10 +36,7 @@ export function Pagination({ page = 1, pageCount = 1, pageSize = 10, total, onPa
         </button>
       </div>
       {onPageSize && (
-        <CustomSelect value={pageSize} onChange={e => onPageSize(Number(e.target.value))}
-          style={{ height: 32, borderRadius: 'var(--tk-r-sm)', border: '1px solid var(--tk-line-strong)',
-                   background: '#fff', color: 'var(--tk-ink-500)', padding: '0 8px',
-                   font: 'var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans)', cursor: 'pointer' }}>
+        <CustomSelect className="tk-pagination-size" value={pageSize} onChange={e => onPageSize(Number(e.target.value))}>
           {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / page</option>)}
         </CustomSelect>
       )}

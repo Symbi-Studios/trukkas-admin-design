@@ -206,6 +206,19 @@
   }
 }
 
+.tk-pagination-size {
+  width: 124px !important;
+  min-width: 124px !important;
+  flex: 0 0 124px !important;
+}
+.tk-pagination-size > button {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 8px !important;
+  border-radius: var(--tk-r-sm) !important;
+  font: var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans) !important;
+}
+
 @media (max-width: 639px) {
   .tk-app button, .tk-app [role="button"] { min-height: 40px; }
   .tk-app input, .tk-app select, .tk-app textarea { font-size: 16px !important; }

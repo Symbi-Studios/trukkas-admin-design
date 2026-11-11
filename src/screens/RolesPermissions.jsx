@@ -199,7 +199,6 @@ export function RolesPermissions() {
             <span style={{ font: '400 13px/19px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{selected.permissionSummary}</span>
 
             <div style={{ borderTop: '1px solid var(--tk-line)', paddingTop: 4 }}>
-              <LabelValue label="Role ID" value={detailValue(selected.id)} />
               <LabelValue label="Role Name" value={detailValue(selected.name)} />
               <LabelValue label="Role Type" value={detailValue(selected.type)} />
               <LabelValue label="Created By" value={detailValue(selected.createdBy)} />

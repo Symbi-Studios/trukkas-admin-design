@@ -134,7 +134,7 @@ export function ForwarderDetail() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <Tag>Forwarder</Tag>
               {FORWARDER.isExporter && <Tag tone="teal" icon={<Icon name="ship" size={11} />}>Exporter</Tag>}
-              <span className="tk-meta">Customer ID: {FORWARDER.customerId}</span>
+              <span className="tk-meta">Email: {FORWARDER.email}</span>
             </div>
           </div>
         </div>
