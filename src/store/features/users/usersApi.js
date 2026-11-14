@@ -98,6 +98,7 @@ export function adaptManagedUser(raw, source = 'user', _profile = false, extras 
     isAccount: statusCode !== 'PENDING_INVITATION' && !id?.startsWith('invite_'),
     version: text(dto.version),
     name: text(dto.name) || text(identity.name) || '—',
+    profileImageUrl: safeDocumentUrl(text(dto.profileImageUrl)),
     email: text(dto.email) || text(contact.email) || '—',
     phone: text(dto.phone) || text(contact.phone) || '—',
     role: r.label,

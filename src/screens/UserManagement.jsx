@@ -201,7 +201,7 @@ export function UserManagement() {
               { key: 'user', header: 'User', render: (r) => (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', minWidth: 240 }}
                       onClick={() => navigate(profilePath(r))}>
-                  <Avatar name={r.name} size={36} />
+                  <Avatar name={r.name} src={r.profileImageUrl} size={36} />
                   <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.name}</span>
