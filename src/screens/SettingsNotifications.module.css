@@ -1,11 +1,3 @@
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--tk-grid-gap);
-  align-items: start;
-  min-width: 0;
-}
-.layout > div { min-width: 0; }
 .generalGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
@@ -23,6 +15,3 @@
 .eventScroll > div { min-width: 590px; }
 .channelRow { flex-wrap: wrap; }
 .channelInfo { flex: 1 1 130px !important; min-width: 0; overflow-wrap: anywhere; }
-@media (max-width: 900px) {
-  .layout { grid-template-columns: minmax(0, 1fr); }
-}

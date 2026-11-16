@@ -2,12 +2,11 @@
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
+import { SettingsSectionHeader } from './settingsShared.jsx';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from '../router.js';
 import {
-  PageHeader, Button, Card, Icon, IconButton, SearchField, FilterSelect, DataTable, Pagination,
-  Badge, DropdownMenu, Modal, EmptyState, Checkbox,
-  TextField as PreviewTextField, Select as PreviewSelect, Textarea as PreviewTextarea,
+  Button, Card, Icon, IconButton, SearchField, FilterSelect, DataTable, Pagination,
+  Badge, DropdownMenu, EmptyState,
 } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsTextarea as Textarea } from './settingsValues.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
@@ -56,29 +55,29 @@ function EntityTabs({ value, counts, onChange }) {
   );
 }
 
-function CategoryList({ entity, fields, value, onChange, available }) {
+function CategoryFilter({ entity, fields, value, onChange, available }) {
+  const [open, setOpen] = useState(false);
   const singular = REGISTRATION_ENTITIES.find((e) => e.value === entity)?.singular;
   // Only list categories this entity actually uses, plus any that are selected.
   const items = [
-    { value: ALL, label: 'All Fields', icon: 'layout-grid', count: available ? fields.length : '—' },
+    { value: ALL, label: 'All categories', count: available ? fields.length : '—' },
     ...FIELD_CATEGORIES
       .map((c) => ({ ...c, label: c.value === 'documents' ? `${singular} Documents` : c.label, count: fields.filter((f) => f.category === c.value).length }))
       .filter((c) => c.count > 0 || c.value === value),
   ];
+  const current = items.find((c) => c.value === value);
   return (
-    <Card className="fr-categories">
-      <h3 className="tk-section" style={{ marginBottom: 12 }}>Field Categories</h3>
-      <nav style={{ display: 'grid', gap: 4 }}>
-        {items.map((c) => (
-          <button key={c.value} type="button" onClick={() => onChange(c.value)}
-            className={'fr-category' + (c.value === value ? ' is-active' : '')}>
-            <Icon name={c.icon} size={18} />
-            <span className="fr-category-label" style={{ flex: 1, textAlign: 'left' }}>{c.label}</span>
-            <span className="fr-category-count">{c.count}</span>
-          </button>
-        ))}
-      </nav>
-    </Card>
+    <span style={{ position: 'relative' }}>
+      <FilterSelect icon="layout-grid" label={value === ALL ? 'Category' : current?.label} active={value !== ALL} onClick={() => setOpen((o) => !o)} />
+      {open && (
+        <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setOpen(false)}>
+          <DropdownMenu width={230} items={items.map((c) => ({
+            label: `${c.label} (${c.count})`, icon: c.value === value ? 'check' : undefined,
+            onClick: () => { onChange(c.value); setOpen(false); },
+          }))} />
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -197,54 +196,7 @@ function FieldEditor({ entity, mode, field, fields, metadata, total, onClose, on
   );
 }
 
-function PreviewInput({ field }) {
-  const common = { label: field.label ?? '—', placeholder: field.placeholder || undefined, hint: field.helpText || undefined };
-  const label = <>{field.label ?? '—'}{field.required && <span style={{ color: 'var(--tk-danger)' }}> *</span>}</>;
-  if (field.type === 'textarea') return <PreviewTextarea {...common} label={label} rows={3} />;
-  if (field.type === 'list') return <PreviewTextarea {...common} label={label} rows={3} hint={field.helpText || 'One item per line.'} />;
-  if (field.type === 'select') return <PreviewSelect label={label} placeholder="Select an option" options={field.options || []} />;
-  if (field.type === 'multi_select') {
-    return (
-      <div style={{ display: 'grid', gap: 8 }}>
-        <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{label}</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
-          {(field.options || []).map((o) => <Checkbox key={o} label={o} />)}
-        </div>
-        {field.helpText && <span className="tk-meta">{field.helpText}</span>}
-      </div>
-    );
-  }
-  if (field.type === 'checkbox') return <Checkbox label={label} hint={field.helpText || undefined} />;
-  if (field.type === 'password') {
-    return (
-      <>
-        <PreviewTextField {...common} label={label} type="password" />
-        <PreviewTextField label={<>Confirm {field.label}{field.required && <span style={{ color: 'var(--tk-danger)' }}> *</span>}</>} type="password" />
-      </>
-    );
-  }
-  if (field.type === 'file') return <PreviewTextField {...common} label={label} type="file" />;
-  const inputType = { number: 'number', email: 'email', phone: 'tel', date: 'date' }[field.type] || 'text';
-  return <PreviewTextField {...common} label={label} required={false} type={inputType} />;
-}
-
-function PreviewModal({ open, entity, fields, onClose }) {
-  const meta = REGISTRATION_ENTITIES.find((e) => e.value === entity);
-  const shown = fields.filter((f) => f.enabled && f.visible);
-  return (
-    <Modal open={open} onClose={onClose} width={640} title={`${meta?.singular} Registration Form — Preview`}
-      description={`${shown.length} of ${fields.length} fields are shown to new ${meta?.plural}. Disabled and hidden fields are left out.`}
-      footer={<Button onClick={onClose}>Close Preview</Button>}>
-      <div style={{ display: 'grid', gap: 14, maxHeight: '60vh', overflowY: 'auto', paddingRight: 4 }}>
-        {shown.map((f) => <PreviewInput key={f.id} field={f} />)}
-        {!shown.length && <EmptyState icon="eye-off" title="No visible fields" description="Enable a field and mark it visible to show it here." />}
-      </div>
-    </Modal>
-  );
-}
-
 export function SettingsFieldsRegistration() {
-  const navigate = useNavigate();
   const [entity, setEntity] = useState('driver');
   const api = useRegistrationFields(entity);
   const fields = api.fields;
@@ -256,7 +208,6 @@ export function SettingsFieldsRegistration() {
   const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState([]);
   const [editor, setEditor] = useState(null); // { mode: 'add' | 'edit', id? }
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [dragId, setDragId] = useState(null);
 
   const counts = api.counts;
@@ -289,7 +240,7 @@ export function SettingsFieldsRegistration() {
     setEditor(next);
   }
 
-  useEffect(() => { setEditor(null); setPreviewOpen(false); }, [api.owner]);
+  useEffect(() => { setEditor(null); }, [api.owner]);
 
   function switchEntity(next) { setEntity(next); setCategory(ALL); setEditor(null); }
 
@@ -360,82 +311,68 @@ export function SettingsFieldsRegistration() {
 
   return (
     <div className="fr-page">
-      <PageHeader
-        crumbs={[
-          { label: 'Dashboard', onClick: () => navigate('/dashboard') },
-          { label: 'Settings', onClick: () => navigate('/settings') },
-          'Fields Registration',
-        ]}
-        title="Fields Registration"
+      <SettingsSectionHeader
+        title="Registration Fields"
         description="Manage all data fields for Forwarders, Drivers and Companies. Add new fields, edit existing ones, set requirements and control visibility during registration and profile updates."
-        actions={(
-          <>
-            <SearchField variant="panel" placeholder="Search fields..." value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220 }} />
-            <Button variant="outline" icon="eye" onClick={() => { if (api.available) setPreviewOpen(true); else window.alert(api.error ? getApiErrorMessage(api.error) : 'Wait for the current settings to finish loading.'); }}>Preview Form</Button>
-            <Button icon="plus" onClick={() => openEditor({ mode: 'add' })}>Add Field</Button>
-          </>
-        )}
+        actions={<Button icon="plus" onClick={() => openEditor({ mode: 'add' })}>Add Field</Button>}
       />
 
       <div className={'fr-layout' + (editor ? ' has-editor' : '')}>
         <div className="fr-main">
           <EntityTabs value={entity} counts={counts} onChange={switchEntity} />
 
-          <div className="fr-body">
-            <CategoryList entity={entity} fields={fields} value={category} onChange={setCategory} available={api.available} />
-
-            <Card pad="none" className="fr-table-card">
-              <div className="fr-table-head">
-                <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-                  <h3 className="tk-section">{meta.singular} Fields</h3>
-                  <span className="tk-meta">Manage the fields collected during {meta.singular.toLowerCase()} registration and profile updates.</span>
-                </div>
-                <div className="fr-table-tools">
-                  <SearchField variant="panel" placeholder="Search fields..." value={q} onChange={(e) => setQ(e.target.value)} />
-                  <span style={{ position: 'relative' }}>
-                    <FilterSelect icon="filter" label={filter ? filter.label : 'Filter'} active={Boolean(filter)} onClick={() => setFilterOpen((o) => !o)} />
-                    {filterOpen && (
-                      <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setFilterOpen(false)}>
-                        <DropdownMenu width={200} items={[
-                          ...FILTERS.map((f) => (f.key ? {
-                            label: f.label, icon: filter?.label === f.label ? 'check' : undefined,
-                            onClick: () => { setFilter(f); setFilterOpen(false); },
-                          } : f)),
-                          { divider: true },
-                          { label: 'Clear filter', icon: 'x', disabled: !filter, onClick: () => { setFilter(null); setFilterOpen(false); } },
-                        ]} />
-                      </span>
-                    )}
-                  </span>
-                </div>
+          <Card pad="none" className="fr-table-card">
+            <div className="fr-table-head">
+              <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+                <h3 className="tk-section">{meta.singular} Fields</h3>
+                <span className="tk-meta">Manage the fields collected during {meta.singular.toLowerCase()} registration and profile updates.</span>
               </div>
+              <div className="fr-table-tools">
+                <SearchField variant="panel" placeholder="Search fields..." value={q} onChange={(e) => setQ(e.target.value)} />
+                <CategoryFilter entity={entity} fields={fields} value={category} onChange={setCategory} available={api.available} />
+                <span style={{ position: 'relative' }}>
+                  <FilterSelect icon="filter" label={filter ? filter.label : 'Filter'} active={Boolean(filter)} onClick={() => setFilterOpen((o) => !o)} />
+                  {filterOpen && (
+                    <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setFilterOpen(false)}>
+                      <DropdownMenu width={200} items={[
+                        ...FILTERS.map((f) => (f.key ? {
+                          label: f.label, icon: filter?.label === f.label ? 'check' : undefined,
+                          onClick: () => { setFilter(f); setFilterOpen(false); },
+                        } : f)),
+                        { divider: true },
+                        { label: 'Clear filter', icon: 'x', disabled: !filter, onClick: () => { setFilter(null); setFilterOpen(false); } },
+                      ]} />
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
 
-              {selected.length > 0 && (
-                <div className="fr-bulk">
-                  <span className="tk-meta" style={{ fontWeight: 600, color: 'var(--tk-ink-700)' }}>{selected.length} selected</span>
-                  <Button size="sm" variant="outline" onClick={() => bulk({ required: true })}>Mark Required</Button>
-                  <Button size="sm" variant="outline" onClick={() => bulk({ required: false })}>Mark Optional</Button>
-                  <Button size="sm" variant="outline" onClick={() => bulk({ enabled: true })}>Enable</Button>
-                  <Button size="sm" variant="outline" onClick={() => bulk({ enabled: false })}>Disable</Button>
-                </div>
-              )}
+            {selected.length > 0 && (
+              <div className="fr-bulk">
+                <span className="tk-meta" style={{ fontWeight: 600, color: 'var(--tk-ink-700)' }}>{selected.length} selected</span>
+                <Button size="sm" variant="outline" onClick={() => bulk({ required: true })}>Mark Required</Button>
+                <Button size="sm" variant="outline" onClick={() => bulk({ required: false })}>Mark Optional</Button>
+                <Button size="sm" variant="outline" onClick={() => bulk({ enabled: true })}>Enable</Button>
+                <Button size="sm" variant="outline" onClick={() => bulk({ enabled: false })}>Disable</Button>
+              </div>
+            )}
 
-              {api.loading ? <DriverTableLoading columns={8} label="Loading registration fields" /> : !api.available ? <DriverLoadingNotice>{api.error ? getApiErrorMessage(api.error) : '—'}</DriverLoadingNotice> : filtered.length ? (
-                <div onDragOver={(e) => { if (dragId) e.preventDefault(); }} onDrop={handleDrop}>
-                  <DataTable coloredHeader selectable columns={columns} rows={paged}
-                    selected={selected} onSelect={setSelected}
-                    onRowClick={(f) => openEditor({ mode: 'edit', id: f.id })} />
-                </div>
-              ) : (
-                <EmptyState icon="list-x" title={`No ${meta.singular.toLowerCase()} fields match`}
-                  description="Each field collected on the registration form appears here with its key, type and requirement."
-                  action={<Button variant="outline" onClick={() => { setQ(''); setFilter(null); setCategory(ALL); }}>Clear search & filters</Button>} />
-              )}
+            {api.loading ? <DriverTableLoading columns={8} label="Loading registration fields" /> : !api.available ? <DriverLoadingNotice>{api.error ? getApiErrorMessage(api.error) : '—'}</DriverLoadingNotice> : filtered.length ? (
+              <div onDragOver={(e) => { if (dragId) e.preventDefault(); }} onDrop={handleDrop}>
+                <DataTable coloredHeader selectable columns={columns} rows={paged}
+                  selected={selected} onSelect={setSelected}
+                  onRowClick={(f) => openEditor({ mode: 'edit', id: f.id })} />
+              </div>
+            ) : (
+              <EmptyState icon="list-x" title={`No ${meta.singular.toLowerCase()} fields match`}
+                description="Each field collected on the registration form appears here with its key, type and requirement."
+                action={<Button variant="outline" onClick={() => { setQ(''); setFilter(null); setCategory(ALL); }}>Clear search & filters</Button>} />
+            )}
 
-              <Pagination page={currentPage} pageCount={pageCount} pageSize={pageSize} total={api.available ? filtered.length : '—'}
-                onPage={(p) => setPage(Math.max(1, Math.min(pageCount, p)))} onPageSize={setPageSize} />
-            </Card>
-          </div>
+            <Pagination page={currentPage} pageCount={pageCount} pageSize={pageSize} total={api.available ? filtered.length : '—'}
+              onPage={(p) => setPage(Math.max(1, Math.min(pageCount, p)))} onPageSize={setPageSize} />
+          </Card>
         </div>
 
         {editor && (editor.mode === 'add' || editing) && (
@@ -446,8 +383,6 @@ export function SettingsFieldsRegistration() {
             onDelete={handleDelete} />
         )}
       </div>
-
-      <PreviewModal open={previewOpen} entity={entity} fields={fields} onClose={() => setPreviewOpen(false)} />
     </div>
   );
 }

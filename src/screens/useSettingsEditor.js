@@ -74,6 +74,11 @@ export function useSettingsEditor(page) {
   function eventChanges() {
     return Object.entries(eventDraft?.events || {}).map(([key, fields]) => ({ key, changes: Object.fromEntries(Object.entries(fields).filter(([field, value]) => eventDraft.baseEvents.find(row => row.key === key)?.[field] !== value)) })).filter(row => Object.keys(row.changes).length);
   }
+  // With a group: whether that card has unsaved edits. Without: whether anything on the page does.
+  function dirty(name) {
+    if (name) return Object.entries(draft?.groups[name] || {}).some(([field, value]) => value !== draft.baseValues?.[name]?.[field]);
+    return Object.keys(draft?.groups || {}).some((key) => dirty(key)) || eventChanges().length > 0;
+  }
   function group(name) {
     if (name === 'settingsMeta') return model?.meta || { lastUpdated: '—', updatedBy: '—' };
     return { ...values?.[name], ...draft?.groups[name] };
@@ -162,7 +167,7 @@ export function useSettingsEditor(page) {
     finally { busy.current = false; }
   }
   function quickActions(items, handlers = {}) {
-    const destinations = { 'Set Default Pricing Rules': '/pricing', 'Configure Notifications': '/settings/notifications', 'Manage Integrations': '/settings/integrations', 'Manage User Roles': '/roles', 'Review Active Sessions': '/settings/passwords', 'View Audit Logs': '/audit' };
+    const destinations = { 'Set Default Pricing Rules': '/pricing', 'Configure Notifications': '/settings?tab=notifications', 'Manage Integrations': '/settings?tab=integrations', 'Manage User Roles': '/roles', 'Review Active Sessions': '/settings?tab=security', 'View Audit Logs': '/audit' };
     // Show only actions with working navigation or an implemented handler.
     const available = items.filter((item) => typeof handlers[item.label] === 'function' || Object.hasOwn(destinations, item.label) || item.label === 'Test Notification');
     return available.map((item) => ({ ...item, onClick: () => {
@@ -174,7 +179,7 @@ export function useSettingsEditor(page) {
     } }));
   }
   const loading = [query, securityPreferences, status, version, channels, processors, events].some((read) => read.isLoading || (read.isFetching && !read.currentData));
-  return { group, change, event, changeEvent, save, reset, resetAll, unavailable, quickActions, owner, admin, authenticated: !skip,
+  return { group, change, dirty, event, changeEvent, save, reset, resetAll, unavailable, quickActions, owner, admin, authenticated: !skip,
     eventAvailable: (key) => {
       const row = eventModel?.events?.find((item) => item.key === key);
       return key === 'suspiciousActivity' ? row?.delivered === true : row?.delivered !== false;

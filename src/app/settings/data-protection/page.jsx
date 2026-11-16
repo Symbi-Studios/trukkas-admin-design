@@ -1,10 +1,5 @@
-import { SettingsDataProtection } from '../../../screens/SettingsDataProtection.jsx';
+import { SettingsRedirect } from "../../../screens/SettingsRedirect.jsx";
 
-export const metadata = {
-  title: 'Data Protection',
-  description: 'Manage how your data is collected, stored, used, and protected across the platform.',
-};
-
-export default function SettingsDataProtectionPage() {
-  return <SettingsDataProtection />;
+export default function Page() {
+  return <SettingsRedirect tab="data-protection" />;
 }

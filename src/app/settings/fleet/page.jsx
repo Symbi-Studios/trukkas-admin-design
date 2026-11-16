@@ -1,10 +1,5 @@
-import { SettingsFleet } from '../../../screens/SettingsFleet.jsx';
+import { SettingsRedirect } from "../../../screens/SettingsRedirect.jsx";
 
-export const metadata = {
-  title: 'Fleet Settings',
-  description: 'Configure fleet management preferences, maintenance rules, and asset tracking settings.',
-};
-
-export default function SettingsFleetPage() {
-  return <SettingsFleet />;
+export default function Page() {
+  return <SettingsRedirect tab="fleet" />;
 }

@@ -1,7 +1,5 @@
-import { SettingsIntegrations } from '../../../screens/SettingsIntegrations.jsx';
+import { SettingsRedirect } from "../../../screens/SettingsRedirect.jsx";
 
-export const metadata = { title: 'Integrations Settings' };
-
-export default function SettingsIntegrationsPage() {
-  return <SettingsIntegrations />;
+export default function Page() {
+  return <SettingsRedirect tab="integrations" />;
 }

@@ -1,8 +1,8 @@
 'use client';
 
 import { useSelector } from 'react-redux';
-import { PageHeader, Card, Badge, EmptyState } from '../ds.js';
-import { SettingsTabStrip } from './settingsShared.jsx';
+import { Card, Badge, EmptyState } from '../ds.js';
+import { SettingsSectionHeader } from './settingsShared.jsx';
 import { SettingsReadNotice } from './settingsValues.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import { useGetAdminSettingsIntegrationsQuery } from '../store/features/settings/settingsApi.js';
@@ -17,9 +17,8 @@ export function SettingsIntegrations() {
 
   return (
     <>
-      <PageHeader crumbs={['System Settings', 'Integrations']} title="Integrations Settings"
+      <SettingsSectionHeader title="Integrations"
         description="Configure integrations preferences for your Trukkas platform." />
-      <SettingsTabStrip active="integrations" />
       <SettingsReadNotice error={query.error} />
       <Card>
         {loading ? <>
