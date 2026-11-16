@@ -1,4 +1,6 @@
 "use client";
+import { CustomSelect } from '../ds/components/forms/Select.jsx';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useRef, useState } from "react";
@@ -392,7 +394,7 @@ export function Maintenance() {
             </div>
           ))}
         </SectionCard>
-        <SectionCard title="Maintenance Approvals" count={value(stats?.approvals.total)}>
+        <SectionCard className="maint-approvals" title="Maintenance Approvals" count={value(stats?.approvals.total)}>
           {maintenanceApprovals.map((r) => (
             <ListRow
               key={r.id}
@@ -425,7 +427,7 @@ export function Maintenance() {
                 setPage(1);
               }}
             />
-            <select
+            <CustomSelect
               className="maint-select"
               value={status}
               onChange={(e) => {
@@ -436,8 +438,8 @@ export function Maintenance() {
               {STATUSES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </select>
-            <select
+            </CustomSelect>
+            <CustomSelect
               className="maint-select"
               value={priority}
               onChange={(e) => {
@@ -448,8 +450,8 @@ export function Maintenance() {
               {PRIORITIES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </select>
-            <select
+            </CustomSelect>
+            <CustomSelect
               className="maint-select"
               value={type}
               onChange={(e) => {
@@ -460,7 +462,7 @@ export function Maintenance() {
               {TYPES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </select>
+            </CustomSelect>
             <input
               className="maint-select"
               type="date"

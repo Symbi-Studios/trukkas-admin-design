@@ -2,7 +2,7 @@
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSelector } from 'react-redux';
 import { Link, useNavigate } from "../router.js";
 import {
@@ -35,6 +35,7 @@ import { useSettlementOperations } from '../store/features/settlements/useSettle
 import { defaultSettlementDates, settlementDateParams, settlementDateLabel } from '../store/features/settlements/settlementDates.js';
 import { SettlementDateRangeDialog } from './SettlementDateRangeDialog.jsx';
 import { DriverTableLoading } from './DriversLoading.jsx';
+import styles from './Settlements.module.css';
 
 const TABS = [
   "All Settlements",
@@ -115,6 +116,7 @@ export function Settlements() {
   return <SettlementsScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
 }
 function SettlementsScreen() {
+  const filtersRef = useRef(null);
   const navigate = useNavigate();
   const [tab, setTab] = useState("All Settlements");
   const [q, setQ] = usePageSearchState("", () => setPage(1));
@@ -200,7 +202,7 @@ function SettlementsScreen() {
         actions={
           <>
             <FilterSelect label={dateLabel} icon="calendar" active onClick={() => setDateDialogOpen(true)} />
-            <Button variant="outline" icon="filter">
+            <Button variant="outline" icon="filter" onClick={() => filtersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
               Filters
             </Button>
             <Button variant="outline" icon="download" disabled={loading || !knownCollection} onClick={() => exportSettlementRows(filtered)}>
@@ -210,13 +212,7 @@ function SettlementsScreen() {
         }
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "var(--tk-space-4)",
-        }}
-      >
+      <div className={styles.stats}>
         <StatCard
           icon="wallet"
           tint="navy"
@@ -292,6 +288,7 @@ function SettlementsScreen() {
             items={TABS}
           />
 
+          <div ref={filtersRef} style={{ scrollMarginTop: 80 }}>
           <TableToolbar
             filters={
               <>
@@ -367,6 +364,7 @@ function SettlementsScreen() {
               </>
             }
           />
+          </div>
 
           <div
             style={{
@@ -654,11 +652,13 @@ function SettlementsScreen() {
 
           <SectionCard
             title="Recent Settlements"
+            className={styles.recent}
             action={<a href="#">View All</a>}
           >
             {all.slice(0, 3).map((r) => (
               <div
                 key={r.key}
+                className={styles.recentRow}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -681,7 +681,7 @@ function SettlementsScreen() {
                 >
                   <Icon name="coins" size={16} />
                 </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div className={styles.recentInfo} style={{ flex: 1, minWidth: 0 }}>
                   <Link
                     to={settlementDetailUrl(r)}
                     style={{
@@ -696,7 +696,7 @@ function SettlementsScreen() {
                     {r.relatedTo} · {r.payee}
                   </span>
                 </div>
-                <div style={{ textAlign: "right" }}>
+                <div className={styles.recentAmount} style={{ textAlign: "right" }}>
                   <div
                     style={{
                       font: "600 13px/18px var(--tk-font-sans)",

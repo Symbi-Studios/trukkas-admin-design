@@ -1,0 +1,44 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(300px, calc(33.333% - 11px))), 1fr));
+  gap: var(--tk-space-4);
+  min-width: 0;
+}
+
+.stats > :global(.tk-card) {
+  container: settlement-stat / inline-size;
+}
+
+@container settlement-stat (max-width: 280px) {
+  .stats :global(.tk-card) > div:first-child {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .stats :global(.tk-metric) {
+    font-size: clamp(14px, 7cqi, 24px);
+  }
+}
+
+.recent {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.recentInfo,
+.recentAmount {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 400px) {
+  .recentRow {
+    display: grid !important;
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .recentAmount {
+    grid-column: 2;
+    text-align: left !important;
+  }
+}

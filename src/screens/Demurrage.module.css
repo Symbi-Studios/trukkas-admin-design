@@ -1,0 +1,17 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(300px, calc(20% - 10px))), 1fr));
+  gap: var(--tk-space-3);
+  min-width: 0;
+}
+
+.stats > :global(.tk-card) {
+  container: demurrage-stat / inline-size;
+}
+
+@container demurrage-stat (max-width: 260px) {
+  .stats :global(.tk-card) > div:first-child {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+}

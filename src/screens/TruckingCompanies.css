@@ -1,20 +1,39 @@
 .tc-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--tk-section-gap);
+  min-width: 0;
 }
 .tc-stat-grid {
   display: grid;
   gap: var(--tk-grid-gap);
+  min-width: 0;
 }
 .tc-stat-grid-primary {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
 }
 .tc-stat-grid-secondary {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+}
+.tc-stat-grid > .tk-card {
+  container: company-metric / inline-size;
 }
 .tc-stat-grid .tk-metric {
   font-size: var(--tk-title-size);
   line-height: var(--tk-title-lh);
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+@container company-metric (max-width: 290px) {
+  .tc-stat-grid .tk-card > div:first-child {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .tc-stat-grid .tk-metric {
+    font-size: clamp(14px, 7cqi, 22px);
+  }
 }
 .tc-filters {
   display: grid;
@@ -177,9 +196,6 @@
   gap: var(--tk-space-4);
 }
 @media (max-width: 1280px) {
-  .tc-stat-grid-primary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .tc-content-grid {
     grid-template-columns: 1fr;
   }
@@ -188,10 +204,6 @@
   }
 }
 @media (max-width: 900px) {
-  .tc-stat-grid-primary,
-  .tc-stat-grid-secondary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .tc-filters {
     grid-template-columns: 1fr 1fr;
   }
@@ -203,8 +215,6 @@
   }
 }
 @media (max-width: 560px) {
-  .tc-stat-grid-primary,
-  .tc-stat-grid-secondary,
   .tc-filters,
   .tc-form {
     grid-template-columns: 1fr;

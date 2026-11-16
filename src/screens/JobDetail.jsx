@@ -28,8 +28,9 @@ import {
   SplitButton,
   Skeleton,
   TextField,
+  Select,
 } from "../ds.js";
-import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
+import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
 import { useGetAdminCompanyDocumentPreviewQuery, useLazyGetAdminCompanyDocumentPreviewQuery } from "../store/features/companies/companyDocumentsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
@@ -367,7 +368,18 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const jobQuery = useGetAdminJobScreenQuery({ id: jobId, owner, role }, { skip: !authenticated || !jobId, refetchOnMountOrArgChange: true });
   const job = jobQuery.error ? undefined : jobQuery.currentData;
   const [changeJob, { isLoading: actionBusy }] = useChangeAdminJobScreenMutation();
-  const actionLock = useRef(false), active = useRef(true);
+  const [performAdminAction, { isLoading: adminActionBusy }] = usePerformAdminJobActionMutation();
+  const [adminAction, setAdminAction] = useState(null);
+  const [adminReason, setAdminReason] = useState("");
+  const [adminDate, setAdminDate] = useState("");
+  const [adminCargo, setAdminCargo] = useState("");
+  const [adminInstructions, setAdminInstructions] = useState("");
+  const [adminPickup, setAdminPickup] = useState("");
+  const [adminDelivery, setAdminDelivery] = useState("");
+  const [adminReturn, setAdminReturn] = useState("");
+  const [bidDecision, setBidDecision] = useState("acceptBid");
+  const [flagReason, setFlagReason] = useState("PRICING");
+  const actionLock = useRef(false), adminActionLock = useRef(false), active = useRef(true);
   const [rejectionReason, setRejectionReason] = useState("");
   const [delayReason, setDelayReason] = useState("");
   const [delayOpen, setDelayOpen] = useState(null);
@@ -382,6 +394,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [acceptBidFor, setAcceptBidFor] = useState(null);
+  const bidActionQuery = useGetAdminJobBidActionDetailQuery({ id: acceptBidFor?.id, jobId: job?.apiId, owner, role }, { skip: !authenticated || !acceptBidFor?.id || !job?.apiId, refetchOnMountOrArgChange: true });
   const [reviewDoc, setReviewDoc] = useState(null);
   const documentPreview = useGetAdminCompanyDocumentPreviewQuery(
     { companyId: jobId, id: reviewDoc?.id, url: reviewDoc?.url, owner },
@@ -514,8 +527,31 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     const doc = typeof rejectOpen === "object" ? rejectOpen : null;
     return perform(doc ? "rejectDocument" : "reject", { reason: rejectionReason, ...(doc ? { documentId: doc.apiId, version: doc.version, documentUrl: doc.url } : {}) });
   }
-  function doAcceptBid() { unavailable("Accept Bid"); }
-  function doMarkInTransit() { unavailable("Mark In Transit"); }
+  function openAdminAction(action) { setAdminReason(""); setAdminDate(""); setAdminCargo(""); setAdminInstructions(""); setAdminPickup(""); setAdminDelivery(""); setAdminReturn(""); setFlagReason(job.reviewFlag?.reason || "PRICING"); setAdminAction(action); }
+  function doMarkInTransit() { openAdminAction("transit"); }
+  async function submitAdminAction(action, bid = null) {
+    if (adminActionBusy || adminActionLock.current || adminReason.trim().length < 3) return;
+    const fields = {};
+    if (action === "edit") {
+      if (adminCargo.trim()) fields.cargoDescription = adminCargo.trim();
+      if (adminInstructions.trim()) fields.specialInstructions = adminInstructions.trim();
+      if (adminPickup.trim()) fields.pickupAddress = adminPickup.trim();
+      if (adminDelivery.trim()) fields.deliveryAddress = adminDelivery.trim();
+      if (adminReturn.trim()) fields.containerReturnAddress = adminReturn.trim();
+    }
+    const date = adminDate ? new Date(adminDate) : null;
+    if ((action === "duplicate" && !date) || (date && (!Number.isFinite(date.getTime()) || date.getTime() < Date.now() + 86400000))) { notify("danger", "Choose a TDO date at least 24 hours from now."); return; }
+    if (action === "edit" && date) fields.tdoDate = date.toISOString();
+    adminActionLock.current = true;
+    try {
+      const result = await performAdminAction({ id: job.apiId, owner, role, action, reason: adminReason, expectedVersion: action === "edit" ? job.version : action === "flag" ? job.reviewFlag?.version : bidActionQuery.currentData?.version, flagReason, fields, bidId: bid?.id, tdoDate: date?.toISOString() }).unwrap();
+      setAdminAction(null); setAcceptBidFor(null); setAdminReason("");
+      notify("success", action === "duplicate" ? `Draft ${result.jobNumber || result.id} created.` : action === "transit" ? "Job marked in transit." : action === "edit" ? "Job updated." : action === "flag" ? "Job flagged for review." : action === "acceptBid" ? "Bid accepted." : "Bid declined.");
+    } catch (error) {
+      const shortfall = error?.data?.shortfall;
+      notify("danger", error?.status === 402 && shortfall != null && shortfall !== "" && Number.isFinite(Number(shortfall)) && Number(shortfall) >= 0 ? `Insufficient funds. Shortfall: ${naira(Number(shortfall))}.` : getApiErrorMessage(error));
+    } finally { adminActionLock.current = false; }
+  }
   function doMarkDelivered() { return perform("deliver"); }
   function doTripStatus(tripId, status) {
     setTripMenu(null);
@@ -585,20 +621,19 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
             <DropdownMenu
               width={220}
               items={[
-                // {
-                //   label: "Edit Job",
-                //   icon: "pencil",
-                //   onClick: () => {
-                //     setMoreOpen(false);
-                //     unavailable("Edit Job");
-                //   },
-                // },
+                {
+                  label: "Edit Job",
+                  icon: "pencil",
+                  disabled: !["SUPER_ADMIN", "OPS_ADMIN"].includes(role) || job.adminActions.canEdit !== true || !job.version,
+                  onClick: () => { setMoreOpen(false); openAdminAction("edit"); },
+                },
                 {
                   label: "Duplicate Job",
                   icon: "copy",
+                  disabled: !["SUPER_ADMIN", "OPS_ADMIN"].includes(role) || job.adminActions.canDuplicate !== true,
                   onClick: () => {
                     setMoreOpen(false);
-                    unavailable("Duplicate Job");
+                    openAdminAction("duplicate");
                   },
                 },
                 {
@@ -613,9 +648,10 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                 {
                   label: "Flag for Review",
                   icon: "flag",
+                  disabled: Boolean(job.reviewFlag && !job.reviewFlag.version),
                   onClick: () => {
                     setMoreOpen(false);
-                    unavailable("Flag for Review");
+                    openAdminAction("flag");
                   },
                 },
                 ...(job.status === "In Transit"
@@ -635,6 +671,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                       {
                         label: "Mark In Transit",
                         icon: "truck",
+                        disabled: !["SUPER_ADMIN", "OPS_ADMIN"].includes(role) || job.adminActions.canMarkInTransit !== true,
                         onClick: () => {
                           setMoreOpen(false);
                           doMarkInTransit();
@@ -1389,14 +1426,14 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                           r.accepted ? (
                             <Badge tone="success">Assigned</Badge>
                           ) : (
-                            <Button
+                            <span style={{ display: "flex", gap: 6 }}><Button
                               size="sm"
                               variant="outline"
                               disabled={job.status !== "Bidding"}
-                              onClick={() => setAcceptBidFor(r)}
+                              onClick={() => { setAdminReason(""); setBidDecision("acceptBid"); setAcceptBidFor(r); }}
                             >
                               {job.status === "Bidding" ? "Accept" : "View"}
-                            </Button>
+                            </Button>{job.status === "Bidding" && r.statusCode === "PENDING" && r.isCounterOffer === false && <Button size="sm" variant="outline" onClick={() => { setAdminReason(""); setBidDecision("declineBid"); setAcceptBidFor(r); }}>Decline</Button>}</span>
                           ),
                       },
                     ]}
@@ -2874,31 +2911,38 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
 
       <Modal
         open={!!acceptBidFor}
-        onClose={() => setAcceptBidFor(null)}
-        title="Accept Bid"
+        onClose={() => { if (!adminActionBusy) setAcceptBidFor(null); }}
+        title={bidDecision === "acceptBid" ? "Accept Bid" : "Decline Bid"}
         description={
-          acceptBidFor ? `Assign ${acceptBidFor.company} to ${job.id}?` : ""
+          acceptBidFor ? `${bidDecision === "acceptBid" ? "Accept" : "Decline"} ${acceptBidFor.company}'s bid for ${job.id}?` : ""
         }
         footer={
           acceptBidFor && (
             <>
-              <Button variant="outline" onClick={() => setAcceptBidFor(null)}>
+              <Button variant="outline" disabled={adminActionBusy} onClick={() => setAcceptBidFor(null)}>
                 Cancel
               </Button>
-              <Button icon="check" onClick={() => doAcceptBid(acceptBidFor)}>
-                Confirm Assignment
+              <Button icon="check" disabled={adminActionBusy || bidActionQuery.isFetching || !bidActionQuery.currentData?.version || bidActionQuery.currentData?.[bidDecision === "acceptBid" ? "canAccept" : "canDecline"] !== true || adminReason.trim().length < 3 || !["SUPER_ADMIN", "OPS_ADMIN"].includes(role)} onClick={() => submitAdminAction(bidDecision, acceptBidFor)}>
+                {adminActionBusy ? "Saving…" : bidDecision === "acceptBid" ? "Confirm Acceptance" : "Confirm Decline"}
               </Button>
             </>
           )
         }
       >
         {acceptBidFor && (
-          <span className="tk-meta">
-            {acceptBidFor.company} bid {naira(acceptBidFor.amount)} with
-            estimated delivery on {acceptBidFor.estDeliveryDate}. This will move
-            the job to Assigned.
-          </span>
+          <><span className="tk-meta">{acceptBidFor.company} bid {naira(acceptBidFor.amount)}. {bidDecision === "acceptBid" ? "Accepting charges the forwarder's wallet for the agreed price, terminal handling and platform fee into escrow, and declines other pending bids." : "Declining does not move money."}</span>
+          {bidActionQuery.error && <Banner tone="danger" title={getApiErrorMessage(bidActionQuery.error)} />}
+          <TextField label="Reason" required maxLength={500} value={adminReason} onChange={(event) => setAdminReason(event.target.value)} /></>
         )}
+      </Modal>
+
+      <Modal open={Boolean(adminAction)} onClose={() => { if (!adminActionBusy) setAdminAction(null); }} title={adminAction === "duplicate" ? "Duplicate Job" : adminAction === "transit" ? "Mark In Transit" : adminAction === "flag" ? "Flag for Review" : "Edit Job"}
+        footer={<><Button variant="outline" disabled={adminActionBusy} onClick={() => setAdminAction(null)}>Cancel</Button><Button disabled={adminActionBusy || adminReason.trim().length < 3 || (adminAction === "duplicate" && !adminDate) || (adminAction === "edit" && !adminCargo.trim() && !adminInstructions.trim() && !adminDate && !adminPickup.trim() && !adminDelivery.trim() && !adminReturn.trim())} onClick={() => submitAdminAction(adminAction)}>{adminActionBusy ? "Saving…" : "Confirm"}</Button></>}>
+        {adminAction === "transit" && <p className="tk-meta">This confirms pickup and may release the mobilisation payment to the trucking company.</p>}
+        {adminAction === "flag" && <Select label="Review reason" value={flagReason} onChange={(event) => setFlagReason(event.target.value)} options={[{ value: "PRICING", label: "Pricing" }, { value: "DOCUMENTS", label: "Documents" }, { value: "DELAY", label: "Delay" }, { value: "SAFETY", label: "Safety" }, { value: "FRAUD_RISK", label: "Fraud risk" }, { value: "CUSTOMER_COMPLAINT", label: "Customer complaint" }, { value: "OTHER", label: "Other" }]} />}
+        {adminAction === "duplicate" && <><p className="tk-meta">A new draft will be created for the forwarder. Documents, price, bids and assignments are not copied.</p><TextField label="New TDO date and time" type="datetime-local" required value={adminDate} onChange={(event) => setAdminDate(event.target.value)} /></>}
+        {adminAction === "edit" && <><p className="tk-meta">Enter only the fields you want to change. Route changes are unavailable while bids are pending and do not recalculate the price. Address fields depend on the job's movement type.</p><TextField label="TDO date and time" type="datetime-local" value={adminDate} onChange={(event) => setAdminDate(event.target.value)} /><TextField label="Cargo description" value={adminCargo} onChange={(event) => setAdminCargo(event.target.value)} /><TextField label="Special instructions" value={adminInstructions} onChange={(event) => setAdminInstructions(event.target.value)} /><TextField label="Pickup address (export)" value={adminPickup} onChange={(event) => setAdminPickup(event.target.value)} /><TextField label="Delivery address" value={adminDelivery} onChange={(event) => setAdminDelivery(event.target.value)} /><TextField label="Container return address" value={adminReturn} onChange={(event) => setAdminReturn(event.target.value)} /></>}
+        <TextField label="Reason" required maxLength={500} value={adminReason} onChange={(event) => setAdminReason(event.target.value)} />
       </Modal>
 
       <Modal open={Boolean(delayOpen)} onClose={() => { if (!actionBusy) setDelayOpen(null); }} title="Mark Delayed" description={delayOpen?.id}

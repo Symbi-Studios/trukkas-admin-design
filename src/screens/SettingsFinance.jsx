@@ -62,7 +62,7 @@ export function SettingsFinance() {
 
       <SettingsGrid>
         {editor.groupVisible('settingsFinancialPolicies') && (<SettingsCard description="Set default financial rules and currency preferences." title="Financial Policies" save={<SettingsCardSave editor={editor} group="settingsFinancialPolicies" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 18 }}>
             {editor.visible('settingsFinancialPolicies', 'defaultCurrency') && (<Select label="Default Currency" options={CURRENCIES} value={policies.defaultCurrency}
               onChange={(e) => updateFinancialPolicies({ defaultCurrency: e.target.value })} />) }
             {editor.visible('settingsFinancialPolicies', 'currencyFormat') && (<Select label="Currency Format" options={CURRENCY_FORMATS} value={policies.currencyFormat}
@@ -70,7 +70,7 @@ export function SettingsFinance() {
             {editor.visible('settingsFinancialPolicies', 'decimalPlaces') && (<Select label="Decimal Places" options={DECIMAL_PLACES} value={policies.decimalPlaces}
               onChange={(e) => updateFinancialPolicies({ decimalPlaces: e.target.value })} />) }
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px 20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '14px 20px' }}>
             {editor.visible('settingsFinancialPolicies', 'allowPartialPayments') && (<Switch checked={policies.allowPartialPayments} label="Allow partial payments"
               hint="Permit customers to make partial payments for jobs."
               onChange={(v) => updateFinancialPolicies({ allowPartialPayments: v })} />) }
@@ -87,7 +87,7 @@ export function SettingsFinance() {
         </SettingsCard>) }
 
         {editor.groupVisible('settingsPlatformFees') && (<SettingsCard description="Configure platform fees, commissions, and additional charges." title="Platform Fees & Commission" save={<SettingsCardSave editor={editor} group="settingsPlatformFees" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 6 }}>
             {editor.visible('settingsPlatformFees', 'platformCommissionType') && (<Select label="Platform Commission Type" options={COMMISSION_TYPES} value={fees.platformCommissionType}
               onChange={(e) => updatePlatformFees({ platformCommissionType: e.target.value })} />) }
             {editor.visible('settingsPlatformFees', 'commissionRate') && (<TextField label="Commission Rate (%)" value={fees.commissionRate} suffix={<span className="tk-meta">%</span>}
@@ -112,7 +112,7 @@ export function SettingsFinance() {
         </SettingsCard>) }
 
         {editor.groupVisible('settingsEscrow') && (<SettingsCard description="Manage how escrow payments are handled." title="Escrow Settings" save={<SettingsCardSave editor={editor} group="settingsEscrow" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             {editor.visible('settingsEscrow', 'escrowHoldPeriodDays') && (<TextField label="Escrow Hold Period (Days)" type="number" value={escrow.escrowHoldPeriodDays}
               hint="Period to hold funds after job completion."
               onChange={(e) => updateEscrowSettingsForm({ escrowHoldPeriodDays: e.target.value })} />) }
@@ -135,7 +135,7 @@ export function SettingsFinance() {
         </SettingsCard>) }
 
         {editor.groupVisible('settingsPayout') && (<SettingsCard description="Manage driver and vendor payouts." title="Payout Settings" save={<SettingsCardSave editor={editor} group="settingsPayout" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             {editor.visible('settingsPayout', 'defaultPayoutMethod') && (<Select label="Default Payout Method" options={PAYOUT_METHODS} value={payout.defaultPayoutMethod}
               onChange={(e) => updatePayoutSettingsForm({ defaultPayoutMethod: e.target.value })} />) }
             {editor.visible('settingsPayout', 'payoutProcessingTime') && (<Select label="Payout Processing Time" options={PROCESSING_TIMES} value={payout.payoutProcessingTime}
@@ -154,7 +154,7 @@ export function SettingsFinance() {
         </SettingsCard>) }
 
         {editor.groupVisible('settingsInvoicing') && (<SettingsCard description="Configure invoice, receipt, and billing preferences." title="Invoicing & Receipts" save={<SettingsCardSave editor={editor} group="settingsInvoicing" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             {editor.visible('settingsInvoicing', 'invoiceNumberFormat') && (<TextField label="Invoice Number Format" value={invoicing.invoiceNumberFormat}
               hint="Example: INV-2026-0001"
               onChange={(e) => updateInvoicingReceipts({ invoiceNumberFormat: e.target.value })} />) }
@@ -175,7 +175,7 @@ export function SettingsFinance() {
         </SettingsCard>) }
 
         {editor.groupVisible('settingsAccountingTax') && (<SettingsCard description="Configure tax settings and accounting integration." title="Accounting & Tax" save={<SettingsCardSave editor={editor} group="settingsAccountingTax" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             <div style={{ display: 'grid', gap: 6 }}>
               {editor.visible('settingsAccountingTax', 'taxCalculation') && (<Select label="Tax Calculation" options={TAX_CALC} value={tax.taxCalculation}
                 onChange={(e) => updateAccountingTax({ taxCalculation: e.target.value })} />) }

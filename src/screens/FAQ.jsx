@@ -7,6 +7,7 @@ import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
 import {
   PageHeader,
+  Button,
   Card,
   SectionCard,
   SearchField,
@@ -115,6 +116,7 @@ export function FAQ() {
     <>
       <PageHeader
         crumbs={["Support System", "FAQ"]}
+        actions={<Button icon="plus" onClick={() => navigate("/faq/new")}>Add FAQ</Button>}
         title="FAQ"
         description="Find answers to frequently asked questions about the Trukkas platform."
       />
@@ -124,7 +126,7 @@ export function FAQ() {
           value={category}
           onChange={setCategory}
           style={{ padding: "0 var(--tk-card-pad)" }}
-          items={FAQ_CATEGORIES}
+          items={[...FAQ_CATEGORIES, ...groups.map(group => group.key).filter(key => key !== "—" && !FAQ_CATEGORIES.includes(key))]}
         />
       </Card>
 

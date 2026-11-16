@@ -71,12 +71,10 @@ export function FeeRuleDetail() {
             {menu && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={220} items={[
-                  { label: 'Duplicate Fee Rule', icon: 'copy', onClick: () => { setMenu(false); operations.unavailable('Duplicating fee rules'); } },
                   { label: r.status === 'Active' ? 'Deactivate Rule' : 'Activate Rule', icon: 'circle-slash', disabled: loading || query.isFetching || operations.busy || !operations.canManage || !editableFeeRule(r), onClick: () => { setMenu(false); void operations.toggle(r); } },
                   { divider: true },
                   { label: 'Export Rule Details', icon: 'file-text', disabled: loading || !query.currentData || Boolean(query.error), onClick: () => { setMenu(false); void operations.download('rule', 'csv', r); } },
                   { divider: true },
-                  { label: 'Delete Fee Rule', icon: 'trash-2', tone: 'danger', onClick: () => { setMenu(false); operations.unavailable('Deleting fee rules'); } },
                 ]} />
               </span>
             )}

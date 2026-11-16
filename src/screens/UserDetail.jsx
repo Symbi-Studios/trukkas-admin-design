@@ -135,7 +135,7 @@ export function UserDetail() {
         <Card style={{ display: 'grid', gap: 16 }}>
           <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
             <div style={{ display: 'grid', justifyItems: 'center', gap: 8 }}>
-              <Avatar name={u.name} size={72} />
+              <Avatar name={u.name} src={u.profileImageUrl} size={72} />
               <StatusDot tone={u.online ? 'success' : 'neutral'} label={u.online == null ? '—' : u.online ? 'Online' : 'Offline'} />
             </div>
             <div style={{ flex: '1 1 220px', display: 'grid', gap: 8, minWidth: 220 }}>

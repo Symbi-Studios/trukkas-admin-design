@@ -79,7 +79,8 @@ export function MaintenanceDetail() {
   const records = truckRecordsQuery.error ? null : truckRecordsQuery.currentData;
   const assetQuery = useGetAdminMaintenanceAssetQuery({ truckId: record?.truckId, owner }, { skip: !authenticated || !record?.truckId });
   const asset = assetQuery.error ? null : assetQuery.currentData;
-  const r = record ? { ...record, nextDueDate: records?.nextDueDate || "—", nextDueDays: records?.nextDueDays ?? null,
+  const r = record ? { ...record, nextDueDate: record.nextMaintenance === undefined ? records?.nextDueDate || "—" : record.nextMaintenance?.date || "—",
+    nextDueDays: record.nextMaintenance === undefined ? records?.nextDueDays ?? null : record.nextMaintenance?.daysUntilDue ?? null,
     makeModel: asset?.makeModel || "—", year: asset?.year ?? "—", vin: asset?.vin || "—", noOpenIssues: asset?.noOpenIssues ?? null } : null;
   const [tab, setTab] = useState("Overview"),
     [menuOpen, setMenuOpen] = useState(false),
@@ -132,13 +133,21 @@ export function MaintenanceDetail() {
     );
   }
 
-  const isOverdue = r.status === "Overdue";
   const isInProgress = r.status === "In Progress";
   const assetStatus = r.assetStatus;
   const fitForRoad = r.fitForRoad;
-  const maintStatusLabel = isOverdue ? "Overdue" : isInProgress ? "Maintenance In Progress" : "—";
+  const maintStatusLabel = isInProgress ? "Maintenance In Progress" : r.status;
   const maintStatusTone = STATUS_TONE[r.status] || "neutral";
-  const maintStatusDesc = isOverdue ? "This asset has overdue maintenance and requires immediate attention." : isInProgress ? "A maintenance job is currently in progress for this asset." : "—";
+  const maintStatusDescriptions = {
+    Overdue: "This asset has overdue maintenance and requires immediate attention.",
+    "In Progress": "A maintenance job is currently in progress for this asset.",
+    Requested: "A maintenance request has been submitted for this asset.",
+    Scheduled: "Maintenance has been scheduled for this asset.",
+    Completed: "This maintenance record has been completed.",
+    Cancelled: "This maintenance record was cancelled.",
+    Rejected: "This maintenance request was rejected.",
+  };
+  const maintStatusDesc = maintStatusDescriptions[r.status];
   const remainingKm = r.remainingKm ?? (r.nextDueOdometer != null && r.currentOdometer != null ? Math.max(0, r.nextDueOdometer - r.currentOdometer) : null);
   const scaleMax = r.nextDueOdometer;
   const compliance = [
@@ -148,7 +157,7 @@ export function MaintenanceDetail() {
   ];
   const checklist = r.checklist;
   const historyRows = (records?.history || []).map(row => ({ ...row, self: row.id === r.id }));
-  const lastMaintenance = records?.last || { date: "—", odometer: null, serviceType: "—" };
+  const lastMaintenance = (r.lastMaintenance === undefined ? records?.last : r.lastMaintenance) || { date: "—", odometer: null, serviceType: "—" };
   const upcoming = records?.upcoming || [];
   const monthly = usage?.monthly || [];
   const monthLabels = usage?.labels || [];
@@ -182,12 +191,13 @@ export function MaintenanceDetail() {
     finally { busy.current = false; }
   }
   function viewHistory(row) {
-    if (row.self) notify("info", "You are viewing this record.");
-    else navigate(maintenanceHref(row.id));
+    setTab("Overview");
+    if (!row.self) navigate(maintenanceHref(row.id));
+    document.querySelector(".tk-app-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
-    <div className="maint-page">
+    <div className="maint-page mdet-page">
       <PageHeader
         crumbs={["Fleet Management", "Maintenance", r.reference]}
         title="Maintenance Record Details"
@@ -304,6 +314,7 @@ export function MaintenanceDetail() {
             }}
           >
             <div
+              className="mdet-identity"
               style={{
                 display: "flex",
                 gap: 20,
@@ -322,8 +333,8 @@ export function MaintenanceDetail() {
                   </Badge>
                 </span>
               </div>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="mdet-identity-copy">
+                <div className="mdet-identity-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <h2 className="tk-title" style={{ fontSize: 20 }}>
                     {r.plate}
                   </h2>
@@ -566,7 +577,7 @@ export function MaintenanceDetail() {
                       }}
                     >
                       {r.nextDueDays != null
-                        ? `In ${r.nextDueDays} days / ${km(remainingKm)}`
+                        ? r.nextDueDays < 0 ? `${Math.abs(r.nextDueDays)} days overdue / ${km(remainingKm)}` : `In ${r.nextDueDays} days / ${km(remainingKm)}`
                         : "—"}
                     </div>
                   </div>
@@ -741,8 +752,13 @@ export function MaintenanceDetail() {
                 <span>{km(scaleMax)}</span>
               </div>
               <Banner tone="info" style={{ marginTop: 12 }}>
-                Next maintenance is due at {km(r.nextDueOdometer)} or by{" "}
-                {r.nextDueDate}, whichever comes first.
+                {r.nextDueOdometer != null && r.nextDueDate !== "—"
+                  ? `Next maintenance is due at ${km(r.nextDueOdometer)} or by ${r.nextDueDate}, whichever comes first.`
+                  : r.nextDueOdometer != null
+                    ? `Next maintenance is due at ${km(r.nextDueOdometer)}.`
+                    : r.nextDueDate !== "—"
+                      ? `Next maintenance is due by ${r.nextDueDate}.`
+                      : "The next maintenance date and odometer reading are unavailable."}
               </Banner>
             </SectionCard>
 

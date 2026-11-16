@@ -259,7 +259,7 @@ export function Transactions() {
   const [tab, setTab] = useState("All Transactions");
   const [datePresets] = useState(() => transactionDatePresets());
   const defaultFilters = useMemo(() => ({ ...DEFAULT_FILTERS, from: datePresets[0].from, to: datePresets[0].to }), [datePresets]);
-  const [showFilters, setShowFilters] = useState(true);
+  const filtersRef = useRef(null);
   const [draft, setDraft] = useState(defaultFilters);
   const [applied, setApplied] = useState(defaultFilters);
   const dateLabel = datePresets.find(preset => preset.from === applied.from && preset.to === applied.to)?.label || transactionRangeLabel(applied.from, applied.to);
@@ -426,7 +426,7 @@ export function Transactions() {
             <Button
               variant="outline"
               icon="filter"
-              onClick={() => setShowFilters((s) => !s)}
+              onClick={() => filtersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
             >
               Filters
             </Button>
@@ -448,13 +448,7 @@ export function Transactions() {
         }
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "var(--tk-space-4)",
-        }}
-      >
+      <div className={styles.stats}>
         <StatCard
           icon="receipt"
           tint="navy"
@@ -508,9 +502,9 @@ export function Transactions() {
       </div>
 
       <div
+        className={styles.layout}
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 320px",
           gap: "var(--tk-grid-gap)",
           alignItems: "start",
         }}
@@ -526,8 +520,7 @@ export function Transactions() {
             items={TABS}
           />
 
-          {showFilters && (
-            <div className={styles.filters}
+            <div ref={filtersRef} className={styles.filters}
               style={{
                 display: "grid",
                 gap: 10,
@@ -585,7 +578,6 @@ export function Transactions() {
                 }
               />
             </div>
-          )}
 
           <TableToolbar
             search={
@@ -783,6 +775,7 @@ export function Transactions() {
         </SectionCard>
 
         <div
+          className={styles.sidebar}
           style={{
             display: "grid",
             gap: "var(--tk-grid-gap)",
@@ -902,8 +895,8 @@ export function Transactions() {
             {all.slice(0, 5).map((r) => (
               <div
                 key={r.id}
+                className={styles.recentRow}
                 style={{
-                  display: "flex",
                   alignItems: "center",
                   gap: 10,
                   padding: "10px 0",
@@ -931,6 +924,7 @@ export function Transactions() {
                       display: "block",
                       font: "600 13px/18px var(--tk-font-sans)",
                       color: "var(--tk-ink-900)",
+                      overflowWrap: "anywhere",
                     }}
                   >
                     {r.displayId}
@@ -947,7 +941,7 @@ export function Transactions() {
                     {r.description}
                   </span>
                 </div>
-                <div style={{ textAlign: "right" }}>
+                <div className={styles.recentMeta}>
                   <div
                     style={{
                       font: "600 13px/18px var(--tk-font-sans)",
@@ -980,14 +974,15 @@ export function Transactions() {
           >
             {!transactionAlerts.length && <span className="tk-meta">{statsQuery.error ? getApiErrorMessage(statsQuery.error) : '—'}</span>}
             {transactionAlerts.map((a, i) => (
-              <AlertRow
-                key={i}
-                icon={a.icon}
-                tone={a.tone}
-                title={a.title}
-                description={a.description}
-                action={<span className="tk-meta">{a.time}</span>}
-              />
+              <div className={styles.alertRow} key={i}>
+                <AlertRow
+                  icon={a.icon}
+                  tone={a.tone}
+                  title={a.title}
+                  description={a.description}
+                  action={<span className="tk-meta">{a.time}</span>}
+                />
+              </div>
             ))}
           </SectionCard>
         </div>

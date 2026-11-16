@@ -5,7 +5,7 @@ import { useNavigate } from '../router.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, FilterSelect, DropdownMenu, StatCard, SectionCard, MapPanel,
-  DataTable, Badge, Button, Modal, Banner, Pagination, SkeletonRow, LabelValue,
+  DataTable, Badge, Button, Modal, Banner, Pagination, SkeletonRow,
 } from '../ds.js';
 import {
   useGetAdminTriangulationOpportunitiesQuery,
@@ -63,14 +63,14 @@ export function ContainerTriangulation() {
   const [openFilter, setOpenFilter] = useState(null);
   const [sort, setSort] = useState('Best Match');
   const [radiusKm, setRadiusKm] = useState(150);
+  const [reviewStatus, setReviewStatus] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [mapExpanded, setMapExpanded] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [notice, setNotice] = useState(null);
   const [notifyCompany, { isLoading: notifying }] = useNotifyAdminTriangulationMatchMutation();
   const { currentData: response, isLoading, isFetching, error, refetch } =
-    useGetAdminTriangulationOpportunitiesQuery({ page, limit: PAGE_SIZE, radiusKm });
+    useGetAdminTriangulationOpportunitiesQuery({ page, limit: PAGE_SIZE, radiusKm, status: reviewStatus || undefined });
   const rows = response?.rows || [];
   const summary = response?.summary;
   const loadingRows = isLoading || (isFetching && !response);
@@ -124,8 +124,6 @@ export function ContainerTriangulation() {
     <PageHeader title="Triangulation Matching"
       description="Optimize empty capacity by matching trucks, containers and upcoming loads across the Trukkas network."
       actions={<>
-        <Button variant="outline" icon="settings" onClick={() => setRulesOpen(true)}>Triangulation Rules</Button>
-        <Button icon="play" disabled title="Running the matching engine is not available.">Run Triangulation Engine</Button>
       </>} />
     {notice && <Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner>}
     {isFetching && !isLoading && <Banner tone="info">Refreshing opportunities…</Banner>}
@@ -155,6 +153,15 @@ export function ContainerTriangulation() {
           <DropdownMenu width={160} items={[50, 100, 150, 250].map((value) => ({
             label: `${value} km`, icon: value === radiusKm ? 'check' : undefined,
             onClick: () => { setRadiusKm(value); setPage(1); setOpenFilter(null); },
+          }))} />
+        </span>}
+      </span>
+      <span style={{ position: 'relative' }}>
+        <FilterSelect label={reviewStatus ? `Status: ${reviewStatus}` : 'Active statuses'} active={Boolean(reviewStatus)} onClick={() => setOpenFilter(openFilter === 'reviewStatus' ? null : 'reviewStatus')} />
+        {openFilter === 'reviewStatus' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+          <DropdownMenu width={180} items={[['', 'Active statuses'], ['ALL', 'All statuses'], ['OPEN', 'Open'], ['PROPOSED', 'Proposed'], ['REJECTED', 'Rejected']].map(([value, label]) => ({
+            label, icon: value === reviewStatus ? 'check' : undefined,
+            onClick: () => { setReviewStatus(value); setPage(1); setOpenFilter(null); },
           }))} />
         </span>}
       </span>
@@ -240,16 +247,6 @@ export function ContainerTriangulation() {
       footer={<><Button variant="outline" disabled={notifying} onClick={() => setNotifyTarget(null)}>Cancel</Button>
         <Button icon="send" disabled={notifying} onClick={sendNotification}>{notifying ? 'Sending…' : 'Send notification'}</Button></>}>
       <p className="tk-meta">The company can bid on this job through the normal flow. This notification does not assign the job.</p>
-    </Modal>
-    <Modal open={rulesOpen} onClose={() => setRulesOpen(false)} title="Triangulation Rules"
-      footer={<Button onClick={() => setRulesOpen(false)}>Close</Button>}>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <LabelValue label="Minimum match score" value="—" />
-        <LabelValue label="Maximum detour distance" value="—" />
-        <LabelValue label="Maximum chain length" value="—" />
-        <LabelValue label="Auto-assign threshold" value="—" />
-      </div>
-      <p className="tk-meta">Triangulation rules are not available.</p>
     </Modal>
     <Modal open={mapExpanded} onClose={() => setMapExpanded(false)} title="Job Locations" width={860}>
       <div className="triangulation-expanded-map">

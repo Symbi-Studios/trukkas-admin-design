@@ -5,10 +5,11 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
-import { Badge, Banner, Button, Card, DataTable, DonutChart, DropdownMenu, Icon, Modal, PageHeader, Pagination, SearchField, Skeleton, Sparkline, Tabs } from "../ds.js";
+import { Badge, Banner, Button, Card, DataTable, DonutChart, DropdownMenu, Icon, Modal, PageHeader, Pagination, SearchField, Skeleton, Sparkline, Tabs, TextField } from "../ds.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenTopCompaniesQuery, useGetAdminBidScreenOfferQuery, useLazyExportAdminBidFunnelQuery } from "../store/features/bids/bidScreenApi.js";
+import { useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation } from "../store/features/jobs/jobDetailApi.js";
 import "./Operations.css";
 
 const tones = { "Pending Evaluation":"warning", "Bid Accepted":"success", "In Transit":"info", "At Delivery":"orange", "Returning Container":"teal", Bidding:"purple", Completed:"success", Expired:"danger", Cancelled:"neutral" };
@@ -97,6 +98,8 @@ function BidsOffersContent({owner,role,authenticated}) {
   const [tab,setTab]=useState("Bid Overview"),[page,setPage]=useState(1),[q,setQ]=usePageSearchState("", () => setPage(1));
   const [statusFilter,setStatusFilter]=useState("All Status"),[dateKey,setDateKey]=useState("week");
   const [menu,setMenu]=useState(null),[offerModal,setOfferModal]=useState(null),[toast,setToast]=useState(null),[offerError,setOfferError]=useState("");
+  const [offerReason,setOfferReason]=useState("");
+  const offerActionLock=useRef(false);
   const dateOptions=useMemo(()=>bidScreenDateOptions(),[]);
   const selectedDate=dateOptions.find((d)=>d.key===dateKey)||dateOptions[0],dateRange=selectedDate.label;
   const session={owner,role},dates={dateFrom:selectedDate.dateFrom,dateTo:selectedDate.dateTo};
@@ -104,6 +107,8 @@ function BidsOffersContent({owner,role,authenticated}) {
   const analyticsQuery=useGetAdminBidScreenAnalyticsQuery({...session,...dates},{skip:!authenticated,refetchOnMountOrArgChange:true});
   const topQuery=useGetAdminBidScreenTopCompaniesQuery({...session,dateFrom:dateOptions[0].dateFrom,dateTo:dateOptions[0].dateTo},{skip:!authenticated,refetchOnMountOrArgChange:true});
   const offerQuery=useGetAdminBidScreenOfferQuery({...session,id:offerModal?.bidId},{skip:!authenticated||!offerModal?.bidId,refetchOnMountOrArgChange:true});
+  const actionDetail=useGetAdminJobBidActionDetailQuery({...session,id:offerModal?.bidId,jobId:offerModal?.jobId},{skip:!authenticated||!offerModal?.bidId||!offerModal?.jobId,refetchOnMountOrArgChange:true});
+  const [performAdminAction,{isLoading:acting}]=usePerformAdminJobActionMutation();
   const [exportFunnel]=useLazyExportAdminBidFunnelQuery();
   const data=directoryQuery.error?null:directoryQuery.currentData;
   const analytics=analyticsQuery.error?null:analyticsQuery.currentData;
@@ -124,11 +129,20 @@ function BidsOffersContent({owner,role,authenticated}) {
   const menuItems=menu?.key==="date"?dateOptions.map((d)=>({label:d.label,icon:d.key===dateKey?"check":undefined,onClick:()=>{setDateKey(d.key);setPage(1);setMenu(null);}}))
     :["All Status",...STATUSES].map((s)=>({label:s,icon:s===statusFilter?"check":undefined,onClick:()=>{setStatusFilter(s);setPage(1);setMenu(null);}}));
   function viewJob(row){if(row.jobId)navigate("/jobs/detail?id="+encodeURIComponent(row.jobId));else setToast({tone:"info",title:"Job details are unavailable."});}
-  function resolveOffer(_offer,accept){
-    const title=(accept?"Accepting":"Declining")+" counteroffers is not available.";
-    setOfferError(title);setToast({tone:"info",title});
+  async function resolveOffer(offer,accept){
+    if (!offerModal || offerModal.bidId !== offer?.bidId) { openOffer(offer); return; }
+    if (!accept) { setOfferError("The API does not support declining counteroffers."); return; }
+    if (acting || offerActionLock.current || offerReason.trim().length < 3 || actionDetail.currentData?.canAccept !== true || !actionDetail.currentData?.version) return;
+    offerActionLock.current=true;
+    try {
+      await performAdminAction({id:offer.jobId,owner,role,action:"acceptBid",bidId:offer.bidId,expectedVersion:actionDetail.currentData.version,reason:offerReason}).unwrap();
+      setOfferModal(null);setOfferReason("");setToast({tone:"success",title:"Offer accepted."});
+    } catch(error) {
+      const shortfall=error?.data?.shortfall;
+      setOfferError(error?.status===402&&shortfall!=null&&shortfall!==""&&Number.isFinite(Number(shortfall))&&Number(shortfall)>=0 ? "Insufficient funds. Shortfall: ₦"+Number(shortfall).toLocaleString("en-NG") : getApiErrorMessage(error));
+    } finally { offerActionLock.current=false; }
   }
-  function openOffer(row){setOfferError("");setOfferModal(row);setMenu(null);}
+  function openOffer(row){setOfferError("");setOfferReason("");setOfferModal(row);setMenu(null);}
   async function exportFunnelReport(){
     try {
       const csv=await exportFunnel({...session,...dates}).unwrap();
@@ -208,7 +222,7 @@ function BidsOffersContent({owner,role,authenticated}) {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => resolveOffer(r, false)}
+            disabled
           >
             Decline
           </Button>
@@ -463,7 +477,7 @@ function BidsOffersContent({owner,role,authenticated}) {
 
       <Modal
         open={!!offerModal}
-        onClose={() => { setOfferModal(null); setOfferError(""); }}
+        onClose={() => { if (!acting) { setOfferModal(null); setOfferError(""); } }}
         title="Counter Offer"
         description={
           offerModal ? `${offerModal.company} · ${offerModal.id}` : ""
@@ -473,14 +487,14 @@ function BidsOffersContent({owner,role,authenticated}) {
             <>
               <Button
                 variant="outline"
-                disabled={!selectedOffer || selectedOffer.statusCode !== "PENDING" || offerQuery.isFetching}
+                disabled
                 onClick={() => resolveOffer(selectedOffer, false)}
               >
                 Decline
               </Button>
               <Button
                 icon="check"
-                disabled={!selectedOffer || selectedOffer.statusCode !== "PENDING" || offerQuery.isFetching}
+                disabled={acting || !selectedOffer || selectedOffer.statusCode !== "PENDING" || offerQuery.isFetching || actionDetail.isFetching || actionDetail.currentData?.canAccept !== true || !actionDetail.currentData?.version || offerReason.trim().length < 3 || !["SUPER_ADMIN","OPS_ADMIN"].includes(role)}
                 onClick={() => resolveOffer(selectedOffer, true)}
               >
                 Accept Offer
@@ -503,9 +517,9 @@ function BidsOffersContent({owner,role,authenticated}) {
               <b style={{ color: "var(--tk-success)" }}>{selectedOffer?.delta ?? "—"}</b>
             </div>
             <span className="tk-meta">
-              Accepting will mark this job's bid as accepted and notify the
-              bidding company.
+              Accepting charges the forwarder's wallet for the agreed price, terminal handling and platform fee into escrow, and declines other pending bids.
             </span>
+            <TextField label="Reason" required maxLength={500} value={offerReason} onChange={(event)=>setOfferReason(event.target.value)} />
           </div>
         )}
       </Modal>

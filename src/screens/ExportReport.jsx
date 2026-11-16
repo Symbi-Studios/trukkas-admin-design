@@ -15,6 +15,7 @@ import { ReportTemplateDialog } from './ReportDialogs.jsx';
 import { useReportPreview } from '../store/features/reports/useReportPreview.js';
 import { useReportOperations, useReportSession } from '../store/features/reports/useReportOperations.js';
 import { reportRangeQuery } from '../store/features/reports/reportDraft.js';
+import styles from './ExportReport.module.css';
 
 const STEPS = [
   { n: 1, label: 'Report Type', hint: 'Select the type of report to export' },
@@ -70,8 +71,8 @@ function ExportReportScreen() {
 
       {banner && <Banner tone="error" title={banner} />}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <Card style={{ display: 'grid', gap: 4, position: 'sticky', top: 16 }}>
+      <div className={styles.layout}>
+        <Card className={styles.steps} style={{ display: 'grid', gap: 4 }}>
           {STEPS.map((s) => {
             const active = s.n <= 4;
             return (
@@ -91,12 +92,12 @@ function ExportReportScreen() {
           })}
         </Card>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+        <div className={styles.content}>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--tk-grid-gap)' }}>
             <SectionCard title="1. Select Report Type">
               <div ref={(el) => (sectionRefs.current[1] = el)} />
               <p className="tk-meta" style={{ margin: '-8px 0 12px' }}>Choose the type of report you want to export.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+              <div className={styles.choices}>
                 {REPORT_TYPES.map((r) => (
                   <ChoiceCard key={r.id} selected={draft.reportType === r.id} icon={r.icon} title={r.title}
                     description={r.description} onSelect={() => updateReportDraft({ reportType: r.id })} />
@@ -146,7 +147,7 @@ function ExportReportScreen() {
             <SectionCard title="5. Export Format & Delivery">
               <div ref={(el) => (sectionRefs.current[4] = el)} />
               <p className="tk-meta" style={{ margin: '-8px 0 12px' }}>Choose your preferred export format and delivery method.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+              <div className={styles.delivery}>
                 <div style={{ display: 'grid', gap: 10 }}>
                   <span className="tk-meta" style={{ fontWeight: 600, color: 'var(--tk-ink-700)' }}>Export Format</span>
                   {[
@@ -175,7 +176,7 @@ function ExportReportScreen() {
               </div>
             </SectionCard>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
               <Button variant="outline" onClick={() => navigate('/reports')}>Cancel</Button>
               <Button iconRight="arrow-right" disabled={!estimate.authenticated || !reportRangeQuery(draft) || selCount === 0 || Boolean(estimate.configurationError)} onClick={() => navigate('/reports/export/preview')}>
                 Preview & Export Report
@@ -183,7 +184,7 @@ function ExportReportScreen() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--tk-grid-gap)', alignContent: 'start', position: 'sticky', top: 16 }}>
+          <div className={styles.summary}>
             <SectionCard title="Your Report Summary">
               <p className="tk-meta" style={{ margin: '-8px 0 12px' }}>Review your selections before exporting.</p>
               <SummaryRow icon={reportType.icon} tint={reportType.tint} label="Report Type" value={`${reportType.title} Report`} />
@@ -247,7 +248,7 @@ function ColumnPicker({ draft, sectionRefs }) {
     <SectionCard title="4. Select Columns" action={<span className="tk-meta">{selCount} of {colTotal} columns selected</span>}>
       <div ref={(el) => (sectionRefs.current[3] = el)} />
       <p className="tk-meta" style={{ margin: '-8px 0 12px' }}>Choose the data fields you want to include in your report.</p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+      <div className={styles.columnToolbar}>
         <TextField icon="search" placeholder="Search columns..." style={{ flex: '1 1 240px' }}
           value={search} onChange={(e) => setSearch(e.target.value)} />
         <Checkbox checked={allSelected} indeterminate={!allSelected && selCount > 0} label="Select All"

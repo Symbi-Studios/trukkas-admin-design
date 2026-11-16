@@ -4,6 +4,7 @@
 import { Button, Badge, Icon } from '../ds.js';
 import { SettingsCheckbox as Checkbox, SettingsSwitch as Switch, SettingsTextField as TextField, SettingsSelect as Select, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
+import styles from './SettingsNotifications.module.css';
 import { SettingsSectionHeader, SettingsPanelLoading, SettingsGrid, SettingsCard, SettingsCardSave } from './settingsShared.jsx';
 
 import { NOTIFICATION_FREQUENCIES, eventNotificationGroups as notificationEventControls, notificationChannelsStatus as notificationChannelControls } from '../mock/fixtures/settings.js';
@@ -20,10 +21,9 @@ const TIMEZONES = [
 function EventRow({ event, onToggle, onFrequency }) {
   return (
     <div
-      className="tk-notification-event-grid"
+      className={styles.eventRow}
       style={{
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) 70px 70px 70px 140px",
         alignItems: "center",
         padding: "12px 4px",
         borderBottom: "1px solid var(--tk-line)",
@@ -97,14 +97,7 @@ export function SettingsNotifications() {
       <SettingsReadNotice error={editor.error} />
       <SettingsGrid>
         <SettingsCard description="Set your overall notification preferences and quiet hours." title="General Notification Settings" save={<SettingsCardSave editor={editor} />}>
-          <div
-            className="tk-notification-event-grid tk-notification-event-header"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-              gap: 24,
-            }}
-          >
+          <div className={styles.generalGrid}>
             <div style={{ display: "grid", gap: 14 }}>
               <span
                 style={{
@@ -145,7 +138,7 @@ export function SettingsNotifications() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 125px), 1fr))",
                   gap: 12,
                 }}
               >
@@ -189,10 +182,10 @@ export function SettingsNotifications() {
         </SettingsCard>
 
         <SettingsCard description="Choose which events trigger notifications and how you want to be notified." title="Event Notification Settings" className="tk-settings-wide" save={<SettingsCardSave editor={editor} />}>
-          <div
+          <div className={styles.eventScroll} role="region" aria-label="Event notification settings" tabIndex={0}>
+          <div className={styles.eventHeader}
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) 70px 70px 70px 140px",
               gap: 8,
               padding: "10px 4px",
               borderBottom: "1px solid var(--tk-line)",
@@ -277,6 +270,7 @@ export function SettingsNotifications() {
               ))}
             </div>
           ))}
+          </div>
         </SettingsCard>
         
         <SettingsCard title="Notification Channels">
@@ -284,6 +278,7 @@ export function SettingsNotifications() {
             {notificationChannelsStatus.map((c, i) => (
               <div
                 key={c.label}
+                className={styles.channelRow}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -309,7 +304,7 @@ export function SettingsNotifications() {
                 >
                   <Icon name={c.icon} size={16} />
                 </span>
-                <span style={{ flex: 1, display: "grid", gap: 1 }}>
+                <span className={styles.channelInfo} style={{ flex: 1, display: "grid", gap: 1 }}>
                   <span
                     style={{
                       font: "600 13px/18px var(--tk-font-sans)",

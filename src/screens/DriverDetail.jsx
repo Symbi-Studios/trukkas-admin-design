@@ -293,7 +293,7 @@ export function DriverDetail() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--tk-grid-gap)' }}>
       <PageHeader
-        crumbs={['Fleet Management', 'Drivers', d.id]}
+        crumbs={['Fleet Management', 'Drivers', d.name]}
         title="Driver Details"
         description="View driver profile, verification status, documents, trip history, maintenance log and compliance information."
         actions={<>
@@ -337,7 +337,6 @@ export function DriverDetail() {
               </div>
               <div className="dd-fact-row" style={{ marginTop: 4 }}>
                 <span className="dd-fact"><Icon name="phone" size={14} color="var(--tk-ink-300)" />{d.phone}</span>
-                <span className="dd-fact"><Icon name="badge-check" size={14} color="var(--tk-ink-300)" />Driver ID: <b>{d.id}</b></span>
                 <span className="dd-fact"><Icon name="map-pin" size={14} color="var(--tk-ink-300)" />{d.currentLocation}</span>
               </div>
               <div className="dd-fact-row" style={{ marginTop: 0 }}>

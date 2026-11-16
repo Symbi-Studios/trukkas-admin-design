@@ -102,7 +102,6 @@ function OverviewTab({ user, notify, canEdit }) {
         </SectionCard>
 
         <SectionCard title="Account details" icon="fingerprint">
-          <LabelValue label="Admin ID" value={<span className="tk-mono">{user.id}</span>} />
           <LabelValue label="Member since" value={user.joinedOn} />
           <LabelValue label="Last active" value={user.lastActive} />
         </SectionCard>

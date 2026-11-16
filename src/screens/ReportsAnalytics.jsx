@@ -17,6 +17,7 @@ import { useReportOperations, useReportSession } from '../store/features/reports
 import { reportEntityScope } from '../store/features/reports/reportContracts.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
+import styles from './ReportsAnalytics.module.css';
 
 const COMPARE_OPTIONS = ['Previous 7 days', 'Previous Period', 'Previous Month', 'Previous Year'];
 const GROUP_BY_OPTIONS = ['Daily', 'Weekly', 'Monthly'];
@@ -166,7 +167,7 @@ function ReportsAnalyticsScreen() {
         </SectionCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+      <div className={styles.reportGrid}>
         <SectionCard title="Top Performing Entities" action={
           <Select value={sortEntities} options={SORT_OPTIONS} onChange={(e) => setSortEntities(e.target.value)} style={{ minWidth: 130 }} />
         } footer={<Button variant="outline" fullWidth onClick={() => navigate('/forwarders')}>View All Entities</Button>}>
@@ -188,7 +189,7 @@ function ReportsAnalyticsScreen() {
           {loading && <DriverTableLoading columns={5} label="Loading report entities" />}
         </SectionCard>
 
-        <SectionCard title="Jobs by Type" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
+        <SectionCard className={styles.legendCard} title="Jobs by Type" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
           <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
             <DonutChart size={150} thickness={20} centerValue={loading ? '—' : reportCount(dashboardSummary.totalJobs)} centerLabel="Total"
               data={jobsByType.every((s) => s.count != null) && jobsByType.reduce((sum, s) => sum + s.count, 0) === dashboardSummary.totalJobs ? jobsByType.map((s) => ({ label: s.label, value: s.count, color: s.color })) : []} />
@@ -204,9 +205,9 @@ function ReportsAnalyticsScreen() {
         </SectionCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+      <div className={styles.summaryGrid}>
         <SectionCard icon="banknote" title="Financial Summary" footer={<Button variant="outline" fullWidth onClick={() => goExport('financial')}>View Financial Report</Button>}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className={styles.financialGrid}>
             <div>
               <div className="tk-meta">Total Revenue</div>
               <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.totalRevenue)}</div>

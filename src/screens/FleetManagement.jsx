@@ -1,4 +1,6 @@
 'use client';
+import { CustomSelect } from '../ds/components/forms/Select.jsx';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -74,13 +76,13 @@ export function FleetManagement() {
     {inspections.error && <Banner tone="warning" title="Inspection data unavailable" action={<Button variant="outline" onClick={() => inspections.refetch()}>Retry</Button>}>{fleetError(inspections.error)} Registration records can still be reviewed.</Banner>}
     <Card pad="none"><div className="fleet-toolbar">
       <SearchField placeholder="Search by truck no., plate number, or company..." value={q} onChange={(event) => setQ(event.target.value)} />
-      <select aria-label="Status" disabled title="Operational status is not available yet">{['All Status', ...STATUSES].map((x) => <option key={x}>{x}</option>)}</select>
-      <select aria-label="Truck type" disabled title="Truck type filtering is not available yet">{['All Types', ...TYPES].map((x) => <option key={x}>{x}</option>)}</select>
-      <select aria-label="Company" disabled title="Use the search field to find a company"><option>All Companies</option></select>
-      <select aria-label="Location" disabled title="Location is not available yet"><option>All Locations</option></select>
+      <CustomSelect aria-label="Status" disabled title="Operational status is not available yet">{['All Status', ...STATUSES].map((x) => <option key={x}>{x}</option>)}</CustomSelect>
+      <CustomSelect aria-label="Truck type" disabled title="Truck type filtering is not available yet">{['All Types', ...TYPES].map((x) => <option key={x}>{x}</option>)}</CustomSelect>
+      <CustomSelect aria-label="Company" disabled title="Use the search field to find a company"><option>All Companies</option></CustomSelect>
+      <CustomSelect aria-label="Location" disabled title="Location is not available yet"><option>All Locations</option></CustomSelect>
       <Button variant="outline" icon="rotate-ccw" onClick={() => { setQ(''); setSearch(''); setSort('Newest'); setPage(1); }}>Reset</Button>
     </div></Card>
-    <div className="fleet-layout"><SectionCard title="Trucks" count={pagination?.total ?? undefined} pad="none" action={<select className="fleet-sort" aria-label="Sort displayed trucks" value={sort} onChange={(event) => setSort(event.target.value)}>{['Newest', 'Plate A–Z', 'Company A–Z'].map((x) => <option key={x}>{x}</option>)}</select>}>
+    <div className="fleet-layout"><SectionCard title="Trucks" count={pagination?.total ?? undefined} pad="none" action={<CustomSelect className="fleet-sort" aria-label="Sort displayed trucks" value={sort} onChange={(event) => setSort(event.target.value)}>{['Newest', 'Plate A–Z', 'Company A–Z'].map((x) => <option key={x}>{x}</option>)}</CustomSelect>}>
       {query.isFetching && <div className="fleet-empty" role="status">{query.currentData ? 'Refreshing trucks…' : 'Loading trucks…'}</div>}
       <DataTable rows={rows} rowKey={(r) => r.id} onRowClick={openTruck} columns={[
         { key: 'plate', header: 'Truck / Plate No.', render: (r) => <span className="fleet-truck-cell"><span className="fleet-thumb">🚚</span>{dual(<span className="fleet-link">{r.plate}</span>, r.ref)}</span> },

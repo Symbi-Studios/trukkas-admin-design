@@ -1,0 +1,6 @@
+.eventScroll { overflow-x: auto; overscroll-behavior-inline: contain; }
+.eventRow {
+  min-width: 570px;
+  grid-template-columns: minmax(160px, 1.1fr) repeat(3, 56px) minmax(180px, 1.3fr);
+}
+.eventRow > * { min-width: 0; overflow-wrap: anywhere; }

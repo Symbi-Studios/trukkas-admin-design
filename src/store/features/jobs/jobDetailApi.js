@@ -111,7 +111,7 @@ function mapScreen(dto, summary, docDto, rawBids, rawTrips, rawPayments, errors)
   const cargo = object(summary?.cargo), assignment = object(summary?.assignment);
   const trips = rawTrips?.filter((t) => t.jobId === dto.id).map(mapTrip) || [];
   const bids = rawBids?.filter((b) => b.jobId === dto.id).map((b) => ({
-    id: b.id, company: shown(b.truckerName), rating: null, trips: null,
+    id: b.id, company: shown(b.truckerName), rating: null, trips: null, statusCode: text(b.status), isCounterOffer: b.isCounterOffer,
     amount: number(b.amount), status: title(b.status), accepted: b.status === 'ACCEPTED',
     services: null, estDeliveryDate: '—', submittedAt: jobScreenTime(b.createdAt),
   })) || [];
@@ -146,6 +146,8 @@ function mapScreen(dto, summary, docDto, rawBids, rawTrips, rawPayments, errors)
   });
   return {
     apiId: dto.id, id: text(dto.jobNumber) || dto.id, statusCode: rawStatus,
+    version: text(dto.version), adminActions: object(dto.adminActions),
+    reviewFlag: dto.reviewFlag && typeof dto.reviewFlag === 'object' ? { reason: text(dto.reviewFlag.reason), version: text(dto.reviewFlag.version) } : null,
     status: rejected ? 'Rejected' : labels[rawStatus] || (rawStatus === 'DRAFT' ? 'Draft' : '—'),
     forwarderId: text(forwarder.id), truckerId: text(trucker.id), forwarder: shown(forwarder.name),
     truckingCompany: text(trucker.name), assignmentStatus: count(assignment.assignedTrips) == null ? '—' : assignment.assignedTrips > 0 ? 'Assigned' : 'Not Assigned',
@@ -177,6 +179,47 @@ function mapScreen(dto, summary, docDto, rawBids, rawTrips, rawPayments, errors)
 export const jobDetailApi = baseApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
+    getAdminJobBidActionDetail: builder.query({
+      async queryFn({ id, jobId, owner, role }, api, _options, baseQuery) {
+        try {
+          const dto = await transport(api, baseQuery, owner, role)({ url: '/admin/bids/' + encodeURIComponent(id) });
+          const bid = dto?.bid && typeof dto.bid === 'object' ? dto.bid : dto;
+          if (bid?.id !== id || (bid.jobId || bid.job?.id) !== jobId) throw fail('The bid does not belong to this job.');
+          return { data: { id, version: text(bid.version), status: text(bid.status), isCounterOffer: bid.isCounterOffer, canAccept: bid.adminActions?.canAccept === true, canDecline: bid.adminActions?.canDecline === true } };
+        } catch (error) { return { error: error?.status ? error : fail('The bid could not be loaded.') }; }
+      },
+      providesTags: ['AdminBids'],
+    }),
+    performAdminJobAction: builder.mutation({
+      async queryFn({ id, owner, role, action, reason, expectedVersion, fields, bidId, tdoDate, flagReason }, api, _options, baseQuery) {
+        try {
+          if (!(action === 'flag' ? roles : deliveryRoles).has(role) || !session(api, owner, role)) throw fail('This action is not available for your account.');
+          if (!text(id) || !['acceptBid', 'declineBid', 'edit', 'duplicate', 'transit', 'flag'].includes(action)) throw fail('This action is unavailable.');
+          const why = text(reason);
+          if (!why || why.length < 3 || why.length > 500) throw fail('Enter a reason between 3 and 500 characters.');
+          let request;
+          if (action === 'flag') {
+            if (!['PRICING', 'DOCUMENTS', 'DELAY', 'SAFETY', 'FRAUD_RISK', 'CUSTOMER_COMPLAINT', 'OTHER'].includes(flagReason)) throw fail('Choose a review reason.');
+            request = { url: path(id) + '/flag', method: 'POST', body: { reason: flagReason, note: why, ...(text(expectedVersion) ? { expectedVersion } : {}) } };
+          } else if (action === 'acceptBid' || action === 'declineBid') {
+            if (!text(bidId) || !text(expectedVersion)) throw fail('Refresh the bid before continuing.');
+            request = { url: '/admin/bids/' + encodeURIComponent(bidId) + '/' + (action === 'acceptBid' ? 'accept' : 'decline'), method: 'POST', body: { jobId: id, expectedVersion, reason: why } };
+          } else if (action === 'duplicate') {
+            if (!text(tdoDate) || !Number.isFinite(Date.parse(tdoDate))) throw fail('Choose a valid TDO date.');
+            request = { url: path(id) + '/duplicate', method: 'POST', body: { tdoDate, reason: why } };
+          } else if (action === 'transit') {
+            request = { url: path(id) + '/mark-in-transit', method: 'POST', body: { reason: why } };
+          } else {
+            if (!text(expectedVersion) || !fields || !Object.keys(fields).length) throw fail('Refresh the job and enter a change.');
+            request = { url: path(id), method: 'PATCH', body: { ...fields, expectedVersion, reason: why } };
+          }
+          const result = await transport(api, baseQuery, owner, role)(request);
+          if (action === 'duplicate' ? result?.sourceJobId !== id || !text(result?.id) : (result?.jobId !== id || (bidId && result?.bidId !== bidId))) throw fail('The action response could not be confirmed. Refresh before trying again.');
+          return { data: result };
+        } catch (error) { return { error: error?.status ? error : fail('The action could not be completed.') }; }
+      },
+      invalidatesTags: ['AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips'],
+    }),
     getAdminJobScreen: builder.query({
       async queryFn({ id, owner, role }, api, _options, baseQuery) {
         try {
@@ -279,4 +322,4 @@ export const jobDetailApi = baseApi.injectEndpoints({
     }),
   }),
 });
-export const { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation } = jobDetailApi;
+export const { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation } = jobDetailApi;

@@ -12,6 +12,7 @@ const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
 const types = { PREVENTIVE: 'Preventive', REPAIR: 'Repair', INSPECTION: 'Inspection', BREAKDOWN: 'Breakdown' };
 const priorities = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
 const statuses = { REQUESTED: 'Requested', SCHEDULED: 'Scheduled', IN_PROGRESS: 'In Progress', COMPLETED: 'Completed', OVERDUE: 'Overdue', CANCELLED: 'Cancelled', REJECTED: 'Rejected' };
+const truckStatuses = { ACTIVE: 'Active', APPROVED: 'Approved', PENDING_REVIEW: 'Pending Review', REJECTED: 'Rejected', INACTIVE: 'Inactive', MAINTENANCE: 'In Maintenance' };
 export const maintenanceTabs = { 'All Maintenance': 'all', Scheduled: 'scheduled', 'In Progress': 'inProgress', Completed: 'completed', Overdue: 'overdue', Cancelled: 'cancelled' };
 export const maintenanceHref = (id) => `/maintenance/detail?id=${encodeURIComponent(id)}`;
 export function maintenanceError(error) {
@@ -87,6 +88,9 @@ function mapUsage(response, _meta, { truckId }) {
 function mapRecord(dto) {
   if (!text(dto?.id)) throw new Error('Maintenance response is missing a record ID.');
   const days = Number.isSafeInteger(dto.daysUntilDue) ? dto.daysUntilDue : null;
+  const asset = dto.asset && typeof dto.asset === 'object' ? dto.asset : {};
+  const last = asset.lastMaintenance && typeof asset.lastMaintenance === 'object' ? asset.lastMaintenance : null;
+  const next = asset.nextDue && typeof asset.nextDue === 'object' ? asset.nextDue : null;
   return {
     id: dto.id, reference: text(dto.reference) || '—', truckId: text(dto.truck?.id),
     company: text(dto.company?.name) || '—', plate: text(dto.truck?.plateNumber) || '—', truckType: text(dto.asset?.truckType) || text(dto.truck?.label) || '—',
@@ -97,9 +101,11 @@ function mapRecord(dto) {
     completedAt: dateValue(dto.completedAt), odometer: number(dto.odometerKm), estimatedCost: number(dto.estimatedCost), actualCost: number(dto.actualCost),
     dueLabel: days == null ? '—' : days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? 'Due today' : `In ${days} days`,
     daysUntilDue: days, priority: Object.hasOwn(priorities, dto.priority) ? priorities[dto.priority] : '—', notes: text(dto.notes) || '—',
-    assetStatus: dto.truck?.status === 'MAINTENANCE' ? 'In Maintenance' : statuses[dto.truck?.status] || (dto.truck?.status === 'ACTIVE' ? 'Active' : '—'),
+    assetStatus: truckStatuses[dto.truck?.status] || '—',
     makeModel: '—', year: '—', vin: '—', truckRef: text(dto.truck?.id) || '—', assetLocation: location(dto.asset?.currentLocation),
     currentOdometer: number(dto.asset?.currentOdometerKm), remainingKm: number(dto.asset?.kmUntilServiceDue), nextDueOdometer: number(dto.asset?.nextDueOdometerKm), nextDueDate: '—', nextDueDays: null, lastUpdated: maintenanceDate(dto.asset?.odometerUpdatedAt),
+    lastMaintenance: Object.hasOwn(asset, 'lastMaintenance') ? (last ? { date: maintenanceDate(last.completedAt), odometer: number(last.odometerKm), serviceType: text(last.typeLabel) || types[last.type] || '—' } : null) : undefined,
+    nextMaintenance: Object.hasOwn(asset, 'nextDue') ? (next ? { date: maintenanceDate(next.dueDate), daysUntilDue: Number.isSafeInteger(next.daysUntilDue) ? next.daysUntilDue : null } : null) : undefined,
     attachments: null, checklist: mapServiceItems(dto.serviceItems), fitForRoad: bool(dto.asset?.fitForRoad), maintenanceCompliant: bool(dto.asset?.maintenanceCompliant), noOpenIssues: null,
     eligibleForJobs: dto.truckEligibility?.id === dto.truck?.id ? bool(dto.truckEligibility?.eligibleForJobs) : null,
   };

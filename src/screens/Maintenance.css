@@ -108,6 +108,7 @@
 .maint-ring {
   width: 108px;
   height: 108px;
+  flex: 0 0 108px;
   border-radius: 50%;
   background: conic-gradient(
     var(--tk-blue) 0 43.2%,
@@ -136,12 +137,14 @@
   height: 100%;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .maint-legend {
   display: grid;
   gap: 8px;
-  flex: 1;
+  flex: 1 1 130px;
+  min-width: 0;
   font-size: var(--tk-meta-size);
 }
 .maint-legend span {
@@ -216,8 +219,28 @@
 }
 .maint-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 16px;
+  min-width: 0;
+}
+.maint-row > * {
+  min-width: 0;
+}
+.maint-row .tk-section-card-action button {
+  white-space: nowrap;
+}
+.maint-approvals .tk-section-card-body > div > div > span:first-child {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+}
+.maint-approvals .tk-section-card-body > button {
+  height: auto !important;
+  min-height: var(--tk-h-btn);
+  padding-block: 9px !important;
+  white-space: normal !important;
+  line-height: 1.25 !important;
 }
 .maint-info {
   display: flex;
@@ -288,9 +311,6 @@
   .maint-form-grid {
     grid-template-columns: 1fr;
   }
-  .maint-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 @media (max-width: 460px) {
   .maint-stats {
@@ -298,9 +318,10 @@
   }
   .maint-chart {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
   }
-  .maint-row {
-    grid-template-columns: minmax(0, 1fr);
+  .maint-legend {
+    flex-basis: auto;
+    align-self: stretch;
   }
 }

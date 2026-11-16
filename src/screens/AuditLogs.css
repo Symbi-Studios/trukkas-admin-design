@@ -478,3 +478,7 @@
     padding: 12px;
   }
 }
+
+.audit-page .tk-data-table {
+  min-width: 1200px !important;
+}

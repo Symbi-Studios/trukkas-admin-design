@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button, Icon } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
+import styles from './SettingsSecurityAlerts.module.css';
 import { SettingsEventsDialog, SettingsPasswordDialog } from './SettingsActionDialogs.jsx';
 import { SettingsTwoFactorDialog } from './SettingsTwoFactorDialog.jsx';
 
@@ -13,8 +14,7 @@ import { SettingsSectionHeader, SettingsPanelLoading, SettingsGrid, SettingsCard
 
 function AlertEventRow({ event, onToggle }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1.1fr) 56px 56px 56px minmax(180px, 1.3fr)',
-                 alignItems: 'center', gap: 10, padding: '11px 4px', borderBottom: '1px solid var(--tk-line)' }}>
+    <div className={styles.eventRow} style={{ display: 'grid', alignItems: 'center', gap: 10, padding: '11px 4px', borderBottom: '1px solid var(--tk-line)' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ width: 26, height: 26, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)',
                       color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
@@ -63,8 +63,8 @@ export function SettingsSecurityAlerts() {
 
       <SettingsGrid>
         <SettingsCard description="Choose which security events you want to be notified about and how." title="Security Alert Preferences" save={<SettingsCardSave editor={editor} />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1.1fr) 56px 56px 56px minmax(180px, 1.3fr)',
-                       gap: 10, padding: '10px 4px', borderBottom: '1px solid var(--tk-line)' }}>
+          <div className={styles.eventScroll} role="region" aria-label="Security alert preferences" tabIndex={0}>
+          <div className={styles.eventRow} style={{ display: 'grid', gap: 10, padding: '10px 4px', borderBottom: '1px solid var(--tk-line)' }}>
             <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>Security Event</span>
             <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-400)', textAlign: 'center' }}>In-App</span>
             <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-400)', textAlign: 'center' }}>Email</span>
@@ -75,10 +75,11 @@ export function SettingsSecurityAlerts() {
             <AlertEventRow key={ev.key} event={ev}
               onToggle={(channel, v) => toggleSecurityAlertChannel(ev.key, channel, v)} />
           ))}
+          </div>
         </SettingsCard>
 
         {editor.groupVisible('settingsAlertDelivery') && (<SettingsCard description="Configure how and when you receive security alerts." title="Alert Delivery Settings" save={<SettingsCardSave editor={editor} />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14 }}>
             <div style={{ display: 'grid', gap: 6 }}>
               {editor.visible('settingsAlertDelivery', 'emailForSecurityAlerts') && (<TextField label="Email for security alerts" type="email" value={delivery.emailForSecurityAlerts}
                 onChange={(e) => updateAlertDelivery({ emailForSecurityAlerts: e.target.value })} />) }
@@ -103,7 +104,7 @@ export function SettingsSecurityAlerts() {
               hint="You will still receive critical alerts (e.g. failed logins, suspicious activity)."
               onChange={(v) => updateSecurityAlertsQuietHours({ enabled: v })} />) }
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 14 }}>
             {editor.visible('settingsSecurityAlertsQuietHours', 'from') && (<TextField label="From" value={quiet.from} suffix={<Icon name="clock" size={15} color="var(--tk-ink-300)" />}
               onChange={(e) => updateSecurityAlertsQuietHours({ from: e.target.value })} />) }
             {editor.visible('settingsSecurityAlertsQuietHours', 'to') && (<TextField label="To" value={quiet.to} suffix={<Icon name="clock" size={15} color="var(--tk-ink-300)" />}

@@ -78,7 +78,8 @@ function mapOpportunity(value) {
     pickupLocation: proposedPickup,
     deliveryLocation: proposedDelivery,
     pickupWindow: text(proposed.pickupWindow, item.pickupWindow),
-    status: text(item.statusLabel, item.status),
+    status: text(record(item.review).status, item.statusLabel, item.status),
+    reviewVersion: text(record(item.review).version),
     score,
     revenue,
     currency: text(item.currency, proposed.currency) || 'NGN',
@@ -114,11 +115,22 @@ function mapOpportunities(response, args = {}) {
 export const triangulationApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getAdminTriangulationOpportunities: builder.query({
-      query: ({ page = 1, limit = 20, radiusKm = 150 } = {}) => ({
+      query: ({ page = 1, limit = 20, radiusKm = 150, status } = {}) => ({
         url: '/admin/triangulation/opportunities',
-        params: { radiusKm, page, limit },
+        params: { radiusKm, page, limit, ...(status ? { status } : {}) },
       }),
       transformResponse: (response, _meta, args) => mapOpportunities(response, args),
+      providesTags: ['AdminTriangulation'],
+    }),
+    getAdminTriangulationActivity: builder.query({
+      query: ({ id }) => ({ url: `/admin/triangulation/opportunities/${encodeURIComponent(id)}/activity` }),
+      transformResponse: (response, _meta, args) => {
+        const data = record(unwrapApiResponseData(response));
+        if (data.opportunityId !== args.id || !Array.isArray(data.activity)) throw new Error('The activity response is unavailable.');
+        return data.activity.filter((row) => text(row?.id)).map((row) => ({
+          id: text(row.id), title: text(row.title, row.action), note: text(row.note, row.reasonLabel), at: text(row.createdAt), by: text(record(row.by).name),
+        }));
+      },
       providesTags: ['AdminTriangulation'],
     }),
     getAdminTriangulationOpportunity: builder.query({
@@ -135,9 +147,28 @@ export const triangulationApi = baseApi.injectEndpoints({
           score: number(factors.matchScore, opportunity.score),
           distanceKm: number(factors.distanceKm, opportunity.distanceKm),
           revenue: number(financial.estimatedRevenue, opportunity.revenue),
+          platformFee: number(financial.platformFee),
         } };
       },
       providesTags: ['AdminTriangulation'],
+    }),
+    reviewAdminTriangulationOpportunity: builder.mutation({
+      async queryFn({ id, action, radiusKm, expectedVersion, reason, note }, api, _options, baseQuery) {
+        const auth = api.getState().auth;
+        const current = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === auth.admin?.id && api.getState().auth.admin?.role === auth.admin?.role;
+        const fail = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
+        if (!current() || !['SUPER_ADMIN', 'OPS_ADMIN'].includes(auth.admin?.role)) return fail('This action is unavailable for your account.');
+        if (!text(id) || !text(expectedVersion) || !['propose', 'reject'].includes(action)) return fail('Refresh the opportunity before continuing.');
+        if (action === 'reject' && (!['TRUCK_UNAVAILABLE', 'EQUIPMENT_MISMATCH', 'TIMING_CONFLICT', 'ROUTE_NOT_VIABLE', 'COMPLIANCE_ISSUE', 'CUSTOMER_PREFERENCE', 'OTHER'].includes(reason) || (reason === 'OTHER' && !text(note)))) return fail('Choose a reason and provide a note when required.');
+        const response = await baseQuery({ url: `/admin/triangulation/opportunities/${encodeURIComponent(id)}/${action}`, method: 'POST',
+          body: { radiusKm, expectedVersion, ...(action === 'reject' ? { reason } : {}), ...(text(note) ? { note: text(note) } : {}) } });
+        if (!current()) return fail('The session changed. Refresh before continuing.');
+        if (response.error) return { error: response.error };
+        const data = unwrapApiResponseData(response.data);
+        if (data?.opportunityId !== id || data?.status !== (action === 'reject' ? 'REJECTED' : 'PROPOSED')) return fail('The result could not be confirmed. Refresh before trying again.');
+        return { data };
+      },
+      invalidatesTags: ['AdminTriangulation'],
     }),
     notifyAdminTriangulationMatch: builder.mutation({
       query: ({ jobId, truckerId }) => ({
@@ -161,6 +192,8 @@ export const triangulationApi = baseApi.injectEndpoints({
 export const {
   useGetAdminTriangulationOpportunitiesQuery,
   useGetAdminTriangulationOpportunityQuery,
+  useGetAdminTriangulationActivityQuery,
+  useReviewAdminTriangulationOpportunityMutation,
   useNotifyAdminTriangulationMatchMutation,
   useInterveneAdminTriangulationJobMutation,
 } = triangulationApi;
