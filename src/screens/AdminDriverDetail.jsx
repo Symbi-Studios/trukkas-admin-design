@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
-import { Avatar, Badge, Banner, Button, Card, DataTable, EmptyState, Icon, LabelValue, PageHeader, Pagination, SectionCard, StatCard, Tabs, Tooltip } from '../ds.js';
-import { adminDriverError, useGetAdminDriverActivityQuery, useGetAdminDriverJobsQuery, useGetAdminDriverLicenseQuery, useGetAdminDriverProfileQuery, useGetAdminDriverTransactionsQuery } from '../store/features/drivers/driversApi.js';
+import { Avatar, Badge, Banner, Button, Card, DataTable, EmptyState, Icon, LabelValue, Modal, PageHeader, Pagination, SectionCard, StatCard, Tabs, Textarea, Tooltip } from '../ds.js';
+import { adminDriverError, useGetAdminDriverActivityQuery, useGetAdminDriverJobsQuery, useGetAdminDriverLicenseQuery, useGetAdminDriverProfileQuery, useGetAdminDriverTransactionsQuery, useReviewAdminDriverMutation, useVerifyAdminDriverLicenseMutation } from '../store/features/drivers/driversApi.js';
 import { useGetAdminTripsQuery } from '../store/features/trips/tripsApi.js';
 import { DriverDetailLoading, DriverLicenseLoading, DriverTableLoading } from './DriversLoading.jsx';
 
 const TAB_ITEMS = ['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wallet', 'Maintenance Log', 'Compliance', 'Incidents', 'Reviews & Ratings', 'Notes'];
 const SUPPORTED_TABS = new Set(['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wallet', 'Compliance']);
 const ACTIVITY_TABS = new Set(['Maintenance Log', 'Incidents', 'Reviews & Ratings', 'Notes']);
+
+const ACTION_TITLE = { approve: 'Approve driver', reject: 'Reject driver', 'approve-license': 'Verify driver license', 'reject-license': 'Reject driver license' };
+const ACTION_SUCCESS = { approve: 'approved', reject: 'rejected', 'approve-license': 'license verified', 'reject-license': 'license rejected' };
 
 const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 function MetricLabel({ label, description }) {
@@ -62,10 +65,40 @@ export function AdminDriverDetail() {
   const jobsQuery = useGetAdminDriverJobsQuery({ id, tab: jobFilter, page: jobPage, limit: jobLimit }, { skip: !id || tab !== 'Trips & Activity' });
   const transactionsQuery = useGetAdminDriverTransactionsQuery({ id, page: transactionPage, limit: transactionLimit }, { skip: !id || tab !== 'Earnings & Wallet' });
   const activityQuery = useGetAdminDriverActivityQuery(id, { skip: !id || !ACTIVITY_TABS.has(tab) });
+  const [reviewDriver, reviewState] = useReviewAdminDriverMutation();
+  const [verifyLicense, licenseActionState] = useVerifyAdminDriverLicenseMutation();
+  const [action, setAction] = useState(null);
+  const [reason, setReason] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
+  const actionLock = useRef(false);
+  const actionBusy = reviewState.isLoading || licenseActionState.isLoading;
   const profile = profileQuery.currentData;
   const license = licenseQuery.currentData;
   const fullName = profile?.name || 'Driver';
   const licenseUrl = safeDocumentUrl(license?.licenseUrl);
+  const canReviewLicense = ['PENDING', 'PENDING_REVIEW'].includes(license?.statusCode);
+  const actionNeedsReason = action === 'reject' || action === 'reject-license';
+
+  function openAction(kind) {
+    setAction(kind); setReason(''); setActionError(''); setNotice('');
+  }
+
+  async function applyAction() {
+    if (!action || actionBusy || actionLock.current) return;
+    setActionError('');
+    actionLock.current = true;
+    try {
+      if (action === 'approve' || action === 'reject') await reviewDriver({ id, decision: action, reason, reviewPath: profile?.reviewPath }).unwrap();
+      else await verifyLicense({ id, decision: action === 'approve-license' ? 'approve' : 'reject', reason }).unwrap();
+      setNotice(`${fullName} ${ACTION_SUCCESS[action]}.`);
+      setAction(null); setReason('');
+    } catch (error) {
+      setActionError(adminDriverError(error));
+    } finally {
+      actionLock.current = false;
+    }
+  }
   const activitySections = {
     'Maintenance Log': { rows: activityQuery.currentData?.maintenance, columns: [
       { key: 'reference', header: 'Reference' }, { key: 'type', header: 'Type' }, { key: 'description', header: 'Description' },
@@ -94,8 +127,15 @@ export function AdminDriverDetail() {
       crumbs={['Fleet Management', { label: 'Drivers', onClick: () => navigate('/drivers') }, id]}
       title="Driver Details"
       description="View the driver profile and license information."
-      actions={<Button variant="outline" icon="arrow-left" onClick={() => navigate('/drivers')}>Back to Drivers</Button>}
+      actions={<>
+        <Button variant="outline" icon="arrow-left" onClick={() => navigate('/drivers')}>Back to Drivers</Button>
+        {profile?.canReview && <>
+          <Button variant="outline" icon="circle-x" disabled={actionBusy} onClick={() => openAction('reject')}>Reject Driver</Button>
+          <Button icon="circle-check" disabled={actionBusy} onClick={() => openAction('approve')}>Approve Driver</Button>
+        </>}
+      </>}
     />
+    {notice && <Banner tone="success" title="Done">{notice}</Banner>}
     {profileQuery.error && <Banner tone="danger" title="Unable to load driver profile">{adminDriverError(profileQuery.error)}</Banner>}
     {licenseQuery.error && <Banner tone="warning" title="License data unavailable">{adminDriverError(licenseQuery.error)}</Banner>}
     {!profileQuery.error && profile && <>
@@ -138,6 +178,10 @@ export function AdminDriverDetail() {
           <LabelValue layout="stack" label="Expiry Date" value={dateLabel(license.expiresAt)} />
         </div>
         {licenseUrl ? <Button variant="outline" icon="file-text" onClick={() => window.open(licenseUrl, '_blank', 'noopener,noreferrer')}>Open License Document</Button> : <EmptyState icon="file-text" title="No license document available" description="The license document is not available." style={{ padding: '22px 8px' }} />}
+        {canReviewLicense && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button variant="outline" icon="circle-x" disabled={actionBusy} onClick={() => openAction('reject-license')}>Reject License</Button>
+          <Button icon="shield-check" disabled={actionBusy} onClick={() => openAction('approve-license')}>Verify License</Button>
+        </div>}
       </div> : <EmptyState icon="file-text" title="License information unavailable" description="No license record was returned for this driver." />}
     </SectionCard>}
     {tab === 'Overview' && profile?.trucks && <SectionCard title="Assigned Vehicles" pad="none">
@@ -198,5 +242,12 @@ export function AdminDriverDetail() {
           : activitySection?.rows?.length ? <DataTable rows={activitySection.rows} columns={activitySection.columns} rowKey={(item) => item.id} />
             : <EmptyState icon="clipboard-list" title={`No ${tab.toLowerCase()} found`} description="No records were returned for this driver." />}
     </SectionCard>}
+    <Modal open={Boolean(action)} onClose={() => { if (!actionBusy) { setAction(null); setActionError(''); } }} title={action ? ACTION_TITLE[action] : ''} description={fullName} footer={<>
+      <Button variant="outline" disabled={actionBusy} onClick={() => { setAction(null); setActionError(''); }}>Cancel</Button>
+      <Button disabled={actionBusy} onClick={applyAction}>{actionBusy ? 'Saving…' : 'Confirm'}</Button>
+    </>}>
+      {actionNeedsReason && <Textarea label="Reason (optional)" rows={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Enter a reason for this action" />}
+      {actionError && <Banner tone="danger" title="Action not completed" style={{ marginTop: actionNeedsReason ? 12 : 0 }}>{actionError}</Banner>}
+    </Modal>
   </div>;
 }

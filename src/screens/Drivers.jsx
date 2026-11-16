@@ -200,7 +200,7 @@ export function Drivers() {
   }
 
   function openAction(kind, driver) {
-    setAction({ kind, id: driver.id, name: driver.name });
+    setAction({ kind, id: driver.id, name: driver.name, reviewPath: driver.reviewPath });
     setReason('');
     setActionError('');
     setRowMenu(null);
@@ -215,7 +215,7 @@ export function Drivers() {
     setActionError('');
     actionLock.current = true;
     try {
-      if (action.kind === 'approve' || action.kind === 'reject') await reviewDriver({ id: action.id, decision: action.kind, reason }).unwrap();
+      if (action.kind === 'approve' || action.kind === 'reject') await reviewDriver({ id: action.id, decision: action.kind, reason, reviewPath: action.reviewPath }).unwrap();
       if (action.kind === 'approve-license' || action.kind === 'reject-license') await verifyLicense({ id: action.id, decision: action.kind === 'approve-license' ? 'approve' : 'reject', reason }).unwrap();
       if (action.kind === 'suspend') await suspendDriver({ id: action.id, reason: reason.trim() }).unwrap();
       if (action.kind === 'activate') await activateDriver(action.id).unwrap();

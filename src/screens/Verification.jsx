@@ -22,7 +22,7 @@ const EMPTY_ROWS = [];
 const STATUS_ICON = { Pending: 'clock', 'In Review': 'eye', Verified: 'shield-check', Rejected: 'shield-x' };
 const STATUS_TONE = { Pending: 'warning', 'In Review': 'info', Verified: 'success', Rejected: 'danger' };
 const RISK_TONE = { Low: 'success', Medium: 'warning', High: 'danger' };
-const ENTITY_TYPES = ['Forwarder', 'Exporter', 'Truck Company'];
+const ENTITY_TYPES = ['Forwarder', 'Exporter', 'Truck Company', 'Driver', 'Individual Trucker', 'Truck'];
 const VERIFICATION_TYPES = ['Business Verification', 'License Verification', 'Company Address Verification',
   'Fleet Verification', 'Tax Identification (TIN)', 'Insurance Verification', 'Export License', 'Vehicle Documents'];
 const STATUSES = ['Pending', 'In Review', 'Verified', 'Rejected'];

@@ -173,13 +173,16 @@ export const tripScreenApi = baseApi.injectEndpoints({
             if (action === 'delay') {
               if (!text(reason) || reason.trim().length > 500 || !text(before.status) || ['COMPLETED', 'CANCELLED'].includes(before.status)) throw error('Enter a delay reason of up to 500 characters for an active trip.');
               await run({ url: path(id) + '/mark-delayed', method: 'POST', body: { reason: reason.trim() } });
+            } else if (action === 'clearDelay') {
+              if (before.isDelayed !== true || !text(before.delayReason)) throw error('This trip has no manual delay flag to clear.');
+              await run({ url: path(id) + '/clear-delayed', method: 'POST' });
             } else if (action === 'arrival') {
               if (!arrivals.has(before.status)) throw error('This trip cannot be marked at delivery.');
               await run({ url: path(id) + '/mark-at-delivery', method: 'POST' });
             } else throw error('This trip action is unavailable.');
             try {
               const saved = await run({ url: path(id) });
-              if (saved.tripId !== id || saved.jobId !== jobId || (action === 'delay' ? saved.isDelayed !== true || saved.delayReason !== reason.trim() : saved.status !== 'CARGO_ARRIVED')) throw error('The saved result could not be confirmed.');
+              if (saved.tripId !== id || saved.jobId !== jobId || (action === 'delay' ? saved.isDelayed !== true || saved.delayReason !== reason.trim() : action === 'clearDelay' ? Boolean(text(saved.delayReason)) : saved.status !== 'CARGO_ARRIVED')) throw error('The saved result could not be confirmed.');
             } catch { throw error('The action was sent but could not be confirmed. Refresh before retrying.'); }
           }
           return { data: { id, action } };

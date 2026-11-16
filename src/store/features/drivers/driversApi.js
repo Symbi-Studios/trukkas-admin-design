@@ -82,8 +82,10 @@ export function adaptAdminDriver(dto = {}) {
     currency: cleanText(record(dto.earnings).currency),
     isRejected: typeof dto.isRejected === 'boolean' ? dto.isRejected : null,
     rejectionReason: cleanText(dto.rejectionReason), rejectedAt: date(dto.rejectedAt),
-    // Account review under /admin/drivers is for DRIVER accounts only.
-    canReview: rawStatus === 'PENDING_REVIEW' && !isIndividualTrucker(dto),
+    // DRIVER accounts are reviewed under /admin/drivers; individual truckers
+    // (owner-operators) are TRUCKER accounts reviewed under /admin/truckers.
+    canReview: rawStatus === 'PENDING_REVIEW',
+    reviewPath: isIndividualTrucker(dto) ? 'truckers' : 'drivers',
     canActivate: rawStatus === 'SUSPENDED',
     canSuspend: rawStatus === 'ACTIVE' && isOnTrip === false,
   };
@@ -377,8 +379,8 @@ export const driversApi = baseApi.injectEndpoints({
       providesTags: (_result, _error, id) => [{ type: 'AdminDrivers', id: `${id}-license` }],
     }),
     reviewAdminDriver: builder.mutation({
-      query: ({ id, decision, reason }) => ({
-        url: `/admin/drivers/${encodeURIComponent(id)}/${decision}`,
+      query: ({ id, decision, reason, reviewPath }) => ({
+        url: `/admin/${reviewPath === 'truckers' ? 'truckers' : 'drivers'}/${encodeURIComponent(id)}/${decision}`,
         method: 'POST',
         ...(decision === 'reject' ? { body: reason?.trim() ? { reason: reason.trim() } : {} } : {}),
       }),

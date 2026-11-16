@@ -25,7 +25,7 @@ const STATUS = { PENDING: 'Pending', IN_REVIEW: 'In Review', VERIFIED: 'Verified
 const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', EXPORTER_LICENCE: 'Export License', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
 const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', EXPORTER: 'Exporter', TRUCK: 'Truck' };
 const SOURCES = { TRUCKER: 'truckers', DRIVER: 'drivers', KYB: 'kyb', EXPORTER_LICENSE: 'exporter-licenses', TRUCK: 'trucks', COMPANY_DOCUMENT: 'company-documents' };
-const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER', Forwarder: 'FORWARDER' }, verificationType: {
+const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER', Forwarder: 'FORWARDER', Driver: 'DRIVER', 'Individual Trucker': 'TRUCKER', Truck: 'TRUCK' }, verificationType: {
   'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE', 'License Verification': 'LICENSE',
   'Company Address Verification': 'ADDRESS', 'Fleet Verification': 'FLEET', 'Tax Identification (TIN)': 'TIN',
   'Insurance Verification': 'INSURANCE', 'Vehicle Documents': 'VEHICLE_DOCUMENTS',
