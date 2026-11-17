@@ -18,6 +18,9 @@ const TRIP_STATUSES = ["Assigned", "In Transit", "At Pickup", "At Delivery", "Re
 const STATUS_TO_API = { Assigned: "assigned", "In Transit": "inTransit", "At Pickup": "atPickup", "At Delivery": "atDelivery", "Returning Container": "returningContainer", Delayed: "delayed", Delivered: "completed" };
 const DATE_OPTIONS = ["All Dates", "Last 7 Days", "Previous 7 Days"];
 const tones = { Assigned: "info", "In Transit": "success", "At Pickup": "purple", "At Delivery": "orange", "Returning Container": "teal", Delayed: "danger", Delivered: "success" };
+const issueLabel = (value) => typeof value === "string" && value.trim() ? value.trim().toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "—";
+const issueDate = (value) => { const date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date.toLocaleString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"; };
+const safeUrl = (value) => { try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) ? url.href : null; } catch { return null; } };
 
 function dateRange(value) {
   if (value === "All Dates") return {};
@@ -160,7 +163,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
       await changeTrip({ ...session, id: trip.id, jobId: trip.jobId, expectedStatus: trip.statusCode, driverId: trip.driverId, action, ...details }).unwrap();
       if (!active.current) return;
       if (selectedRef.current === trip.id) { setContactOpen(false); setMessage(""); setDelayTarget(null); setReason(""); }
-      notify("success", action === "message" ? "Message sent to " + trip.driver + "." : action === "delay" ? "Job and its trips marked delayed." : "Job and its trips marked at delivery.");
+      notify("success", action === "message" ? "Message sent to " + trip.driver + "." : action === "delay" ? "Job and its trips marked delayed." : action === "clearDelay" ? "Manual delay cleared for the job and its trips." : "Job and its trips marked at delivery.");
     } catch (e) { if (active.current) { setActionError(getApiErrorMessage(e)); notify("danger", getApiErrorMessage(e)); } }
     finally { actionLock.current = false; }
   }
@@ -411,6 +414,34 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
                   {siblingTrips.map((t) => t.id).join(", ")}.
                 </div>
               )}
+              {selectedTrip.isDelayed === true && selectedTrip.delayReason && (
+                <div className="approval-note">Marked delayed by an admin: {selectedTrip.delayReason}</div>
+              )}
+              {Array.isArray(selectedTrip.issues) && selectedTrip.issues.length > 0 && (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <span className="tk-eyebrow">Reported issues ({selectedTrip.issues.length})</span>
+                  {selectedTrip.issues.map((issue) => (
+                    <div key={issue.id || issue.createdAt} style={{ display: "grid", gap: 4, padding: 10, border: "1px solid var(--tk-line)", borderRadius: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <Badge tone={issue.resolvedAt ? "success" : "danger"}>{issueLabel(issue.type)}</Badge>
+                        <span className="tk-meta">{issueLabel(issue.status)}</span>
+                      </div>
+                      <span style={{ font: "500 13px/18px var(--tk-font-sans)", color: "var(--tk-ink-700)", overflowWrap: "anywhere" }}>{issue.description || "—"}</span>
+                      <span className="tk-meta">
+                        {[issue.reportedBy?.name, issue.reportedBy?.role ? issueLabel(issue.reportedBy.role) : null].filter(Boolean).join(" · ") || "—"}
+                        {" · "}{issueDate(issue.createdAt)}{issue.resolvedAt ? " · Resolved " + issueDate(issue.resolvedAt) : ""}
+                      </span>
+                      {issue.photoUrls.length > 0 && (
+                        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {issue.photoUrls.map((url, index) => safeUrl(url) && (
+                            <a key={url} style={{ color: "var(--tk-blue)", font: "600 12px/16px var(--tk-font-sans)" }} href={safeUrl(url)} target="_blank" rel="noopener noreferrer">Photo {index + 1}</a>
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="trip-fact">
                 <span>Company payout</span>
                 <b>
@@ -429,14 +460,25 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
                     View Payout
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  style={{ flex: 1 }}
-                  disabled={actionBusy || !canManage || !selectedTrip.canMarkDelayed || selectedTrip.status === "Delayed"}
-                  onClick={() => updateTripStatus(selectedTrip.id, "Delayed")}
-                >
-                  Mark Delayed
-                </Button>
+                {selectedTrip.isDelayed === true && selectedTrip.delayReason ? (
+                  <Button
+                    variant="outline"
+                    style={{ flex: 1 }}
+                    disabled={actionBusy || !canManage}
+                    onClick={() => void perform("clearDelay", selectedTrip)}
+                  >
+                    Clear Delay
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    style={{ flex: 1 }}
+                    disabled={actionBusy || !canManage || !selectedTrip.canMarkDelayed || selectedTrip.status === "Delayed"}
+                    onClick={() => updateTripStatus(selectedTrip.id, "Delayed")}
+                  >
+                    Mark Delayed
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   style={{ flex: 1 }}
