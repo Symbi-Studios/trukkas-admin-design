@@ -7,7 +7,7 @@ export function TableToolbar({ search, filters, trailing, viewControl, onClear, 
                   padding: '14px var(--tk-card-pad)', ...style }}>
       {search && <div className="tk-table-toolbar-search" style={{ flex: viewControl ? '0 1 300px' : '1 1 280px', minWidth: 200 }}>{search}</div>}
       {filters && <div className="tk-table-toolbar-filters">{filters}{viewControl && onClear && <button type="button" className="tk-clear-filters" onClick={onClear}>Clear all</button>}</div>}
-      <div className="tk-table-toolbar-spacer" style={{ flex: 1 }} />
+      {!viewControl && <div className="tk-table-toolbar-spacer" style={{ flex: 1 }} />}
       {(viewControl || trailing) && <div className="tk-table-toolbar-trailing">{viewControl}{trailing}</div>}
       {(!filters || !viewControl) && onClear && <button type="button" className="tk-clear-filters" onClick={onClear}>Clear all</button>}
     </div>
