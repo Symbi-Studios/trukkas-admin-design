@@ -140,7 +140,21 @@
   cursor: pointer;
 }
 .tabs button span {
-  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--tk-surface-sunk);
+  color: var(--tk-ink-500);
+  font: 600 11px/1 var(--tk-font-sans);
+}
+.tabs .activeTab span {
+  background: var(--tk-blue-soft);
+  color: var(--tk-blue);
 }
 .tabs .activeTab {
   color: var(--tk-blue);
@@ -157,7 +171,7 @@
 }
 .filterWrap {
   position: relative;
-  flex: 1 1 140px;
+  display: inline-flex;
   min-width: 0;
 }
 .filterBar > button {
@@ -537,4 +551,282 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .loadingNoticeDot { animation: none; }
+}
+
+/* ---------- Toolbar: search, filter chips, view toggle, export ---------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--tk-line);
+}
+.toolbarSearch {
+  flex: 0 1 300px;
+  min-width: 220px;
+}
+.toolbarRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.viewToggle {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: var(--tk-surface-sunk);
+}
+.viewToggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tk-ink-500);
+  font: 600 13px/1 var(--tk-font-sans);
+  cursor: pointer;
+}
+.viewToggle button:hover {
+  color: var(--tk-ink-900);
+}
+.viewToggle .viewActive {
+  background: #fff;
+  color: var(--tk-ink-900);
+  box-shadow: 0 1px 2px rgba(0, 8, 36, 0.1);
+}
+.viewToggle button:focus-visible {
+  outline: 2px solid var(--tk-blue);
+  outline-offset: 1px;
+}
+
+.forwarder {
+  display: block;
+  font: 600 13px/18px var(--tk-font-sans);
+  color: var(--tk-ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Board view ---------- */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(268px, 1fr);
+  gap: 14px;
+  padding: 16px 20px 20px;
+  overflow-x: auto;
+  min-height: 420px;
+  background: var(--tk-surface-page, #f7f8fb);
+}
+.boardColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 12px;
+  background: var(--tk-surface-sunk);
+  border: 1px solid var(--tk-line);
+}
+.boardColumnHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 10px;
+}
+.boardCards {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 0 10px 12px;
+  max-height: 640px;
+  overflow-y: auto;
+}
+.boardEmpty {
+  padding: 18px 8px;
+  text-align: center;
+  border: 1.5px dashed var(--tk-line-strong);
+  border-radius: 10px;
+  color: var(--tk-ink-400);
+  font: 500 12px/16px var(--tk-font-sans);
+}
+.boardCard {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--tk-line);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.boardCard:hover {
+  border-color: var(--tk-line-strong);
+  box-shadow: 0 4px 12px rgba(0, 8, 36, 0.08);
+  transform: translateY(-1px);
+}
+.boardCard:focus-visible {
+  outline: 2px solid var(--tk-blue);
+  outline-offset: 2px;
+}
+.boardCardActive {
+  border-color: var(--tk-blue);
+  box-shadow: 0 0 0 3px var(--tk-blue-soft);
+}
+.boardCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.boardCardTop strong {
+  font: 600 13px/18px var(--tk-font-mono);
+  color: var(--tk-ink-900);
+}
+.boardForwarder {
+  font: 500 12px/16px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.boardCardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tk-line);
+  min-width: 0;
+}
+.boardCardFoot > :last-child {
+  min-width: 0;
+  justify-content: flex-end;
+}
+.boardCard :global(.tk-route) {
+  max-width: none;
+}
+.boardNote {
+  padding: 12px 20px;
+  border-top: 1px solid var(--tk-line);
+  color: var(--tk-ink-400);
+  font: 500 12px/16px var(--tk-font-sans);
+}
+
+/* ---------- Drawer extras ---------- */
+.drawerAssignee {
+  padding: 12px 14px;
+  border: 1px solid var(--tk-line);
+  border-radius: 12px;
+}
+.driverList {
+  display: grid;
+  border: 1px solid var(--tk-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.driverRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--tk-line);
+}
+.driverRow:first-child {
+  border-top: 0;
+}
+.driverText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.driverText strong {
+  font: 600 13px/18px var(--tk-font-sans);
+  color: var(--tk-ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.driverText small {
+  font: 400 12px/16px var(--tk-font-sans);
+  color: var(--tk-ink-400);
+}
+.driverMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.drawerTimeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+.drawerTimeline li {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 0 0 14px;
+}
+.drawerTimeline li::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 14px;
+  bottom: 0;
+  border-left: 1.5px solid var(--tk-line);
+}
+.drawerTimeline li:last-child::before {
+  display: none;
+}
+.drawerTimeline li > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+.drawerTimeline strong {
+  font: 600 13px/18px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+}
+.drawerTimeline small {
+  font: 400 12px/16px var(--tk-font-sans);
+  color: var(--tk-ink-400);
+}
+.drawerTimelineDot {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 2px solid var(--tk-line-strong);
+  background: #fff;
+}
+.timelineDone .drawerTimelineDot {
+  border-color: var(--tk-success);
+  background: var(--tk-success);
+}
+.timelineDone strong {
+  color: var(--tk-ink-900);
+}
+
+@media (max-width: 900px) {
+  .toolbarSearch {
+    flex: 1 1 100%;
+  }
+  .toolbarRight {
+    margin-left: 0;
+  }
 }

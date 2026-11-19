@@ -10,10 +10,8 @@ export function TableToolbar({ search, filters, trailing, onClear, style }) {
       <div className="tk-table-toolbar-spacer" style={{ flex: 1 }} />
       {trailing && <div className="tk-table-toolbar-trailing">{trailing}</div>}
       {onClear && (
-        <button type="button" onClick={onClear}
-          style={{ border: 0, background: 'transparent', cursor: 'pointer',
-                   font: '600 13px/1 var(--tk-font-sans)', color: 'var(--tk-orange)' }}>
-          Clear All
+        <button type="button" className="tk-clear-filters" onClick={onClear}>
+          Clear all
         </button>
       )}
     </div>

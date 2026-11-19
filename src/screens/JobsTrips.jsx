@@ -12,15 +12,21 @@ import {
   Banner,
   Button,
   Card,
+  CopyableId,
   DataTable,
+  DrawerFacts,
+  DrawerSection,
   DropdownMenu,
+  FilterSelect,
   Icon,
   IconButton,
   Modal,
   Pagination,
   PageHeader,
+  RouteStack,
   SearchField,
   Select,
+  SideDrawer,
   Skeleton,
   StatCard,
   TextField,
@@ -37,6 +43,7 @@ import {
   useRejectAdminJobDocsMutation,
 } from "../store/features/jobs/jobsApi.js";
 import { useInterveneAdminTriangulationJobMutation } from "../store/features/triangulation/triangulationApi.js";
+import { useGetAdminJobScreenQuery } from "../store/features/jobs/jobDetailApi.js";
 import { createJob } from "../mock/api.js";
 import { statusTone } from "./JobDetail.jsx";
 import { getJobTripCounts, getJobTrips } from "../domain/jobTrips.js";
@@ -146,18 +153,17 @@ function FilterMenu({ open, options, value, onChange }) {
   );
 }
 
-function FilterControl({ name, value, options, menu, setMenu, onChange }) {
+function FilterControl({ name, icon, value, allValue, options, menu, setMenu, onChange }) {
   return (
     <span className={styles.filterWrap}>
-      <button
-        className={styles.filterControl}
-        type="button"
+      <FilterSelect
+        icon={icon}
+        prefix={name}
+        label={value}
+        active={value !== allValue}
         onClick={() => setMenu(menu === name ? null : name)}
-      >
-        <span>{name}</span>
-        <strong>{value}</strong>
-        <Icon name="chevron-down" size={14} />
-      </button>
+        onClear={() => { onChange(allValue); setMenu(null); }}
+      />
       <FilterMenu
         open={menu === name}
         options={options}
@@ -168,6 +174,77 @@ function FilterControl({ name, value, options, menu, setMenu, onChange }) {
         }}
       />
     </span>
+  );
+}
+
+const BOARD_COLUMNS = [
+  ["pendingApproval", "Pending Approval", "warning"],
+  ["bidding", "Bidding", "info"],
+  ["assigned", "Assigned", "purple"],
+  ["inTransit", "In Transit", "info"],
+  ["delivered", "Delivered", "success"],
+  ["cancelled", "Cancelled", "neutral"],
+  ["flagged", "Flagged", "danger"],
+  ["rejected", "Rejected", "danger"],
+];
+
+function AssigneeCell({ job, size = 32, compact = false }) {
+  const company = job.truckingCompany || job.truckCompany;
+  if (!company) {
+    if (compact) return <span className="tk-meta">Unassigned</span>;
+    return <span className="tk-cell-person empty">
+      <span className="tk-cell-placeholder"><Icon name="building-2" size={14} /></span>
+      <span><strong>Not assigned</strong></span>
+    </span>;
+  }
+  const trips = job.assignmentDataAvailable === false || job.tripCounts?.required == null
+    ? null
+    : `${job.tripCounts.assigned} of ${job.tripCounts.required} trip${job.tripCounts.required === 1 ? "" : "s"}`;
+  return <span className="tk-cell-person">
+    <Avatar name={company} src={job.truckingCompanyAvatarUrl || undefined} size={size} square />
+    <span><strong title={company}>{company}</strong>{trips && <small>{trips}</small>}</span>
+  </span>;
+}
+
+function JobBoard({ jobs, selectedJobId, onOpen, tab }) {
+  const columns = BOARD_COLUMNS.filter(([stage]) =>
+    tab === "All Jobs" ? !["flagged", "rejected"].includes(stage) || jobs.some((job) => job.stage === stage) : TAB_API_VALUE[tab] === stage);
+  return (
+    <div className={styles.board}>
+      {columns.map(([stage, label, tone]) => {
+        const items = jobs.filter((job) => job.stage === stage);
+        return (
+          <section className={styles.boardColumn} key={stage} aria-label={label}>
+            <header className={styles.boardColumnHead}>
+              <Badge tone={tone} dot>{label}</Badge>
+              <span className="tk-count-pill">{items.length}</span>
+            </header>
+            <div className={styles.boardCards}>
+              {items.length === 0 && <div className={styles.boardEmpty}>No jobs</div>}
+              {items.map((job) => (
+                <button
+                  type="button"
+                  key={job.id}
+                  className={`${styles.boardCard} ${selectedJobId === job.id ? styles.boardCardActive : ""}`}
+                  onClick={() => onOpen(job.id)}
+                >
+                  <span className={styles.boardCardTop}>
+                    <strong>{job.displayId}</strong>
+                    <span className="tk-cell-strong">{naira(job.displayValue)}</span>
+                  </span>
+                  <span className={styles.boardForwarder}>{job.displayForwarder}</span>
+                  <RouteStack from={job.origin} to={job.destination} />
+                  <span className={styles.boardCardFoot}>
+                    <Badge tone={job.displayType === "Export" ? "success" : "purple"}>{shortType(job.displayType)}</Badge>
+                    <AssigneeCell job={job} size={24} compact />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
@@ -211,153 +288,105 @@ function JobActionMenu({ anchor, items, onClose }) {
   );
 }
 
-function Inspector({ job, onClose, onAction, menu, setMenu, canDeliver }) {
-  if (!job) return null;
-  const timeline = job.timeline.map((event) => ({
+function JobDrawer({ job, onClose, onAction, canDeliver, actionBusy }) {
+  const owner = useSelector((state) => state.auth.admin?.id);
+  const role = useSelector((state) => state.auth.admin?.role);
+  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const detailQuery = useGetAdminJobScreenQuery({ id: job.id, owner, role }, { skip: !authenticated || !job.id, refetchOnMountOrArgChange: true });
+  const detail = detailQuery.error ? null : detailQuery.currentData;
+  const company = job.truckingCompany || job.truckCompany || detail?.truckingCompany || null;
+  const trips = detail?.trips || [];
+  const docs = detail?.documentStatusCounts;
+  const timeline = (job.timeline || []).map((event) => ({
     title: event.title,
-    description: event.timestamp ? new Date(event.timestamp).toLocaleString("en-NG") : "Upcoming",
-    state: event.completed ? "done" : "pending",
+    when: event.timestamp ? new Date(event.timestamp).toLocaleString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Upcoming",
+    done: Boolean(event.completed),
   }));
+  const primaryActions = [
+    job.canValidateDocs && <Button key="approve" icon="circle-check" disabled={actionBusy} onClick={() => onAction("approve", job)}>Approve Job</Button>,
+    job.canRejectDocs && <Button key="reject" variant="danger" icon="circle-x" disabled={actionBusy} onClick={() => onAction("reject", job)}>Reject Documents</Button>,
+    job.canMarkDelivered && canDeliver && <Button key="deliver" variant="outline" icon="circle-check" disabled={actionBusy} onClick={() => onAction("deliver", job)}>Mark Delivered</Button>,
+  ].filter(Boolean);
   return (
-    <aside className={styles.inspector} aria-label={`Selected job ${job.displayId || job.id}`}>
-      <div className={styles.inspectorHead}>
-        <span className={styles.jobTitle}>
-          <Icon name="package" size={16} />
-          {job.displayId || job.id}
-        </span>
-        <IconButton icon="x" label="Close inspector" onClick={onClose} />
-      </div>
-      <Badge tone={statusTone(job.status)} dot>
-        {job.status}
-      </Badge>
-      <section className={styles.inspectorSection}>
-        <h3>Overview</h3>
-        <dl className={styles.detailsList}>
-          <div>
-            <dt>Company</dt>
-            <dd>{job.displayForwarder}</dd>
-          </div>
-          <div>
-            <dt>Trip Type</dt>
-            <dd>
-              <Badge tone="purple">{shortType(job.displayType)}</Badge>
-            </dd>
-          </div>
-          <div>
-            <dt>Route</dt>
-            <dd>{job.displayRoute}</dd>
-          </div>
-          <div>
-            <dt>Cargo</dt>
-            <dd>{job.displayCargo}</dd>
-          </div>
-          <div>
-            <dt>Job Value</dt>
-            <dd>
-              <strong>{naira(job.displayValue)}</strong>
-            </dd>
-          </div>
-          <div>
-            <dt>Created</dt>
-            <dd>{job.displayCreated}</dd>
-          </div>
-          <div>
-            <dt>Trip Fulfilment</dt>
-            <dd><strong>{job.assignmentDataAvailable === false
-              ? "—"
-              : `${job.tripCounts.assigned} of ${job.tripCounts.required} assigned`}</strong></dd>
-          </div>
-        </dl>
-        <div className={styles.requester}>
-          <span>Requested By</span>
-          <Avatar name={job.contactPerson || "—"} size={34} />
-          <span>
-            <strong>{job.contactPerson || "—"}</strong>
-            <small>{job.contactEmail || "Not provided"}</small>
-          </span>
+    <SideDrawer
+      label="Job details"
+      eyebrow="Job"
+      onClose={onClose}
+      title={<CopyableId id={job.displayId || job.id} size="lg" onCopy={(value) => navigator.clipboard?.writeText(value)} />}
+      meta={<>
+        <Badge tone={statusTone(job.status)} dot>{job.status}</Badge>
+        <Badge tone={job.displayType === "Export" ? "success" : "purple"}>{shortType(job.displayType)}</Badge>
+        {job.deliveryHealth && job.deliveryHealth !== job.status && <span className="tk-meta">{job.deliveryHealth}</span>}
+      </>}
+      headerActions={<IconButton icon="maximize-2" label="Open full page" onClick={() => onAction("view", job)} />}
+      footer={<>
+        {primaryActions.length > 0 && <div className="tk-drawer-footer-row">{primaryActions}</div>}
+        <div className="tk-drawer-footer-row">
+          <Button variant="outline" icon="download" disabled={actionBusy} onClick={() => onAction("export", job)}>Export Job Sheet</Button>
+          {job.canCancel && <Button variant="danger" icon="ban" disabled={actionBusy} onClick={() => onAction("cancel", job)}>Cancel Job</Button>}
+          <Button iconRight="maximize-2" onClick={() => onAction("view", job)}>Open Full Page</Button>
         </div>
-      </section>
-      <div className={styles.inspectorActions}>
-        <Button
-          fullWidth
-          iconRight="arrow-right"
-          onClick={() => onAction("view", job)}
-        >
-          View Full Details
-        </Button>
-        <span className={styles.moreWrap}>
-          <Button
-            fullWidth
-            variant="outline"
-            iconRight="chevron-down"
-            onClick={() => setMenu(menu === "more" ? null : "more")}
-          >
-            More Actions
-          </Button>
-          {menu === "more" && (
-            <span className={styles.moreMenu}>
-              <DropdownMenu
-                width={240}
-                items={[
-                  ...(job.canValidateDocs
-                    ? [
-                        {
-                          label: "Approve Job",
-                          icon: "circle-check",
-                          onClick: () => onAction("approve", job),
-                        },
-                      ]
-                    : []),
-                  ...(job.canRejectDocs ? [{
-                    label: "Reject Documents", icon: "circle-x", tone: "danger",
-                    onClick: () => onAction("reject", job),
-                  }] : []),
-                  ...(job.canMarkDelivered && canDeliver
-                    ? [
-                        {
-                          label: "Mark Delivered",
-                          icon: "circle-check",
-                          onClick: () => onAction("deliver", job),
-                        },
-                      ]
-                    : []),
-                  {
-                    label: "Export Job Sheet",
-                    icon: "download",
-                    onClick: () => onAction("export", job),
-                  },
-                  ...(job.canCancel
-                    ? [
-                        { divider: true },
-                        {
-                          label: "Cancel Job",
-                          icon: "ban",
-                          tone: "danger",
-                          onClick: () => onAction("cancel", job),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </span>
-          )}
-        </span>
-      </div>
-      <section className={styles.timelineSection}>
-        <h3>Timeline</h3>
-        <div className={styles.timeline}>
+      </>}
+    >
+      <div className="tk-drawer-card"><RouteStack from={job.origin} to={job.destination} wrap /></div>
+
+      <DrawerSection title="Overview">
+        <DrawerFacts items={[
+          { label: "Forwarder", value: job.displayForwarder },
+          { label: "Requested by", value: job.contactPerson || "—", sub: job.contactEmail || undefined },
+          { label: "Job value", value: naira(job.displayValue) },
+          { label: "Cargo", value: job.displayCargo },
+          { label: "Created", value: job.displayCreated },
+          { label: "Expected delivery", value: job.displayDeadline || "—", sub: job.freeDays != null && job.freeDays >= 0 ? `${job.freeDays} free day${job.freeDays === 1 ? "" : "s"}` : undefined },
+        ]} />
+      </DrawerSection>
+
+      <DrawerSection title="Assigned to">
+        {company ? <div className={styles.drawerAssignee}>
+          <AssigneeCell job={{ ...job, truckingCompany: company }} size={36} />
+        </div> : <div className="tk-drawer-note info"><Icon name="building-2" size={16} /><span>No trucking company has been assigned yet.</span></div>}
+        {company && (detailQuery.isFetching && !detail ? <Skeleton height={88} /> : detailQuery.error ? <Banner tone="warning" title="Unable to load drivers for this job." action={<Button size="sm" variant="outline" onClick={detailQuery.refetch}>Retry</Button>} /> : trips.length > 0 ? (
+          <div className={styles.driverList}>
+            {trips.map((trip) => {
+              const driver = trip.driverName && trip.driverName !== "—" ? trip.driverName : null;
+              return (
+                <div className={styles.driverRow} key={trip.id}>
+                  {driver ? <Avatar name={driver} size={30} /> : <span className="tk-cell-placeholder"><Icon name="user" size={13} /></span>}
+                  <span className={styles.driverText}>
+                    <strong>{driver || company}</strong>
+                    <small>{driver ? (trip.driverPhone && trip.driverPhone !== "—" ? trip.driverPhone : "Driver") : "No separate driver"}</small>
+                  </span>
+                  <span className={styles.driverMeta}>
+                    {trip.truckPlate && trip.truckPlate !== "—" && <span className="tk-plate"><Icon name="truck" size={12} />{trip.truckPlate}</span>}
+                    <Badge tone={statusTone(trip.status)}>{trip.status}</Badge>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : <span className="tk-meta">No trips have been assigned to drivers yet.</span>)}
+      </DrawerSection>
+
+      {docs && docs.total != null && <DrawerSection title="Documents">
+        <DrawerFacts items={[
+          { label: "Approved", value: docs.approved ?? "—" },
+          { label: "Pending review", value: docs.pending ?? "—" },
+          { label: "Rejected", value: docs.rejected ?? "—" },
+          { label: "Total", value: docs.total ?? "—" },
+        ]} />
+      </DrawerSection>}
+
+      {timeline.length > 0 && <DrawerSection title="Timeline">
+        <ol className={styles.drawerTimeline}>
           {timeline.map((item, index) => (
-            <div className={styles.timelineItem} key={`${item.title}-${index}`}>
-              <span className={`${styles.timelineDot} ${styles[item.state]}`} />
-              <span>
-                <strong>{item.title}</strong>
-                <small>{item.description}</small>
-              </span>
-            </div>
+            <li key={`${item.title}-${index}`} className={item.done ? styles.timelineDone : ""}>
+              <span className={styles.drawerTimelineDot} />
+              <span><strong>{item.title}</strong><small>{item.when}</small></span>
+            </li>
           ))}
-        </div>
-      </section>
-    </aside>
+        </ol>
+      </DrawerSection>}
+    </SideDrawer>
   );
 }
 
@@ -444,7 +473,8 @@ export function JobsTrips() {
   const [dateFilter, setDateFilter] = useState("All Dates");
   const [menu, setMenu] = useState(null);
   const [selected, setSelected] = useState([]);
-  const [selectedJobId, setSelectedJobId] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState(null);
+  const [view, setView] = useState("list");
   const [rowMenu, setRowMenu] = useState(null);
   const [toast, setToast] = useState(null);
   const [actionDialog, setActionDialog] = useState(null);
@@ -485,7 +515,7 @@ export function JobsTrips() {
     isFetching: jobsFetching,
     isError: jobsError,
     refetch: refetchJobs,
-  } = useGetAdminJobsQuery({ ...listFilters, page, limit: pageSize });
+  } = useGetAdminJobsQuery({ ...listFilters, page: view === "board" ? 1 : page, limit: view === "board" ? 100 : pageSize });
   const {
     currentData: statsResponse,
     isError: statsError,
@@ -528,14 +558,6 @@ export function JobsTrips() {
     query,
   ]);
   useEffect(() => { setSelected([]); }, [page, pageSize, tab, statusFilter, typeFilter, cargoFilter, originFilter, destinationFilter, dateFilter, query]);
-  useEffect(() => {
-    if (!jobs.length) {
-      if (selectedJobId && selectedJobId !== null) setSelectedJobId("");
-      return;
-    }
-    if (selectedJobId === null) return;
-    if (!jobs.some((job) => job.id === selectedJobId)) setSelectedJobId(jobs[0].id);
-  }, [jobs, selectedJobId]);
 
   const counts = {
     total: statsResponse?.tabs.all ?? null,
@@ -546,6 +568,7 @@ export function JobsTrips() {
     delivered: statsResponse?.tabs.delivered ?? null,
     cancelled: statsResponse?.tabs.cancelled ?? null,
     flagged: statsResponse?.tabs.flagged ?? null,
+    rejected: statsResponse?.tabs.rejected ?? null,
   };
   const origins = useMemo(() => [...new Set(jobs.map((job) => job.origin).filter(Boolean))].sort(), [jobs]);
   const destinations = useMemo(() => [...new Set(jobs.map((job) => job.destination).filter(Boolean))].sort(), [jobs]);
@@ -559,6 +582,7 @@ export function JobsTrips() {
     Delivered: (job) => job.stage === "delivered",
     Cancelled: (job) => job.stage === "cancelled",
     Flagged: (job) => job.stage === "flagged",
+    Rejected: (job) => job.stage === "rejected",
   };
   const filtered = useMemo(
     () =>
@@ -572,6 +596,8 @@ export function JobsTrips() {
   const pageCount = Math.max(1, jobsResponse?.pagination?.totalPages || 1);
   const hasLocalFilters = statusFilter !== "All Statuses" && Boolean(selectedTabFilter || !selectedStatusFilter);
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
+  const filtersActive = typeFilter !== "All Types" || cargoFilter !== "All Cargo" || originFilter !== "All Locations"
+    || destinationFilter !== "All Locations" || dateFilter !== "All Dates" || Boolean(query.trim());
   const statCaption = dateFilter === "All Dates" ? "vs last week" : "vs previous period";
   const card = (key) => statsResponse?.cards[key];
   const statDelta = (key) => card(key)?.changePercent == null ? undefined : `${Math.abs(card(key).changePercent)}%`;
@@ -714,33 +740,31 @@ export function JobsTrips() {
   const columns = [
     {
       key: "id",
-      header: "Job ID",
-      width: 92,
+      header: "Job",
+      width: "14%",
       render: (job) => (
-        <Link
-          to={`/jobs/detail?id=${encodeURIComponent(job.id)}`}
-          className={styles.jobLink}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {job.displayId || job.id}
-        </Link>
-      ),
-    },
-    {
-      key: "company",
-      header: "Company / Requester",
-      width: 170,
-      render: (job) => (
-        <span className={styles.twoLine}>
-          <strong>{job.displayForwarder}</strong>
-          <small>{job.originCountry || "—"}</small>
+        <span className="tk-cell-id">
+          <strong>{job.displayId || job.id}</strong>
+          <small>{job.displayCreated !== "—" ? job.displayCreated.replace(" at ", ", ") : "—"}</small>
         </span>
       ),
     },
     {
+      key: "forwarder",
+      header: "Forwarder",
+      width: "17%",
+      render: (job) => <span className={styles.forwarder} title={job.displayForwarder}>{job.displayForwarder}</span>,
+    },
+    {
+      key: "route",
+      header: "Route",
+      width: "24%",
+      render: (job) => <RouteStack from={job.origin} to={job.destination} />,
+    },
+    {
       key: "type",
-      header: "Trip Type",
-      width: 128,
+      header: "Type",
+      width: "10%",
       render: (job) => (
         <Badge tone={job.displayType === "Export" ? "success" : "purple"}>
           {shortType(job.displayType)}
@@ -748,29 +772,15 @@ export function JobsTrips() {
       ),
     },
     {
-      key: "route",
-      header: "Route",
-      width: 165,
-      render: (job) => <span className={styles.route}>{job.displayRoute}</span>,
-    },
-    {
-      key: "cargo",
-      header: "Cargo",
-      width: 150,
-      render: (job) => <span className={styles.cargo}>{job.displayCargo}</span>,
-    },
-    {
       key: "value",
-      header: "Value (₦)",
-      width: 106,
-      render: (job) => (
-        <strong className={styles.value}>{naira(job.displayValue)}</strong>
-      ),
+      header: "Value",
+      width: "11%",
+      render: (job) => <span className="tk-cell-strong">{naira(job.displayValue)}</span>,
     },
     {
       key: "status",
       header: "Status",
-      width: 112,
+      width: "11%",
       render: (job) => (
         <Badge tone={statusTone(job.status)} dot>
           {job.status}
@@ -780,67 +790,8 @@ export function JobsTrips() {
     {
       key: "assigned",
       header: "Assigned To",
-      width: 130,
-      render: (job) =>
-        job.displayAssignee ? (
-          <span className={styles.assignee}>
-            <Avatar name={job.truckingCompany || job.truckCompany || job.displayAssignee} size={26} />
-            {job.assignmentDataAvailable === false
-              ? <span>{job.displayAssignee}</span>
-              : <span className={styles.twoLine}><strong>{job.tripCounts.assigned} of {job.tripCounts.required} trips</strong><small>{job.truckingCompany || job.truckCompany}</small></span>}
-          </span>
-        ) : (
-          "—"
-        ),
-    },
-    {
-      key: "created",
-      header: "Dates",
-      width: 116,
-      render: (job) => (
-        <span className={styles.dateCell}>
-          {job.displayCreated !== "—" ? (
-            <>
-              <span>{job.displayCreated.replace(" at ", ", ")}</span>
-              <small>Created</small>
-            </>
-          ) : job.displayDeadline ? (
-            <>
-              <span>{job.displayDeadline}</span>
-              <small>Deadline</small>
-              {job.freeDays != null && <small>{job.freeDays} free days</small>}
-            </>
-          ) : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "actions",
-      header: "Actions",
-      width: 54,
-      render: (job) => (
-        <div className={styles.rowMenuWrap}>
-          <IconButton
-            icon="ellipsis"
-            label={`Actions for ${job.displayId || job.id}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              const anchor = event.currentTarget;
-              setRowMenu((current) => current?.id === job.id ? null : { id: job.id, anchor });
-            }}
-          />
-          {rowMenu?.id === job.id && (
-            <JobActionMenu anchor={rowMenu.anchor} onClose={setRowMenu} items={[
-              { label: "View Job Details", icon: "eye", onClick: () => handleAction("view", job) },
-              ...(job.canValidateDocs ? [{ label: "Approve Job", icon: "circle-check", onClick: () => handleAction("approve", job) }] : []),
-              ...(job.canRejectDocs ? [{ label: "Reject Documents", icon: "circle-x", tone: "danger", onClick: () => handleAction("reject", job) }] : []),
-              ...(job.canMarkDelivered && canDeliver ? [{ label: "Mark Delivered", icon: "circle-check", onClick: () => handleAction("deliver", job) }] : []),
-              { label: "Export Job Sheet", icon: "download", onClick: () => handleAction("export", job) },
-              ...(job.canCancel ? [{ divider: true }, { label: "Cancel Job", icon: "ban", tone: "danger", onClick: () => handleAction("cancel", job) }] : []),
-            ]} />
-          )}
-        </div>
-      ),
+      width: "17%",
+      render: (job) => <AssigneeCell job={job} />,
     },
   ];
 
@@ -852,31 +803,6 @@ export function JobsTrips() {
         crumbs={["Jobs & Trips", "Jobs"]}
         title="Jobs"
         description="View, manage and monitor all logistics jobs across Trukkas."
-        actions={<span className={styles.headerActions}>
-          <button
-            className={styles.dateButton}
-            type="button"
-            onClick={() =>
-              setMenu(menu === "Header Date" ? null : "Header Date")
-            }
-          >
-            <Icon name="calendar-days" size={17} />
-            {dateFilter}
-            <Icon name="chevron-down" size={14} />
-          </button>
-          {/* <Button icon="plus" onClick={() => setCreateOpen(true)}>
-            Create Job
-          </Button> */}
-          <FilterMenu
-            open={menu === "Header Date"}
-            options={DATE_OPTIONS}
-            value={dateFilter}
-            onChange={(value) => {
-              setDateFilter(value);
-              setMenu(null);
-            }}
-          />
-        </span>}
       />
       {toast && <Banner tone={toast.tone} title={toast.title} />}
       {jobsFetching && jobsResponse && (
@@ -976,6 +902,7 @@ export function JobsTrips() {
             ["Delivered", counts.delivered],
             ["Cancelled", counts.cancelled],
             ["Flagged", counts.flagged],
+            ["Rejected", counts.rejected],
           ].map(([name, count]) => (
             <button
               type="button"
@@ -983,7 +910,7 @@ export function JobsTrips() {
               key={name}
               onClick={() => setTab(name)}
             >
-              {name} <span>({count ?? "—"})</span>
+              {name}{count != null && <span>{count}</span>}
             </button>
           ))}
         </div>
@@ -994,160 +921,87 @@ export function JobsTrips() {
           </Banner>
         )}
         {tab === "Pending Approval" && pendingDocsError && <Banner tone="warning" title="Unable to load jobs awaiting documents." action={<Button variant="outline" size="sm" onClick={refetchPendingDocs}>Retry</Button>} style={{ margin: "12px 16px 0" }} />}
-        <div className={styles.filterBar}>
-          <FilterControl
-            name="Job Status"
-            value={statusFilter}
-            options={[
-              "All Statuses",
-              "Pending Approval",
-              "Bidding",
-              "Assigned",
-              "In Transit",
-              "Delivered",
-              "Cancelled",
-              "Flagged",
-              "Rejected",
-            ]}
-            menu={menu}
-            setMenu={setMenu}
-            onChange={setStatusFilter}
-          />
-          <FilterControl
-            name="Trip Type"
-            value={typeFilter}
-            options={["All Types", ...REQUEST_TYPES]}
-            menu={menu}
-            setMenu={setMenu}
-            onChange={setTypeFilter}
-          />
-          <FilterControl
-            name="Cargo Type"
-            value={cargoFilter}
-            options={["All Cargo", ...cargoTypes]}
-            menu={menu}
-            setMenu={setMenu}
-            onChange={setCargoFilter}
-          />
-          <FilterControl
-            name="Origin"
-            value={originFilter}
-            options={["All Locations", ...origins]}
-            menu={menu}
-            setMenu={setMenu}
-            onChange={setOriginFilter}
-          />
-          <FilterControl
-            name="Destination"
-            value={destinationFilter}
-            options={["All Locations", ...destinations]}
-            menu={menu}
-            setMenu={setMenu}
-            onChange={setDestinationFilter}
-          />
-          <FilterControl
-            name="Date Range"
-            value={dateFilter}
-            options={DATE_OPTIONS}
-            menu={menu}
-            setMenu={setMenu}
-            onChange={setDateFilter}
-          />
-          <Button
-            variant="outline"
-            icon="list-filter"
-            onClick={() => setMenu(null)}
-          >
-            Filters
-          </Button>
-          <Button variant="ghost" icon="rotate-ccw" onClick={resetFilters}>
-            Reset
-          </Button>
-        </div>
-        <div
-          className={`${styles.mainGrid} ${selectedJob ? "" : styles.noInspector}`}
-        >
-          <div className={styles.tableArea}>
-            <div className={styles.tableTools}>
-              <SearchField
-                placeholder="Search by Job ID, company, route, or cargo…"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-              <Button
-                variant="outline"
-                icon="download"
-                disabled={exportingJobs || exportingSheet}
-                onClick={() => selected.length
-                  ? exportRows(jobs.filter((job) => selected.includes(job.id)))
-                  : void exportAllJobs()}
-              >
-                {exportingJobs ? "Exporting…" : "Export"}
-              </Button>
-              <IconButton icon="list" label="List view" tone="outline" />
-              <IconButton icon="grid-2x2" label="Grid view" tone="outline" />
-            </div>
-            {selected.length > 0 && (
-              <div className={styles.bulkBar}>
-                <strong>{selected.length} selected</strong>
-                <button
-                  type="button"
-                  onClick={() =>
-                    exportRows(jobs.filter((job) => selected.includes(job.id)))
-                  }
-                >
-                  Export selected
-                </button>
-                <button type="button" onClick={() => setSelected([])}>
-                  Clear
-                </button>
-              </div>
-            )}
-            <div className={styles.tableShell}>
-              <DataTable
-                selectable
-                selected={selected}
-                onSelect={setSelected}
-                rows={paged}
-                rowKey={(job) => job.id}
-                columns={columns}
-                tableLayout="fixed"
-                onRowClick={(job) => setSelectedJobId(job.id)}
-              />
-            </div>
-            {!jobsBusy && !jobsError && filtered.length === 0 && (
-              <div className={styles.empty}>
-                No jobs match the selected filters.
-              </div>
-            )}
-            <Pagination
-              page={page}
-              pageCount={pageCount}
-              pageSize={pageSize}
-              total={hasLocalFilters ? undefined : jobsResponse?.pagination?.total ?? filtered.length}
-              onPage={(next) =>
-                setPage(
-                  Math.min(Math.max(1, next), pageCount),
-                )
-              }
-              onPageSize={(size) => {
-                setPageSize(size);
-                setPage(1);
-              }}
+        <div className={styles.toolbar}>
+          <div className={styles.toolbarSearch}>
+            <SearchField
+              placeholder="Search by job ID, forwarder, route or cargo…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          {selectedJob && (
-            <Inspector
-              job={selectedJob}
-              onClose={() => setSelectedJobId(null)}
-              onAction={handleAction}
-              menu={menu}
-              setMenu={setMenu}
-              canDeliver={canDeliver}
-            />
-          )}
+          <div className="tk-list-toolbar-filters" role="group" aria-label="Filter jobs">
+            <FilterControl name="Type" icon="route" value={typeFilter} allValue="All Types" options={["All Types", ...REQUEST_TYPES]} menu={menu} setMenu={setMenu} onChange={setTypeFilter} />
+            <FilterControl name="Cargo" icon="package" value={cargoFilter} allValue="All Cargo" options={["All Cargo", ...cargoTypes]} menu={menu} setMenu={setMenu} onChange={setCargoFilter} />
+            <FilterControl name="Origin" icon="map-pin" value={originFilter} allValue="All Locations" options={["All Locations", ...origins]} menu={menu} setMenu={setMenu} onChange={setOriginFilter} />
+            <FilterControl name="Destination" icon="flag" value={destinationFilter} allValue="All Locations" options={["All Locations", ...destinations]} menu={menu} setMenu={setMenu} onChange={setDestinationFilter} />
+            <FilterControl name="Date" icon="calendar" value={dateFilter} allValue="All Dates" options={DATE_OPTIONS} menu={menu} setMenu={setMenu} onChange={setDateFilter} />
+            {filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}
+          </div>
+          <div className={styles.toolbarRight}>
+            <div className={styles.viewToggle} role="group" aria-label="View">
+              <button type="button" aria-pressed={view === "list"} className={view === "list" ? styles.viewActive : ""} onClick={() => setView("list")}>
+                <Icon name="list" size={15} /> List
+              </button>
+              <button type="button" aria-pressed={view === "board"} className={view === "board" ? styles.viewActive : ""} onClick={() => { setView("board"); setSelected([]); }}>
+                <Icon name="square-kanban" size={15} /> Board
+              </button>
+            </div>
+            <Button
+              variant="outline"
+              icon="download"
+              disabled={exportingJobs || exportingSheet}
+              onClick={() => selected.length
+                ? exportRows(jobs.filter((job) => selected.includes(job.id)))
+                : void exportAllJobs()}
+            >
+              {exportingJobs ? "Exporting…" : selected.length ? `Export ${selected.length}` : "Export"}
+            </Button>
+          </div>
         </div>
+        {view === "list" && selected.length > 0 && (
+          <div className={styles.bulkBar}>
+            <strong>{selected.length} selected</strong>
+            <button type="button" onClick={() => exportRows(jobs.filter((job) => selected.includes(job.id)))}>Export selected</button>
+            <button type="button" onClick={() => setSelected([])}>Clear</button>
+          </div>
+        )}
+        {view === "list" ? <>
+          <DataTable
+            selectable
+            selected={selected}
+            onSelect={setSelected}
+            rows={paged}
+            rowKey={(job) => job.id}
+            columns={columns}
+            onRowClick={(job) => setSelectedJobId(job.id)}
+          />
+          {!jobsBusy && !jobsError && filtered.length === 0 && (
+            <div className={styles.empty}>No jobs match the selected filters.</div>
+          )}
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            total={hasLocalFilters ? undefined : jobsResponse?.pagination?.total ?? filtered.length}
+            onPage={(next) => setPage(Math.min(Math.max(1, next), pageCount))}
+            onPageSize={(size) => { setPageSize(size); setPage(1); }}
+          />
+        </> : <>
+          <JobBoard jobs={filtered} selectedJobId={selectedJobId} onOpen={setSelectedJobId} tab={tab} />
+          {(jobsResponse?.pagination?.total ?? 0) > rawJobs.length && (
+            <div className={styles.boardNote}>Showing the {rawJobs.length} most recent of {jobsResponse.pagination.total} jobs. Use filters or the list view to see the rest.</div>
+          )}
+        </>}
       </Card>
+      {selectedJob && (
+        <JobDrawer
+          job={selectedJob}
+          onClose={() => setSelectedJobId(null)}
+          onAction={handleAction}
+          canDeliver={canDeliver}
+          actionBusy={actionBusy}
+        />
+      )}
       <Modal
         open={Boolean(actionDialog)}
         onClose={() => { if (!actionBusy) setActionDialog(null); }}
