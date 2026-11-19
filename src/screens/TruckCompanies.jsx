@@ -4,7 +4,27 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
-import { Avatar, Badge, Banner, Button, Card, DataTable, DropdownMenu, Icon, IconButton, Modal, PageHeader, Pagination, SearchField, Select, Skeleton, StatCard, Tabs, TextField } from '../ds.js';
+import {
+  Avatar,
+  Badge,
+  Banner,
+  Button,
+  Card,
+  DataTable,
+  DropdownMenu,
+  Icon,
+  IconButton,
+  Modal,
+  PageHeader,
+  Pagination,
+  SearchField,
+  Select,
+  Skeleton,
+  StatCard,
+  Tabs,
+  TextField,
+  StatsPanel,
+} from '../ds.js';
 import { companyError, useGetAdminCompaniesQuery, useGetAdminPendingCompaniesQuery, useGetAdminCompanyStatsQuery, useGetAdminCompanyPerformanceQuery, useCreateAdminCompanyMutation } from '../store/features/companies/companiesApi.js';
 import { useResetAdminCompanyScreenVerificationMutation } from '../store/features/companies/companyScreenApi.js';
 import { CompaniesLoading } from './CompaniesLoading.jsx';
@@ -99,19 +119,21 @@ function CompaniesDirectory() {
   }
   if (!directoryQuery.currentData && (directoryQuery.isLoading || directoryQuery.isFetching)) return <CompaniesLoading />;
   return <div className="tc-page">
-    <PageHeader crumbs={['Companies', 'Trucking Companies']} title="Trucking Companies" description="Review, verify and manage all registered trucking companies on Trukkas." actions={<><Button variant="outline" icon="download" disabled={directoryQuery.isFetching || Boolean(directoryQuery.error)} onClick={() => downloadCsv(filtered)}>Export</Button><Button icon="plus" onClick={() => { setCreateError(null); setAddOpen(true); }}>Add Company</Button></>} />
+    <PageHeader crumbs={['Companies', 'Trucking Companies']} title="Trucking Companies" description="Review, verify and manage all registered trucking companies on Trukkas." actions={<Button icon="plus" onClick={() => { setCreateError(null); setAddOpen(true); }}>Add Company</Button>} />
     {directoryQuery.error && <Banner tone="danger" title="Unable to load companies">{companyError(directoryQuery.error)}<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button></Banner>}
     {pendingQuery.error && <Banner tone="warning" title="Pending company information unavailable">{companyError(pendingQuery.error)}<Button variant="outline" onClick={pendingQuery.refetch}>Retry</Button></Banner>}
     {payoutsQuery.error && <Banner tone="warning" title="Company payout summary unavailable">{companyError(payoutsQuery.error)}<Button variant="outline" onClick={payoutsQuery.refetch}>Retry</Button></Banner>}
     {companies.some((company) => company.profileUnavailable) && <Banner tone="warning" title="Some company details unavailable">Some company profiles could not be loaded. RC numbers, addresses, joined dates and verification status may be incomplete.<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button></Banner>}
     {notice && <Banner tone="info" title="Companies">{notice}</Banner>}
     {directoryQuery.isFetching && <DriverLoadingNotice>Refreshing companies…</DriverLoadingNotice>}
+    <StatsPanel stack fixedLabel="All time" fixedHint="Company totals cover all time; the trucking company stats API can’t be filtered by date yet.">
     <div className="tc-stat-grid tc-stat-grid-primary">
       <StatCard icon="building-2" label="Total Companies" value={value(stats.total)} delta={comparison('total').delta} direction={comparison('total').direction} caption="vs last month" /><StatCard icon="truck" tint="green" label="Active Companies" value={value(stats.active)} delta={comparison('active').delta} direction={comparison('active').direction} caption="vs last month" /><StatCard icon="shield-check" label="Verified Companies" value={value(stats.verified)} delta={comparison('verified').delta} direction={comparison('verified').direction} caption="vs last month" /><StatCard icon="hourglass" tint="amber" label="Pending Review" value={value(stats.pending)} delta={comparison('pending').delta} direction={comparison('pending').direction} caption="vs last month" /><StatCard icon="ban" tint="red" label="Suspended Companies" value={value(stats.suspended)} delta={comparison('suspended').delta} direction={comparison('suspended').direction} caption="vs last month" />
     </div>
     <div className="tc-stat-grid tc-stat-grid-secondary"><StatCard icon="truck" tint="navy" label="Total Trucks" value={value(stats.trucks)} delta={comparison('trucks').delta} direction={comparison('trucks').direction} caption="vs last month" /><StatCard icon="users" label="Total Drivers" value={value(stats.drivers)} delta={comparison('drivers').delta} direction={comparison('drivers').direction} caption="vs last month" /><StatCard icon="truck" tint="green" label="Active Trucks" value={value(stats.activeTrucks)} delta={comparison('activeTrucks').delta} direction={comparison('activeTrucks').direction} caption="vs last month" /><StatCard icon="wallet" tint="amber" label="Paid Out Amount" value={payoutsQuery.isFetching ? <Skeleton as="span" width={90} height={23} /> : paidOut == null ? '—' : `₦${paidOut.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} delta={comparison('paidOut').delta} direction={comparison('paidOut').direction} caption="vs last month" /></div>
+    </StatsPanel>
     <Tabs value={tab} onChange={(next) => { setTab(next); setPage(1); setSelected([]); }} items={tabs} />
-    <Card style={{ padding: 'var(--tk-space-3)' }}><div className="tc-filters"><SearchField value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search by company name, RC number, email, phone..." /><Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} options={['All Statuses', 'Active', 'Inactive', 'Suspended']} /><Select value={location} onChange={(event) => { setLocation(event.target.value); setPage(1); }} options={['All Locations', ...locations]} /><Select value={fleet} onChange={(event) => { setFleet(event.target.value); setPage(1); }} options={['All Fleet Sizes', '1–15 trucks', '16–30 trucks', '31+ trucks']} /><Button variant="outline" icon="sliders-horizontal" onClick={() => { setStatus('All Statuses'); setLocation('All Locations'); setFleet('All Fleet Sizes'); setPage(1); }}>Filters</Button></div></Card>
+    <Card style={{ padding: 'var(--tk-space-3)' }}><div className="tc-filters"><SearchField value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search by company name, RC number, email, phone..." /><Button variant="outline" icon="download" disabled={directoryQuery.isFetching || Boolean(directoryQuery.error)} onClick={() => downloadCsv(filtered)}>Export</Button><Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} options={['All Statuses', 'Active', 'Inactive', 'Suspended']} /><Select value={location} onChange={(event) => { setLocation(event.target.value); setPage(1); }} options={['All Locations', ...locations]} /><Select value={fleet} onChange={(event) => { setFleet(event.target.value); setPage(1); }} options={['All Fleet Sizes', '1–15 trucks', '16–30 trucks', '31+ trucks']} /><Button variant="outline" icon="sliders-horizontal" onClick={() => { setStatus('All Statuses'); setLocation('All Locations'); setFleet('All Fleet Sizes'); setPage(1); }}>Filters</Button></div></Card>
     <div className="tc-content-grid"><Card pad="none">{directoryQuery.isFetching ? <DriverTableLoading columns={9} label="Loading companies" /> : !directoryQuery.error && <DataTable rows={visible} rowKey={(row) => row.id} selectable selected={selected} onSelect={setSelected} onRowClick={(row) => navigate(detailPath(row.id))} coloredHeader columns={[
       { key: 'company', header: 'Company', render: (row) => <span className="tc-company-cell"><Avatar name={row.name} size={36} square /><span><strong>{row.name}</strong><small>{row.regNo || '—'}</small></span></span> },
       { key: 'contact', header: 'Contact Person', render: (row) => <span className="tc-two-line"><strong>{row.contactName || '—'}</strong><small>{row.contactPhone || '—'}</small></span> }, { key: 'location', header: 'Location', render: (row) => row.location || '—' },

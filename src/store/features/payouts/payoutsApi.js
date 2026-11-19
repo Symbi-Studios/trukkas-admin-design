@@ -347,7 +347,7 @@ export const payoutsApi = baseApi.enhanceEndpoints({ addTagTypes: payoutTags }).
   endpoints: (builder) => ({
     getAdminPayoutDirectory: builder.query({ serializeQueryArgs: serializePayoutQuery, queryFn: (_args, api, _options, baseQuery) => payoutDirectory(baseQuery, api), providesTags: payoutTags }),
     getAdminPayoutSummary: builder.query({
-      query: () => ({ url: '/admin/payouts/summary' }),
+      query: ({ dateFrom, dateTo } = {}) => ({ url: '/admin/payouts/summary', params: dateFrom && dateTo ? { dateFrom, dateTo } : undefined }),
       transformResponse: (response) => {
         const dto = record(unwrapApiResponseData(response)), ngn = dto.scope?.currency === 'NGN';
         const count = (value) => Number.isSafeInteger(number(value)) && number(value) >= 0 ? number(value) : null;

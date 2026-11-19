@@ -23,6 +23,7 @@ import {
   TextField,
   Select,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
 import {
   useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageRulesQuery, useUpdateAdminDemurrageRulesMutation, useLazyGetAdminDemurrageBulkCalculationQuery,
@@ -209,13 +210,8 @@ function DemurrageScreen() {
         crumbs={["Finance", "Demurrage"]}
         title="Demurrage"
         description="Track and manage demurrage and detention charges across all shipments and containers."
-        actions={
-          <Button icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>
-            Export Report
-          </Button>
-        }
       />
-      <div className={styles.stats}>
+      <StatsPanel fixedLabel="All time" fixedHint="Demurrage totals cover all time; the demurrage stats API can’t be filtered by date yet.">
         <StatCard
           icon="calendar-x"
           tint="red"
@@ -252,7 +248,7 @@ function DemurrageScreen() {
           value={metric(summary.disputes)}
           caption={`${money(summary.disputeAmount)} In Dispute`}
         />
-      </div>
+      </StatsPanel>
       <div className="grid grid-cols-[minmax(0,1fr)_310px] gap-4 items-start max-[1200px]:grid-cols-1">
         <div className="grid grid-cols-1 gap-3.5 content-start min-w-0">
           <SectionCard title="" pad="none">
@@ -281,6 +277,7 @@ function DemurrageScreen() {
                   setPage(1);
                 }}
               />
+              <Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button>
               <CustomSelect
                 className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
                 aria-label="Status filter"

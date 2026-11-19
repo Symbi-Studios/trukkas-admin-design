@@ -6,10 +6,31 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
 import {
-  PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, FilterSelect,
-  DataTable, Pagination, Badge, Avatar, Tag, DropdownMenu, IconButton, Modal, TextField, Select,
-  DonutChart, LegendList, StatusDot, Skeleton, ActivityFeed,
+  PageHeader,
+  Button,
+  StatCard,
+  SectionCard,
+  TableToolbar,
+  SearchField,
+  FilterSelect,
+  DataTable,
+  Pagination,
+  Badge,
+  Avatar,
+  Tag,
+  DropdownMenu,
+  IconButton,
+  Modal,
+  TextField,
+  Select,
+  DonutChart,
+  LegendList,
+  StatusDot,
+  Skeleton,
+  ActivityFeed,
+  StatsPanel,
 } from '../ds.js';
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
   useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useRenameManagedUserMutation, useCreateManagedAdminMutation,
   managedUserSummary, managedUserRoleChart, managedUserStatusChart, managedUsersCsv, managedUserMatchesRole, useGetUserManagementRecentActivityQuery,
@@ -50,10 +71,12 @@ export function UserManagement() {
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const includeAdmins = admin?.role === 'SUPER_ADMIN';
   const query = useGetUserManagementDirectoryQuery({ includeAdmins, owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const statsQuery = useGetUserManagementStatsQuery({ owner: admin?.id, includeAdmins }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  const statsQuery = useGetUserManagementStatsQuery({ owner: admin?.id, includeAdmins, ...statsRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const directory = !authenticated || query.error ? null : query.currentData;
   const users = useMemo(() => directory?.rows || [], [directory]);
-  const usersSummary = managedUserSummary(directory?.rows, !authenticated || statsQuery.error ? null : statsQuery.currentData, includeAdmins);
+  const usersSummary = managedUserSummary(directory?.rows, !authenticated || statsQuery.error ? null : statsQuery.currentData, includeAdmins, statsPeriod(statsPeriodKey).vs);
   const usersByRole = managedUserRoleChart(directory?.rows, directory?.adminsIncluded, statsQuery.error ? null : statsQuery.currentData);
   const usersByStatus = managedUserStatusChart(directory?.rows, usersSummary, statsQuery.error ? null : statsQuery.currentData);
   const [renameUser, editState] = useRenameManagedUserMutation();
@@ -163,11 +186,10 @@ export function UserManagement() {
         description="Manage users, view their roles, permissions and account status."
         actions={<>
           <Button variant="outline" icon="upload" onClick={() => operations.open('import')}>Import Users</Button>
-          <Button variant="outline" icon="download" onClick={exportUsers}>Export Users</Button>
           <Button icon="plus" onClick={() => setAddOpen(true)}>Add New User</Button>
         </>} />
 
-      <div className={styles.stats}>
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <StatCard icon="users-round" tint="amber" label="Total Users" value={metric(usersSummary.total)}
           delta={usersSummary.totalCaption} direction={usersSummary.totalDirection} />
         <StatCard icon="shield-check" tint="green" label="Active Users" value={metric(usersSummary.active)}
@@ -178,7 +200,7 @@ export function UserManagement() {
           delta={usersSummary.lockedCaption} direction={usersSummary.lockedDirection} />
         <StatCard icon="user-round-plus" tint="blue" label="New This Month" value={metric(usersSummary.newThisMonth)}
           delta={usersSummary.newThisMonthCaption} direction={usersSummary.newThisMonthDirection} />
-      </div>
+      </StatsPanel>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="" pad="none">
@@ -192,8 +214,8 @@ export function UserManagement() {
                 onChange={(v) => { setStatus(v); setPage(1); }} />
               <FilterButton value={entity} options={['All Entities', ...entities]} active={entity !== 'All Entities'}
                 onChange={(v) => { setEntity(v); setPage(1); }} />
-              <Button variant="outline" icon="list-filter" onClick={() => unavailable('More Filters')}>More Filters</Button>
             </>}
+            trailing={<Button variant="outline" icon="download" onClick={exportUsers}>Export</Button>}
             onClear={resetFilters} />
 
           {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}

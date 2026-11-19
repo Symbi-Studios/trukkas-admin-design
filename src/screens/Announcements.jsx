@@ -21,7 +21,9 @@ import {
   Icon,
   DropdownMenu,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import { useGetAdminAnnouncementDirectoryQuery, useGetAdminAnnouncementStatsQuery, announcementCount, announcementDetailUrl, announcementEditUrl, announcementCopyUrl, ANNOUNCEMENT_STATUSES } from "../store/features/announcements/announcementsApi.js";
 import { useAnnouncementOperations } from '../store/features/announcements/useAnnouncementOperations.js';
 import { AnnouncementReasonDialog } from './AnnouncementDialogs.jsx';
@@ -93,7 +95,8 @@ export function Announcements() {
   const menuAnchor = useRef(null);
   const operations = useAnnouncementOperations();
   const [reasonDialog, setReasonDialog] = useState(null);
-  const period = useMemo(() => { const now = Date.now(); return { dateFrom: new Date(now - 30 * 86400000).toISOString(), dateTo: new Date(now).toISOString() }; }, []);
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const period = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const directory = useGetAdminAnnouncementDirectoryQuery({ owner }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const countsQuery = useGetAdminAnnouncementStatsQuery({ owner, ...period }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const tabStatus = tab === 'All Announcements' ? null : ANNOUNCEMENT_STATUSES[tab === 'Drafts' ? 'Draft' : tab];
@@ -157,20 +160,13 @@ export function Announcements() {
         description="Create, manage and broadcast important updates to users."
         actions={
           <>
-            <Button
-              variant="outline"
-              icon="download"
-              onClick={() => { if (!available || loading) { window.alert(source.error ? getApiErrorMessage(source.error) : 'The complete announcement results are unavailable for export.'); return; } csvExport(filtered); }}
-            >
-              Export
-            </Button>
             <Button icon="plus" onClick={() => navigate("/announcements/new")}>
               New Announcement
             </Button>
           </>
         }
       />
-      <div className="engagement-stats">
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <StatCard
           icon="megaphone"
           label="Total Announcements"
@@ -205,7 +201,7 @@ export function Announcements() {
           direction={counts?.totalViews?.direction ?? null}
           caption="from last 30 days"
         />
-      </div>
+      </StatsPanel>
       <div className="engagement-layout">
         <SectionCard title="" pad="none">
           <Tabs
@@ -234,6 +230,13 @@ export function Announcements() {
                 setPage(1);
               }}
             />
+            <Button style={{ flex: "0 0 auto" }}
+              variant="outline"
+              icon="download"
+              onClick={() => { if (!available || loading) { window.alert(source.error ? getApiErrorMessage(source.error) : 'The complete announcement results are unavailable for export.'); return; } csvExport(filtered); }}
+            >
+              Export
+            </Button>
             <CustomSelect
               aria-label="Status filter"
               className="engagement-select"

@@ -26,7 +26,9 @@ import {
   FilterSelect,
   EmptyState,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
   useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery,
   useGetAdminEscrowLedgerQuery, useGetAdminEscrowDisputesQuery,
@@ -112,7 +114,9 @@ function WalletScreen() {
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
-  const overviewQuery = useGetAdminEscrowOverviewQuery({ owner, role }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  const overviewQuery = useGetAdminEscrowOverviewQuery({ owner, role, ...statsRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const registerQuery = useGetAdminEscrowRegisterQuery({ owner, role }, { skip: !authenticated || !["Escrow Overview", "Holds"].includes(tab), refetchOnMountOrArgChange: true });
   const releasesQuery = useGetAdminEscrowReleasesQuery({ owner, role }, { skip: !authenticated || !["Escrow Overview", "Releases"].includes(tab), refetchOnMountOrArgChange: true });
   const ledgerQuery = useGetAdminEscrowLedgerQuery({ owner, role }, { skip: !authenticated || tab !== "Transactions", refetchOnMountOrArgChange: true });
@@ -140,10 +144,6 @@ function WalletScreen() {
         description="Secure funds in escrow and manage holds, releases, and settlements."
         actions={
           <>
-            <FilterSelect label="—" icon="calendar" />
-            <Button variant="outline" icon="filter">
-              Filters
-            </Button>
             <Button icon="plus" onClick={() => setModal("add")}>
               Add Funds
             </Button>
@@ -151,13 +151,7 @@ function WalletScreen() {
         }
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "var(--tk-space-4)",
-        }}
-      >
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey} columns={3}>
         <StatCard
           icon="wallet"
           tint="navy"
@@ -208,7 +202,7 @@ function WalletScreen() {
           direction="down"
           caption="—"
         />
-      </div>
+      </StatsPanel>
 
       <div
         style={{

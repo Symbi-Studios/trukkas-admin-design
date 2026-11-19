@@ -28,7 +28,9 @@ import {
   EmptyState,
   FilterSelect,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodDates, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
   useGetAdminTransactionLedgerQuery, useRetryAdminTransactionMutation, useReverseAdminTransactionMutation,
   useGetAdminTransactionStatsQuery, useLazyGetAdminTransactionDetailQuery, useLazyGetAdminTransactionReceiptQuery, useLazyGetAdminTransactionReportQuery, downloadTransactionPdf,
@@ -268,11 +270,15 @@ export function Transactions() {
   const [menuFor, setMenuFor] = useState(null);
   const [selected, setSelected] = useState([]);
 
-  const statsQuery = useGetAdminTransactionStatsQuery({ from: applied.from, to: applied.to });
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsDates = useMemo(() => statsPeriodDates(statsPeriodKey), [statsPeriodKey]);
+  const statsQuery = useGetAdminTransactionStatsQuery({ from: statsDates.from, to: statsDates.to });
   const stats = statsQuery.error ? null : statsQuery.currentData;
   const insights = useMemo(() => transactionInsights(ledger?.rows, applied.from, applied.to, stats), [ledger, applied.from, applied.to, stats]);
-  const transactionSummary = insights.summary;
-  const transactionVolumeBreakdown = insights.volume;
+  // The stat cards and volume breakdown follow the stats period; the table and its filters keep their own dates.
+  const statsInsights = useMemo(() => transactionInsights(ledger?.rows, statsDates.from, statsDates.to, stats), [ledger, statsDates.from, statsDates.to, stats]);
+  const transactionSummary = statsInsights.summary;
+  const transactionVolumeBreakdown = statsInsights.volume;
   const transactionStatusBreakdown = insights.statuses;
   const transactionAlerts = insights.alerts;
   const metric = (value) => (!ledger && ledgerQuery.isFetching) || (!stats && statsQuery.isFetching) ? <Skeleton as="span" width={54} height={23} /> : value;
@@ -412,43 +418,9 @@ export function Transactions() {
         crumbs={["Business & Finance", "Transactions"]}
         title="Transactions"
         description="Track all money movements across escrow, wallets, settlements and payouts."
-        actions={
-          <>
-            <DateRangeButton
-              value={dateLabel}
-              presets={datePresets}
-              onChange={({ from, to }) => {
-                setDraft((d) => ({ ...d, from, to }));
-                setApplied((a) => ({ ...a, from, to }));
-                setPage(1);
-              }}
-            />
-            <Button
-              variant="outline"
-              icon="filter"
-              onClick={() => filtersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            >
-              Filters
-            </Button>
-            <Button
-              variant="outline"
-              icon="download"
-              disabled={!ledger || ledgerQuery.isFetching}
-              onClick={() =>
-                downloadCsv(
-                  selected.length
-                    ? filtered.filter((r) => selected.includes(r.id))
-                    : filtered,
-                )
-              }
-            >
-              Export
-            </Button>
-          </>
-        }
       />
 
-      <div className={styles.stats}>
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <StatCard
           icon="receipt"
           tint="navy"
@@ -499,7 +471,7 @@ export function Transactions() {
           direction="down"
           caption={transactionSummary.comparisonCaption}
         />
-      </div>
+      </StatsPanel>
 
       <div
         className={styles.layout}
@@ -592,6 +564,15 @@ export function Transactions() {
             }
             trailing={
               <>
+                <DateRangeButton
+                  value={dateLabel}
+                  presets={datePresets}
+                  onChange={({ from, to }) => {
+                    setDraft((d) => ({ ...d, from, to }));
+                    setApplied((a) => ({ ...a, from, to }));
+                    setPage(1);
+                  }}
+                />
                 <Button
                   variant="outline"
                   icon="rotate-ccw"
@@ -601,6 +582,14 @@ export function Transactions() {
                 </Button>
                 <Button icon="check" onClick={handleApply}>
                   Apply
+                </Button>
+                <Button
+                  variant="outline"
+                  icon="download"
+                  disabled={!ledger || ledgerQuery.isFetching}
+                  onClick={() => downloadCsv(selected.length ? filtered.filter((r) => selected.includes(r.id)) : filtered)}
+                >
+                  Export
                 </Button>
               </>
             }

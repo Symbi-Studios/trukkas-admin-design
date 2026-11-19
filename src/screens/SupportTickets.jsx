@@ -24,6 +24,7 @@ import {
   TextField,
   Textarea,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
 import {
   useGetAdminSupportTicketDirectoryQuery, useGetAdminSupportTicketStatsQuery, useGetAdminTicketAgentsQuery,
@@ -118,7 +119,7 @@ export function SupportTickets() {
           </Button>
         }
       />
-      <div className="support-stats">
+      <StatsPanel fixedLabel="All time" fixedHint="Ticket totals cover all time; the support stats API can’t be filtered by date yet.">
         <StatCard
           icon="ticket"
           label="Total Tickets"
@@ -163,7 +164,7 @@ export function SupportTickets() {
           direction={summary.changes.resolved.direction}
           caption="from last 7 days"
         />
-      </div>
+      </StatsPanel>
       <SectionCard title="" pad="none">
         <div className="support-toolbar">
           <SearchField

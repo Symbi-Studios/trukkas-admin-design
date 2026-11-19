@@ -310,9 +310,9 @@ export const feesApi = baseApi.enhanceEndpoints({ addTagTypes: changedTags }).in
   endpoints: (builder) => ({
     getAdminFeeRevenue: builder.query({ query: () => ({ url: '/admin/overview' }), transformResponse: adaptAdminFeeRevenue, providesTags: ['AdminFeeRevenue'] }),
     getAdminFeeSummary: builder.query({
-      async queryFn({ period = 'month' } = {}, _api, _options, baseQuery) {
+      async queryFn({ period = 'month', dateFrom, dateTo } = {}, _api, _options, baseQuery) {
         if (!validPeriod(period)) return failure('Select a supported fee summary period.');
-        const result = await baseQuery({ url: '/admin/fees/summary', params: { period } });
+        const result = await baseQuery({ url: '/admin/fees/summary', params: dateFrom && dateTo ? { period, dateFrom, dateTo } : { period } });
         return result.error ? result : { data: adaptFeeSummary(result.data) };
       }, providesTags: ['AdminFeeSummary'],
     }),

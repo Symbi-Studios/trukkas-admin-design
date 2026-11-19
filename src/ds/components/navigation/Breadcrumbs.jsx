@@ -1,24 +1,46 @@
+'use client';
 import React from 'react';
 import { Icon } from '../../assets/icons/Icon.jsx';
+import { Link } from '../../../router.js';
+import { NAV } from '../../../nav.js';
 
-export function Breadcrumbs({ items = [], style }) {
+const PAGE_PATHS = new Map(NAV.flatMap((group) => group.items.map((item) => [item.label.toLowerCase(), '/' + item.id])));
+
+/** Resolve a crumb to { label, to?, onClick? }. Plain strings that match a sidebar page become links. */
+function resolve(item) {
+  if (item && typeof item === 'object') return item;
+  const to = PAGE_PATHS.get(String(item).toLowerCase());
+  return to ? { label: item, to } : { label: item };
+}
+
+/**
+ * Home › Section › Page › Current. Earlier crumbs link when they have `to`, `href` or `onClick`
+ * (or are a sidebar page name); section names and the current page are plain text.
+ */
+export function Breadcrumbs({ items = [], home = true, style }) {
+  const crumbs = items.map(resolve);
   return (
-    <nav style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', ...style }}>
-      {items.map((it, i) => {
-        const last = i === items.length - 1;
-        const label = typeof it === 'string' ? it : it.label;
-        return (
-          <React.Fragment key={label + i}>
-            {i > 0 && <Icon name="chevron-right" size={14} color="var(--tk-ink-300)" />}
-            <span style={{ font: (last ? 600 : 400) + ' 13px/18px var(--tk-font-sans)',
-                           color: last ? 'var(--tk-ink-900)' : 'var(--tk-ink-400)',
-                           cursor: last ? 'default' : 'pointer' }}
-                  onClick={() => !last && typeof it === 'object' && it.onClick?.()}>
-              {label}
-            </span>
-          </React.Fragment>
-        );
-      })}
+    <nav className="tk-breadcrumbs" aria-label="Breadcrumb" style={style}>
+      <ol>
+        {home && (
+          <li>
+            <Link to="/dashboard" className="tk-breadcrumb-home" aria-label="Dashboard"><Icon name="house" size={14} /></Link>
+          </li>
+        )}
+        {crumbs.map((crumb, i) => {
+          const last = i === crumbs.length - 1;
+          const href = crumb.to || crumb.href;
+          return (
+            <li key={crumb.label + i}>
+              {(home || i > 0) && <Icon name="chevron-right" size={13} className="tk-breadcrumb-sep" />}
+              {last ? <span aria-current="page" className="tk-breadcrumb-current">{crumb.label}</span>
+                : href ? <Link to={href} className="tk-breadcrumb-link">{crumb.label}</Link>
+                  : crumb.onClick ? <button type="button" className="tk-breadcrumb-link" onClick={crumb.onClick}>{crumb.label}</button>
+                    : <span className="tk-breadcrumb-text">{crumb.label}</span>}
+            </li>
+          );
+        })}
+      </ol>
     </nav>
   );
 }

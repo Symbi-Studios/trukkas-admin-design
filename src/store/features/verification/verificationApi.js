@@ -181,7 +181,7 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
     getAdminVerificationSummary: builder.query({
       serializeQueryArgs: serializeVerificationQuery,
       async queryFn(args, api, _options, baseQuery) {
-        const result = await scopedQuery(baseQuery, api, args)({ url: '/admin/verification/summary', params: { expiryWindowDays: 30 } });
+        const result = await scopedQuery(baseQuery, api, args)({ url: '/admin/verification/summary', params: { expiryWindowDays: 30, ...(args?.dateFrom && args?.dateTo ? { dateFrom: args.dateFrom, dateTo: args.dateTo } : {}) } });
         return result.error ? result : { data: adaptVerificationSummary(result.data) };
       }, providesTags: ['AdminVerificationDirectory'],
     }),

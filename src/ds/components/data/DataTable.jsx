@@ -1,10 +1,13 @@
 import React from "react";
 import { Checkbox } from "../forms/Checkbox.jsx";
+import { DataBoard } from "./DataBoard.jsx";
 
 /**
  * The console list table. Columns declare { key, header, width, align, render }.
  * Rows are separated by hairlines; the header row is an 11px uppercase ink-400 band on surface-sunk.
  * Clickable rows highlight on hover (see ds/styles.css).
+ * Pass view="board" with boardGroupBy={(row) => row.status} to show the same rows as a board
+ * (pair it with <ViewToggle> in the toolbar). boardGroups orders the columns; boardFields picks card fields.
  */
 export function DataTable({
   columns = [],
@@ -19,7 +22,15 @@ export function DataTable({
   coloredHeader,
   expandedRowKeys = [],
   renderExpandedRow,
+  view = "list",
+  boardGroupBy,
+  boardGroups,
+  boardFields,
+  boardSelectedKey,
 }) {
+  if (view === "board" && boardGroupBy) {
+    return <DataBoard columns={columns} rows={rows} groupBy={boardGroupBy} groups={boardGroups} fields={boardFields} onRowClick={onRowClick} rowKey={rowKey} selectedKey={boardSelectedKey} />;
+  }
   const allOn = rows.length > 0 && selected.length === rows.length;
   const cell = {
     padding: "var(--tk-row-pad-y) var(--tk-row-pad-x)",

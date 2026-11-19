@@ -29,6 +29,8 @@ import {
   SideDrawer,
   Skeleton,
   StatCard,
+  StatsPanel,
+  ViewToggle,
   TextField,
 } from "../ds.js";
 import {
@@ -44,6 +46,7 @@ import {
 } from "../store/features/jobs/jobsApi.js";
 import { useInterveneAdminTriangulationJobMutation } from "../store/features/triangulation/triangulationApi.js";
 import { useGetAdminJobScreenQuery } from "../store/features/jobs/jobDetailApi.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from "../domain/statsPeriod.js";
 import { createJob } from "../mock/api.js";
 import { statusTone } from "./JobDetail.jsx";
 import { getJobTripCounts, getJobTrips } from "../domain/jobTrips.js";
@@ -491,6 +494,8 @@ export function JobsTrips() {
   });
 
   const selectedRange = useMemo(() => dateRange(dateFilter), [dateFilter]);
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const {
     currentData: containerTypes = [],
     isError: containerTypesError,
@@ -520,7 +525,7 @@ export function JobsTrips() {
     currentData: statsResponse,
     isError: statsError,
     refetch: refetchStats,
-  } = useGetAdminJobStatsQuery(selectedRange);
+  } = useGetAdminJobStatsQuery(statsRange);
   const {
     currentData: pendingDocsResponse,
     isError: pendingDocsError,
@@ -559,17 +564,6 @@ export function JobsTrips() {
   ]);
   useEffect(() => { setSelected([]); }, [page, pageSize, tab, statusFilter, typeFilter, cargoFilter, originFilter, destinationFilter, dateFilter, query]);
 
-  const counts = {
-    total: statsResponse?.tabs.all ?? null,
-    pending: statsResponse?.tabs.pendingApproval ?? null,
-    bidding: statsResponse?.tabs.bidding ?? null,
-    assigned: statsResponse?.tabs.assigned ?? null,
-    inTransit: statsResponse?.tabs.inTransit ?? null,
-    delivered: statsResponse?.tabs.delivered ?? null,
-    cancelled: statsResponse?.tabs.cancelled ?? null,
-    flagged: statsResponse?.tabs.flagged ?? null,
-    rejected: statsResponse?.tabs.rejected ?? null,
-  };
   const origins = useMemo(() => [...new Set(jobs.map((job) => job.origin).filter(Boolean))].sort(), [jobs]);
   const destinations = useMemo(() => [...new Set(jobs.map((job) => job.destination).filter(Boolean))].sort(), [jobs]);
   const cargoTypes = containerTypes.map((item) => item.name).sort();
@@ -596,14 +590,15 @@ export function JobsTrips() {
   const pageCount = Math.max(1, jobsResponse?.pagination?.totalPages || 1);
   const hasLocalFilters = statusFilter !== "All Statuses" && Boolean(selectedTabFilter || !selectedStatusFilter);
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
-  const filtersActive = typeFilter !== "All Types" || cargoFilter !== "All Cargo" || originFilter !== "All Locations"
+  const filtersActive = tab !== "All Jobs" || typeFilter !== "All Types" || cargoFilter !== "All Cargo" || originFilter !== "All Locations"
     || destinationFilter !== "All Locations" || dateFilter !== "All Dates" || Boolean(query.trim());
-  const statCaption = dateFilter === "All Dates" ? "vs last week" : "vs previous period";
+  const statCaption = statsPeriod(statsPeriodKey).vs;
   const card = (key) => statsResponse?.cards[key];
   const statDelta = (key) => card(key)?.changePercent == null ? undefined : `${Math.abs(card(key).changePercent)}%`;
   const statDirection = (key) => card(key)?.trend === "DOWN" ? "down" : "up";
 
   function resetFilters() {
+    setTab("All Jobs");
     setStatusFilter("All Statuses");
     setTypeFilter("All Types");
     setCargoFilter("All Cargo");
@@ -821,7 +816,7 @@ export function JobsTrips() {
       )}
       {statsError && <Banner tone="warning" title="Unable to load job totals." action={<Button variant="outline" size="sm" onClick={refetchStats}>Retry</Button>} />}
       {containerTypesError && <Banner tone="warning" title="Unable to load cargo filter options." action={<Button variant="outline" size="sm" onClick={refetchContainerTypes}>Retry</Button>} />}
-      <section className={styles.metrics} aria-label="Job summary">
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <StatCard
           icon="clipboard-list"
           tint="blue"
@@ -890,30 +885,8 @@ export function JobsTrips() {
           caption="vs last week"
           style={{ minHeight: 92, padding: 13 }}
         /> */}
-      </section>
+      </StatsPanel>
       <Card pad="none" className={styles.workspace}>
-        <div className={styles.tabs}>
-          {[
-            ["All Jobs", counts.total],
-            ["Pending Approval", counts.pending],
-            ["Bidding", counts.bidding],
-            ["Assigned", counts.assigned],
-            ["In Transit", counts.inTransit],
-            ["Delivered", counts.delivered],
-            ["Cancelled", counts.cancelled],
-            ["Flagged", counts.flagged],
-            ["Rejected", counts.rejected],
-          ].map(([name, count]) => (
-            <button
-              type="button"
-              className={tab === name ? styles.activeTab : ""}
-              key={name}
-              onClick={() => setTab(name)}
-            >
-              {name}{count != null && <span>{count}</span>}
-            </button>
-          ))}
-        </div>
         {tab === "Pending Approval" && pendingDocsResponse?.pagination.total > 0 && (
           <Banner tone="info" title={`${pendingDocsResponse.pagination.total} job${pendingDocsResponse.pagination.total === 1 ? "" : "s"} awaiting document upload`} style={{ margin: "12px 16px 0" }}>
             {pendingDocsResponse.rows.map((job, index) => <span key={job.id}>{index > 0 ? " · " : ""}<Link to={`/jobs/detail?id=${encodeURIComponent(job.id)}`}>{job.displayId}</Link></span>)}
@@ -930,6 +903,7 @@ export function JobsTrips() {
             />
           </div>
           <div className="tk-list-toolbar-filters" role="group" aria-label="Filter jobs">
+            <FilterControl name="Status" icon="circle-dot" value={tab} allValue="All Jobs" options={["All Jobs", "Pending Approval", "Bidding", "Assigned", "In Transit", "Delivered", "Cancelled", "Flagged", "Rejected"]} menu={menu} setMenu={setMenu} onChange={setTab} />
             <FilterControl name="Type" icon="route" value={typeFilter} allValue="All Types" options={["All Types", ...REQUEST_TYPES]} menu={menu} setMenu={setMenu} onChange={setTypeFilter} />
             <FilterControl name="Cargo" icon="package" value={cargoFilter} allValue="All Cargo" options={["All Cargo", ...cargoTypes]} menu={menu} setMenu={setMenu} onChange={setCargoFilter} />
             <FilterControl name="Origin" icon="map-pin" value={originFilter} allValue="All Locations" options={["All Locations", ...origins]} menu={menu} setMenu={setMenu} onChange={setOriginFilter} />
@@ -938,14 +912,7 @@ export function JobsTrips() {
             {filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}
           </div>
           <div className={styles.toolbarRight}>
-            <div className={styles.viewToggle} role="group" aria-label="View">
-              <button type="button" aria-pressed={view === "list"} className={view === "list" ? styles.viewActive : ""} onClick={() => setView("list")}>
-                <Icon name="list" size={15} /> List
-              </button>
-              <button type="button" aria-pressed={view === "board"} className={view === "board" ? styles.viewActive : ""} onClick={() => { setView("board"); setSelected([]); }}>
-                <Icon name="square-kanban" size={15} /> Board
-              </button>
-            </div>
+            <ViewToggle value={view} onChange={(next) => { setView(next); if (next === "board") setSelected([]); }} />
             <Button
               variant="outline"
               icon="download"

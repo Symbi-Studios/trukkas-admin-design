@@ -22,8 +22,11 @@ import {
   DropdownMenu,
   Icon,
   ListRow,
-  Modal, Textarea,
-  EmptyState, Banner,
+  Modal,
+  Textarea,
+  EmptyState,
+  Banner,
+  StatsPanel,
 } from "../ds.js";
 import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation,
   useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useGetAdminPricingSummaryQuery,
@@ -311,10 +314,6 @@ export function PricingManagement() {
         description="Manage service rates, pricing rules and surcharges across Trukkas."
         actions={
           <>
-            <FilterSelect label="Current settings" icon="calendar" />
-            <Button variant="outline" icon="filter">
-              Filters
-            </Button>
             <Button icon="plus" onClick={() => { setEditServiceId(null); setAddOpen(true); }}>
               Add Pricing
             </Button>
@@ -325,7 +324,7 @@ export function PricingManagement() {
       {notice && <Banner tone="success" action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice}</Banner>}
       {(readError || actionError) && <Banner tone="danger" title="Unable to load platform pricing" action={<Button variant="outline" onClick={() => { setActionError(null); readQueries.filter((query) => query.error).forEach((query) => query.refetch()); }}>Retry</Button>}>{pricingError(actionError || readError)}</Banner>}
       {readQueries.some((query) => query.isFetching) && <DriverLoadingNotice>Refreshing pricing settings…</DriverLoadingNotice>}
-      <div className="pricing-stats">
+      <StatsPanel fixedLabel="Current settings" fixedHint="Counts reflect the current pricing setup; Avg. Price Change compares the last 30 days with the 30 days before.">
         <StatCard
           icon="list-checks"
           tint="blue"
@@ -369,7 +368,7 @@ export function PricingManagement() {
           value={pricingSummary.currency}
           caption="Base Currency"
         />
-      </div>
+      </StatsPanel>
 
       <div className="pricing-layout">
         <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>

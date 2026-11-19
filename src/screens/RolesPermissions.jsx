@@ -5,8 +5,25 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
-  PageHeader, Button, StatCard, SectionCard, Card, TableToolbar, SearchField, FilterSelect,
-  DataTable, Pagination, Badge, Tag, DropdownMenu, IconButton, Icon, Tabs, LabelValue, Skeleton,
+  PageHeader,
+  Button,
+  StatCard,
+  SectionCard,
+  Card,
+  TableToolbar,
+  SearchField,
+  FilterSelect,
+  DataTable,
+  Pagination,
+  Badge,
+  Tag,
+  DropdownMenu,
+  IconButton,
+  Icon,
+  Tabs,
+  LabelValue,
+  Skeleton,
+  StatsPanel,
 } from '../ds.js';
 import { useGetAdminRolesDirectoryQuery, useGetAdminPermissionsQuery, useGetAdminRoleQuery, roleSummary, emptyRoleDetail } from '../store/features/roles/rolesApi.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
@@ -128,12 +145,12 @@ export function RolesPermissions() {
           <Button icon="plus" disabled={!operations.canManage} onClick={() => navigate('/roles/new')}>Create New Role</Button>
         </>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>
+      <StatsPanel fixedLabel="Current" fixedHint="Live counts of roles, permissions and assigned users.">
         <StatCard icon="users-round" tint="blue" label="Total Roles" value={value(rolesSummary.totalRoles)} caption={rolesSummary.totalCaption} />
         <StatCard icon="file-text" tint="blue" label="System Roles" value={value(rolesSummary.systemRoles)} caption={rolesSummary.systemCaption} />
         <StatCard icon="user-round-cog" tint="blue" label="Custom Roles" value={value(rolesSummary.customRoles)} caption={rolesSummary.customCaption} />
         <StatCard icon="shield-check" tint="blue" label="Permissions" value={catalogQuery.isFetching ? <Skeleton as="span" width={60} height={23} /> : rolesSummary.permissions} caption={rolesSummary.permissionsCaption} />
-      </div>
+      </StatsPanel>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="Roles" pad="none">

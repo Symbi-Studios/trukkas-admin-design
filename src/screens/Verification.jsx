@@ -8,9 +8,27 @@ import { VerificationDateRangeDialog } from './VerificationDateRangeDialog.jsx';
 import { verificationDateParams } from '../store/features/verification/verificationDates.js';
 import { Link, useNavigate } from '../router.js';
 import {
-  PageHeader, Button, StatCard, SectionCard, Tabs, TableToolbar, SearchField, FilterSelect,
-  DataTable, Pagination, Badge, CopyableId, Avatar, DropdownMenu, IconButton, Icon, Skeleton, EmptyState,
+  PageHeader,
+  Button,
+  StatCard,
+  SectionCard,
+  Tabs,
+  TableToolbar,
+  SearchField,
+  FilterSelect,
+  DataTable,
+  Pagination,
+  Badge,
+  CopyableId,
+  Avatar,
+  DropdownMenu,
+  IconButton,
+  Icon,
+  Skeleton,
+  EmptyState,
+  StatsPanel,
 } from '../ds.js';
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import { useGetAdminVerificationDirectoryQuery, useGetAdminVerificationSummaryQuery, verificationSummary, verificationDetailUrl, verificationFilterValue } from '../store/features/verification/verificationApi.js';
 import { VerificationActionDialog } from './VerificationActionDialog.jsx';
 import { useVerificationOperations } from '../store/features/verification/useVerificationOperations.js';
@@ -59,6 +77,9 @@ function VerificationScreen() {
   const [verType, setVerType] = useState('All Types');
   const [dateDialog, setDateDialog] = useState(false);
   const allTime = useGetAdminVerificationSummaryQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  const periodSummaryQuery = useGetAdminVerificationSummaryQuery({ owner: operations.owner, role: operations.role, ...statsRange }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
   const query = useGetAdminVerificationDirectoryQuery({ owner: operations.owner, role: operations.role, entityType: verificationFilterValue('entityType', entityType), verificationType: verificationFilterValue('verificationType', verType), ...(range ? { range } : {}) }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
   const [dialog, setDialog] = useState(null);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
@@ -71,7 +92,8 @@ function VerificationScreen() {
   const verifications = !operations.authenticated || query.error ? EMPTY_ROWS : query.currentData || EMPTY_ROWS;
   const summary = !operations.authenticated || allTime.error ? verificationSummary(null) : allTime.currentData || verificationSummary(null);
   const loading = query.isLoading || (query.isFetching && !query.currentData);
-  const statValue = (value) => allTime.isLoading || (allTime.isFetching && !allTime.currentData) ? <Skeleton as="span" width={54} height={23} /> : value;
+  const statValue = (value) => periodSummaryQuery.isLoading || (periodSummaryQuery.isFetching && !periodSummaryQuery.currentData) ? <Skeleton as="span" width={54} height={23} /> : value;
+  const cards = !operations.authenticated || periodSummaryQuery.error ? verificationSummary(null) : periodSummaryQuery.currentData || verificationSummary(null);
   const unavailable = (action) => window.alert(`${action} is not available for this verification.`);
   const [tab, setTab] = useState('All Verifications');
   const [q, setQ] = usePageSearchState('', () => setPage(1));
@@ -113,19 +135,16 @@ function VerificationScreen() {
     <>
       <PageHeader crumbs={['Compliance', 'Verification', 'All Verifications']} title="All Verifications"
         description="Monitor and manage all verification requests across entities."
-        actions={<>
-          <Button variant="outline" icon="download" onClick={exportReport}>Export Report</Button>
-          <Button icon="plus" onClick={() => openDialog('create')}>New Verification</Button>
-        </>} />
+        actions={<Button icon="plus" onClick={() => openDialog('create')}>New Verification</Button>} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--tk-space-4)' }}>
-        <StatCard icon="clipboard-list" tint="blue" label="Total Verifications" value={statValue(summary.total)} caption={summary.totalCaption} />
-        <StatCard icon="clock" tint="amber" label="Pending" value={statValue(summary.pending)} caption={summary.pendingShare} />
-        <StatCard icon="eye" tint="blue" label="In Review" value={statValue(summary.inReview)} caption={summary.inReviewShare} />
-        <StatCard icon="shield-check" tint="green" label="Verified" value={statValue(summary.verified)} caption={summary.verifiedShare} />
-        <StatCard icon="shield-x" tint="red" label="Rejected" value={statValue(summary.rejected)} caption={summary.rejectedShare} />
-        <StatCard icon="calendar-clock" tint="amber" label="Expiring Soon" value={statValue(summary.expiringSoon)} caption={summary.expiringSoonCaption} />
-      </div>
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
+        <StatCard icon="clipboard-list" tint="blue" label="Total Verifications" value={statValue(cards.total)} caption={statsPeriod(statsPeriodKey).summary} />
+        <StatCard icon="clock" tint="amber" label="Pending" value={statValue(cards.pending)} caption={cards.pendingShare} />
+        <StatCard icon="eye" tint="blue" label="In Review" value={statValue(cards.inReview)} caption={cards.inReviewShare} />
+        <StatCard icon="shield-check" tint="green" label="Verified" value={statValue(cards.verified)} caption={cards.verifiedShare} />
+        <StatCard icon="shield-x" tint="red" label="Rejected" value={statValue(cards.rejected)} caption={cards.rejectedShare} />
+        <StatCard icon="calendar-clock" tint="amber" label="Expiring Soon" value={statValue(cards.expiringSoon)} caption={cards.expiringSoonCaption} />
+      </StatsPanel>
 
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
         <TableToolbar
@@ -141,8 +160,8 @@ function VerificationScreen() {
             <FilterButton value={riskLevel} options={['All Levels', ...RISK_LEVELS]} active={riskLevel !== 'All Levels'}
               onChange={(v) => { setRiskLevel(v); setPage(1); }} />
             <FilterSelect label="Date Range" icon="calendar" active={Boolean(range)} onClick={() => setDateDialog(true)} />
-            <Button variant="outline" icon="list-filter" onClick={() => unavailable('Additional filters')}>Filters</Button>
           </>}
+          trailing={<Button variant="outline" icon="download" onClick={exportReport}>Export</Button>}
           onClear={resetFilters} />
 
         <Tabs value={tab} onChange={(t) => { setTab(t); setPage(1); }} style={{ padding: '0 var(--tk-card-pad)' }}
