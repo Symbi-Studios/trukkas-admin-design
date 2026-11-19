@@ -8,7 +8,7 @@ export function DropdownMenu({ items = [], width = 240, open = true, style }) {
   if (!open) return null;
   return (
     <div className="tk-dropdown-menu" role="menu" style={{
-      width, padding: 6, background: '#fff', borderRadius: 'var(--tk-r-lg)',
+      width, padding: 6, background: 'var(--tk-surface)', borderRadius: 'var(--tk-r-lg)',
       border: '1px solid var(--tk-line)', boxShadow: 'var(--tk-shadow-menu)',
       animation: 'tk-menu-in var(--tk-dur) var(--tk-ease)', ...style,
     }}>

@@ -1,6 +1,7 @@
 import React from "react";
 import { Checkbox } from "../forms/Checkbox.jsx";
 import { DataBoard } from "./DataBoard.jsx";
+import { isMissing } from "../core/NotAvailable.jsx";
 
 /**
  * The console list table. Columns declare { key, header, width, align, render }.
@@ -8,6 +9,7 @@ import { DataBoard } from "./DataBoard.jsx";
  * Clickable rows highlight on hover (see ds/styles.css).
  * Pass view="board" with boardGroupBy={(row) => row.status} to show the same rows as a board
  * (pair it with <ViewToggle> in the toolbar). boardGroups orders the columns; boardFields picks card fields.
+ * emptyAs: element shown instead of an empty cell value (null, "", "—"), e.g. <NotAvailable />.
  */
 export function DataTable({
   columns = [],
@@ -31,6 +33,7 @@ export function DataTable({
   boardOnRowClick,
   boardConfig,
   boardHideEmpty = false,
+  emptyAs,
 }) {
   if (view === "board" && boardGroupBy) {
     return <DataBoard columns={boardColumns || columns} rows={rows} groupBy={boardGroupBy} groups={boardConfig?.groups || boardGroups} hideEmpty={boardHideEmpty} card={boardConfig?.card} emptyLabel={boardConfig?.emptyLabel} fields={boardFields} onRowClick={boardOnRowClick || onRowClick} rowKey={rowKey} selectedKey={boardSelectedKey} expandedRowKeys={expandedRowKeys} renderExpandedRow={renderExpandedRow} />;
@@ -136,7 +139,7 @@ export function DataTable({
                       color: "var(--tk-ink-500)",
                     }}
                   >
-                    {c.render ? c.render(r) : r[c.key]}
+                    {(() => { const value = c.render ? c.render(r) : r[c.key]; return emptyAs && isMissing(value) ? emptyAs : value; })()}
                   </td>
                 ))}
               </tr>

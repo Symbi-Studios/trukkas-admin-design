@@ -226,7 +226,7 @@ export function SettingsDangerZone({
           padding: "12px",
           border: 0,
           borderRadius: "var(--tk-r-lg)",
-          background: "#fff",
+          background: "var(--tk-surface)",
           cursor: "pointer",
           textAlign: "left",
         }}

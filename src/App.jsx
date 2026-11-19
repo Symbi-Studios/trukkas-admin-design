@@ -121,38 +121,6 @@ function AdminShellContent({ children }) {
     <Sidebar
       collapsed={collapsed}
       onCollapse={toggleNavigation}
-      footer={
-        !collapsed && (
-          <div
-            style={{
-              padding: "12px 14px",
-              borderRadius: "var(--tk-r-lg)",
-              border: "1px solid var(--tk-line)",
-              background: "var(--tk-surface-sunk)",
-            }}
-          >
-            <span
-              style={{
-                display: "block",
-                font: "600 13px/18px var(--tk-font-sans)",
-                color: "var(--tk-ink-900)",
-              }}
-            >
-              Trukkas is moving Africa forward.
-            </span>
-            <span
-              style={{
-                display: "block",
-                marginTop: 2,
-                font: "400 12px/16px var(--tk-font-sans)",
-                color: "var(--tk-ink-400)",
-              }}
-            >
-              Safer. Smarter. Together.
-            </span>
-          </div>
-        )
-      }
     >
       {NAV.map((group) => (
         <React.Fragment key={group.section}>
