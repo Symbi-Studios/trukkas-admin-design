@@ -4,10 +4,10 @@ import { Icon } from '../../assets/icons/Icon.jsx';
 const FILL = {
   primary:   { bg: 'var(--tk-blue)',   fg: '#fff', bd: 'transparent', hover: 'var(--tk-blue-hover)' },
   accent:    { bg: 'var(--tk-orange)', fg: '#fff', bd: 'transparent', hover: 'var(--tk-orange-hover)' },
-  secondary: { bg: '#fff', fg: 'var(--tk-blue)', bd: 'var(--tk-blue)', hover: 'var(--tk-blue-soft)' },
-  outline:   { bg: '#fff', fg: 'var(--tk-ink-700)', bd: 'var(--tk-line-strong)', hover: 'var(--tk-surface-sunk)' },
+  secondary: { bg: 'var(--tk-surface)', fg: 'var(--tk-blue)', bd: 'var(--tk-blue)', hover: 'var(--tk-blue-soft)' },
+  outline:   { bg: 'var(--tk-surface)', fg: 'var(--tk-ink-700)', bd: 'var(--tk-line-strong)', hover: 'var(--tk-surface-sunk)' },
   ghost:     { bg: 'transparent', fg: 'var(--tk-ink-500)', bd: 'transparent', hover: 'var(--tk-surface-sunk)' },
-  danger:    { bg: '#fff', fg: 'var(--tk-danger)', bd: 'var(--tk-danger-soft)', hover: 'var(--tk-danger-soft)' },
+  danger:    { bg: 'var(--tk-surface)', fg: 'var(--tk-danger)', bd: 'var(--tk-danger-soft)', hover: 'var(--tk-danger-soft)' },
 };
 const SIZE = { sm: { h: 'var(--tk-h-btn-sm)', px: 10, fs: 13, ic: 14 },
                md: { h: 'var(--tk-h-btn)',    px: 14, fs: 14, ic: 16 },

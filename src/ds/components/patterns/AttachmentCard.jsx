@@ -13,7 +13,7 @@ export function AttachmentCard({ name, size, kind = 'doc', onOpen, style }) {
   return (
     <button type="button" onClick={onOpen}
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, cursor: 'pointer',
-               borderRadius: 'var(--tk-r-lg)', border: '1px solid var(--tk-line)', background: '#fff',
+               borderRadius: 'var(--tk-r-lg)', border: '1px solid var(--tk-line)', background: 'var(--tk-surface)',
                textAlign: 'left', minWidth: 200, ...style }}>
       <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: bg, color: fg,
                      display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>

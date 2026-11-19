@@ -233,7 +233,7 @@
 }
 .document-thumbnail {
   height: 142px;
-  background: #fff;
+  background: var(--tk-surface);
   border: 3px solid var(--tk-blue);
   padding: 10px;
   color: #111;
@@ -251,7 +251,7 @@
 .document-page {
   width: min(100%, 570px);
   min-height: 430px;
-  background: #fff;
+  background: var(--tk-surface);
   padding: 38px 46px;
   box-sizing: border-box;
   box-shadow: 0 3px 10px #0006;
@@ -282,7 +282,7 @@
   display: grid;
   place-items: center;
   color: #188242;
-  font-weight: 800;
+  font-weight: 700;
 }
 .document-certificate {
   font:

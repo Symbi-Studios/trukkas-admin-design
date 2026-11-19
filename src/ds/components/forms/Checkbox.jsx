@@ -8,7 +8,7 @@ export function Checkbox({ checked, indeterminate, label, hint, disabled, onChan
                     cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, ...style }}>
       <span onClick={() => !disabled && onChange?.(!checked)}
         style={{ width: 18, height: 18, borderRadius: 5, flex: '0 0 auto', marginTop: hint ? 1 : 0,
-                 background: on ? 'var(--tk-blue)' : '#fff',
+                 background: on ? 'var(--tk-blue)' : 'var(--tk-surface)',
                  border: '1px solid ' + (on ? 'var(--tk-blue)' : 'var(--tk-line-strong)'),
                  display: 'grid', placeItems: 'center', transition: 'var(--tk-transition)' }}>
         {on && <Icon name={indeterminate ? 'minus' : 'check'} size={12} color="#fff" />}
