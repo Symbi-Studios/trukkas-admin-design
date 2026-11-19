@@ -7,7 +7,23 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useState } from 'react';
 import { useNavigate } from '../router.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
-import { PageHeader, Button, StatCard, Card, SectionCard, Tabs, Checkbox, Switch, Icon, IconButton, DropdownMenu, Pagination, Modal, Badge } from '../ds.js';
+import {
+  PageHeader,
+  Button,
+  StatCard,
+  Card,
+  SectionCard,
+  Tabs,
+  Checkbox,
+  Switch,
+  Icon,
+  IconButton,
+  DropdownMenu,
+  Pagination,
+  Modal,
+  Badge,
+  StatsPanel,
+} from '../ds.js';
 import {
   useGetAdminNotificationsQuery,
   useMarkAdminNotificationsReadMutation,
@@ -183,12 +199,12 @@ export function NotificationCenter() {
     </>} />
     <div className="notify-layout">
       <main className="notify-main">
-        <div className="notify-stats">
+        <StatsPanel fixedLabel="All time" fixedHint="Notification totals cover all time.">
           <StatCard icon="bell" label="All Notifications" value={data?.summary?.allUnread ?? data?.unreadCount ?? '—'} caption="Total unread" />
           <StatCard icon="triangle-alert" tint="red" label="High Priority" value={data?.summary?.highPriority ?? '—'} caption="Requires attention" />
           <StatCard icon="clock-3" tint="amber" label="Due Today" value={data?.summary?.dueToday ?? '—'} caption="Actions due today" />
           <StatCard icon="circle-check" tint="green" label="This Week" value={data?.summary?.thisWeek ?? '—'} caption="Upcoming & recent" />
-        </div>
+        </StatsPanel>
         <Card pad="none">
           <Tabs value={tab} onChange={(value) => { setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
           <div className="notify-list-head">

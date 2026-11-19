@@ -224,7 +224,7 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
     getAdminEscrowOverview: builder.query({
       serializeQueryArgs: serializeWalletQuery,
       async queryFn(args, api, _options, baseQuery) {
-        const result = await scopedWalletQuery(baseQuery, api, args)({ url: '/admin/payments/overview', params: { period: 'all' } });
+        const result = await scopedWalletQuery(baseQuery, api, args)({ url: '/admin/payments/overview', params: args?.dateFrom && args?.dateTo ? { dateFrom: args.dateFrom, dateTo: args.dateTo } : { period: 'all' } });
         return result.error ? result : { data: adaptEscrowOverview(result.data) };
       }, providesTags: ['AdminEscrowOverview'],
     }),

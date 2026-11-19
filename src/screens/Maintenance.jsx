@@ -26,6 +26,7 @@ import {
   ListRow,
   Skeleton,
   EmptyState,
+  StatsPanel,
 } from "../ds.js";
 import { ProgressBar } from "../ds/components/data/ProgressBar.jsx";
 import { DriverTableLoading } from "./DriversLoading.jsx";
@@ -280,7 +281,7 @@ export function Maintenance() {
           </>
         }
       />
-      <div className="maint-stats">
+      <StatsPanel fixedLabel="Current" fixedHint="Live maintenance counts; “due soon” means within the next 7 days.">
         <StatCard
           icon="truck"
           label="Total Trucks"
@@ -321,7 +322,7 @@ export function Maintenance() {
           value={statValue(stats?.pendingApprovals)}
           caption="Maintenance requests"
         />
-      </div>
+      </StatsPanel>
       <div className="maint-row">
         <SectionCard title="Maintenance Overview">
           <div className="maint-chart">

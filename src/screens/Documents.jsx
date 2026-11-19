@@ -26,6 +26,7 @@ import {
   TableToolbar,
   Tabs,
   Textarea,
+  StatsPanel,
 } from "../ds.js";
 import {
   useApproveAdminDocumentMutation,
@@ -302,7 +303,6 @@ export function Documents() {
         crumbs={[{ label: "Operations" }, { label: "Documents" }]}
         title="Documents"
         description="Review job documents and follow up on missing submissions."
-        actions={<FilterSelect label="All Dates" icon="calendar" />}
       />
 
       {notice && (
@@ -312,7 +312,8 @@ export function Documents() {
       )}
       {queueError && <div className="documents-error"><Banner tone="danger" title={queueError.status === 403 ? "Access denied to the document queue." : "Unable to load the document queue."} /><Button variant="outline" onClick={refetchQueue}>Retry</Button></div>}
       {statsError && <div className="documents-error"><Banner tone="warning" title="Document review stats are unavailable." /><Button variant="outline" onClick={refetchStats}>Retry stats</Button></div>}
-      <div className="documents-stats-grid">
+      <StatsPanel fixedLabel="Current" fixedHint="Live counts of documents by review status.">
+
         <StatCard
           icon="file-text"
           label="Total Documents"
@@ -341,7 +342,7 @@ export function Documents() {
           tint="red"
           caption={stats?.rejectedJobsToday == null ? "—" : `${stats.rejectedJobsToday} jobs rejected today`}
         />
-      </div>
+      </StatsPanel>
 
       <Tabs
         value={tab}

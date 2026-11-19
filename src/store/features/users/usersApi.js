@@ -230,7 +230,7 @@ async function readProfile(baseQuery, id, source, extras = true) {
     })
   };
 }
-export function managedUserSummary(_rows, stats) {
+export function managedUserSummary(_rows, stats, _includeAdmins, vsLabel = 'vs last month') {
   const cards = record(stats), out = {};
   for (const [view, key] of [['total', 'total'], ['active', 'active'], ['inactive', 'inactive'], ['locked', 'locked'], ['newThisMonth', 'newThisPeriod']]) {
     const metric = record(cards[key]);
@@ -240,7 +240,7 @@ export function managedUserSummary(_rows, stats) {
     // Use the supplied percentage and direction; do not estimate either one.
     const percent = out[view] != null && previous != null ? number(metric.changePercent) : null;
     const direction = percent != null && ['UP', 'DOWN', 'FLAT'].includes(metric.direction) ? metric.direction : null;
-    out[view + 'Caption'] = percent == null ? '— vs last month' : Math.abs(percent) + '% vs last month';
+    out[view + 'Caption'] = percent == null ? '— ' + vsLabel : Math.abs(percent) + '% ' + vsLabel;
     out[view + 'Direction'] = direction && direction !== 'FLAT' ? direction.toLowerCase() : null;
   }
   return out;
@@ -437,14 +437,15 @@ export const usersApi = apiWithTags.injectEndpoints({
     }),
     getUserManagementStats: builder.query({
       async queryFn({
-        includeAdmins = false
+        includeAdmins = false, dateFrom, dateTo
       } = {}, api, _opts, baseQuery) {
         const blocked = access(api, includeAdmins ? 'admin' : 'user');
         if (blocked) return blocked;
         const result = await baseQuery({
           url: `${ROOT}/summary`,
           params: {
-            scope: includeAdmins ? 'all' : 'users'
+            scope: includeAdmins ? 'all' : 'users',
+            ...(dateFrom && dateTo ? { dateFrom, dateTo } : {})
           }
         });
         if (result.error) return result;

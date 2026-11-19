@@ -7,7 +7,23 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
-import { PageHeader, Button, StatCard, SectionCard, Card, Tabs, SearchField, DataTable, Pagination, Badge, Avatar, Icon, Skeleton } from '../ds.js';
+import {
+  PageHeader,
+  Button,
+  StatCard,
+  SectionCard,
+  Card,
+  Tabs,
+  SearchField,
+  DataTable,
+  Pagination,
+  Badge,
+  Avatar,
+  Icon,
+  Skeleton,
+  StatsPanel,
+} from '../ds.js';
+import { DEFAULT_STATS_PERIOD, STATS_PERIODS, statsPeriod, statsPeriodDates, statsPeriodRange } from '../domain/statsPeriod.js';
 import { useGetAdminKnowledgeArticleDirectoryQuery, useGetAdminKnowledgeStatsQuery, KNOWLEDGE_CATEGORIES, ARTICLE_STATUS_CODES, knowledgeSummary, knowledgeDetailUrl } from '../store/features/knowledgeBase/knowledgeBaseApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading, DriverLoadingNotice } from './DriversLoading.jsx';
@@ -29,7 +45,8 @@ export function KnowledgeBase(){
  const articles=authenticated&&!directory.error?directory.currentData:undefined;
  const rows=authenticated&&!source.error?source.currentData:undefined;
  const loading=authenticated&&(source.isFetching||q.trim()!==search);
- const stats=useGetAdminKnowledgeStatsQuery({period:'thisMonth',comparisonDays:7},{skip:!authenticated});
+ const [statsPeriodKey,setStatsPeriodKey]=useState(DEFAULT_STATS_PERIOD); const statsDates=useMemo(()=>statsPeriodDates(statsPeriodKey),[statsPeriodKey]);
+ const stats=useGetAdminKnowledgeStatsQuery({period:'last7Days',comparisonDays:statsPeriod(statsPeriodKey).days||7,dateFrom:statsDates.from,dateTo:statsDates.to},{skip:!authenticated});
  const summary=knowledgeSummary(articles,authenticated&&!stats.error?stats.currentData:null);
  const comparison=key=>summary.changes[key];
  const feedback=summary.feedback;const feedbackPercent=value=>value==null?'—':value+'%';
@@ -43,7 +60,7 @@ export function KnowledgeBase(){
  useEffect(()=>{if(pageCount!=null&&page>pageCount)setPage(pageCount)},[page,pageCount]);
  return <div className="support-page">
   <PageHeader crumbs={['Support System','Knowledge Base']} title="Knowledge Base" description="Create, organize and manage helpful articles for users." actions={<Button icon="plus" onClick={()=>navigate('/knowledge-base/new')}>New Article</Button>}/>
-  <div className="support-stats"><StatCard icon="book-open" label="Total Articles" value={value(summary.total)} delta={comparison('totalArticles').delta} direction={comparison('totalArticles').direction} caption="from last 7 days"/><StatCard icon="clipboard-check" tint="green" label="Published Articles" value={value(summary.published)} delta={comparison('publishedArticles').delta} direction={comparison('publishedArticles').direction} caption="from last 7 days"/><StatCard icon="file-pen-line" tint="amber" label="Draft Articles" value={value(summary.draft)} delta={comparison('draftArticles').delta} direction={comparison('draftArticles').direction} caption="from last 7 days"/><StatCard icon="chart-no-axes-column-increasing" label="Views (This Month)" value={value(summary.monthlyViews)} delta={comparison('views').delta} direction={comparison('views').direction} caption="from last 7 days"/><StatCard icon="star" label="Helpful Ratings" value={value(summary.helpful)} delta={comparison('helpfulPercentage').delta} direction={comparison('helpfulPercentage').direction} caption="from last 7 days"/></div>
+  <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey} periods={STATS_PERIODS.filter((p)=>p.key!=="all")}><StatCard icon="book-open" label="Total Articles" value={value(summary.total)} delta={comparison('totalArticles').delta} direction={comparison('totalArticles').direction} caption="from last 7 days"/><StatCard icon="clipboard-check" tint="green" label="Published Articles" value={value(summary.published)} delta={comparison('publishedArticles').delta} direction={comparison('publishedArticles').direction} caption="from last 7 days"/><StatCard icon="file-pen-line" tint="amber" label="Draft Articles" value={value(summary.draft)} delta={comparison('draftArticles').delta} direction={comparison('draftArticles').direction} caption="from last 7 days"/><StatCard icon="chart-no-axes-column-increasing" label="Views (This Month)" value={value(summary.monthlyViews)} delta={comparison('views').delta} direction={comparison('views').direction} caption="from last 7 days"/><StatCard icon="star" label="Helpful Ratings" value={value(summary.helpful)} delta={comparison('helpfulPercentage').delta} direction={comparison('helpfulPercentage').direction} caption="from last 7 days"/></StatsPanel>
   <div className="support-layout"><SectionCard title="" pad="none">
    <Tabs value={tab} onChange={v=>{setTab(v);setPage(1)}} items={['All Articles','Published','Drafts','Archived']} style={{padding:'0 16px'}}/>
    <div className="support-toolbar"><SearchField style={{flex:1,minWidth:220}} placeholder="Search articles..." value={q} onChange={e=>{setQ(e.target.value);setPage(1)}}/><CustomSelect className="support-select" aria-label="Category filter" value={category} onChange={e=>{setCategory(e.target.value);setPage(1)}}><option>All</option>{KNOWLEDGE_CATEGORIES.map(x=><option key={x}>{x}</option>)}</CustomSelect><CustomSelect className="support-select" aria-label="Status filter" value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}>{['All','Published','Draft','Archived'].map(x=><option key={x}>{x}</option>)}</CustomSelect><CustomSelect className="support-select" aria-label="Author filter" value={author} onChange={e=>{setAuthor(e.target.value);setPage(1)}}><option>All</option>{authors.map(x=><option key={x}>{x}</option>)}</CustomSelect><Button variant="outline" icon="sliders-horizontal" onClick={()=>{setCategory('All');setStatus('All');setAuthor('All')}}>Reset</Button><Button variant="outline" icon="download" disabled={loading||!available} onClick={()=>exportCsv(filtered)}>Export</Button></div>

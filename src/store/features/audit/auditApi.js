@@ -232,7 +232,7 @@ export const auditApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminAuditLogs
         if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return permissionError();
         const scope = args.scope ?? 'admin';
         if (!['admin', 'system', 'all'].includes(scope)) return failure('Choose a supported audit summary scope.');
-        const result = await baseQuery({ url: '/admin/audit-logs/summary', params: { scope } });
+        const result = await baseQuery({ url: '/admin/audit-logs/summary', params: { scope, ...(args.dateFrom && args.dateTo ? { dateFrom: args.dateFrom, dateTo: args.dateTo } : {}) } });
         if (result.error) return result;
         return { data: adaptSummary(result.data) };
       }, providesTags: ['AdminAuditLogs'],

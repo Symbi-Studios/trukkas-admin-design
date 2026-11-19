@@ -7,9 +7,32 @@ import { createPortal } from 'react-dom';
 import { Link } from '../router.js';
 import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import {
-  PageHeader, Button, StatCard, SectionCard, TableToolbar, SearchField, FilterSelect,
-  DataTable, Pagination, Badge, QuickActionsCard, Card, DropdownMenu, IconButton,
-  Avatar, Icon, Tabs, Banner, EmptyState, Modal, Textarea, Skeleton, TextField, Select, LineChart,
+  PageHeader,
+  Button,
+  StatCard,
+  SectionCard,
+  TableToolbar,
+  SearchField,
+  FilterSelect,
+  DataTable,
+  Pagination,
+  Badge,
+  QuickActionsCard,
+  Card,
+  DropdownMenu,
+  IconButton,
+  Avatar,
+  Icon,
+  Tabs,
+  Banner,
+  EmptyState,
+  Modal,
+  Textarea,
+  Skeleton,
+  TextField,
+  Select,
+  LineChart,
+  StatsPanel,
 } from '../ds.js';
 import { DriverLicenseLoading, DriverLoadingNotice, DriverTableLoading, DriversLoading } from './DriversLoading.jsx';
 import {
@@ -302,7 +325,6 @@ export function Drivers() {
       description="Monitor, review and manage all drivers on the Trukkas platform — individual drivers and drivers under trucking companies."
       actions={<>
         <Button icon="user-check" onClick={() => changeTab('Pending Review')}>Review Pending Drivers ({counts.pending ?? '—'})</Button>
-        <Button variant="outline" icon="download" disabled={driversQuery.isFetching} onClick={exportRoster}>Export Current Page</Button>
         <span style={{ position: 'relative' }}>
           <Button variant="outline" iconRight="chevron-down" onClick={() => setMoreOpen((open) => !open)}>More Actions</Button>
           {moreOpen && <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
@@ -320,6 +342,7 @@ export function Drivers() {
     {driversQuery.isFetching && <DriverLoadingNotice>Loading drivers…</DriverLoadingNotice>}
     {pendingQuery.error && <Banner tone="warning" title="Pending driver review data unavailable">{adminDriverError(pendingQuery.error)}</Banner>}
 
+    <StatsPanel stack fixedLabel="All time" fixedHint="Driver totals cover all time; the driver stats API can’t be filtered by date yet.">
     <div className="drivers-metrics">
       <StatCard icon="users" label="Total Drivers" value={metricValue(counts.total, !statsQuery.data && statsQuery.isFetching)} caption={statsQuery.isLoading ? <Skeleton as="span" width={86} height={11} /> : counts.total == null ? 'Not available' : 'All registered drivers'} />
       <StatCard icon="user" tint="green" label="Individual Drivers" value={metricValue(counts.individual, statsQuery.isLoading)} caption="Individual registrations" />
@@ -336,6 +359,7 @@ export function Drivers() {
       <StatCard icon="wallet" tint="green" label="Total Driver Earnings" value={naira(counts.totalEarnings)} caption="Completed trip value; paid to companies" />
       <StatCard icon="star" tint="amber" label="Average Rating" value={counts.avgRating == null ? '—' : counts.avgRating.toFixed(1)} caption={counts.totalReviews == null ? '—' : `${counts.totalReviews} reviews`} />
     </div>
+    </StatsPanel>
 
     <div className="drivers-layout">
       <Card pad="none">
@@ -347,6 +371,7 @@ export function Drivers() {
             <span style={{ position: 'relative' }}><FilterSelect label={company} active={company !== 'All Companies'} onClick={() => setOpenMenu(openMenu === 'company' ? null : 'company')} />{filterMenu(openMenu === 'company', setOpenMenu, ['All Companies', ...companies], company, setCompany)}</span>
             <span style={{ position: 'relative' }}><FilterSelect label={licenseStatus === 'All' ? 'All License Status' : licenseStatus} active={licenseStatus !== 'All'} onClick={() => setOpenMenu(openMenu === 'license' ? null : 'license')} />{filterMenu(openMenu === 'license', setOpenMenu, ['All', ...LICENSE_STATUSES], licenseStatus, setLicenseStatus)}</span>
           </>}
+          trailing={<Button variant="outline" icon="download" disabled={driversQuery.isFetching} onClick={exportRoster}>Export</Button>}
         />
         <Tabs style={{ padding: '0 var(--tk-card-pad)' }} value={tab} onChange={changeTab} items={[
           { value: 'All Drivers', label: 'All Drivers', count: counts.total ?? undefined },

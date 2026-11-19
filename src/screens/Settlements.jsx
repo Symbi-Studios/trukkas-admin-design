@@ -25,7 +25,9 @@ import {
   AlertRow,
   EmptyState,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
   useGetAdminSettlementsQuery, useGetAdminSettlementSummaryQuery, useGetAdminSettlementAlertsQuery, emptySettlementInsights,
   settlementMoney as formatNaira, settlementNumber, settlementMillions,
@@ -137,7 +139,9 @@ function SettlementsScreen() {
   const dateLabel = settlementDateLabel(dateRange);
   const operations = useSettlementOperations();
   const query = useGetAdminSettlementsQuery({ owner: operations.owner, role: operations.role, groupBy: tab === 'By Trip' ? 'trip' : 'job', payerBusinessType: ({ Importer:'IMPORTER', Customer:'CUSTOMER', Internal:'INTERNAL' })[payerType], ...dateParams }, { skip: !operations.authenticated });
-  const summaryQuery = useGetAdminSettlementSummaryQuery({ owner: operations.owner, role: operations.role, ...dateParams }, { skip: !operations.authenticated });
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  const summaryQuery = useGetAdminSettlementSummaryQuery({ owner: operations.owner, role: operations.role, ...statsRange }, { skip: !operations.authenticated });
   const alertsQuery = useGetAdminSettlementAlertsQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated });
   const all = useMemo(() => operations.authenticated && !query.error ? query.currentData || [] : [], [query.currentData, query.error, operations.authenticated]);
   const { summary: settlementSummary, payouts: payoutSummary, statuses: settlementStatusBreakdown } = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData || emptySettlementInsights : emptySettlementInsights;
@@ -199,20 +203,9 @@ function SettlementsScreen() {
         crumbs={["Business & Finance", "Settlements"]}
         title="Settlements"
         description="Manage and track all settlement activities across jobs, trips and parties."
-        actions={
-          <>
-            <FilterSelect label={dateLabel} icon="calendar" active onClick={() => setDateDialogOpen(true)} />
-            <Button variant="outline" icon="filter" onClick={() => filtersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-              Filters
-            </Button>
-            <Button variant="outline" icon="download" disabled={loading || !knownCollection} onClick={() => exportSettlementRows(filtered)}>
-              Export
-            </Button>
-          </>
-        }
       />
 
-      <div className={styles.stats}>
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <StatCard
           icon="wallet"
           tint="navy"
@@ -267,7 +260,7 @@ function SettlementsScreen() {
           direction={settlementSummary.avgSettlementTimeDirection}
           caption={settlementSummary.comparisonCaption}
         />
-      </div>
+      </StatsPanel>
 
       <div
         style={{
@@ -363,6 +356,7 @@ function SettlementsScreen() {
                 <FilterSelect label={dateLabel} icon="calendar" active onClick={() => setDateDialogOpen(true)} />
               </>
             }
+            trailing={<Button variant="outline" icon="download" disabled={loading || !knownCollection} onClick={() => exportSettlementRows(filtered)}>Export</Button>}
           />
           </div>
 

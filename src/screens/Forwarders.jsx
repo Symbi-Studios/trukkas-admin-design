@@ -24,7 +24,11 @@ import {
   DropdownMenu,
   IconButton,
   Icon,
-  Avatar, Banner, Modal, EmptyState,
+  Avatar,
+  Banner,
+  Modal,
+  EmptyState,
+  StatsPanel,
 } from "../ds.js";
 
 import { forwarderMoney, forwarderError, useGetAdminForwarderDirectoryQuery, useGetAdminForwarderStatsQuery, useGetAdminForwarderRankingsQuery, useLazyDownloadAdminForwarderReportQuery, useGetAdminPendingExporterLicensesQuery } from '../store/features/forwarders/forwardersApi.js';
@@ -153,12 +157,6 @@ export function Forwarders() {
         actions={
           <>
             <Button icon="plus" onClick={() => setAddOpen(true)}>Add Forwarder</Button>
-            <Button variant="outline" icon="download" iconRight="chevron-down" disabled={!directoryQuery.currentData || Boolean(directoryQuery.error)} onClick={exportList}>
-              Export
-            </Button>
-            <Button variant="outline" icon="sliders-horizontal" onClick={() => setOpenFilter("type")}>
-              Filters
-            </Button>
           </>
         }
       />
@@ -167,7 +165,7 @@ export function Forwarders() {
       {directoryQuery.error && <Banner tone="danger" title="Unable to load forwarders" action={<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button>}>{forwarderError(directoryQuery.error)}</Banner>}
       {(directoryQuery.isFetching || statsQuery.isFetching) && <DriverLoadingNotice>Refreshing forwarders…</DriverLoadingNotice>}
       {FORWARDERS.some((row) => row.profileUnavailable) && <Banner tone="warning" action={<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button>}>Some profiles could not be loaded. Their joined dates and verification statuses are unavailable.</Banner>}
-      <div className="fw-stats">
+      <StatsPanel fixedLabel="All time" fixedHint="Forwarder totals cover all time; the forwarder stats API can’t be filtered by date yet.">
         <StatCard
           icon="users"
           label="Total Forwarders"
@@ -206,7 +204,7 @@ export function Forwarders() {
           label="Total Spend (₦)"
           value={naira(STATS.totalSpend)}
         />
-      </div>
+      </StatsPanel>
 
       <Card pad="none">
         <TableToolbar
@@ -352,6 +350,7 @@ export function Forwarders() {
               <FilterSelect label="More Filters" icon="layout-grid" onClick={() => unavailable("Additional filters")} />
             </>
           }
+          trailing={<Button variant="outline" icon="download" disabled={!directoryQuery.currentData || Boolean(directoryQuery.error)} onClick={exportList}>Export</Button>}
         />
       </Card>
 

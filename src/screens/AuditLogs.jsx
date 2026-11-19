@@ -6,9 +6,25 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from '../router.js';
 import {
-  PageHeader, StatCard, Card, Tabs, SearchField, FilterSelect, DropdownMenu,
-  Button, DataTable, Pagination, Badge, Avatar, Icon, IconButton, EmptyState, Skeleton,
+  PageHeader,
+  StatCard,
+  Card,
+  Tabs,
+  SearchField,
+  FilterSelect,
+  DropdownMenu,
+  Button,
+  DataTable,
+  Pagination,
+  Badge,
+  Avatar,
+  Icon,
+  IconButton,
+  EmptyState,
+  Skeleton,
+  StatsPanel,
 } from '../ds.js';
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import { useGetAdminAuditDirectoryQuery, useGetAdminSystemEventsQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery, auditPeriod, auditMatchesTab, auditTabAvailable, auditCsv, AUDIT_DATE_OPTIONS } from '../store/features/audit/auditApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
@@ -95,7 +111,9 @@ function AuditLogsScreen() {
   const systemEventsQuery = useGetAdminSystemEventsQuery({ ...period, owner, role }, { skip: !canView || !systemEvents, refetchOnMountOrArgChange: true });
   const logsQuery = systemEvents ? systemEventsQuery : adminLogsQuery;
   const summaryScope = systemEvents ? 'system' : tab === 'All Logs' ? 'all' : 'admin';
-  const summaryQuery = useGetAdminAuditScreenSummaryQuery({ owner, role, scope: summaryScope }, { skip: !canView, refetchOnMountOrArgChange: true });
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  const summaryQuery = useGetAdminAuditScreenSummaryQuery({ owner, role, scope: summaryScope, ...statsRange }, { skip: !canView, refetchOnMountOrArgChange: true });
   const error = role && !canView ? { status: 403, data: { message: 'Only Super Admins can view audit logs.' } } : logsQuery.error;
   const audits = !canView || logsQuery.error ? EMPTY_ROWS : logsQuery.currentData?.rows || EMPTY_ROWS;
   const summary = canView && !summaryQuery.error ? summaryQuery.currentData : null;
@@ -161,8 +179,8 @@ function AuditLogsScreen() {
   }
 
   return <div className="audit-page">
-    <PageHeader title="Audit Logs" description="Track all system activities, user actions, and changes across Trukkas." actions={<Button variant="outline" icon="download" onClick={exportRows}>Export Logs</Button>} />
-    <div className="audit-stats"><StatCard icon="files" tint="blue" label="Total Logs" value={metric(summary?.totalLogs)} delta={delta('totalLogs')} direction={direction('totalLogs')} caption="vs last month" /><StatCard icon="users" tint="navy" label="Active Users" value={metric(summary?.activeUsers)} delta={delta('activeUsers')} direction={direction('activeUsers')} caption="vs last month" /><StatCard icon="shield-alert" tint="red" label="Security Events" value={metric(summary?.securityEvents)} delta={delta('securityEvents')} direction={direction('securityEvents')} caption="vs last month" /><StatCard icon="triangle-alert" tint="amber" label="Failed Actions" value={metric(summary?.failedActions)} delta={delta('failedActions')} direction={direction('failedActions')} caption="vs last month" /></div>
+    <PageHeader title="Audit Logs" description="Track all system activities, user actions, and changes across Trukkas." />
+    <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}><StatCard icon="files" tint="blue" label="Total Logs" value={metric(summary?.totalLogs)} delta={delta('totalLogs')} direction={direction('totalLogs')} caption={statsPeriod(statsPeriodKey).vs} /><StatCard icon="users" tint="navy" label="Active Users" value={metric(summary?.activeUsers)} delta={delta('activeUsers')} direction={direction('activeUsers')} caption={statsPeriod(statsPeriodKey).vs} /><StatCard icon="shield-alert" tint="red" label="Security Events" value={metric(summary?.securityEvents)} delta={delta('securityEvents')} direction={direction('securityEvents')} caption={statsPeriod(statsPeriodKey).vs} /><StatCard icon="triangle-alert" tint="amber" label="Failed Actions" value={metric(summary?.failedActions)} delta={delta('failedActions')} direction={direction('failedActions')} caption={statsPeriod(statsPeriodKey).vs} /></StatsPanel>
     <Card pad="none" style={{ minWidth: 0 }}>
       <Tabs value={tab} onChange={(value) => { if ((value === 'System Events') !== systemEvents) { setSelectedAuditId(null); setSelectedRows([]); } setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
       <div className="audit-filter-row">
@@ -172,7 +190,7 @@ function AuditLogsScreen() {
         <MenuFilter value={draft.action} options={actions} onChange={(action) => setDraft((old) => ({ ...old, action }))} />
         <MenuFilter value={draft.status} options={['All Statuses', 'Success', 'Failed']} onChange={(status) => setDraft((old) => ({ ...old, status }))} />
       </div>
-      <div className="audit-search-row"><SearchField placeholder="Search audit logs..." value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /><div /><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); notify('Filters applied'); }}>Apply</Button></div>
+      <div className="audit-search-row"><SearchField placeholder="Search audit logs..." value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /><div /><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button variant="outline" icon="download" onClick={exportRows}>Export</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); notify('Filters applied'); }}>Apply</Button></div>
       {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={() => { if (canView) logsQuery.refetch(); else notify('Only Super Admins can view audit logs.'); }}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length ? <><DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
         { key: 'date', header: 'Date & Time', width: 126, render: (r) => <span className="audit-cell-stack"><span>{r.date}</span><small>{r.time}</small></span> },
         { key: 'user', header: 'User', width: 175, render: (r) => <span className="audit-user-cell"><Avatar name={r.user} size={32} /><span className="audit-cell-stack"><strong>{r.user}</strong><small>{r.email}</small></span></span> },

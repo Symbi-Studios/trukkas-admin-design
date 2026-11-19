@@ -21,7 +21,9 @@ import {
   SectionCard,
   Skeleton,
   StatCard,
+  StatsPanel,
 } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodDates } from '../domain/statsPeriod.js';
 import { useCollection } from "../mock/useCollection.js";
 import { getJobTrips } from "../domain/jobTrips.js";
 import { formatNaira } from "../mock/format.js";
@@ -208,7 +210,9 @@ const HEALTH = [
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [dateRange, setDateRange] = useState(DATE_RANGES[0]);
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const dateRange = statsPeriod(statsPeriodKey).summary;
+  const statsDates = useMemo(() => statsPeriodDates(statsPeriodKey), [statsPeriodKey]);
   const [activityPeriod, setActivityPeriod] = useState(null);
   const [revenuePeriod, setRevenuePeriod] = useState(null);
   const [ratingPeriod, setRatingPeriod] = useState(null);
@@ -219,7 +223,7 @@ export function Dashboard() {
     isUninitialized: isOverviewUninitialized,
     isError: isOverviewError,
     refetch: refetchOverview,
-  } = useGetAdminOverviewQuery(dashboardDates(dateRange));
+  } = useGetAdminOverviewQuery(statsDates.from ? statsDates : undefined);
   const earningsQuery = useGetAdminOverviewQuery(dashboardDates(revenuePeriod), { skip: revenuePeriod == null });
   const activityQuery = useGetAdminOverviewQuery(dashboardDates(activityPeriod), { skip: activityPeriod == null });
   const ratingQuery = useGetAdminOverviewQuery(dashboardDates(ratingPeriod), { skip: ratingPeriod == null });
@@ -556,7 +560,7 @@ export function Dashboard() {
           </>
         }
         description={
-          <>Here&apos;s what&apos;s happening on Trukkas for {dateRange}.</>
+          <>Here&apos;s what&apos;s happening on Trukkas{statsPeriodKey === 'all' ? ' overall' : ` in the ${dateRange.toLowerCase()}`}.</>
         }
         actions={
           <>
@@ -564,19 +568,10 @@ export function Dashboard() {
               <Icon name="quote" size={20} />
               “Connecting People. Moving Africa Forward.”
             </blockquote>
-            <MenuSelect
-              id="date"
-              value={dateRange}
-              options={DATE_RANGES}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={(value) => { setDateRange(value); setRevenuePeriod(null); setActivityPeriod(null); setRatingPeriod(null); }}
-              icon="calendar-days"
-            />
           </>
         }
       />
-      <section className={styles.stats} aria-label="Platform summary">
+      <StatsPanel period={statsPeriodKey} onPeriodChange={(key) => { setStatsPeriodKey(key); setRevenuePeriod(null); setActivityPeriod(null); setRatingPeriod(null); }}>
         <StatCard
           icon="user-round"
           label="Total Drivers"
@@ -686,7 +681,7 @@ export function Dashboard() {
           direction={(overview?.range?.jobs.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
           caption="Selected period"
         />
-      </section>
+      </StatsPanel>
 
       <section className={styles.financeGrid}>
         {/* <SectionCard

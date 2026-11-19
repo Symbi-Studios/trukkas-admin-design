@@ -5,7 +5,26 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
-import { Badge, Banner, Button, Card, DataTable, DonutChart, DropdownMenu, Icon, Modal, PageHeader, Pagination, SearchField, Skeleton, Sparkline, Tabs, TextField } from "../ds.js";
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  DataTable,
+  DonutChart,
+  DropdownMenu,
+  Icon,
+  Modal,
+  PageHeader,
+  Pagination,
+  SearchField,
+  Skeleton,
+  Sparkline,
+  Tabs,
+  TextField,
+  StatsPanel,
+} from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenTopCompaniesQuery, useGetAdminBidScreenOfferQuery, useLazyExportAdminBidFunnelQuery } from "../store/features/bids/bidScreenApi.js";
@@ -104,7 +123,9 @@ function BidsOffersContent({owner,role,authenticated}) {
   const selectedDate=dateOptions.find((d)=>d.key===dateKey)||dateOptions[0],dateRange=selectedDate.label;
   const session={owner,role},dates={dateFrom:selectedDate.dateFrom,dateTo:selectedDate.dateTo};
   const directoryQuery=useGetAdminBidScreenDirectoryQuery(session,{skip:!authenticated,refetchOnMountOrArgChange:true});
-  const analyticsQuery=useGetAdminBidScreenAnalyticsQuery({...session,...dates},{skip:!authenticated,refetchOnMountOrArgChange:true});
+  const [statsPeriodKey,setStatsPeriodKey]=useState(DEFAULT_STATS_PERIOD);
+  const statsRange=useMemo(()=>statsPeriodRange(statsPeriodKey),[statsPeriodKey]);
+  const analyticsQuery=useGetAdminBidScreenAnalyticsQuery({...session,...statsRange},{skip:!authenticated,refetchOnMountOrArgChange:true});
   const topQuery=useGetAdminBidScreenTopCompaniesQuery({...session,dateFrom:dateOptions[0].dateFrom,dateTo:dateOptions[0].dateTo},{skip:!authenticated,refetchOnMountOrArgChange:true});
   const offerQuery=useGetAdminBidScreenOfferQuery({...session,id:offerModal?.bidId},{skip:!authenticated||!offerModal?.bidId,refetchOnMountOrArgChange:true});
   const actionDetail=useGetAdminJobBidActionDetailQuery({...session,id:offerModal?.bidId,jobId:offerModal?.jobId},{skip:!authenticated||!offerModal?.bidId||!offerModal?.jobId,refetchOnMountOrArgChange:true});
@@ -239,28 +260,6 @@ function BidsOffersContent({owner,role,authenticated}) {
         crumbs={["Jobs & Trips", "Bids & Offers"]}
         title="Bids & Offers"
         description="Manage all bid submissions and counter offers across Trukkas."
-        actions={<>
-          <span style={{ position: "relative" }}>
-            <button
-              className="date-button"
-              onClick={(event) => openMenu(event, "date")}
-            >
-              <Icon name="calendar" size={15} />
-              <span>{dateRange}</span>
-              <Icon name="chevron-down" size={14} />
-            </button>
-          </span>
-          <span style={{ position: "relative" }}>
-            <Button
-              variant="outline"
-              icon="list-filter"
-              onClick={(event) => openMenu(event, "head")}
-            >
-              Filters
-            </Button>
-          </span>
-          <Button icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button>
-        </>}
       />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
@@ -268,7 +267,7 @@ function BidsOffersContent({owner,role,authenticated}) {
       {data?.errors.length > 0 && <Banner tone="warning" title={"Unable to load: " + data.errors.join(", ") + "."} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
       {(analyticsQuery.error || topQuery.error) && <Banner tone="warning" title="Bid analytics are temporarily unavailable." action={<Button size="sm" variant="outline" onClick={() => { analyticsQuery.refetch(); topQuery.refetch(); }}>Retry analytics</Button>} />}
 
-      {analyticsLoading ? <BidsMetricsLoading /> : <div className="kpi-grid">
+      {analyticsLoading ? <BidsMetricsLoading /> : <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <Metric
           label="Total Bids" metric={analytics?.metrics.totalBids} comparison={analytics?.comparison}
           icon="briefcase-business"
@@ -297,7 +296,7 @@ function BidsOffersContent({owner,role,authenticated}) {
           label="Avg. Winning Margin" metric={analytics?.metrics.margin} comparison={analytics?.comparison}
           icon="badge-percent"
         />
-      </div>}
+      </StatsPanel>}
 
       <Tabs
         items={[
@@ -331,6 +330,14 @@ function BidsOffersContent({owner,role,authenticated}) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+            <span style={{ position: "relative" }}>
+              <button className="date-button" onClick={(event) => openMenu(event, "date")}>
+                <Icon name="calendar" size={15} />
+                <span>{dateRange}</span>
+                <Icon name="chevron-down" size={14} />
+              </button>
+            </span>
+            <Button variant="outline" icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button>
           </div>
           {directoryQuery.isFetching ? <BidsTableLoading columns={isCounterTab ? offerCols : cols} /> : !rowsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : isCounterTab ? (
             <DataTable

@@ -27,7 +27,9 @@ import {
   Icon,
   EmptyState,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, STATS_PERIODS, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
   useGetAdminFeeSummaryQuery, useGetAdminFeeRulesQuery, emptyFeeSummary,
   unavailableFeeCatalog, unavailableFeeDistribution, editableFeeRule, feeDetailUrl,
@@ -116,7 +118,9 @@ export function FeesCommission() {
   const navigate = useNavigate();
   const operations = useFeeOperations();
   const [summaryPeriod, setSummaryPeriod] = useState('month');
-  const summaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner, period: 'month' }, { skip: !operations.authenticated });
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  const summaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner, period: 'month', ...statsRange }, { skip: !operations.authenticated });
   const periodSummaryQuery = useGetAdminFeeSummaryQuery({ owner: operations.owner, period: summaryPeriod }, { skip: !operations.authenticated });
   const catalogQuery = useGetAdminFeeRulesQuery({ owner: operations.owner }, { skip: !operations.authenticated });
   const catalog = operations.authenticated && !catalogQuery.error ? catalogQuery.currentData || unavailableFeeCatalog : unavailableFeeCatalog;
@@ -244,20 +248,14 @@ export function FeesCommission() {
         }
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "var(--tk-space-4)",
-        }}
-      >
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey} periods={STATS_PERIODS.filter((p) => p.key !== "all")}>
         <StatCard
           icon="wallet"
           tint="green"
-          label="Total Revenue (This Month)"
+          label="Total Revenue"
           value={revenueLoading ? <Skeleton as="span" width={96} height={23} /> : formatNaira(feeSummary.totalRevenue)}
           delta={feeSummary.totalRevenueDelta}
-          caption="vs previous period"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
         <StatCard
           icon="scan-line"
@@ -265,7 +263,7 @@ export function FeesCommission() {
           label="Total Platform Fees"
           value={metric(formatNaira(feeSummary.totalPlatformFees))}
           delta={feeSummary.totalPlatformFeesDelta}
-          caption="vs previous period"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
         <StatCard
           icon="handshake"
@@ -273,7 +271,7 @@ export function FeesCommission() {
           label="Total Commissions"
           value={metric(formatNaira(feeSummary.totalCommissions))}
           delta={feeSummary.totalCommissionsDelta}
-          caption="vs previous period"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
         <StatCard
           icon="file-minus"
@@ -282,7 +280,7 @@ export function FeesCommission() {
           value={metric(formatNaira(feeSummary.totalDeductions))}
           delta={feeSummary.totalDeductionsDelta}
           direction="down"
-          caption="vs previous period"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
         <StatCard
           icon="chart-pie"
@@ -290,9 +288,9 @@ export function FeesCommission() {
           label="Avg. Effective Rate"
           value={metric(feeSummary.avgEffectiveRate)}
           delta={feeSummary.avgEffectiveRateDelta}
-          caption="vs previous period"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
-      </div>
+      </StatsPanel>
 
       <div
         style={{

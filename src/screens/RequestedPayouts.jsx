@@ -21,7 +21,9 @@ import {
   DropdownMenu,
   EmptyState,
   Skeleton,
+  StatsPanel,
 } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
   useGetAdminPayoutDirectoryQuery, useGetAdminPayoutSummaryQuery, useLazyGetAdminPayoutDocumentsQuery, useLazyGetAdminPayoutDocumentQuery, downloadPayoutFile, payoutMatchesStatus,
   payoutSummary, payoutMoney as formatNaira, payoutDetailUrl, payoutCompanyUrl, payoutJobUrl,
@@ -112,6 +114,9 @@ export function RequestedPayouts() {
   const navigate = useNavigate();
   const directoryQuery = useGetAdminPayoutDirectoryQuery();
   const statsQuery = useGetAdminPayoutSummaryQuery();
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  const periodStatsQuery = useGetAdminPayoutSummaryQuery(statsRange);
   const [readDocuments, documentsState] = useLazyGetAdminPayoutDocumentsQuery();
   const [readDocument, documentState] = useLazyGetAdminPayoutDocumentQuery();
   const downloading = useRef(false);
@@ -142,6 +147,8 @@ export function RequestedPayouts() {
   }, []);
 
   const summary = useMemo(() => payoutSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.currentData, statsQuery.error]);
+  // Stat cards follow the stats period; tab counts (summary.counts) stay all-time.
+  const cardSummary = useMemo(() => payoutSummary(directory, periodStatsQuery.error ? null : periodStatsQuery.currentData), [directory, periodStatsQuery.currentData, periodStatsQuery.error]);
   const counts = summary.counts;
   const metric = (value, loading = (!directory && directoryQuery.isFetching) || (!statsQuery.currentData && statsQuery.isFetching)) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
 
@@ -205,43 +212,43 @@ export function RequestedPayouts() {
         actions={<Button icon="plus" onClick={() => { setTab("Pending"); setStatus("Pending Review"); setType("Company Payout"); setParty("company"); setPage(1); }}>Review Company Payouts</Button>}
       />
 
-      <div className="payout-stats">
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <StatCard
           icon="clock"
           tint="navy"
           label="Total Requests"
-          value={metric(summary.totalRequests)}
+          value={metric(cardSummary.totalRequests)}
           caption="all payout requests"
         />
         <StatCard
           icon="hourglass"
           tint="amber"
           label="Pending Review"
-          value={metric(summary.pending, statsQuery.isFetching && !statsQuery.currentData && !directory)}
-          caption={`${formatNaira(summary.companyHeld)} held`}
+          value={metric(cardSummary.pending, statsQuery.isFetching && !statsQuery.currentData && !directory)}
+          caption={`${formatNaira(cardSummary.companyHeld)} held`}
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Approved"
-          value={metric(summary.approved, statsQuery.isFetching && !statsQuery.currentData)}
-          caption={`${formatNaira(summary.companyPaid)} company payouts paid`}
+          value={metric(cardSummary.approved, statsQuery.isFetching && !statsQuery.currentData)}
+          caption={`${formatNaira(cardSummary.companyPaid)} company payouts paid`}
         />
         <StatCard
           icon="circle-x"
           tint="red"
           label="Rejected"
-          value={metric(summary.rejected, statsQuery.isFetching && !statsQuery.currentData)}
+          value={metric(cardSummary.rejected, statsQuery.isFetching && !statsQuery.currentData)}
           caption="requires no further payment"
         />
         <StatCard
           icon="database"
           tint="blue"
           label="Total Requested Amount"
-          value={metric(formatNaira(summary.totalRequestedAmount))}
+          value={metric(formatNaira(cardSummary.totalRequestedAmount))}
           caption="net of rejected requests"
         />
-      </div>
+      </StatsPanel>
 
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
         <div

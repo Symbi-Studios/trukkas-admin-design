@@ -331,7 +331,7 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminPricingSummary: builder.query({
-      query: () => ({ url: '/admin/pricing/summary', params: { days: 30 } }),
+      query: ({ days = 30 } = {}) => ({ url: '/admin/pricing/summary', params: { days } }),
       transformResponse: (response) => {
         const data = record(unwrapApiResponseData(response));
         const exceptions = record(data.exceptions), changes = record(data.rateChanges);

@@ -4,7 +4,8 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
-import { Avatar, Badge, Banner, Button, Card, CopyableId, DataTable, DrawerFacts, DrawerSection, DropdownMenu, FilterSelect, Icon, IconButton, Modal, PageHeader, Pagination, RouteStack, SideDrawer, Skeleton, Sparkline, Textarea } from "../ds.js";
+import { Avatar, Badge, Banner, Button, Card, CopyableId, DataTable, DrawerFacts, DrawerSection, DropdownMenu, FilterSelect, Icon, IconButton, Modal, PageHeader, Pagination, RouteStack, SideDrawer, Skeleton, Sparkline, StatsPanel, Textarea } from "../ds.js";
+import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from "../domain/statsPeriod.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { TriangulationGoogleMap } from "./TriangulationGoogleMap.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
@@ -117,12 +118,14 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   const active = useRef(true), actionLock = useRef(false), selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
   const selectedRange = useMemo(() => dateRange(dateFilter), [dateFilter]);
+  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
+  const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const session = { owner, role };
   const listFilters = { ...selectedRange, search, statusFilter: STATUS_TO_API[statusFilter],
     origin: originFilter === "All Locations" ? undefined : originFilter,
     destination: destFilter === "All Locations" ? undefined : destFilter, driverId };
   const list = useGetAdminTripScreenListQuery({ ...session, ...listFilters, page }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const statsQuery = useGetAdminTripScreenStatsQuery({ ...session, ...selectedRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const statsQuery = useGetAdminTripScreenStatsQuery({ ...session, ...statsRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const optionsQuery = useGetAdminTripScreenFiltersQuery({ ...session, ...selectedRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const detailQuery = useGetAdminTripScreenDetailQuery({ ...session, id: selectedId }, {
     skip: !authenticated || !selectedId, refetchOnMountOrArgChange: true, pollingInterval: selectedId && !contactOpen && !delayTarget ? 30000 : 0 });
@@ -219,15 +222,6 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
         crumbs={["Jobs & Trips", "Trips"]}
         title="Trips"
         description="Monitor every trip in real time."
-        actions={
-          <>
-            <button className="date-button" onClick={(event) => openMenu(event, "date")}>
-              <Icon name="calendar" size={15} />
-              {dateFilter}
-            </button>
-            <Button icon="plus" disabled={exporting || !authenticated || total == null || total === 0} onClick={() => void exportTrips()}>Export</Button>
-          </>
-        }
       />
 
       {toast && <Banner tone={toast.tone} title={toast.title} />}
@@ -235,7 +229,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
       {statsQuery.error && <Banner tone="warning" title="Unable to load trip totals." action={<Button variant="outline" size="sm" onClick={statsQuery.refetch}>Retry</Button>} />}
 
 
-      <div className="kpi-grid">
+      <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <Metric
           loading={statsLoading}
           label="All Trips" card={stats?.cards.allTrips} comparison={stats?.comparisonLabel}
@@ -271,7 +265,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
           icon="clock"
           color="#e02b22"
         />
-      </div>
+      </StatsPanel>
 
       <div className="ops-panel">
         <div className="tk-list-toolbar">
@@ -286,6 +280,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
             <FilterChip icon="user" label="Driver" value={driverFilter} active={driverFilter !== "All Drivers"} onOpen={(e) => openMenu(e, "driver")} onClear={() => { setDriverId(null); choose(setDriverFilter, "All Drivers"); }} />
             <FilterChip icon="calendar" label="Date" value={dateFilter} active={dateFilter !== "All Dates"} onOpen={(e) => openMenu(e, "date")} onClear={() => choose(setDateFilter, "All Dates")} />
             {filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}
+            <Button variant="outline" icon="download" disabled={exporting || !authenticated || total == null || total === 0} onClick={() => void exportTrips()}>Export</Button>
           </div>
         </div>
 
