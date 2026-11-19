@@ -4,8 +4,6 @@ const route = (value) => {
   const [from, to] = typeof value === 'string' ? value.split(/\s*(?:→|->)\s*/, 2) : [];
   return { from, to };
 };
-const naira = (value) => value == null || Number.isNaN(Number(value)) ? null
-  : `₦${Number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const groups = (entries) => entries.map(([value, tone]) => ({ value, label: value, tone }));
 const layout = (statuses, card, emptyLabel) => ({ groups: groups(statuses), card, emptyLabel });
 
@@ -28,8 +26,8 @@ export const BOARD_LAYOUTS = {
     ],
   },
   documents: layout([
-    ['Pending review', 'warning'], ['Missing documents', 'orange'], ['Changes requested', 'danger'], ['Approved', 'success'],
-  ], { title: (row) => row.displayId, subtitle: (row) => row.company || '—', route: (row) => route(row.job.route), footer: ['jobType', (row) => row.updatedAt ? `Updated ${new Date(row.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : null] }, 'No jobs'),
+    ['Pending', 'warning'], ['Approved', 'success'], ['Rejected', 'danger'], ['Missing Documents', 'warning'],
+  ], { title: (row) => row.displayId, value: (row) => row.summary.total == null ? '—' : `${row.summary.total} docs`, subtitle: (row) => row.company || '—', route: (row) => route(row.job.route), footer: ['jobType', 'updated'] }, 'No documents'),
   drivers: layout([
     ['Active', 'success'], ['On Trip', 'info'], ['Inactive', 'neutral'], ['Pending Profile', 'warning'], ['Pending Review', 'warning'], ['Rejected', 'danger'],
   ], { title: (row) => row.name, value: 'rating', subtitle: 'company', body: ['license', 'truckPlate'], footer: ['registrationType', 'licenseStatus'] }, 'No drivers'),
@@ -41,15 +39,7 @@ export const BOARD_LAYOUTS = {
   ], { title: (row) => row.name, subtitle: 'location', body: ['email'], footer: ['type', 'verification'] }, 'No forwarders'),
   payouts: layout([
     ['Pending Review', 'warning'], ['Approved', 'success'], ['Rejected', 'danger'], ['Processing', 'info'], ['Completed', 'success'],
-  ], {
-    title: (row) => row.party, value: (row) => naira(row.netAmount), subtitle: (row) => row.id,
-    body: [
-      { icon: 'briefcase', value: (row) => row.jobId || null },
-      { icon: 'route', value: (row) => row.route || null },
-      { icon: 'truck', value: (row) => row.truckTripCount == null ? null : `${row.truckTripCount} trip${row.truckTripCount === 1 ? '' : 's'}` },
-    ],
-    footer: ['type', (row) => [row.dateRequested, row.dateRequestedTime].filter(Boolean).join(' · ') || null],
-  }, 'No payouts'),
+  ], { title: 'id', value: 'amount', subtitle: 'party', body: ['job'], footer: ['type', 'date'] }, 'No payouts'),
   settlements: layout([
     ['Pending', 'warning'], ['On Hold', 'info'], ['Completed', 'success'], ['Failed', 'danger'],
   ], { title: 'id', value: 'amount', subtitle: 'payee', body: ['relatedTo'], footer: ['type', 'settledOn'] }, 'No settlements'),

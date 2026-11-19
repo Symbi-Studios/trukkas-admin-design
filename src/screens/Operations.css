@@ -14,7 +14,7 @@
   padding: 0 13px;
   border: 1px solid var(--tk-line-strong);
   border-radius: 8px;
-  background: var(--tk-surface);
+  background: #fff;
   color: var(--tk-ink-700);
   display: inline-flex;
   align-items: center;
@@ -149,7 +149,7 @@
 .ops-panel {
   border: 1px solid var(--tk-line);
   border-radius: 12px;
-  background: var(--tk-surface);
+  background: #fff;
   overflow: hidden;
 }
 .ops-panel-head {
@@ -185,7 +185,7 @@
   text-align: left;
   border: 1px solid var(--tk-line-strong);
   border-radius: 8px;
-  background: var(--tk-surface);
+  background: #fff;
   color: var(--tk-ink-700);
   font: 500 12px var(--tk-font-sans);
   cursor: pointer;
@@ -235,7 +235,7 @@
   height: 30px;
   border: 1px solid var(--tk-line);
   border-radius: 7px;
-  background: var(--tk-surface);
+  background: #fff;
   cursor: pointer;
 }
 .row-actions:hover {
@@ -335,7 +335,7 @@
   width: 30px;
   height: 30px;
   border: 1px solid var(--tk-line-strong);
-  background: var(--tk-surface);
+  background: #fff;
   border-radius: 6px;
 }
 .trip-detail {
@@ -583,7 +583,7 @@
   margin: 0 auto 7px;
   border: 2px solid var(--tk-line-strong);
   border-radius: 50%;
-  background: var(--tk-surface);
+  background: #fff;
   display: grid;
   place-items: center;
   font-style: normal;

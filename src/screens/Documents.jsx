@@ -1,8 +1,10 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
-import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
 
 import { useEffect, useState } from "react";
@@ -26,12 +28,8 @@ import {
   Skeleton,
   StatCard,
   TableToolbar,
-  ViewToggle,
   Textarea,
   StatsPanel,
-  DocumentPreview,
-  NotAvailable,
-  RouteStack,
 } from "../ds.js";
 import {
   useApproveAdminDocumentMutation,
@@ -87,6 +85,8 @@ function DocumentsLoading() {
 }
 
 export function Documents() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
@@ -96,9 +96,7 @@ export function Documents() {
   const [statusFilter, setStatusFilter] = useState("All statuses");
   const [companyFilter, setCompanyFilter] = useState("All companies");
   const [openFilter, setOpenFilter] = useState(null);
-  const [openJob, setOpenJob] = useState(null);
-  const [tableView, setTableView] = useState("list");
-  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [expandedJob, setExpandedJob] = useState(null);
   const [selectedDocs, setSelectedDocs] = useState([]);
   const [action, setAction] = useState(null);
   const [reason, setReason] = useState("");
@@ -142,7 +140,7 @@ export function Documents() {
   const totals = authenticated && !statsError ? stats?.documentCounts : null;
   const filtered = grouped;
   const loadingQueue = queueFetching || authenticated && search !== searchInput.trim();
-  useEffect(() => { setSelectedDocs([]); setAction(null); }, [searchInput, typeFilter, statusFilter, companyFilter, page, pageSize, owner]);
+  useEffect(() => { setSelectedDocs([]); setExpandedJob(null); setAction(null); }, [searchInput, typeFilter, statusFilter, companyFilter, page, pageSize, owner]);
 
   const reviewableSelected = selectedDocs.filter(canReviewDocument);
 
@@ -191,50 +189,114 @@ export function Documents() {
 
   const columns = [
     {
-      key: "id",
-      header: "Job",
-      width: "16%",
+      key: "expand",
+      header: "",
+      width: 36,
       render: (row) => (
-        <span className="tk-cell-id">
-          <strong>{row.displayId}</strong>
-          <small>{row.updatedAt ? "Updated " + formatTime(row.updatedAt) : "No updates yet"}</small>
-        </span>
+        <IconButton
+          label={expandedJob === row.id ? "Collapse job" : "Expand job"}
+          icon={expandedJob === row.id ? "chevron-down" : "chevron-right"}
+          onClick={() => {
+            setExpandedJob(expandedJob === row.id ? null : row.id);
+            setSelectedDocs([]);
+          }}
+        />
+      ),
+    },
+    {
+      key: "id",
+      header: "Job ID",
+      width: 115,
+      render: (row) => (
+        <div>
+          <strong className="documents-job-id">{row.displayId}</strong>
+          <div>
+            <Badge
+              tone={
+                row.job.statusCode === "approved"
+                  ? "success"
+                  : row.job.statusCode === "rejected"
+                    ? "danger"
+                    : "warning"
+              }
+            >
+              {row.job.status}
+            </Badge>
+          </div>
+        </div>
       ),
     },
     {
       key: "route",
       header: "Route",
-      width: "28%",
-      render: (row) => {
-        const [from, to] = (row.job.route || "").split(/\s*(?:→|->)\s*/);
-        return row.job.route ? <RouteStack from={from || row.job.origin} to={to} /> : <NotAvailable />;
-      },
+      width: 165,
+      render: (row) => (
+        <div>
+          <strong>{row.job.route || "—"}</strong>
+          {row.job.origin && <small>{row.job.origin}</small>}
+        </div>
+      ),
     },
     {
       key: "company",
-      header: "Forwarder",
-      width: "20%",
+      header: "Company",
+      width: 180,
       render: (row) => (
-        <span className="tk-cell-person">
-          <Avatar name={row.company || "?"} size={30} />
-          <span><strong title={row.company}>{row.company || "Unknown"}</strong></span>
-        </span>
+        <div className="documents-company">
+          <Avatar name={row.company} size={28} />
+          <span>{row.company || "—"}</span>
+        </div>
       ),
     },
     {
       key: "jobType",
       header: "Job type",
-      width: "12%",
-      render: (row) => (row.jobType ? <Badge tone={row.jobKind === "Import" ? "info" : "neutral"}>{row.jobType}</Badge> : <NotAvailable />),
+      width: 110,
+      render: (row) => (
+        row.jobType ? <Badge tone={row.jobKind === "Import" ? "info" : "neutral"}>{row.jobType}</Badge> : "—"
+      ),
     },
     {
-      key: "approval",
-      header: "Document approval",
-      width: "18%",
-      render: (row) => {
-        const approval = approvalStatus(row);
-        return <Badge tone={approval.tone} dot>{approval.label}</Badge>;
-      },
+      key: "total",
+      header: "Documents",
+      align: "center",
+      render: (row) => <strong>{row.summary.total ?? "—"}</strong>,
+    },
+    {
+      key: "approved",
+      header: "Approved",
+      align: "center",
+      render: (row) => (
+        <span className="documents-count is-approved">
+          ● {row.summary.approved ?? "—"}
+        </span>
+      ),
+    },
+    {
+      key: "pending",
+      header: "Pending",
+      align: "center",
+      render: (row) => (
+        <span className="documents-count is-pending">
+          ● {row.summary.pending ?? "—"}
+        </span>
+      ),
+    },
+    {
+      key: "rejected",
+      header: "Rejected",
+      align: "center",
+      render: (row) => (
+        <span className="documents-count is-rejected">
+          ● {row.summary.rejected ?? "—"}
+        </span>
+      ),
+    },
+    {
+      key: "updated",
+      header: "Last updated",
+      width: 125,
+      render: (row) => formatTime(row.updatedAt),
     },
   ];
 
@@ -289,9 +351,8 @@ export function Documents() {
 
 
       <Card className="documents-table-card" pad="none">
-        <TableToolbar
+        <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           style={{ padding: "var(--tk-space-4) var(--tk-card-pad-tight)" }}
-          viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           search={
             <SearchField
               value={searchInput}
@@ -378,17 +439,25 @@ export function Documents() {
           </div>
         ) : queueError ? (
           <EmptyState icon="file-text" title={queueError.status === 403 ? "Access denied" : "Document queue unavailable"} description="Please try again." />
-        ) : filtered.length || tableView === "board" ? (
-          <DataTable
-            view={tableView}
-            boardConfig={BOARD_LAYOUTS.documents}
-            boardHideEmpty={hideEmptyColumns}
-            boardGroupBy={(row) => approvalStatus(row).label}
+        ) : filtered.length || tableView === 'board' ? (
+          <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.documents} view={tableView} boardGroupBy={(row) => row.summary.rejected > 0 ? 'Rejected' : row.summary.pending > 0 ? 'Pending' : row.summary.missing > 0 ? 'Missing Documents' : row.summary.approved > 0 ? 'Approved' : 'Unavailable'}
             columns={columns}
+            boardColumns={columns.filter((column) => column.key !== 'expand')}
+            boardOnRowClick={(row) => { setExpandedJob(expandedJob === row.id ? null : row.id); setSelectedDocs([]); }}
             rows={filtered}
             rowKey={(row) => row.id}
-            onRowClick={(row) => { setOpenJob(row); setSelectedDocs([]); }}
-            emptyAs={<NotAvailable />}
+            coloredHeader
+            tableLayout="fixed"
+            expandedRowKeys={expandedJob ? [expandedJob] : []}
+            renderExpandedRow={(row) => (
+              <ExpandedJob
+                row={row}
+                selected={selectedDocs}
+                setSelected={setSelectedDocs}
+                navigate={navigate}
+                onAction={openAction}
+              />
+            )}
           />
         ) : (
           <EmptyState
@@ -409,8 +478,6 @@ export function Documents() {
           }}
         />
       </Card>
-
-      {openJob && <JobDocumentsDrawer row={openJob} onClose={() => setOpenJob(null)} navigate={navigate} onAction={openAction} busy={submitting} />}
 
       <Modal
         open={!!action}
@@ -648,50 +715,5 @@ function ExpandedJob({ row, selected, setSelected, navigate, onAction }) {
         </div>
       )}
     </div>
-  );
-}
-
-/** One overall approval status for a job's documents, instead of separate counts. */
-function approvalStatus(row) {
-  const summary = row.summary || {};
-  if (row.job.statusCode === "rejected" || summary.rejected > 0) return { label: "Changes requested", tone: "danger" };
-  if (summary.missing > 0) return { label: "Missing documents", tone: "warning" };
-  if (summary.pending > 0 || row.job.statusCode === "pending" || row.job.statusCode === "awaiting") return { label: "Pending review", tone: "warning" };
-  if (row.job.statusCode === "approved" || (summary.approved > 0 && !summary.pending && !summary.rejected)) return { label: "Approved", tone: "success" };
-  return { label: row.job.status || "Not available", tone: "neutral" };
-}
-
-/** Preview-style drawer for one job's documents: thumbnails on the side, the selected file large. */
-function JobDocumentsDrawer({ row, onClose, navigate, onAction, busy }) {
-  const { currentData: detail, isFetching, error } = useGetAdminDocReviewDetailQuery(row.id, { refetchOnMountOrArgChange: true });
-  const documents = (detail?.documents || []).map((doc) => ({
-    ...doc,
-    id: doc.rowKey,
-    name: doc.name,
-    type: requirementLabels[doc.requirement] || doc.name,
-    submittedBy: doc.uploadedBy,
-    date: doc.uploadedAt ? formatTime(doc.uploadedAt) : null,
-    scope: "Whole job",
-  }));
-  const [selectedId, setSelectedId] = useState(null);
-  const selected = documents.find((doc) => doc.id === selectedId) || documents[0] || null;
-  return (
-    <DocumentPreview
-      open
-      variant="drawer"
-      onClose={onClose}
-      title={`${row.displayId} documents`}
-      subtitle={[row.company, row.job.route].filter(Boolean).join(" · ")}
-      documents={documents}
-      selectedId={selected?.id}
-      onSelect={setSelectedId}
-      loading={isFetching && !detail}
-      preview={{ url: selected?.url || null, error: Boolean(error) }}
-      canReview={(doc) => canReviewDocument(doc)}
-      busy={busy}
-      onApprove={(doc) => onAction("approve", [doc])}
-      onRequestReupload={(doc) => onAction("request", [doc])}
-      titleActions={<Button size="sm" variant="outline" iconRight="arrow-up-right" onClick={() => navigate(`/jobs/detail?id=${encodeURIComponent(row.id)}`)}>Open job</Button>}
-    />
   );
 }

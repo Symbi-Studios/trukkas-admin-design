@@ -8,7 +8,7 @@ export function Switch({ checked, unknown = false, label, hint, disabled, onChan
                  background: checked ? 'var(--tk-blue)' : '#D7DBE5',
                  transition: 'var(--tk-transition)', display: 'flex',
                  justifyContent: checked ? 'flex-end' : 'flex-start' }}>
-        <span style={{ width: 18, height: 18, borderRadius: 999, background: 'var(--tk-surface)',
+        <span style={{ width: 18, height: 18, borderRadius: 999, background: '#fff',
                        boxShadow: '0 1px 2px rgba(0,8,36,.2)', transition: 'var(--tk-transition)' }}>{unknown ? '—' : null}</span>
       </span>
       {label && (

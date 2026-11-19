@@ -14,11 +14,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Apply the saved theme before first paint so dark mode doesn't flash white. */}
-        <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('trukkas-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}catch(e){}" }} />
-      </head>
+    <html lang="en">
       <body style={{ margin: 0 }}>
         <div className={screenStyles.experience}>
           <StoreProvider><AdminShell>{children}</AdminShell></StoreProvider>

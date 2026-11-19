@@ -11,10 +11,3 @@
   --tk-focus-ring-danger: 0 0 0 3px rgba(224, 43, 34, 0.16);
   --tk-scrim: rgba(0, 8, 36, 0.48);
 }
-:root[data-theme="dark"] {
-  --tk-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --tk-shadow-raised: 0 4px 12px rgba(0, 0, 0, 0.45);
-  --tk-shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.55);
-  --tk-shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.6);
-  --tk-scrim: rgba(0, 0, 0, 0.6);
-}

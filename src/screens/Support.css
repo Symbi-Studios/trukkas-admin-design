@@ -36,7 +36,7 @@
   height: 38px;
   border: 1px solid var(--tk-line-strong);
   border-radius: 8px;
-  background: var(--tk-surface);
+  background: #fff;
   color: var(--tk-ink-700);
   padding: 0 30px 0 11px;
   font: 500 12px var(--tk-font-sans);
@@ -167,7 +167,7 @@
   border-radius: 8px;
   padding: 9px 12px;
   min-width: 180px;
-  background: var(--tk-surface);
+  background: #fff;
   cursor: pointer;
 }
 .attachment .file-ico {
@@ -224,7 +224,7 @@
 .reply-tabs button {
   padding: 12px 14px;
   border: 0;
-  background: var(--tk-surface);
+  background: #fff;
   color: var(--tk-ink-500);
   font: 500 12px var(--tk-font-sans);
   cursor: pointer;
@@ -391,7 +391,7 @@
   width: 66px;
   height: 66px;
   border-radius: 50%;
-  background: var(--tk-surface);
+  background: #fff;
   color: var(--tk-ink-900);
   font: 700 16px/18px var(--tk-font-sans);
 }
@@ -505,7 +505,7 @@
   height: 28px;
   min-width: 28px;
   border: 0;
-  background: var(--tk-surface);
+  background: #fff;
   border-radius: 5px;
   color: var(--tk-ink-700);
   cursor: pointer;
@@ -533,7 +533,7 @@
   color: var(--tk-ink-500);
   font-size: 12px;
   cursor: pointer;
-  background: var(--tk-surface);
+  background: #fff;
 }
 .dropzone:hover {
   border-color: var(--tk-blue);
@@ -635,7 +635,7 @@
 }
 .article-shot-top {
   height: 32px;
-  background: var(--tk-surface);
+  background: white;
   border-bottom: 1px solid var(--tk-line);
   display: flex;
   align-items: center;
@@ -669,7 +669,7 @@
 .article-shot-table {
   margin-top: 10px;
   border: 1px solid var(--tk-line);
-  background: var(--tk-surface);
+  background: #fff;
 }
 .article-shot-table div {
   display: grid;

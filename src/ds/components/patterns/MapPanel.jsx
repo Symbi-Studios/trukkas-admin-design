@@ -60,7 +60,7 @@ export function MapPanel({
                 cursor: "pointer",
                 borderRadius: "var(--tk-r-sm)",
                 border: "1px solid var(--tk-line-strong)",
-                background: "var(--tk-surface)",
+                background: "#fff",
                 color: "var(--tk-ink-500)",
               }}
             >

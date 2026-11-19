@@ -13,7 +13,7 @@ export function QuickActionsCard({ title = 'Quick Actions', items = [], layout =
             <button key={it.label} type="button" onClick={it.onClick}
               style={{ display: 'grid', justifyItems: 'center', gap: 8, padding: '14px 8px',
                        borderRadius: 'var(--tk-r-lg)', border: '1px solid var(--tk-line)',
-                       background: 'var(--tk-surface)', cursor: 'pointer' }}>
+                       background: '#fff', cursor: 'pointer' }}>
               <Icon name={it.icon} size={20} color="var(--tk-blue)" />
               <span style={{ font: '500 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-700)',
                              textAlign: 'center' }}>{it.label}</span>

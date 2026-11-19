@@ -6,7 +6,7 @@ export function Pagination({ page = 1, pageCount = 1, pageSize = 10, total, onPa
   const btn = (active, disabled) => ({
     minWidth: 32, height: 32, padding: '0 8px', borderRadius: 'var(--tk-r-sm)',
     border: '1px solid ' + (active ? 'var(--tk-blue)' : 'var(--tk-line-strong)'),
-    background: active ? 'var(--tk-blue)' : 'var(--tk-surface)',
+    background: active ? 'var(--tk-blue)' : '#fff',
     color: active ? '#fff' : disabled ? 'var(--tk-ink-300)' : 'var(--tk-ink-500)',
     font: 'var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans)', cursor: disabled ? 'not-allowed' : 'pointer',
     display: 'grid', placeItems: 'center',
