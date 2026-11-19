@@ -17,7 +17,7 @@ function mapUserCount(group) {
 function formatJoinedAt(value) {
   if (!value) return '—';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('en-NG', {
     day: 'numeric',
     month: 'short',
@@ -176,7 +176,7 @@ function mapAdminOverviewResponse(response) {
     weeklyJobVolume: Array.isArray(data.weeklyJobVolume)
       ? data.weeklyJobVolume.map((entry) => ({
           date: entry?.date || '',
-          count: numberOrNull(entry?.count) ?? 0,
+          count: numberOrNull(entry?.count),
         }))
       : [],
     deliveryPerformance: {
@@ -194,9 +194,6 @@ function mapAdminOverviewResponse(response) {
           company: job?.forwarderName || null,
           truckerName: job?.truckerName || null,
           value: numberOrNull(job?.value),
-          // This endpoint provides a summary only; the job detail route is
-          // still backed by the local mock collection.
-          detailAvailable: false,
         })).filter((job) => job.id)
       : [],
     marketplaceHealth: {
