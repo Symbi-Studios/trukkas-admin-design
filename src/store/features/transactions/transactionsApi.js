@@ -40,6 +40,7 @@ export const transactionAmount = (row, currency = false) => row.amount == null ?
 export const transactionDetailUrl = (id) => `/transactions/detail?id=${encodeURIComponent(id)}`;
 export const transactionJobUrl = (id) => `/jobs/detail?id=${encodeURIComponent(id)}`;
 
+const ESCROW_TYPES = new Set(['ESCROW_LOCK', 'ESCROW_RELEASE', 'ESCROW_HOLD', 'MOBILIZATION', 'FINAL_PAYMENT']);
 export function adaptAdminTransaction(dto) {
   dto = record(dto);
   const party = record(dto.party), paymentMethod = record(dto.paymentMethod), reference = record(dto.referenceDetails);
@@ -58,14 +59,16 @@ export function adaptAdminTransaction(dto) {
     time: created == null ? '—' : new Date(created).toLocaleTimeString('en-US', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit' }),
     timestamp: created,
     description: text(dto.description) || text(dto.label) || '—', note: text(dto.note), type, typeCode: text(dto.type), isReversal,
-    filterTypes: [...new Set([type, direction === 'inflow' ? 'Payment In' : direction === 'outflow' ? 'Payment Out' : null].filter(Boolean))],
-    isEscrow: ['ESCROW_LOCK', 'ESCROW_RELEASE', 'ESCROW_HOLD', 'MOBILIZATION', 'FINAL_PAYMENT'].includes(dto.type) && !isReversal,
+    // 'Escrow' groups every escrow movement so the Escrow page can link here pre-filtered.
+    filterTypes: [...new Set([type, direction === 'inflow' ? 'Payment In' : direction === 'outflow' ? 'Payment Out' : null, ESCROW_TYPES.has(dto.type) && !isReversal ? 'Escrow' : null].filter(Boolean))],
+    isEscrow: ESCROW_TYPES.has(dto.type) && !isReversal,
     relatedTo: text(related.label) || text(related.id) || text(dto.relatedTo) || '—',
     relatedKind: dto.relatedKind === 'JOB' ? 'Job' : dto.relatedKind === 'REVERSAL' ? 'Transaction' : label(dto.relatedKind),
     party: text(party.name) || text(dto.party) || '—',
     amount: money(rawAmount),
     pos: direction === 'inflow' ? true : direction === 'outflow' ? false : null,
     statusCode: text(dto.status), status: label(dto.status), balanceAfter: number(dto.balanceAfter),
+    escrowId: text(dto.escrowId),
     parties: Array.isArray(dto.parties) ? records(dto.parties).map((entry) => ({
       role: label(entry.role), name: text(entry.name) || '—', id: text(entry.id) || '—',
       email: text(entry.email) || '—', phone: text(entry.phone) || '—', tint: entry.tint,

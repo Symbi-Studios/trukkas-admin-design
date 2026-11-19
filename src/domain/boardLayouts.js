@@ -58,7 +58,7 @@ export const BOARD_LAYOUTS = {
   ], { title: 'id', value: 'amount', subtitle: 'party', body: ['description'], footer: ['type', 'date'] }, 'No transactions'),
   demurrage: layout([
     ['Active', 'danger'], ['Upcoming', 'warning'], ['Resolved', 'success'], ['Dispute', 'purple'],
-  ], { title: 'jobId', value: 'charge', subtitle: 'customer', body: ['container', 'vessel'], footer: ['daysUsed', 'daysOver'] }, 'No demurrage'),
+  ], { title: 'jobId', value: 'charge', subtitle: 'customer', body: ['container', 'assignedTo'], footer: ['daysUsed', 'daysOver'] }, 'No demurrage'),
   verification: layout([
     ['Pending', 'warning'], ['In Review', 'info'], ['Verified', 'success'], ['Rejected', 'danger'],
   ], { title: 'id', subtitle: 'entity', body: ['type'], footer: ['entityType', 'riskLevel'] }, 'No verifications'),

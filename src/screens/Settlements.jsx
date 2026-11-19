@@ -6,7 +6,7 @@ import { ViewToggle } from '../ds.js';
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSelector } from 'react-redux';
 import { Link, useNavigate } from "../router.js";
 import {
@@ -17,72 +17,41 @@ import {
   Tabs,
   TableToolbar,
   SearchField,
-  FilterSelect,
   DataTable,
   Pagination,
   Badge,
-  DonutChart,
-  LegendList,
   IconButton,
   DropdownMenu,
   Icon,
-  AlertRow,
   EmptyState,
   Skeleton,
   StatsPanel,
 } from "../ds.js";
 import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
-  useGetAdminSettlementsQuery, useGetAdminSettlementSummaryQuery, useGetAdminSettlementAlertsQuery, emptySettlementInsights,
+  useGetAdminSettlementsQuery, useGetAdminSettlementSummaryQuery, emptySettlementInsights,
   settlementMoney as formatNaira, settlementNumber, settlementMillions,
   settlementDetailUrl, exportSettlementRows,
 } from '../store/features/settlements/settlementsApi.js';
 import { useSettlementOperations } from '../store/features/settlements/useSettlementOperations.js';
-import { defaultSettlementDates, settlementDateParams, settlementDateLabel } from '../store/features/settlements/settlementDates.js';
+import { settlementDateParams, settlementDateLabel } from '../store/features/settlements/settlementDates.js';
 import { SettlementDateRangeDialog } from './SettlementDateRangeDialog.jsx';
 import { DriverTableLoading } from './DriversLoading.jsx';
+import { initialSearch, initialTab } from '../domain/urlState.js';
+import { DATE_PRESETS, FilterChip, datePresetRange } from '../components/FilterChip.jsx';
 import styles from './Settlements.module.css';
 
+// A settlement is money paid to a party: escrow releases (mobilisation, final payment,
+// dispute settlements and refunds) credit wallets; bank payouts move wallet money to a bank.
+// Withdrawal requests are reviewed on Payouts. Driver and vendor payments don't exist on the platform.
 const TABS = [
   "All Settlements",
-  "By Job",
-  "By Trip",
-  "Driver Settlements",
-  "Vendor Settlements",
-  "Customer Settlements",
+  "Escrow Releases",
+  "Bank Payouts",
 ];
+const TYPE_OPTIONS = ["All Types", "Mobilization", "Final Payment", "Dispute Settlement", "Customer Refund", "Bank Payout"];
 const PAGE_SIZE = 10;
 
-function FilterButton({ label, value, options, active, onChange }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span style={{ position: "relative" }}>
-      <FilterSelect
-        label={value}
-        active={active}
-        onClick={() => setOpen((o) => !o)}
-      />
-      {open && (
-        <span
-          style={{ position: "absolute", left: 0, top: 44, zIndex: 30 }}
-          onMouseLeave={() => setOpen(false)}
-        >
-          <DropdownMenu
-            width={200}
-            items={options.map((o) => ({
-              label: o,
-              icon: o === value ? "check" : undefined,
-              onClick: () => {
-                onChange(o);
-                setOpen(false);
-              },
-            }))}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function RowMenu({ items, id, menuFor, setMenuFor }) {
   return (
@@ -110,10 +79,11 @@ const STATUS_TONE = {
   Failed: "danger",
 };
 const TYPE_TONE = {
-  "Driver Payout": "blue",
-  "Transporter Payment": "purple",
-  "Vendor Payment": "teal",
+  Mobilization: "blue",
+  "Final Payment": "purple",
+  "Dispute Settlement": "teal",
   "Customer Refund": "orange",
+  "Bank Payout": "neutral",
 };
 
 export function Settlements() {
@@ -124,10 +94,10 @@ export function Settlements() {
 function SettlementsScreen() {
   const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
-  const filtersRef = useRef(null);
   const navigate = useNavigate();
-  const [tab, setTab] = useState("All Settlements");
-  const [q, setQ] = usePageSearchState("", () => setPage(1));
+  const [tab, setTab] = useState(() => initialTab(TABS, "All Settlements"));
+  const [groupBy, setGroupBy] = useState("Group by Job");
+  const [q, setQ] = usePageSearchState(initialSearch(), () => setPage(1));
   const [settlementType, setSettlementType] = useState("All Types");
   const [status, setStatus] = useState("All Status");
   const [payerType, setPayerType] = useState("All Payers");
@@ -136,37 +106,34 @@ function SettlementsScreen() {
   const [sort, setSort] = useState("Newest First");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const [view, setView] = useState("list");
   const [menuFor, setMenuFor] = useState(null);
 
-  const [dateRange,setDateRange] = useState(defaultSettlementDates);
+  const [datePreset, setDatePreset] = useState("Last 30 Days");
+  const [dateRange,setDateRange] = useState(() => datePresetRange("Last 30 Days"));
   const [dateDialogOpen,setDateDialogOpen] = useState(false);
   const dateParams = settlementDateParams(dateRange);
   const dateLabel = settlementDateLabel(dateRange);
   const operations = useSettlementOperations();
-  const query = useGetAdminSettlementsQuery({ owner: operations.owner, role: operations.role, groupBy: tab === 'By Trip' ? 'trip' : 'job', payerBusinessType: ({ Importer:'IMPORTER', Customer:'CUSTOMER', Internal:'INTERNAL' })[payerType], ...dateParams }, { skip: !operations.authenticated });
+  const query = useGetAdminSettlementsQuery({ owner: operations.owner, role: operations.role, groupBy: groupBy === 'Group by Trip' ? 'trip' : 'job', payerBusinessType: ({ Importer:'IMPORTER', Customer:'CUSTOMER', Internal:'INTERNAL' })[payerType], ...dateParams }, { skip: !operations.authenticated });
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const summaryQuery = useGetAdminSettlementSummaryQuery({ owner: operations.owner, role: operations.role, ...statsRange }, { skip: !operations.authenticated });
-  const alertsQuery = useGetAdminSettlementAlertsQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated });
   const all = useMemo(() => operations.authenticated && !query.error ? query.currentData || [] : [], [query.currentData, query.error, operations.authenticated]);
-  const { summary: settlementSummary, payouts: payoutSummary, statuses: settlementStatusBreakdown } = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData || emptySettlementInsights : emptySettlementInsights;
-  const settlementAlerts = operations.authenticated && !alertsQuery.error ? alertsQuery.currentData || [] : [];
+  const { summary: settlementSummary } = operations.authenticated && !summaryQuery.error ? summaryQuery.currentData || emptySettlementInsights : emptySettlementInsights;
+  const filtersActive = settlementType !== "All Types" || status !== "All Status" || payerType !== "All Payers" || payeeType !== "All Payees"
+    || method !== "All Methods" || groupBy !== "Group by Job" || datePreset !== "Last 30 Days" || sort !== "Newest First" || Boolean(q.trim());
+  function resetFilters() {
+    setSettlementType("All Types"); setStatus("All Status"); setPayerType("All Payers"); setPayeeType("All Payees"); setMethod("All Methods");
+    setGroupBy("Group by Job"); setDatePreset("Last 30 Days"); setDateRange(datePresetRange("Last 30 Days")); setSort("Newest First"); setQ(""); setPage(1);
+  }
   const loading = query.isLoading || (query.isFetching && !query.currentData);
   const value = (content) => summaryQuery.isLoading || summaryQuery.isFetching && !summaryQuery.currentData ? <Skeleton as="span" width={90} height={23} /> : content;
 
   const tabFiltered = useMemo(() => {
-    if (tab === "Driver Settlements")
-      return all.filter((s) => s.type === "Driver Payout");
-    if (tab === "Vendor Settlements")
-      return all.filter((s) => s.type === "Vendor Payment");
-    if (tab === "Customer Settlements")
-      return all.filter(
-        (s) => s.type === "Customer Refund" || s.payeeType === "Customer",
-      );
+    if (tab === "Escrow Releases") return all.filter((s) => s.isEscrowRelease);
+    if (tab === "Bank Payouts") return all.filter((s) => s.isBankPayout);
     return all;
   }, [all, tab]);
-
   const filtered = useMemo(() => {
     let rows = tabFiltered.filter(
       (s) =>
@@ -176,7 +143,7 @@ function SettlementsScreen() {
         (payeeType === "All Payees" || s.payeeType === payeeType) &&
         (method === "All Methods" || s.method === method) &&
         (!q ||
-          [s.id, s.relatedTo, s.payer, s.payee, ...s.transactionReferences].some(
+          [s.id, s.relatedTo, s.payer, s.payee, s.escrowId, ...s.transactionReferences, ...s.transactionIds].some(
             (v) => v && v.toLowerCase().includes(q.toLowerCase()),
           )),
     );
@@ -206,9 +173,9 @@ function SettlementsScreen() {
   return (
     <>
       <PageHeader
-        crumbs={["Business & Finance", "Settlements"]}
+        crumbs={["Finance", "Settlements"]}
         title="Settlements"
-        description="Manage and track all settlement activities across jobs, trips and parties."
+        description="Money paid out to parties: escrow releases to truckers, refunds to forwarders, and wallet-to-bank payouts."
       />
 
       <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
@@ -271,7 +238,7 @@ function SettlementsScreen() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 320px",
+          gridTemplateColumns: "minmax(0, 1fr)",
           gap: "var(--tk-grid-gap)",
           alignItems: "start",
         }}
@@ -286,131 +253,33 @@ function SettlementsScreen() {
             style={{ padding: "0 var(--tk-card-pad)" }}
             items={TABS}
           />
+          {tab === "Bank Payouts" && (
+            <p className="tk-meta" style={{ margin: "12px var(--tk-card-pad) 0" }}>
+              Withdrawal requests are approved or rejected on <Link to="/payouts">Payouts</Link>; this tab shows the resulting bank transfers.
+            </p>
+          )}
 
-          <div ref={filtersRef} style={{ scrollMarginTop: 80 }}>
-          <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
-            filters={
-              <>
-                <FilterButton
-                  label="Settlement Type"
-                  value={settlementType}
-                  options={[
-                    "All Types",
-                    "Driver Payout",
-                    "Transporter Payment",
-                    "Vendor Payment",
-                    "Customer Refund",
-                  ]}
-                  active={settlementType !== "All Types"}
-                  onChange={(v) => {
-                    setSettlementType(v);
-                    setPage(1);
-                  }}
-                />
-                <FilterButton
-                  label="Status"
-                  value={status}
-                  options={[
-                    "All Status",
-                    "Completed",
-                    "Pending",
-                    "On Hold",
-                    "Failed",
-                  ]}
-                  active={status !== "All Status"}
-                  onChange={(v) => {
-                    setStatus(v);
-                    setPage(1);
-                  }}
-                />
-                <FilterButton
-                  label="Payer Type"
-                  value={payerType}
-                  options={["All Payers", "Importer", "Customer", "Internal"]}
-                  active={payerType !== "All Payers"}
-                  onChange={(v) => {
-                    setPayerType(v);
-                    setPage(1);
-                  }}
-                />
-                <FilterButton
-                  label="Payee Type"
-                  value={payeeType}
-                  options={[
-                    "All Payees",
-                    "Driver",
-                    "Transporter",
-                    "Vendor",
-                    "Customer",
-                  ]}
-                  active={payeeType !== "All Payees"}
-                  onChange={(v) => {
-                    setPayeeType(v);
-                    setPage(1);
-                  }}
-                />
-                <FilterButton
-                  label="Payment Method"
-                  value={method}
-                  options={["All Methods", "Bank Transfer", "Wallet"]}
-                  active={method !== "All Methods"}
-                  onChange={(v) => {
-                    setMethod(v);
-                    setPage(1);
-                  }}
-                />
-                <FilterSelect label={dateLabel} icon="calendar" active onClick={() => setDateDialogOpen(true)} />
-              </>
-            }
-            trailing={<Button variant="outline" icon="download" disabled={loading || !knownCollection} onClick={() => exportSettlementRows(filtered)}>Export</Button>}
+          <TableToolbar
+            search={<SearchField placeholder="Search by settlement ID, job, payer, payee or reference…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+            filters={<>
+              <FilterChip name="Type" icon="coins" value={settlementType} allValue="All Types" options={TYPE_OPTIONS} onChange={(v) => { setSettlementType(v); setPage(1); }} />
+              <FilterChip name="Status" icon="circle-dot" value={status} allValue="All Status" options={["All Status", "Completed", "Pending", "On Hold", "Failed"]} onChange={(v) => { setStatus(v); setPage(1); }} />
+              <FilterChip name="Payer" icon="arrow-up-right" value={payerType} allValue="All Payers" options={["All Payers", "Importer", "Customer", "Internal"]} onChange={(v) => { setPayerType(v); setPage(1); }} />
+              <FilterChip name="Payee" icon="arrow-down-left" value={payeeType} allValue="All Payees" options={["All Payees", "Transporter", "Customer"]} onChange={(v) => { setPayeeType(v); setPage(1); }} />
+              <FilterChip name="Method" icon="wallet" value={method} allValue="All Methods" options={["All Methods", "Bank Transfer", "Wallet"]} onChange={(v) => { setMethod(v); setPage(1); }} />
+              <FilterChip name="Grouping" icon="layers" value={groupBy} allValue="Group by Job" options={["Group by Job", "Group by Trip"]} onChange={(v) => { setGroupBy(v); setPage(1); }} />
+              <FilterChip name="Date" icon="calendar" value={datePreset} allValue="All Dates"
+                options={[...DATE_PRESETS, { value: "Custom", label: datePreset === "Custom" ? dateLabel : "Custom range…" }]}
+                onChange={(v) => { if (v === "Custom") { setDateDialogOpen(true); return; } setDatePreset(v); setDateRange(datePresetRange(v)); setPage(1); }} />
+              <FilterChip name="Sort" icon="arrow-down-up" value={sort} allValue="Newest First" options={["Newest First", "Oldest First"]} onChange={setSort} />
+            </>}
+            onClear={filtersActive ? resetFilters : undefined}
+            viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
+            trailing={<>
+              <Button variant="outline" icon="file-text" disabled={!dateParams} onClick={() => void operations.downloadReport(dateParams)}>Report</Button>
+              <Button variant="outline" icon="download" disabled={loading || !knownCollection} onClick={() => exportSettlementRows(filtered)}>Export</Button>
+            </>}
           />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "0 var(--tk-card-pad) 12px",
-            }}
-          >
-            <SearchField
-              placeholder="Search settlements..."
-              style={{ flex: "1 1 240px" }}
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-            />
-            <span
-              style={{
-                display: "flex",
-                border: "1px solid var(--tk-line-strong)",
-                borderRadius: "var(--tk-r-md)",
-                overflow: "hidden",
-              }}
-            >
-              <IconButton
-                icon="list"
-                tone={view === "list" ? "blue" : "ghost"}
-                style={{ borderRadius: 0 }}
-                onClick={() => setView("list")}
-              />
-              <IconButton
-                icon="grid-3x3"
-                tone={view === "grid" ? "blue" : "ghost"}
-                style={{ borderRadius: 0 }}
-                onClick={() => setView("grid")}
-              />
-            </span>
-            <FilterButton
-              label="Sort by"
-              value={`Sort by: ${sort}`}
-              options={["Newest First", "Oldest First"]}
-              onChange={setSort}
-            />
-          </div>
 
           {loading ? (
             <DriverTableLoading columns={10} label="Loading settlements" />
@@ -572,165 +441,10 @@ function SettlementsScreen() {
           )}
         </SectionCard>
 
-        <div
-          style={{
-            display: "grid",
-            gap: "var(--tk-grid-gap)",
-            alignContent: "start",
-          }}
-        >
-          <SectionCard
-            title="Payout Summary"
-            footer={<a href="#" onClick={(event) => { event.preventDefault(); void operations.downloadReport(dateParams); }}>View Report →</a>}
-          >
-            <div style={{ display: "grid", justifyItems: "center", gap: 14 }}>
-              <DonutChart
-                size={160}
-                thickness={18}
-                centerValue={settlementMillions(settlementSummary.completedSettlements)}
-                centerLabel="Total Settled"
-                data={payoutSummary.filter((d) => Number.isFinite(d.chartValue)).map((d) => ({
-                  label: d.label,
-                  value: d.chartValue,
-                  color: d.color,
-                }))}
-              />
-              <LegendList
-                style={{ width: "100%" }}
-                items={payoutSummary.map((d) => ({
-                  label: d.label,
-                  value: d.pct,
-                  display: `${formatNaira(d.amount)} (${d.pct == null ? "—" : `${d.pct}%`})`,
-                  color: d.color,
-                }))}
-                showShare={false}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Settlement Status"
-            action={<a href="#">View All</a>}
-          >
-            {settlementStatusBreakdown.map((s) => (
-              <div
-                key={s.label}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "9px 0",
-                  borderTop: "1px solid var(--tk-line)",
-                }}
-              >
-                <Icon
-                  name={s.icon}
-                  size={16}
-                  color={`var(--tk-${s.tone === "info" ? "blue" : s.tone})`}
-                />
-                <span
-                  style={{
-                    flex: 1,
-                    font: "500 13px/18px var(--tk-font-sans)",
-                    color: "var(--tk-ink-700)",
-                  }}
-                >
-                  {s.label}
-                </span>
-                <span
-                  style={{
-                    font: "600 13px/18px var(--tk-font-sans)",
-                    color: "var(--tk-ink-900)",
-                  }}
-                >
-                  {settlementNumber(s.count)} settlements
-                </span>
-                <span className="tk-meta">{s.pct}</span>
-              </div>
-            ))}
-          </SectionCard>
-
-          <SectionCard
-            title="Recent Settlements"
-            className={styles.recent}
-            action={<a href="#">View All</a>}
-          >
-            {all.slice(0, 3).map((r) => (
-              <div
-                key={r.key}
-                className={styles.recentRow}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 0",
-                  borderTop: "1px solid var(--tk-line)",
-                }}
-              >
-                <span
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: "var(--tk-r-sm)",
-                    background: "var(--tk-blue-soft)",
-                    color: "var(--tk-blue)",
-                    display: "grid",
-                    placeItems: "center",
-                    flex: "0 0 auto",
-                  }}
-                >
-                  <Icon name="coins" size={16} />
-                </span>
-                <div className={styles.recentInfo} style={{ flex: 1, minWidth: 0 }}>
-                  <Link
-                    to={settlementDetailUrl(r)}
-                    style={{
-                      display: "block",
-                      font: "600 13px/18px var(--tk-font-sans)",
-                      color: "var(--tk-ink-900)",
-                    }}
-                  >
-                    {r.id}
-                  </Link>
-                  <span className="tk-meta">
-                    {r.relatedTo} · {r.payee}
-                  </span>
-                </div>
-                <div className={styles.recentAmount} style={{ textAlign: "right" }}>
-                  <div
-                    style={{
-                      font: "600 13px/18px var(--tk-font-sans)",
-                      color: "var(--tk-ink-900)",
-                    }}
-                  >
-                    {formatNaira(r.amount)}
-                  </div>
-                  <Badge tone={STATUS_TONE[r.status] || "neutral"}>{r.status}</Badge>
-                </div>
-              </div>
-            ))}
-          </SectionCard>
-
-          <SectionCard
-            title="Settlement Alerts"
-            action={<a href="#">View All</a>}
-          >
-            {alertsQuery.isLoading ? <DriverTableLoading columns={3} label="Loading settlements" /> : settlementAlerts.map((a, i) => (
-              <AlertRow
-                key={i}
-                icon={a.icon}
-                tone={a.tone}
-                title={a.title}
-                description={a.description}
-                action={<span className="tk-meta">{a.time}</span>}
-              />
-            ))}
-          </SectionCard>
-        </div>
       </div>
       {dateDialogOpen && <SettlementDateRangeDialog range={dateRange} onClose={() => setDateDialogOpen(false)} onApply={next => {
         if (!settlementDateParams(next)) return;
-        setDateRange({ ...next }); setPage(1); setMenuFor(null); setDateDialogOpen(false);
+        setDateRange({ ...next }); setDatePreset("Custom"); setPage(1); setMenuFor(null); setDateDialogOpen(false);
       }} />}
     </>
   );

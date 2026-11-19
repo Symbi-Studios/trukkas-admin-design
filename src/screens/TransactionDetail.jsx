@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { useNavigate, useParams, Link } from '../router.js';
+import { FinanceRelatedLinks } from './FinanceRelatedLinks.jsx';
+import { withParams } from '../domain/urlState.js';
 import {
   PageHeader, Button, Badge, Card, SectionCard, LabelValue, CopyableId, DropdownMenu, Icon,
   Timeline, AttachmentCard, Modal, TextField, Textarea, Banner, Skeleton,
@@ -196,7 +198,7 @@ export function TransactionDetail() {
 
   return (
     <>
-      <PageHeader crumbs={['Transactions', r.displayId]} title="Transaction Details"
+      <PageHeader crumbs={['Finance', 'Transactions', r.displayId]} title="Transaction Details"
         description="View full details, status and history of this transaction."
         actions={<>
           <Button variant="outline" icon="printer" onClick={() => window.print()}>Print</Button>
@@ -333,6 +335,12 @@ export function TransactionDetail() {
               ))}
             </div>
           </SectionCard>
+
+          <FinanceRelatedLinks items={[
+            r.escrowId && { icon: 'lock', label: 'Escrow hold', description: 'The escrow this transaction belongs to', to: '/escrow/detail?id=' + encodeURIComponent(r.escrowId) },
+            r.escrowId && { icon: 'coins', label: 'Settlements from this escrow', description: 'Mobilisation, final payment and dispute releases', to: withParams('/settlements', { q: r.escrowId }) },
+            r.typeCode === 'WITHDRAWAL' && r.displayId && { icon: 'banknote', label: 'Withdrawal request', description: 'Review on Payouts', to: withParams('/payouts', { q: r.displayId }) },
+          ]} />
 
           <SectionCard title="Actions">
             <div style={{ display: 'grid', gap: 10 }}>

@@ -17,19 +17,13 @@ import {
   SectionCard,
   TableToolbar,
   SearchField,
-  Select,
-  TextField,
   DataTable,
   Pagination,
   Badge,
-  DonutChart,
-  LegendList,
   IconButton,
   DropdownMenu,
   Icon,
-  AlertRow,
   EmptyState,
-  FilterSelect,
   Skeleton,
   StatsPanel,
 } from "../ds.js";
@@ -40,9 +34,10 @@ import {
   transactionInsights, transactionNumber, transactionMoney as formatNaira, transactionAmount, transactionDetailUrl,
 } from "../store/features/transactions/transactionsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
-import { transactionDatePresets, transactionRangeLabel } from "../store/features/transactions/transactionDates.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import styles from "./Transactions.module.css";
+import { initialSearch, urlParam } from "../domain/urlState.js";
+import { DATE_PRESETS, FilterChip, datePresetRange } from "../components/FilterChip.jsx";
 
 const EMPTY_ROWS = [];
 
@@ -68,6 +63,7 @@ const TYPE_TONE = {
 
 const TYPE_OPTIONS = [
   "All Types",
+  "Escrow",
   "Payment In",
   "Payment Out",
   "Payout",
@@ -155,36 +151,6 @@ function downloadCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-function DateRangeButton({ value, onChange, presets }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span style={{ position: "relative" }}>
-      <FilterSelect
-        label={value}
-        icon="calendar"
-        onClick={() => setOpen((o) => !o)}
-      />
-      {open && (
-        <span
-          style={{ position: "absolute", right: 0, top: 44, zIndex: 30 }}
-          onMouseLeave={() => setOpen(false)}
-        >
-          <DropdownMenu
-            width={220}
-            items={presets.map((preset) => ({
-              label: preset.label,
-              icon: preset.label === value ? "check" : undefined,
-              onClick: () => {
-                onChange(preset);
-                setOpen(false);
-              },
-            }))}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function RowMenu({ items, id, menuFor, setMenuFor }) {
   const anchorRef = useRef(null);
@@ -252,14 +218,19 @@ export function Transactions() {
   const operationPending = useRef(false);
   const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching || detailState.isFetching || receiptState.isFetching || reportState.isFetching;
 
-  const tab = 'All Transactions';
-  const [datePresets] = useState(() => transactionDatePresets());
-  const defaultFilters = useMemo(() => ({ ...DEFAULT_FILTERS, from: datePresets[0].from, to: datePresets[0].to }), [datePresets]);
-  const filtersRef = useRef(null);
-  const [draft, setDraft] = useState(defaultFilters);
-  const [applied, setApplied] = useState(defaultFilters);
-  const dateLabel = datePresets.find(preset => preset.from === applied.from && preset.to === applied.to)?.label || transactionRangeLabel(applied.from, applied.to);
-  const [q, setQ] = usePageSearchState("", () => setPage(1));
+  const DEFAULT_DATE = "Last 7 Days";
+  const defaultFilters = useMemo(() => ({ ...DEFAULT_FILTERS, ...datePresetRange(DEFAULT_DATE) }), []);
+  // Other finance pages link here with ?q=, ?type= or ?status=; those links search all dates.
+  const [linkedFilters] = useState(() => {
+    const type = urlParam("type"), status = urlParam("status");
+    const linked = { ...(TYPE_OPTIONS.includes(type) ? { type } : {}), ...(STATUS_OPTIONS.includes(status) ? { status } : {}) };
+    return Object.keys(linked).length || initialSearch() ? { ...defaultFilters, ...linked, from: "", to: "" } : defaultFilters;
+  });
+  const [applied, setApplied] = useState(linkedFilters);
+  const [datePreset, setDatePreset] = useState(() => linkedFilters.from ? DEFAULT_DATE : "All Dates");
+  const setFilter = (key) => (value) => { setApplied((current) => ({ ...current, [key]: value })); setPage(1); };
+  const setDate = (preset) => { setDatePreset(preset); setApplied((current) => ({ ...current, ...datePresetRange(preset) })); setPage(1); };
+  const [q, setQ] = usePageSearchState(initialSearch(), () => setPage(1));
   const [page, setPage] = useState(1);
   const [menuFor, setMenuFor] = useState(null);
   const [selected, setSelected] = useState([]);
@@ -268,13 +239,9 @@ export function Transactions() {
   const statsDates = useMemo(() => statsPeriodDates(statsPeriodKey), [statsPeriodKey]);
   const statsQuery = useGetAdminTransactionStatsQuery({ from: statsDates.from, to: statsDates.to });
   const stats = statsQuery.error ? null : statsQuery.currentData;
-  const insights = useMemo(() => transactionInsights(ledger?.rows, applied.from, applied.to, stats), [ledger, applied.from, applied.to, stats]);
-  // The stat cards and volume breakdown follow the stats period; the table and its filters keep their own dates.
+  // The stat cards follow the stats period; the table and its filters keep their own dates.
   const statsInsights = useMemo(() => transactionInsights(ledger?.rows, statsDates.from, statsDates.to, stats), [ledger, statsDates.from, statsDates.to, stats]);
   const transactionSummary = statsInsights.summary;
-  const transactionVolumeBreakdown = statsInsights.volume;
-  const transactionStatusBreakdown = insights.statuses;
-  const transactionAlerts = insights.alerts;
   const metric = (value) => (!ledger && ledgerQuery.isFetching) || (!stats && statsQuery.isFetching) ? <Skeleton as="span" width={54} height={23} /> : value;
 
   async function downloadReceipt(row) {
@@ -321,36 +288,11 @@ export function Transactions() {
     [all],
   );
 
-  const tabFiltered = useMemo(() => {
-    switch (tab) {
-      case "Escrow":
-        return all.filter((r) => r.isEscrow);
-      case "Payments In":
-        return all.filter((r) => r.pos === true);
-      case "Payments Out":
-        return all.filter((r) => r.pos === false);
-      case "Wallet Transfers":
-        return all.filter((r) => r.type === "Wallet Funding");
-      case "Settlements":
-        return all.filter((r) => r.isSettlement);
-      case "Refunds":
-        return all.filter((r) => r.type === "Refund");
-      case "Fees & Charges":
-        return all.filter((r) => r.type === "Fee");
-      case "Reversals":
-        return all.filter(
-          (r) => r.type === "Reversal" || r.status === "Reversed",
-        );
-      default:
-        return all;
-    }
-  }, [all, tab]);
-
   const filtered = useMemo(() => {
     const { type, status, related, party, from, to } = applied;
     const fromD = from ? Date.parse(`${from}T00:00:00+01:00`) : null;
     const toD = to ? Date.parse(`${to}T23:59:59.999+01:00`) : null;
-    return tabFiltered.filter((r) => {
+    return all.filter((r) => {
       const rd = r.timestamp;
       const inRange =
         (!from || (Number.isFinite(fromD) && rd != null && rd >= fromD)) &&
@@ -373,43 +315,26 @@ export function Transactions() {
           ].some((v) => v && v.toLowerCase().includes(q.toLowerCase())))
       );
     });
-  }, [tabFiltered, applied, q]);
+  }, [all, applied, q]);
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const filtersActive =
     JSON.stringify(applied) !== JSON.stringify(defaultFilters);
 
-  function handleApply() {
-    setApplied(draft);
-    setPage(1);
-  }
   function handleReset() {
-    setDraft(defaultFilters);
     setApplied(defaultFilters);
+    setDatePreset(DEFAULT_DATE);
     setQ("");
     setPage(1);
     if (ledgerQuery.error) ledgerQuery.refetch();
     if (statsQuery.error) statsQuery.refetch();
   }
-  function jumpToStatus(status) {
-    const next = { ...defaultFilters, status };
-    setDraft(next);
-    setApplied(next);
-    setPage(1);
-  }
-  function resetToAll() {
-    setDraft(defaultFilters);
-    setApplied(defaultFilters);
-    setQ("");
-    setPage(1);
-  }
-
   return (
     <>
       <PageHeader
-        crumbs={["Business & Finance", "Transactions"]}
+        crumbs={["Finance", "Transactions"]}
         title="Transactions"
-        description="Track all money movements across escrow, wallets, settlements and payouts."
+        description="The ledger of every money movement: escrow, wallet top-ups, releases, payouts, fees and refunds."
       />
 
       <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
@@ -478,100 +403,23 @@ export function Transactions() {
 
 
 
-          <TableToolbar filters={<>
-              <Select
-                label="Transaction Type"
-                value={draft.type}
-                options={TYPE_OPTIONS}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, type: e.target.value }))
-                }
-              />
-              <Select
-                label="Status"
-                value={draft.status}
-                options={STATUS_OPTIONS}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, status: e.target.value }))
-                }
-              />
-              <TextField
-                label="From Date"
-                type="date"
-                icon="calendar"
-                value={draft.from}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, from: e.target.value }))
-                }
-              />
-              <TextField
-                label="To Date"
-                type="date"
-                icon="calendar"
-                value={draft.to}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, to: e.target.value }))
-                }
-              />
-              <Select
-                label="Related To"
-                value={draft.related}
-                options={RELATED_OPTIONS}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, related: e.target.value }))
-                }
-              />
-              <Select
-                label="Party"
-                value={draft.party}
-                options={partyOptions}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, party: e.target.value }))
-                }
-              />
-             </>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
-            search={
-              <SearchField
-                placeholder="Search transactions (reference, job ID, customer...)"
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(1);
-                }}
-              />
-            }
-            trailing={
-              <>
-                <DateRangeButton
-                  value={dateLabel}
-                  presets={datePresets}
-                  onChange={({ from, to }) => {
-                    setDraft((d) => ({ ...d, from, to }));
-                    setApplied((a) => ({ ...a, from, to }));
-                    setPage(1);
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  icon="rotate-ccw"
-                  onClick={handleReset}
-                >
-                  Reset
-                </Button>
-                <Button icon="check" onClick={handleApply}>
-                  Apply
-                </Button>
-                <Button
-                  variant="outline"
-                  icon="download"
-                  disabled={!ledger || ledgerQuery.isFetching}
-                  onClick={() => downloadCsv(selected.length ? filtered.filter((r) => selected.includes(r.id)) : filtered)}
-                >
-                  Export
-                </Button>
-              </>
-            }
+          <TableToolbar
+            search={<SearchField placeholder="Search by reference, job, party or description…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+            filters={<>
+              <FilterChip name="Type" icon="receipt" value={applied.type} allValue="All Types" options={TYPE_OPTIONS} onChange={setFilter("type")} />
+              <FilterChip name="Status" icon="circle-dot" value={applied.status} allValue="All Statuses" options={STATUS_OPTIONS} onChange={setFilter("status")} />
+              <FilterChip name="Related To" icon="link" value={applied.related} allValue={RELATED_OPTIONS[0]} options={RELATED_OPTIONS} onChange={setFilter("related")} />
+              <FilterChip name="Party" icon="user" value={applied.party} allValue="All Parties" options={partyOptions} onChange={setFilter("party")} />
+              <FilterChip name="Date" icon="calendar" value={datePreset} allValue="All Dates" options={DATE_PRESETS} onChange={setDate} />
+            </>}
             onClear={filtersActive || q ? handleReset : undefined}
+            viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
+            trailing={<>
+              <Button variant="outline" icon="file-text" disabled={busy || !applied.from || !applied.to} title={!applied.from || !applied.to ? "Pick a date range to download a report" : undefined} onClick={() => void viewReport()}>Report</Button>
+              <Button variant="outline" icon="download" disabled={!ledger || ledgerQuery.isFetching} onClick={() => downloadCsv(selected.length ? filtered.filter((r) => selected.includes(r.id)) : filtered)}>
+                {selected.length ? `Export ${selected.length}` : "Export"}
+              </Button>
+            </>}
           />
 
           {!ledger && ledgerQuery.isFetching ? <DriverTableLoading columns={10} label="Loading transactions" /> : (
@@ -737,218 +585,6 @@ export function Transactions() {
           )}
         </SectionCard>
 
-        <div
-          className={styles.sidebar}
-          style={{
-            display: "grid",
-            gap: "var(--tk-grid-gap)",
-            alignContent: "start",
-          }}
-        >
-          <SectionCard
-            title="Transaction Summary"
-            footer={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  void viewReport();
-                }}
-              >
-                View Report →
-              </a>
-            }
-          >
-            <div style={{ display: "grid", justifyItems: "center", gap: 14 }}>
-              <DonutChart
-                size={180}
-                thickness={18}
-                centerValue={formatNaira(insights.volumeTotal)}
-                centerLabel="Total Volume"
-                data={transactionVolumeBreakdown.filter((d) => d.pct != null).map((d) => ({
-                  label: d.label,
-                  value: d.pct,
-                  color: d.color,
-                }))}
-              />
-              <LegendList
-                style={{ width: "100%" }}
-                items={transactionVolumeBreakdown.map((d) => ({
-                  label: d.label,
-                  value: d.pct,
-                  display: d.amount == null || d.pct == null ? "—" : `${formatNaira(d.amount)} (${d.pct}%)`,
-                  color: d.color,
-                }))}
-                showShare={false}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Transaction Status"
-            action={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  resetToAll();
-                }}
-              >
-                View All
-              </a>
-            }
-          >
-            {transactionStatusBreakdown.map((s) => (
-              <div
-                key={s.label}
-                onClick={() => jumpToStatus(s.label)}
-                role="button"
-                tabIndex={0}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "9px 0",
-                  borderTop: "1px solid var(--tk-line)",
-                  cursor: "pointer",
-                }}
-              >
-                <Icon
-                  name={s.icon}
-                  size={16}
-                  color={`var(--tk-${s.tone === "info" ? "blue" : s.tone})`}
-                />
-                <span
-                  style={{
-                    flex: 1,
-                    font: "500 13px/18px var(--tk-font-sans)",
-                    color: "var(--tk-ink-700)",
-                  }}
-                >
-                  {s.label}
-                </span>
-                <span
-                  style={{
-                    font: "600 13px/18px var(--tk-font-sans)",
-                    color: "var(--tk-ink-900)",
-                  }}
-                >
-                  {transactionNumber(s.count)} transactions
-                </span>
-                <span className="tk-meta">{s.pct}</span>
-              </div>
-            ))}
-          </SectionCard>
-
-          <SectionCard
-            title="Recent Transactions"
-            action={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  resetToAll();
-                }}
-              >
-                View All
-              </a>
-            }
-          >
-            {!all.length && !ledgerQuery.isFetching && <span className="tk-meta">—</span>}
-            {all.slice(0, 5).map((r) => (
-              <div
-                key={r.id}
-                className={styles.recentRow}
-                style={{
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 0",
-                  borderTop: "1px solid var(--tk-line)",
-                }}
-              >
-                <span
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: "var(--tk-r-sm)",
-                    background: "var(--tk-blue-soft)",
-                    color: "var(--tk-blue)",
-                    display: "grid",
-                    placeItems: "center",
-                    flex: "0 0 auto",
-                  }}
-                >
-                  <Icon name="receipt" size={16} />
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Link
-                    to={transactionDetailUrl(r.id)}
-                    style={{
-                      display: "block",
-                      font: "600 13px/18px var(--tk-font-sans)",
-                      color: "var(--tk-ink-900)",
-                      overflowWrap: "anywhere",
-                    }}
-                  >
-                    {r.displayId}
-                  </Link>
-                  <span
-                    className="tk-meta"
-                    style={{
-                      display: "block",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {r.description}
-                  </span>
-                </div>
-                <div className={styles.recentMeta}>
-                  <div
-                    style={{
-                      font: "600 13px/18px var(--tk-font-sans)",
-                      color: r.pos ? "var(--tk-success)" : "var(--tk-danger)",
-                    }}
-                  >
-                    {transactionAmount(r, true)}
-                  </div>
-                  <span className="tk-meta">
-                    {r.date === "Just now" ? "just now" : `${r.date} ${r.time}`}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </SectionCard>
-
-          <SectionCard
-            title="Transaction Alerts"
-            action={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  jumpToStatus("Failed");
-                }}
-              >
-                View All
-              </a>
-            }
-          >
-            {!transactionAlerts.length && <span className="tk-meta">{statsQuery.error ? getApiErrorMessage(statsQuery.error) : '—'}</span>}
-            {transactionAlerts.map((a, i) => (
-              <div className={styles.alertRow} key={i}>
-                <AlertRow
-                  icon={a.icon}
-                  tone={a.tone}
-                  title={a.title}
-                  description={a.description}
-                  action={<span className="tk-meta">{a.time}</span>}
-                />
-              </div>
-            ))}
-          </SectionCard>
-        </div>
       </div>
     </>
   );

@@ -84,24 +84,6 @@ export const unavailableEscrowWeeklyActivity = Object.fromEntries(['fundsHeld', 
 
 export const emptyEscrowOverview = adaptEscrowOverview(null);
 
-// Minutes are the documented live override; hours are the production default.
-// They are alternative policy settings, not additive duration components.
-export function adaptEscrowRules(response) {
-  const config = record(unwrapApiResponseData(response)?.config), escrow = record(config.escrow);
-  const fee = number(config.pricing?.platformFee), duration = record(escrow.standardHoldDuration);
-  const hours = number(duration.hours), minutes = number(duration.minutes);
-  const effectiveMinutes = Object.hasOwn(duration, 'minutes') ? minutes != null && minutes >= 0 ? minutes : null
-    : hours != null && hours >= 0 && Number.isFinite(hours * 60) ? hours * 60 : null;
-  const hold = effectiveMinutes == null ? '—' : effectiveMinutes % 60 === 0 ? (effectiveMinutes / 60).toLocaleString('en-NG') + ' hrs' : effectiveMinutes.toLocaleString('en-NG') + ' mins';
-  const enabled = value => typeof value === 'boolean' ? value ? 'Enabled' : 'Disabled' : '—';
-  return [
-    { id: 'ESR-001', icon: 'lock', iconTint: 'blue', name: 'Standard Hold Period', description: display(duration.description), value: hold },
-    { id: 'ESR-002', icon: 'shield-check', iconTint: 'green', name: 'Auto-Release on Confirmation', description: 'Releases automatically when customer confirms delivery', value: enabled(escrow.autoRelease?.enabled) },
-    { id: 'ESR-003', icon: 'circle-alert', iconTint: 'red', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', value: enabled(escrow.disputeFreeze?.enabled) },
-    { id: 'ESR-004', icon: 'percent', iconTint: 'purple', name: 'Platform Fee Deduction', description: 'Deducted from held amount before release', value: escrowMoney(fee) },
-  ];
-}
-
 const invalid = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
 const serializeWalletQuery = args => defaultSerializeQueryArgs(args) + ':v2';
 function scopedWalletQuery(baseQuery, api, args = {}) {
@@ -191,23 +173,6 @@ async function readCollection(baseQuery, url, key, adapt) {
   return { data: rows.map(adapt) };
 }
 
-export function adaptEscrowTransaction(row) {
-  const pos = row.direction === 'inflow' ? true : row.direction === 'outflow' ? false : null;
-  const type = text(row.type);
-  const held = type === 'ESCROW_HOLD' || type === 'ESCROW_LOCK';
-  const released = type === 'ESCROW_RELEASE';
-  return {
-    id: display(row.id), reference: display(row.reference), jobId: display(row.jobId),
-    party: partyName(row.party) ?? '—', type: text(row.typeLabel) ?? status(type), typeCode: type,
-    amount: number(row.amount), pos, statusCode: text(row.status), status: status(row.status),
-    date: datePart(row.createdAt), time: datePart(row.createdAt, true), createdAt: text(row.createdAt),
-    icon: held ? 'hourglass' : released ? 'arrow-up' : 'coins',
-    tone: held ? 'var(--tk-warning)' : released ? 'var(--tk-success)' : 'var(--tk-blue)',
-    releaseId: display(row.id), releasedTo: partyName(row.party) ?? '—',
-    releasedOn: datePart(row.releasedAt), releasedTime: datePart(row.releasedAt, true), releasedBy: '—', settlementReference: display(row.settlementReference),
-  };
-}
-
 function adaptDispute(row, detail) {
   const source = record(detail), escrow = record(source.job?.escrow);
   return {
@@ -274,14 +239,6 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
         icon: 'triangle-alert', tone: row.severity === 'CRITICAL' || row.severity === 'ERROR' ? 'danger' : row.severity === 'INFO' ? 'info' : 'warning',
       })), providesTags: ['AdminEscrowAlerts'],
     }),
-    getAdminEscrowLedger: builder.query({
-      serializeQueryArgs: serializeWalletQuery,
-      async queryFn(args, api, _options, baseQuery) {
-        baseQuery = scopedWalletQuery(baseQuery, api, args);
-        const result = await readAll(baseQuery, api, '/admin/payments/transactions', 'rows', { tab: 'escrow' });
-        return result.error ? result : { data: result.data.map(adaptEscrowTransaction) };
-      }, providesTags: ['AdminEscrowLedger'],
-    }),
     getAdminEscrowDisputes: builder.query({
       serializeQueryArgs: serializeWalletQuery,
       async queryFn(args, api, _options, baseQuery) {
@@ -302,13 +259,6 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
         return { data: rows };
       }, providesTags: ['AdminEscrowDisputes'],
     }),
-    getAdminEscrowRules: builder.query({
-      serializeQueryArgs: serializeWalletQuery,
-      async queryFn(args, api, _options, baseQuery) {
-        const result = await scopedWalletQuery(baseQuery, api, args)({ url: '/admin/config' });
-        return result.error ? result : { data: adaptEscrowRules(result.data) };
-      }, providesTags: ['AdminPricingConfig'],
-    }),
     getAdminEscrowActivity: builder.query({
       serializeQueryArgs: serializeWalletQuery,
       async queryFn(args, api, _options, baseQuery) {
@@ -320,4 +270,4 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
   }),
 });
 
-export const { useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery, useGetAdminEscrowHoldQuery, useGetAdminEscrowReleasesQuery, useGetAdminEscrowAccountsQuery, useGetAdminEscrowAlertsQuery, useGetAdminEscrowLedgerQuery, useGetAdminEscrowDisputesQuery, useGetAdminEscrowRulesQuery, useGetAdminEscrowActivityQuery } = walletsApi;
+export const { useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery, useGetAdminEscrowHoldQuery, useGetAdminEscrowReleasesQuery, useGetAdminEscrowAccountsQuery, useGetAdminEscrowAlertsQuery, useGetAdminEscrowDisputesQuery, useGetAdminEscrowActivityQuery } = walletsApi;

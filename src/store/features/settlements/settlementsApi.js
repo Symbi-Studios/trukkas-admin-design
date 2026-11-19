@@ -52,7 +52,12 @@ export function adaptAdminSettlement(value) {
     payer: display(dto.payer?.name), payerType: ({ IMPORTER:'Importer', CUSTOMER:'Customer', INTERNAL:'Internal' })[dto.payer?.businessType] ?? '—', payerFinancialType: label(dto.payer?.type),
     payee: display(dto.payee?.name), payeeType: dto.payee?.type === 'TRUCKER' ? 'Transporter' : dto.payee?.type === 'FORWARDER' ? 'Customer' : label(dto.payee?.type),
     amount: dto.currency === 'NGN' ? number(dto.amount) : null, currency: text(dto.currency),
-    type: label(dto.category), status: label(dto.status), statusCode: text(dto.status), method: label(dto.method),
+    // settlementType (MOBILIZATION | FINAL_PAYMENT | DISPUTE_SETTLEMENT | CUSTOMER_REFUND | BANK_PAYOUT) is what each row is;
+    // category is the summary bucket. kind ESCROW_TRANCHE / ESCROW_ADJUSTMENT rows are escrow releases.
+    type: text(dto.settlementType) ? label(dto.settlementType) : label(dto.category), category: label(dto.category),
+    isEscrowRelease: ['ESCROW_TRANCHE', 'ESCROW_ADJUSTMENT'].includes(dto.kind), isBankPayout: dto.kind === 'BANK_PAYOUT' || dto.settlementType === 'BANK_PAYOUT',
+    escrowId: text(dto.escrowId), transactionIds: Array.isArray(dto.transactionIds) ? dto.transactionIds.filter((entry) => text(entry)) : [],
+    status: label(dto.status), statusCode: text(dto.status), method: label(dto.method),
     settledOn: datePart(dto.settledAt), settledTime: datePart(dto.settledAt, true), settledAt: text(dto.settledAt),
     sortAt: datePart(dto.date) === '—' ? null : text(dto.date),
     eligible: typeof dto.eligibility?.eligible === 'boolean' ? dto.eligibility.eligible : null,
@@ -117,12 +122,11 @@ export function settlementInsights(response) {
     const matches = categoryRows?.filter(row => row?.category === key);
     return matches?.length === 1 ? matches[0] : null;
   };
+  // DRIVER_PAYOUT and VENDOR_PAYMENT are always 0 (unsupported on the platform), so they aren't charted.
   const categories = [
-    ['Drivers','DRIVER_PAYOUT','var(--tk-viz-1)'],
-    ['Transporters','TRANSPORTER_PAYMENT','var(--tk-viz-2)'],
-    ['Vendors','VENDOR_PAYMENT','var(--tk-viz-3)'],
-    ['Customers (Refunds)','CUSTOMER_REFUND','var(--tk-viz-5)'],
-    ['Others','BANK_PAYOUT','var(--tk-ink-300)'],
+    ['Transporter payments','TRANSPORTER_PAYMENT','var(--tk-viz-2)'],
+    ['Bank payouts','BANK_PAYOUT','var(--tk-viz-1)'],
+    ['Customer refunds','CUSTOMER_REFUND','var(--tk-viz-5)'],
   ];
   const payouts = categories.map(([name,key,color]) => {
     const row = category(key), known = typeof row?.supported === 'boolean';
@@ -131,7 +135,8 @@ export function settlementInsights(response) {
   });
   // Plot a complete partition only; unsupported categories retain documented 0.
   const knownKeys = new Set(categories.map(([,key]) => key));
-  const complete = categoryRows && categoryRows.length === categories.length && categoryRows.every(row => knownKeys.has(row?.category))
+  const complete = categoryRows && categoryRows.filter(row => knownKeys.has(row?.category)).length === categories.length
+    && categoryRows.every(row => knownKeys.has(row?.category) || row?.supported === false && nonnegative(row.amount) === 0)
     && payouts.every(row => row.amount != null && row.pct != null) && summary.completedSettlements != null
     && Math.abs(payouts.reduce((sum,row) => sum+row.amount,0)-summary.completedSettlements) < 0.01
     && (summary.completedSettlements === 0 ? payouts.every(row => row.pct === 0) : Math.abs(payouts.reduce((sum,row) => sum+row.pct,0)-100) <= 0.3);

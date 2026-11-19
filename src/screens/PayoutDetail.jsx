@@ -334,7 +334,7 @@ export function PayoutDetail() {
             icon="arrow-left"
             onClick={() => navigate("/payouts")}
           >
-            Back to Requested Payouts
+            Back to Payouts
           </Button>
         </div>
       </Card>
@@ -440,7 +440,7 @@ export function PayoutDetail() {
     return (
       <>
         <PageHeader
-          crumbs={["Business & Finance", "Payouts", r.id]}
+          crumbs={["Finance", "Payouts", r.id]}
           title="Payout Details"
           description="View complete information about this payout, including beneficiary, source, and transaction details."
           actions={
@@ -820,11 +820,6 @@ export function PayoutDetail() {
 
             <SectionCard
               title="Related Records"
-              action={
-                <a href="#" onClick={(e) => e.preventDefault()}>
-                  View All
-                </a>
-              }
             >
               {r.relatedSettlement && (
                 <RelatedRecordRow
@@ -871,11 +866,6 @@ export function PayoutDetail() {
 
             <SectionCard
               title="Activity Timeline"
-              action={
-                <a href="#" onClick={(e) => e.preventDefault()}>
-                  View All
-                </a>
-              }
             >
               {activity.length ? <Timeline items={activity} /> : "—"}
             </SectionCard>
@@ -981,7 +971,7 @@ export function PayoutDetail() {
   return (
     <>
       <PageHeader
-        crumbs={["Business & Finance", "Payouts", "Requested Payouts", r.id]}
+        crumbs={["Finance", "Payouts", r.id]}
         title="Payout Request Details"
         description="Review the payout request, verify all information and take action."
       />
@@ -1413,7 +1403,7 @@ export function PayoutDetail() {
                   fullWidth
                   onClick={() => navigate("/payouts")}
                 >
-                  Back to Requested Payouts
+                  Back to Payouts
                 </Button>
               </div>
             )}
