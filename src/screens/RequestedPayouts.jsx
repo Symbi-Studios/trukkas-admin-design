@@ -15,7 +15,6 @@ import {
   SectionCard,
   TableToolbar,
   SearchField,
-  FilterSelect,
   DataTable,
   Pagination,
   Badge,
@@ -33,6 +32,7 @@ import {
 } from "../store/features/payouts/payoutsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
+import { DATE_PRESETS, FilterChip, datePresetRange } from "../components/FilterChip.jsx";
 import "./RequestedPayouts.css";
 
 const PAGE_SIZE = 10;
@@ -47,36 +47,6 @@ const STATUS_TONE = {
 };
 const TYPE_TONE = { "Driver Payout": "blue", "Company Payout": "purple" };
 
-function FilterButton({ label, value, options, active, onChange }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span style={{ position: "relative" }}>
-      <FilterSelect
-        label={value}
-        active={active}
-        onClick={() => setOpen((o) => !o)}
-      />
-      {open && (
-        <span
-          style={{ position: "absolute", left: 0, top: 44, zIndex: 30 }}
-          onMouseLeave={() => setOpen(false)}
-        >
-          <DropdownMenu
-            width={200}
-            items={options.map((o) => ({
-              label: o,
-              icon: o === value ? "check" : undefined,
-              onClick: () => {
-                onChange(o);
-                setOpen(false);
-              },
-            }))}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function RowMenu({ items, id, menuFor, setMenuFor }) {
   return (
@@ -113,6 +83,12 @@ function exportPayouts(rows) {
   URL.revokeObjectURL(url);
 }
 
+function inDateRange(timestamp, preset) {
+  if (preset === "All Dates") return true;
+  const { from, to } = datePresetRange(preset);
+  return Number.isFinite(timestamp) && timestamp >= Date.parse(`${from}T00:00:00+01:00`) && timestamp <= Date.parse(`${to}T23:59:59.999+01:00`);
+}
+
 export function RequestedPayouts() {
   const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
@@ -128,12 +104,11 @@ export function RequestedPayouts() {
   const directory = directoryQuery.error ? null : directoryQuery.currentData;
   const all = directory?.rows || EMPTY_ROWS;
 
-  const tab = 'All Requests';
   const [q, setQ] = usePageSearchState("", () => setPage(1));
   const [type, setType] = useState("All Payout Types");
   const [status, setStatus] = useState("All Statuses");
   const [party, setParty] = useState("All Parties");
-  const [date, setDate] = useState("All Request Dates");
+  const [date, setDate] = useState("All Dates");
   const [page, setPage] = useState(1);
   const [menuFor, setMenuFor] = useState(null);
 
@@ -147,40 +122,27 @@ export function RequestedPayouts() {
       setType("Company Payout");
       setParty("company");
       setQ(company);
-    } else if (job || trip) setQ(job || trip);
+    } else if (job || trip || params.get("q")) setQ(job || trip || params.get("q"));
     if (requestedStatus) setStatus(requestedStatus);
   }, []);
 
-  const summary = useMemo(() => payoutSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.currentData, statsQuery.error]);
-  // Stat cards follow the stats period; tab counts (summary.counts) stay all-time.
   const cardSummary = useMemo(() => payoutSummary(directory, periodStatsQuery.error ? null : periodStatsQuery.currentData), [directory, periodStatsQuery.currentData, periodStatsQuery.error]);
-  const counts = summary.counts;
   const metric = (value, loading = (!directory && directoryQuery.isFetching) || (!statsQuery.currentData && statsQuery.isFetching)) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
-
-  const tabFiltered = useMemo(() => {
-    if (tab === "Pending")
-      return all.filter((p) => payoutMatchesStatus(p, "Pending"));
-    if (tab === "Approved") return all.filter((p) => payoutMatchesStatus(p, "Approved"));
-    if (tab === "Rejected") return all.filter((p) => payoutMatchesStatus(p, "Rejected"));
-    if (tab === "Processing")
-      return all.filter((p) => payoutMatchesStatus(p, "Processing"));
-    return all;
-  }, [all, tab]);
 
   const filtered = useMemo(
     () =>
-      tabFiltered.filter(
+      all.filter(
         (p) =>
           (type === "All Payout Types" || p.type === type) &&
           (status === "All Statuses" || payoutMatchesStatus(p, status)) &&
           (party === "All Parties" || p.partyType === party) &&
-          (date === "All Request Dates" || p.dateRequested === date) &&
+          inDateRange(p.timestamp, date) &&
           (!q ||
             [p.id, p.reference, p.jobId, ...(p.jobIds || []), ...(p.tripIds || []), p.party, p.partyId, p.companyId, p.payment?.bank].some(
               (v) => v && v.toLowerCase().includes(q.toLowerCase()),
             )),
       ),
-    [tabFiltered, type, status, party, date, q],
+    [all, type, status, party, date, q],
   );
 
   async function downloadDocuments(row) {
@@ -200,10 +162,9 @@ export function RequestedPayouts() {
   return (
     <>
       <PageHeader
-        crumbs={["Business & Finance", "Payouts", "Requested Payouts"]}
-        title="Requested Payouts"
-        description="Review and manage all payout requests from drivers and trucking companies."
-        actions={<Button icon="plus" onClick={() => { setStatus("Pending Review"); setType("Company Payout"); setParty("company"); setPage(1); }}>Review Company Payouts</Button>}
+        crumbs={["Finance", "Payouts"]}
+        title="Payouts"
+        description="Withdrawal requests from trucking companies and forwarders, and payouts the platform sends to bank accounts."
       />
 
       <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
@@ -247,70 +208,19 @@ export function RequestedPayouts() {
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
 
 
-        <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
-          filters={
-            <>
-              <FilterButton
-                label="Request Dates"
-                value={date}
-                options={["All Request Dates", ...new Set(all.map((payout) => payout.dateRequested).filter((value) => value !== "—"))]}
-                active={date !== "All Request Dates"}
-                onChange={(value) => { setDate(value); setPage(1); }}
-              />
-              <FilterButton
-                label="Payout Types"
-                value={type}
-                options={[
-                  "All Payout Types",
-                  "Driver Payout",
-                  "Company Payout",
-                ]}
-                active={type !== "All Payout Types"}
-                onChange={(v) => {
-                  setType(v);
-                  setPage(1);
-                }}
-              />
-              <FilterButton
-                label="Statuses"
-                value={status}
-                options={[
-                  "All Statuses",
-                  "Pending Review",
-                  "Approved",
-                  "Rejected",
-                  "Processing",
-                  "Completed",
-                ]}
-                active={status !== "All Statuses"}
-                onChange={(v) => {
-                  setStatus(v);
-                  setPage(1);
-                }}
-              />
-              <FilterButton
-                label="Parties"
-                value={party}
-                options={["All Parties", "driver", "company"]}
-                active={party !== "All Parties"}
-                onChange={(v) => {
-                  setParty(v);
-                  setPage(1);
-                }}
-              />
-            </>
-          }
-          search={<SearchField
-              placeholder="Search payout requests..."
-              style={{ minWidth: 240 }}
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-            />} trailing={<Button variant="outline" icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportPayouts(filtered)}>
-            Export
-          </Button>}
+        <TableToolbar
+          search={<SearchField placeholder="Search by payout ID, reference, party, job or bank…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+          filters={<>
+            <FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={["All Statuses", "Pending Review", "Approved", "Rejected", "Processing", "Completed"]} onChange={(v) => { setStatus(v); setPage(1); }} />
+            <FilterChip name="Type" icon="banknote" value={type} allValue="All Payout Types" options={["All Payout Types", "Company Payout", "Driver Payout"]} onChange={(v) => { setType(v); setPage(1); }} />
+            <FilterChip name="Party" icon="user" value={party} allValue="All Parties" options={[{ value: "All Parties", label: "All Parties" }, { value: "company", label: "Company" }, { value: "driver", label: "Driver" }]} onChange={(v) => { setParty(v); setPage(1); }} />
+            <FilterChip name="Requested" icon="calendar" value={date} allValue="All Dates" options={DATE_PRESETS} onChange={(v) => { setDate(v); setPage(1); }} />
+          </>}
+          onClear={status !== "All Statuses" || type !== "All Payout Types" || party !== "All Parties" || date !== "All Dates" || q.trim()
+            ? () => { setStatus("All Statuses"); setType("All Payout Types"); setParty("All Parties"); setDate("All Dates"); setQ(""); setPage(1); }
+            : undefined}
+          viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
+          trailing={<Button variant="outline" icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportPayouts(filtered)}>Export</Button>}
         />
 
         {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading payout requests" /> : filtered.length === 0 && tableView !== 'board' ? (

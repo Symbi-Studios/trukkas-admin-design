@@ -234,34 +234,62 @@ async function exportPricingServices({ ids }, _api, _extraOptions, baseQuery) {
 }
 
 // Response paths are nested; POST /admin/config accepts these flat DTO keys.
-const fields = [
-  { key: 'platformFee', path: ['pricing', 'platformFee'], name: 'Platform Fee', description: 'Flat platform fee charged on every job', appliesTo: 'All jobs', unit: 'NGN', min: 0, group: 'fee', icon: 'coins' },
-  { key: 'vatPercent', path: ['pricing', 'vatPercent'], name: 'VAT', description: 'VAT percentage applied to total job cost', appliesTo: 'All jobs', unit: '%', min: 0, max: 100, group: 'fee', icon: 'badge-percent' },
-  { key: 'commissionPercent', path: ['pricing', 'commissionPercent'], name: 'Platform Commission', description: 'Commission charged on completed jobs', appliesTo: 'Completed jobs', unit: '%', min: 0, max: 100, group: 'fee', icon: 'badge-percent' },
-  { key: 'withdrawalFeePercent', path: ['pricing', 'withdrawalFeePercent'], name: 'Withdrawal Fee', description: 'Platform fee on wallet withdrawals', appliesTo: 'Wallet withdrawals', unit: '%', min: 0, max: 10, group: 'fee', icon: 'wallet' },
-  { key: 'depositFeePercent', path: ['pricing', 'depositFeePercent'], name: 'Deposit Fee', description: 'Platform fee on wallet deposits', appliesTo: 'Wallet deposits', unit: '%', min: 0, max: 10, group: 'fee', icon: 'wallet' },
-  { key: 'demurrageRatePerDay', path: ['demurrage', 'ratePerDay'], name: 'Demurrage Rate', description: 'Daily charge for late offloading after the free window', appliesTo: 'Forwarder late offloading', unit: 'NGN/day', min: 0, group: 'fee', icon: 'hourglass' },
-  { key: 'driverDemurrageRatePerDay', path: ['driverDemurrage', 'ratePerDay'], name: 'Driver Demurrage Rate', description: 'Daily deduction for delivery beyond ETA and the grace period', appliesTo: 'Trucker late delivery', unit: 'NGN/day', min: 0, group: 'fee', icon: 'hourglass' },
-  { key: 'lateCancellationFee', path: ['cancellation', 'lateCancellationFee'], name: 'Late Cancellation Fee', description: 'Flat fee charged outside the free cancellation window', appliesTo: 'Late cancellations', unit: 'NGN', min: 0, group: 'fee', icon: 'circle-x' },
-  { key: 'noShowFee', path: ['cancellation', 'noShowFee'], name: 'No-Show Fee', description: 'Flat fee charged when a driver does not show up', appliesTo: 'Driver no-shows', unit: 'NGN', min: 0, group: 'fee', icon: 'triangle-alert' },
-  { key: 'minFeePercent', path: ['pricing', 'minFeePercent'], name: 'Minimum Fare', description: 'Minimum job fee as a percentage of recommended fare', unit: '%', min: 1, max: 100, group: 'rule', icon: 'shield-check' },
-  { key: 'maxFeePercent', path: ['pricing', 'maxFeePercent'], name: 'Maximum Fare', description: 'Maximum bid or counter-offer as a percentage of recommended fare', unit: '%', min: 100, max: 500, group: 'rule', icon: 'shield-check' },
-  { key: 'mobilizationPercent', path: ['escrow', 'mobilizationPercent'], name: 'Mobilization Payment', description: 'Percentage paid as mobilization; the remainder is the final payment', unit: '%', min: 0, max: 100, group: 'rule', icon: 'wallet' },
-  { key: 'demurrageGracePeriodMinutes', path: ['demurrage', 'freeMinutes'], name: 'Offloading Free Window', description: 'Free window before forwarder demurrage starts', unit: 'minutes', min: 1, group: 'rule', icon: 'hourglass' },
-  { key: 'driverDemurrageGracePeriodMinutes', path: ['driverDemurrage', 'freeMinutes'], name: 'Delivery Grace Period', description: 'Grace period added to the delivery ETA before driver demurrage', unit: 'minutes', min: 1, group: 'rule', icon: 'hourglass' },
-  { key: 'freeCancellationWindowHours', path: ['cancellation', 'freeCancellationWindowHours'], name: 'Free Cancellation Window', description: 'Window within which cancellation is free of charge', unit: 'hours', min: 0, group: 'rule', icon: 'clock' },
-  { key: 'defaultCurrency', path: ['platform', 'defaultCurrency'], name: 'Base Currency', description: 'Default platform currency', unit: 'currency', options: ['NGN', 'USD', 'GBP'], group: 'rule', icon: 'coins' },
+// `section` groups the rows on Finance › Platform Rates, the single editor for these values.
+export const platformRateSections = [
+  { key: 'job', title: 'Job Fees & Commission', description: 'Charged on every job the platform handles.' },
+  { key: 'wallet', title: 'Wallet Fees', description: 'Flat fees on wallet top-ups and bank withdrawals. Bank charges are added on top.' },
+  { key: 'payment', title: 'Payment Terms', description: 'How escrowed job money is released to the trucker.' },
+  { key: 'fare', title: 'Fare Limits', description: 'Bounds on job fees and bids, relative to the recommended fare.' },
+  { key: 'offloading', title: 'Late Offloading Demurrage', description: 'Charged to the forwarder when offloading starts after the free window.' },
+  { key: 'driver', title: 'Driver Delay Deductions', description: 'Deducted from the trucker’s final payment for delivery beyond the ETA and grace period.' },
+  { key: 'cancellation', title: 'Cancellations', description: 'Charges for late cancellations and no-shows.' },
 ];
+const fields = [
+  { key: 'platformFee', path: ['pricing', 'platformFee'], name: 'Platform Fee', description: 'Flat platform fee charged on every job', appliesTo: 'All jobs', unit: 'NGN', min: 0, section: 'job', icon: 'coins' },
+  { key: 'commissionPercent', path: ['pricing', 'commissionPercent'], name: 'Platform Commission', description: 'Commission charged on completed jobs', appliesTo: 'Completed jobs', unit: '%', min: 0, max: 100, section: 'job', icon: 'badge-percent' },
+  { key: 'vatPercent', path: ['pricing', 'vatPercent'], name: 'VAT', description: 'VAT percentage applied to total job cost', appliesTo: 'All jobs', unit: '%', min: 0, max: 100, section: 'job', icon: 'badge-percent' },
+  { key: 'withdrawalFee', path: ['pricing', 'withdrawalFee'], name: 'Withdrawal Fee', description: 'Flat Trukkas fee on each wallet → bank withdrawal', appliesTo: 'Wallet withdrawals', unit: 'NGN', min: 0, section: 'wallet', icon: 'wallet' },
+  { key: 'depositFee', path: ['pricing', 'depositFee'], name: 'Deposit Fee', description: 'Bank collection fee deducted from each wallet top-up', appliesTo: 'Wallet deposits', unit: 'NGN', min: 0, section: 'wallet', icon: 'wallet' },
+  { key: 'mobilizationPercent', path: ['escrow', 'mobilizationPercent'], name: 'Mobilization Payment', description: 'Share of the job value released to the trucker at pickup; the rest is the final payment. Existing jobs keep their split.', unit: '%', min: 0, max: 100, section: 'payment', icon: 'wallet' },
+  { key: 'minFeePercent', path: ['pricing', 'minFeePercent'], name: 'Minimum Fare', description: 'Minimum job fee as a percentage of recommended fare', unit: '%', min: 1, max: 100, section: 'fare', icon: 'shield-check' },
+  { key: 'maxFeePercent', path: ['pricing', 'maxFeePercent'], name: 'Maximum Fare', description: 'Maximum bid or counter-offer as a percentage of recommended fare', unit: '%', min: 100, max: 500, section: 'fare', icon: 'shield-check' },
+  { key: 'demurrageRatePerDay', path: ['demurrage', 'ratePerDay'], name: 'Demurrage Rate', description: 'Daily charge for late offloading after the free window. Existing charges keep the rate they were created with.', appliesTo: 'Forwarder late offloading', unit: 'NGN/day', min: 0, section: 'offloading', icon: 'hourglass' },
+  { key: 'demurrageGracePeriodMinutes', path: ['demurrage', 'freeMinutes'], name: 'Offloading Free Window', description: 'Free window after cargo arrives before demurrage starts', unit: 'minutes', min: 1, section: 'offloading', icon: 'clock' },
+  { key: 'driverDemurrageRatePerDay', path: ['driverDemurrage', 'ratePerDay'], name: 'Driver Delay Rate', description: 'Daily deduction for delivery beyond the ETA and grace period', appliesTo: 'Trucker late delivery', unit: 'NGN/day', min: 0, section: 'driver', icon: 'hourglass' },
+  { key: 'driverDemurrageGracePeriodMinutes', path: ['driverDemurrage', 'freeMinutes'], name: 'Delivery Grace Period', description: 'Grace period added to the delivery ETA before deductions start', unit: 'minutes', min: 1, section: 'driver', icon: 'clock' },
+  { key: 'freeCancellationWindowHours', path: ['cancellation', 'freeCancellationWindowHours'], name: 'Free Cancellation Window', description: 'Window within which cancellation is free of charge', unit: 'hours', min: 0, section: 'cancellation', icon: 'clock' },
+  { key: 'lateCancellationFee', path: ['cancellation', 'lateCancellationFee'], name: 'Late Cancellation Fee', description: 'Flat fee charged outside the free cancellation window', appliesTo: 'Late cancellations', unit: 'NGN', min: 0, section: 'cancellation', icon: 'circle-x' },
+  { key: 'noShowFee', path: ['cancellation', 'noShowFee'], name: 'No-Show Fee', description: 'Flat fee charged when a driver does not show up', appliesTo: 'Driver no-shows', unit: 'NGN', min: 0, section: 'cancellation', icon: 'triangle-alert' },
+];
+const duration = (minutes) => {
+  if (minutes == null) return null;
+  const hours = minutes / 60;
+  return minutes % 1440 === 0 ? `${(minutes / 1440).toLocaleString('en-NG')} day${minutes === 1440 ? '' : 's'}` : minutes % 60 === 0 ? `${hours.toLocaleString('en-NG')} hr${hours === 1 ? '' : 's'}` : null;
+};
+const rateLabel = (value, unit) => unit === 'minutes' && value != null ? `${value.toLocaleString('en-NG')} min${duration(value) ? ` (${duration(value)})` : ''}` : format(value, unit);
 export function adaptAdminPricingConfig(response) {
   const responseData = unwrapApiResponseData(response), dto = responseData?.config;
   if (!dto || typeof dto !== 'object' || Array.isArray(dto)) throw new Error('The platform configuration response is missing its config object.');
+  const meta = record(responseData.meta);
   const rows = fields.map((field) => {
-    const raw = field.path.reduce((value, part) => value?.[part], dto);
-    const value = field.options ? text(raw) : number(raw);
-    const effectiveFrom = record(responseData.meta?.effectiveFrom)[field.path.join('.')];
-    return { ...field, id: `config:${field.key}`, source: 'config', value, rate: field.options ? value || '—' : format(value, field.unit), iconTint: 'blue', status: value == null ? 'Unavailable' : 'Configured', effectiveFrom: dateParts(effectiveFrom).updated, editable: value != null };
+    const value = number(field.path.reduce((current, part) => current?.[part], dto));
+    const effectiveFrom = record(meta.effectiveFrom)[field.path.join('.')];
+    return { ...field, id: `config:${field.key}`, source: 'config', value, rate: rateLabel(value, field.unit), iconTint: 'blue', status: value == null ? 'Unavailable' : 'Configured', effectiveFrom: effectiveFrom === null ? 'Platform default' : dateParts(effectiveFrom).updated, editable: value != null };
   });
-  return { currency: text(dto.platform?.defaultCurrency), fees: rows.filter((row) => row.group === 'fee'), rules: rows.filter((row) => row.group === 'rule') };
+  const escrow = record(dto.escrow), hold = record(escrow.standardHoldDuration);
+  // Minutes are the documented live override and hours the production default: alternatives, not additive.
+  const holdMinutes = number(hold.minutes) != null ? number(hold.minutes) : number(hold.hours) != null ? number(hold.hours) * 60 : null;
+  const policy = (value) => typeof value === 'boolean' ? (value ? 'Always on' : 'Off') : '—';
+  return {
+    currency: text(dto.platform?.defaultCurrency), rows,
+    escrowPolicy: [
+      { id: 'finalPercent', name: 'Final Payment', description: 'Released after delivery and the forwarder’s confirmation', rate: format(number(escrow.finalPercent), '%') },
+      { id: 'hold', name: 'Confirmation Hold', description: 'How long the final payment waits for the forwarder to confirm container return', rate: holdMinutes == null ? '—' : rateLabel(holdMinutes, 'minutes') },
+      { id: 'autoRelease', name: 'Auto-Release', description: 'Releases the final payment when the hold ends without a dispute', rate: policy(record(escrow.autoRelease).enabled) },
+      { id: 'disputeFreeze', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', rate: policy(record(escrow.disputeFreeze).enabled) },
+    ],
+    updatedAt: dateParts(meta.updatedAt), updatedBy: text(record(meta.updatedBy).name),
+  };
 }
 export function pricingError(error) {
   if (error?.status === 401) return 'Your session has expired. Please sign in again.';

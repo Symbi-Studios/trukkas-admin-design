@@ -14,14 +14,12 @@ import {
   Tabs,
   TableToolbar,
   SearchField,
-  FilterSelect,
   DataTable,
   Pagination,
   Badge,
   IconButton,
   DropdownMenu,
   Icon,
-  ListRow,
   Modal,
   Textarea,
   EmptyState,
@@ -29,56 +27,27 @@ import {
   StatsPanel,
 } from "../ds.js";
 import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation,
-  useGetAdminPricingConfigQuery, useGetAdminPricingTerminalRatesQuery, useGetAdminPricingSummaryQuery,
+  useGetAdminPricingTerminalRatesQuery, useGetAdminPricingSummaryQuery,
   useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
-  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery, useGetAdminPricingRecentHistoryQuery,
+  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery,
 } from '../store/features/pricing/pricingApi.js';
 import { PricingLoading, PricingSettingModal } from './PricingSettings.jsx';
+import { FilterChip } from '../components/FilterChip.jsx';
 import { PricingServiceForm } from './PricingServiceForm.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import './PricingManagement.css';
 
+// Platform-wide fees and rules live on Finance › Platform Rates; this page only
+// manages what services cost. Price exceptions are reviewed and listed under Approvals.
 const TABS = [
   "Service Pricing",
-  "Surcharges & Fees",
+  "Surcharges",
   "Price Lists",
-  "Pricing Rules",
   "Approvals",
-  "Price Exceptions",
   "Price History",
 ];
 const PAGE_SIZE = 8;
 
-function FilterButton({ label, value, options, active, onChange }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span style={{ position: "relative" }}>
-      <FilterSelect
-        label={value}
-        active={active}
-        onClick={() => setOpen((o) => !o)}
-      />
-      {open && (
-        <span
-          style={{ position: "absolute", left: 0, top: 44, zIndex: 30 }}
-          onMouseLeave={() => setOpen(false)}
-        >
-          <DropdownMenu
-            width={210}
-            items={options.map((o) => ({
-              label: o,
-              icon: o === value ? "check" : undefined,
-              onClick: () => {
-                onChange(o);
-                setOpen(false);
-              },
-            }))}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function RowMenu({ items, id, menuFor, setMenuFor }) {
   const enabledItems = items.filter((item) => !item.disabled);
@@ -101,79 +70,7 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
   );
 }
 
-function PriceChangeRow({ c }) {
-  const up = c.pct.startsWith("+");
-  return (
-    <div style={{ padding: "11px 0", borderTop: "1px solid var(--tk-line)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span
-          style={{
-            flex: 1,
-            font: "600 13px/18px var(--tk-font-sans)",
-            color: "var(--tk-ink-900)",
-          }}
-        >
-          {c.service}
-        </span>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 3,
-            font: "600 12px/16px var(--tk-font-sans)",
-            color: up ? "var(--tk-success)" : "var(--tk-danger)",
-          }}
-        >
-          <Icon name={up ? "arrow-up" : "arrow-down"} size={11} />
-          {c.pct}
-        </span>
-      </div>
-      <span className="tk-meta" style={{ display: "block" }}>
-        {c.route}
-      </span>
-      <span
-        style={{
-          display: "block",
-          font: "500 12px/18px var(--tk-font-sans)",
-          color: "var(--tk-ink-500)",
-        }}
-      >
-        {formatNaira(c.from)} →{" "}
-        <b style={{ color: "var(--tk-ink-900)" }}>{formatNaira(c.to)}</b>
-      </span>
-      <span className="tk-meta" style={{ display: "block" }}>
-        {c.updated} {c.time} by {c.by}
-      </span>
-    </div>
-  );
-}
 
-function ApprovalTile({ label, value, tone }) {
-  const TONE = {
-    amber: ["var(--tk-warning-soft)", "var(--tk-warning)"],
-    green: ["var(--tk-success-soft)", "var(--tk-success)"],
-    red: ["var(--tk-danger-soft)", "var(--tk-danger)"],
-  };
-  const [bg, fg] = TONE[tone];
-  return (
-    <div
-      style={{
-        background: bg,
-        borderRadius: "var(--tk-r-lg)",
-        padding: "14px 10px",
-        display: "grid",
-        gap: 4,
-        justifyItems: "center",
-        textAlign: "center",
-      }}
-    >
-      <span style={{ font: "700 20px/24px var(--tk-font-sans)", color: fg }}>
-        {value}
-      </span>
-      <span className="tk-meta">{label}</span>
-    </div>
-  );
-}
 
 export function PricingManagement() {
   const navigate = useNavigate();
@@ -181,39 +78,32 @@ export function PricingManagement() {
   const servicesQuery = useGetAdminPricingServicesQuery();
   const summaryQuery = useGetAdminPricingSummaryQuery();
   const listsQuery = useGetAdminPricingPriceListsQuery(undefined, { skip: !['Price Lists', 'Approvals'].includes(tab) });
-  const customSurchargesQuery = useGetAdminPricingSurchargesQuery(undefined, { skip: !['Surcharges & Fees', 'Approvals'].includes(tab) });
-  const exceptionsQuery = useGetAdminPricingExceptionsQuery(undefined, { skip: !['Approvals', 'Price Exceptions'].includes(tab) });
+  const customSurchargesQuery = useGetAdminPricingSurchargesQuery(undefined, { skip: !['Surcharges', 'Approvals'].includes(tab) });
+  const exceptionsQuery = useGetAdminPricingExceptionsQuery(undefined, { skip: tab !== 'Approvals' });
   const historyQuery = useGetAdminPricingHistoryQuery(undefined, { skip: tab !== 'Price History' });
-  const recentHistoryQuery = useGetAdminPricingRecentHistoryQuery();
   const services = servicesQuery.error ? [] : servicesQuery.currentData?.rows || [];
-  const configQuery = useGetAdminPricingConfigQuery();
-  const config = configQuery.error ? null : configQuery.currentData;
   const [setting, setSetting] = useState(null), [notice, setNotice] = useState(null), [actionError, setActionError] = useState(null);
   const admin = useSelector((state) => state.auth.admin);
-  const canEditConfig = admin?.role === 'SUPER_ADMIN';
-  const pricingRules = config?.rules || [];
   const summary = summaryQuery.error ? null : summaryQuery.currentData;
-  const pricingSummary = { activePriceLists: summary?.activePriceLists ?? '—', totalServices: summary?.totalServices ?? '—', avgPriceChange: summary?.avgPriceChange ?? '—', priceExceptions: summary?.priceExceptions ?? '—', surchargesActive: summary?.surchargesActive ?? '—', currency: config?.currency || '—' };
-  const priceApprovalSummary = { pending: summary?.pending ?? '—', approved: summary?.approved ?? '—', rejected: summary?.rejected ?? '—' };
+  const pricingSummary = { activePriceLists: summary?.activePriceLists ?? '—', totalServices: summary?.totalServices ?? '—', avgPriceChange: summary?.avgPriceChange ?? '—', priceExceptions: summary?.priceExceptions ?? '—', surchargesActive: summary?.surchargesActive ?? '—' };
   const priceLists = listsQuery.error ? [] : listsQuery.currentData?.rows || [];
   const exceptions = exceptionsQuery.error ? [] : exceptionsQuery.currentData?.rows || [];
   const history = historyQuery.error ? [] : historyQuery.currentData?.rows || [];
-  const recentChanges = recentHistoryQuery.error ? [] : recentHistoryQuery.currentData?.rows || [];
   const pendingApprovals = [...services.filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...priceLists.filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || []).filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...exceptions.filter((row) => row.statusCode === 'PENDING')];
   const approvalsLoading = [servicesQuery, listsQuery, customSurchargesQuery, exceptionsQuery].some((query) => query.isFetching);
-  const readQueries = [configQuery, summaryQuery, servicesQuery, recentHistoryQuery, ...(tab === 'Price Lists' ? [listsQuery] : tab === 'Surcharges & Fees' ? [customSurchargesQuery] : tab === 'Approvals' ? [listsQuery, customSurchargesQuery, exceptionsQuery] : tab === 'Price Exceptions' ? [exceptionsQuery] : tab === 'Price History' ? [historyQuery] : [])];
+  const resolvedExceptions = exceptions.filter((row) => row.statusCode !== 'PENDING');
+  const readQueries = [summaryQuery, servicesQuery, ...(tab === 'Price Lists' ? [listsQuery] : tab === 'Surcharges' ? [customSurchargesQuery] : tab === 'Approvals' ? [listsQuery, customSurchargesQuery, exceptionsQuery] : tab === 'Price History' ? [historyQuery] : [])];
   const readError = readQueries.find((query) => query.error)?.error;
 
-  const terminalQuery = useGetAdminPricingTerminalRatesQuery(undefined, { skip: tab !== 'Surcharges & Fees' });
+  const terminalQuery = useGetAdminPricingTerminalRatesQuery(undefined, { skip: tab !== 'Surcharges' });
   const terminalRates = terminalQuery.error ? [] : terminalQuery.currentData?.rows || [];
-  const surcharges = [...(config?.fees || []), ...terminalRates, ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || [])];
+  const surcharges = [...terminalRates, ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || [])];
   const [q, setQ] = usePageSearchState("", () => setPage(1), tab === 'Service Pricing');
   const [serviceType, setServiceType] = useState("All Services");
   const [jobType, setJobType] = useState("All Job Types");
   const [route, setRoute] = useState("All Routes");
   const [location, setLocation] = useState("All Locations");
   const [truckType, setTruckType] = useState("All Truck Types");
-  const [currency, setCurrency] = useState("NGN (₦)");
   const [page, setPage] = useState(1);
   const [view, setView] = useState("list");
   const [menuFor, setMenuFor] = useState(null);
@@ -269,7 +159,6 @@ export function PricingManagement() {
     setRoute("All Routes");
     setLocation("All Locations");
     setTruckType("All Truck Types");
-    setCurrency("NGN (₦)");
     setQ("");
     setPage(1);
   }
@@ -305,13 +194,13 @@ export function PricingManagement() {
     finally { pdfExportLock.current = false; }
   }
 
-  if ([configQuery, servicesQuery, summaryQuery].some((query) => !query.currentData && query.isFetching)) return <PricingLoading />;
+  if ([servicesQuery, summaryQuery].some((query) => !query.currentData && query.isFetching)) return <PricingLoading />;
   return (
     <>
       <PageHeader
-        crumbs={["Business & Finance", "Pricing Management"]}
-        title="Pricing Management"
-        description="Manage service rates, pricing rules and surcharges across Trukkas."
+        crumbs={["Finance", "Pricing"]}
+        title="Pricing"
+        description="Manage service rates, price lists and surcharges across Trukkas."
         actions={
           <>
             <Button icon="plus" onClick={() => { setEditServiceId(null); setAddOpen(true); }}>
@@ -361,16 +250,9 @@ export function PricingManagement() {
           value={pricingSummary.surchargesActive}
           caption={pricingSummary.surchargesActive === '—' ? 'Summary unavailable' : undefined}
         />
-        <StatCard
-          icon="coins"
-          tint="navy"
-          label="Currency"
-          value={pricingSummary.currency}
-          caption="Base Currency"
-        />
       </StatsPanel>
 
-      <div className="pricing-layout">
+      <div className="pricing-layout pricing-layout-full">
         <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
           <Tabs
             value={tab}
@@ -386,167 +268,35 @@ export function PricingManagement() {
           {tab === "Service Pricing" && (
             <>
               <TableToolbar
-                filters={
-                  <>
-                    <FilterButton
-                      label="Service Type"
-                      value={serviceType}
-                      options={serviceOptions}
-                      active={serviceType !== "All Services"}
-                      onChange={(v) => {
-                        setServiceType(v);
-                        setPage(1);
-                      }}
-                    />
-                    <FilterButton
-                      label="Job Type"
-                      value={jobType}
-                      options={["All Job Types", "Per Trip", "Per Day"]}
-                      active={jobType !== "All Job Types"}
-                      onChange={(v) => {
-                        setJobType(v);
-                        setPage(1);
-                      }}
-                    />
-                    <FilterButton
-                      label="Route"
-                      value={route}
-                      options={routeOptions}
-                      active={route !== "All Routes"}
-                      onChange={(v) => {
-                        setRoute(v);
-                        setPage(1);
-                      }}
-                    />
-                    <FilterButton
-                      label="Location"
-                      value={location}
-                      options={locationOptions}
-                      active={location !== "All Locations"}
-                      onChange={(v) => {
-                        setLocation(v);
-                        setPage(1);
-                      }}
-                    />
-                    <FilterButton
-                      label="Truck Type"
-                      value={truckType}
-                      options={truckOptions}
-                      active={truckType !== "All Truck Types"}
-                      onChange={(v) => {
-                        setTruckType(v);
-                        setPage(1);
-                      }}
-                    />
-                    <FilterButton
-                      label="Currency"
-                      value={currency}
-                      options={["NGN (₦)"]}
-                      onChange={setCurrency}
-                    />
-                  </>
-                }
-              />
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  padding: "0 var(--tk-card-pad) 14px",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <Button
-                  variant="outline"
-                  icon="rotate-ccw"
-                  size="sm"
-                  onClick={resetFilters}
-                >
-                  Reset
-                </Button>
-                <Button size="sm">Apply</Button>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "0 var(--tk-card-pad) 12px",
-                }}
-              >
-                <span
-                  style={{
-                    flex: 1,
-                    font: "600 15px/22px var(--tk-font-sans)",
-                    color: "var(--tk-ink-900)",
-                  }}
-                >
-                  Service Pricing{" "}
-                  <span style={{ color: "var(--tk-ink-400)", fontWeight: 500 }}>
-                    ({servicesQuery.currentData && !servicesQuery.error ? filtered.length : '—'})
+                search={<SearchField placeholder="Search by service, route, location or truck type…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+                filters={<>
+                  <FilterChip name="Service" icon="tag" value={serviceType} allValue="All Services" options={serviceOptions} onChange={(v) => { setServiceType(v); setPage(1); }} />
+                  <FilterChip name="Unit" icon="ruler" value={jobType} allValue="All Job Types" options={["All Job Types", "Per Trip", "Per Day"]} onChange={(v) => { setJobType(v); setPage(1); }} />
+                  <FilterChip name="Route" icon="route" value={route} allValue="All Routes" options={routeOptions} onChange={(v) => { setRoute(v); setPage(1); }} />
+                  <FilterChip name="Location" icon="map-pin" value={location} allValue="All Locations" options={locationOptions} onChange={(v) => { setLocation(v); setPage(1); }} />
+                  <FilterChip name="Truck Type" icon="truck" value={truckType} allValue="All Truck Types" options={truckOptions} onChange={(v) => { setTruckType(v); setPage(1); }} />
+                </>}
+                onClear={serviceType !== "All Services" || jobType !== "All Job Types" || route !== "All Routes" || location !== "All Locations" || truckType !== "All Truck Types" || q.trim() ? resetFilters : undefined}
+                viewControl={
+                  <span style={{ display: "flex", border: "1px solid var(--tk-line-strong)", borderRadius: "var(--tk-r-md)", overflow: "hidden" }}>
+                    <IconButton icon="list" tone={view === "list" ? "blue" : "ghost"} style={{ borderRadius: 0 }} onClick={() => setView("list")} />
+                    <IconButton icon="grid-3x3" tone={view === "grid" ? "blue" : "ghost"} style={{ borderRadius: 0 }} onClick={() => setView("grid")} />
                   </span>
-                </span>
-                <SearchField
-                  placeholder="Search services, routes..."
-                  style={{ width: 220 }}
-                  value={q}
-                  onChange={(e) => {
-                    setQ(e.target.value);
-                    setPage(1);
-                  }}
-                />
-                <span style={{ position: "relative" }}>
-                  <Button
-                    variant="outline"
-                    icon="download"
-                    iconRight="chevron-down"
-                    size="sm"
-                    onClick={() => setExportOpen((o) => !o)}
-                  >
-                    Export
-                  </Button>
-                  {exportOpen && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        right: 0,
-                        top: 38,
-                        zIndex: 30,
-                      }}
-                      onMouseLeave={() => setExportOpen(false)}
-                    >
-                      <DropdownMenu
-                        width={180}
-                        items={[
+                }
+                trailing={
+                  <span style={{ position: "relative" }}>
+                    <Button variant="outline" icon="download" iconRight="chevron-down" onClick={() => setExportOpen((o) => !o)}>Export</Button>
+                    {exportOpen && (
+                      <span style={{ position: "absolute", right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setExportOpen(false)}>
+                        <DropdownMenu width={180} items={[
                           { label: "Export as CSV", icon: "file-text", onClick: exportServices },
                           { label: "Export as PDF", icon: "file-text", onClick: () => void exportServicesAsPdf() },
-                        ]}
-                      />
-                    </span>
-                  )}
-                </span>
-                <span
-                  style={{
-                    display: "flex",
-                    border: "1px solid var(--tk-line-strong)",
-                    borderRadius: "var(--tk-r-md)",
-                    overflow: "hidden",
-                  }}
-                >
-                  <IconButton
-                    icon="list"
-                    tone={view === "list" ? "blue" : "ghost"}
-                    style={{ borderRadius: 0 }}
-                    onClick={() => setView("list")}
-                  />
-                  <IconButton
-                    icon="grid-3x3"
-                    tone={view === "grid" ? "blue" : "ghost"}
-                    style={{ borderRadius: 0 }}
-                    onClick={() => setView("grid")}
-                  />
-                </span>
-              </div>
+                        ]} />
+                      </span>
+                    )}
+                  </span>
+                }
+              />
 
               {servicesQuery.isFetching ? <DriverTableLoading columns={11} label="Loading service pricing" /> : view === "list" ? (
                 <DataTable
@@ -744,20 +494,20 @@ export function PricingManagement() {
             </>
           )}
 
-          {tab === "Surcharges & Fees" && (
+          {tab === "Surcharges" && (
             <>
-            <Banner style={{ margin: '14px var(--tk-card-pad)' }}>Global fee changes require Super Admin access. Terminal rates can be edited by admins. Flat amounts are in Naira.</Banner>
+            <Banner style={{ margin: '14px var(--tk-card-pad)' }}>Terminal rates and draft surcharges can be edited here. Flat amounts are in Naira. Platform-wide fees such as the platform fee, commission, VAT and demurrage rates are on <Link to="/rates">Platform Rates</Link>.</Banner>
             {(terminalQuery.isFetching || customSurchargesQuery.isFetching) && <><DriverLoadingNotice>Loading terminal rates…</DriverLoadingNotice><DriverTableLoading columns={5} label="Loading terminal rates" /></>}
             {terminalQuery.error && <Banner tone="danger" title="Unable to load terminal rates" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>{pricingError(terminalQuery.error)}</Banner>}
             {terminalQuery.currentData?.warnings.length > 0 && <Banner tone="warning" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>Terminal rates could not be loaded for: {terminalQuery.currentData.warnings.join(', ')}.</Banner>}
-            {!surcharges.length && !terminalQuery.isFetching && <EmptyState title="Pricing fees unavailable" description="Retry to load the current pricing settings." />}
+            {!surcharges.length && !terminalQuery.isFetching && !customSurchargesQuery.isFetching && <EmptyState title="No surcharges or terminal rates" description="Retry to load the current pricing settings." />}
             <DataTable
               rows={surcharges}
               rowKey={(r) => r.id}
               columns={[
                 {
                   key: "name",
-                  header: "Surcharge / Fee",
+                  header: "Surcharge / Terminal Rate",
                   render: (r) => (
                     <span
                       style={{ display: "flex", alignItems: "center", gap: 10 }}
@@ -808,7 +558,7 @@ export function PricingManagement() {
                       menuFor={menuFor}
                       setMenuFor={setMenuFor}
                       items={[
-                        { label: 'Edit', icon: 'pencil', disabled: !r.editable || (r.source === 'config' ? !canEditConfig || configQuery.isFetching : r.source === 'surcharge' ? customSurchargesQuery.isFetching : terminalQuery.isFetching), onClick: () => { setMenuFor(null); if (r.editable && (r.source !== 'config' || canEditConfig)) setSetting(r); } },
+                        { label: 'Edit', icon: 'pencil', disabled: !r.editable || (r.source === 'surcharge' ? customSurchargesQuery.isFetching : terminalQuery.isFetching), onClick: () => { setMenuFor(null); if (r.editable) setSetting(r); } },
                       ]}
                     />
                   ),
@@ -850,59 +600,6 @@ export function PricingManagement() {
                 },
               ]}
             />
-          )}
-
-          {tab === "Pricing Rules" && (
-            <>
-            {!canEditConfig && <Banner style={{ margin: '14px var(--tk-card-pad)' }}>Platform rules can be edited by Super Admins.</Banner>}
-            {!pricingRules.length && !configQuery.isFetching && <EmptyState title="Pricing rules unavailable" description="Retry to load platform configuration." />}
-            <DataTable
-              rows={pricingRules}
-              rowKey={(r) => r.id}
-              columns={[
-                {
-                  key: "name",
-                  header: "Rule",
-                  render: (r) => (
-                    <span
-                      style={{ display: "flex", alignItems: "center", gap: 10 }}
-                    >
-                      <span
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "var(--tk-r-sm)",
-                          background: "var(--tk-blue-soft)",
-                          color: "var(--tk-blue)",
-                          display: "grid",
-                          placeItems: "center",
-                          flex: "0 0 auto",
-                        }}
-                      >
-                        <Icon name={r.icon} size={16} />
-                      </span>
-                      <span style={{ display: "grid", gap: 2 }}>
-                        <span
-                          style={{
-                            font: "600 13px/18px var(--tk-font-sans)",
-                            color: "var(--tk-ink-900)",
-                          }}
-                        >
-                          {r.name}
-                        </span>
-                        <span className="tk-meta">{r.description}</span>
-                      </span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "rate",
-                  header: "Rate / Value",
-                  render: (r) => <b>{r.rate}</b>,
-                },
-                { key: 'action', header: '', width: 80, render: (r) => <Button variant="outline" size="sm" disabled={!canEditConfig || !r.editable || configQuery.isFetching} onClick={() => setSetting(r)}>Edit</Button> },
-              ]}
-            /></>
           )}
 
           {tab === "Approvals" && (approvalsLoading ? <DriverTableLoading columns={6} label="Loading pricing approvals" /> :
@@ -977,13 +674,15 @@ export function PricingManagement() {
               <EmptyState
                 icon="circle-check"
                 title="Nothing pending"
-                description="All price exceptions have been reviewed."
+                description="All pricing changes and price exceptions have been reviewed."
               />
             )}
 
-          {tab === "Price Exceptions" && (exceptionsQuery.isFetching ? <DriverTableLoading columns={8} label="Loading price exceptions" /> :
+          {tab === "Approvals" && !approvalsLoading && resolvedExceptions.length > 0 && (
+            <>
+            <h3 className="tk-section" style={{ margin: "20px var(--tk-card-pad) 8px" }}>Exception History</h3>
             <DataTable
-              rows={exceptions}
+              rows={resolvedExceptions}
               rowKey={(r) => r.id}
               columns={[
                 {
@@ -1025,6 +724,7 @@ export function PricingManagement() {
                 { key: "submitted", header: "Submitted" },
               ]}
             />
+            </>
           )}
 
           {tab === "Price History" && (historyQuery.isFetching ? <DriverTableLoading columns={6} label="Loading price history" /> :
@@ -1093,103 +793,13 @@ export function PricingManagement() {
           )}
         </SectionCard>
 
-        <div
-          style={{
-            display: "grid",
-            gap: "var(--tk-grid-gap)",
-            alignContent: "start",
-          }}
-        >
-          <SectionCard
-            title="Pricing Rules"
-            action={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setTab("Pricing Rules");
-                }}
-              >
-                View All
-              </a>
-            }
-            footer={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setTab("Pricing Rules");
-                }}
-              >
-                Manage Pricing Rules →
-              </a>
-            }
-          >
-            {pricingRules.slice(0, 5).map((r) => (
-              <ListRow
-                key={r.id}
-                icon={r.icon}
-                iconTint={r.iconTint}
-                title={r.name}
-                subtitle={r.description}
-                value={r.rate}
-              />
-            ))}
-          </SectionCard>
-
-          <SectionCard
-            title="Recent Price Changes"
-            action={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setTab("Price History");
-                }}
-              >
-                View All
-              </a>
-            }
-          >
-            {recentHistoryQuery.isFetching ? <DriverTableLoading columns={2} label="Loading recent price changes" /> : recentChanges.map((c) => (
-              <PriceChangeRow key={c.id} c={c} />
-            ))}
-          </SectionCard>
-
-          <SectionCard title="Price Approval Summary">
-            <p className="tk-meta">Approval totals across all pricing types</p>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 8,
-              }}
-            >
-              <ApprovalTile
-                label="Pending Approval"
-                value={priceApprovalSummary.pending}
-                tone="amber"
-              />
-              <ApprovalTile
-                label="Approved"
-                value={priceApprovalSummary.approved}
-                tone="green"
-              />
-              <ApprovalTile
-                label="Rejected"
-                value={priceApprovalSummary.rejected}
-                tone="red"
-              />
-            </div>
-          </SectionCard>
-        </div>
       </div>
 
       <Modal open={Boolean(rejectRow)} title="Reject pricing" onClose={() => { if (!pricingChanging) setRejectRow(null); }} footer={<><Button variant="outline" disabled={pricingChanging} onClick={() => setRejectRow(null)}>Cancel</Button><Button variant="danger" disabled={pricingChanging || !rejectReason.trim()} onClick={() => void changePricing(rejectRow, 'reject', rejectReason)}>{pricingChanging ? 'Rejecting…' : 'Reject'}</Button></>}>
         {actionError && <Banner tone="danger">{pricingError(actionError)}</Banner>}
         <Textarea label="Reason for rejection" maxLength={500} disabled={pricingChanging} value={rejectReason} onChange={(event) => setRejectReason(event.target.value.slice(0, 500))} />
       </Modal>
-      {setting && <PricingSettingModal key={setting.id} row={setting} writesUnavailable={setting.source === 'config' && !canEditConfig} onClose={() => setSetting(null)} onDone={setNotice} />}
+      {setting && <PricingSettingModal key={setting.id} row={setting} onClose={() => setSetting(null)} onDone={setNotice} />}
       {addOpen && <PricingServiceForm id={editServiceId} onClose={() => setAddOpen(false)} onDone={saved => { setAddOpen(false); setNotice(editServiceId ? 'Draft pricing updated.' : 'Draft pricing created.'); navigate(pricingDetailUrl(saved.id)); }} />}
     </>
   );

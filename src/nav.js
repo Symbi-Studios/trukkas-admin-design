@@ -38,13 +38,16 @@ export const NAV = [
   {
     section: "Finance",
     items: [
-      { id: "pricing", icon: "tag", label: "Pricing Management" },
-      { id: "wallets", icon: "wallet", label: "Escrows & Wallets" },
-      { id: "transactions", icon: "receipt", label: "Transactions" },
+      // Ordered along the money flow: held → released → withdrawn → ledger,
+      // then charges, then the pages that configure prices and rates.
+      { id: "wallets", icon: "lock", label: "Escrow" },
       { id: "settlements", icon: "coins", label: "Settlements" },
       { id: "payouts", icon: "banknote", label: "Payouts" },
-      { id: "demurrage", icon: "banknote", label: "Demurrage" },
+      { id: "transactions", icon: "receipt", label: "Transactions" },
+      { id: "demurrage", icon: "hourglass", label: "Demurrage" },
+      { id: "pricing", icon: "tag", label: "Pricing" },
       { id: "fees", icon: "percent", label: "Fees & Commission" },
+      { id: "rates", icon: "sliders-horizontal", label: "Platform Rates" },
     ],
   },
   {
@@ -104,6 +107,7 @@ export const SEARCH_PLACEHOLDER = {
   transactions: "Search transactions, references, users...",
   settlements: "Search by settlement ID, job ID, trip ID, payer, payee...",
   fees: "Search fee rules...",
+  rates: "Search platform rates...",
   documents: "Search jobs, documents, companies, routes...",
   verification: "Search forwarders, exporters, RC number, email...",
   audit: "Search audit log by user, action, entity...",

@@ -314,36 +314,9 @@ export const demurrageApi = baseApi.enhanceEndpoints({ addTagTypes: [...financia
       }, invalidatesTags: invalidate,
     }),
     emailAdminDemurrageInvoice: builder.mutation({ queryFn: (args, api, _options, baseQuery) => { const {id,key}=args; return !text(id) || !/^[A-Za-z0-9_-]{8,128}$/.test(key || '') ? failure('A valid charge ID and request key are required.') : confirmedAction(scopedQuery(baseQuery,api,args), id, 'email-invoice', 'POST', undefined, { 'x-idempotency-key': key }); }, invalidatesTags: (_result, error) => !error || error.status === 'CUSTOM_ERROR' ? ['AdminDemurrage'] : [] }),
-    getAdminDemurrageRules: builder.query({ serializeQueryArgs:serializeDemurrageQuery,
-      async queryFn(args,api,_options,baseQuery) {
-        const result=await scopedQuery(baseQuery,api,args)({url:'/admin/config'});
-        if(result.error) return result;
-        const config=record(unwrapApiResponseData(result.data)?.config),values=record(config.demurrage);
-        return {data:{freeDays:number(values.freeMinutes)==null?null:number(values.freeMinutes)/1440,rate:number(values.ratePerDay)}};
-      }, providesTags:['AdminPricingConfig'],
-    }),
-    updateAdminDemurrageRules: builder.mutation({
-      async queryFn(values, api, _options, baseQuery) {
-        baseQuery = scopedQuery(baseQuery,api,values);
-        if (api.getState().auth.admin?.role !== 'SUPER_ADMIN') return failure('Only Super Admins can update demurrage rules.');
-        const freeDays = number(values.freeDays), rate = number(values.rate);
-        if (freeDays == null || freeDays * 1440 < 1 || rate == null || rate < 0 || !hasKoboPrecision(values.rate)) return failure('Enter valid free days and a non-negative daily rate with at most two decimal places.');
-        const result = await baseQuery({ url: '/admin/config', method: 'POST', body: { demurrageGracePeriodMinutes: freeDays * 1440, demurrageRatePerDay: rate } });
-        if (result.error) return { error: result.error };
-        const dto = record(unwrapApiResponseData(result.data)), updates = record(dto.updates);
-        if (!text(dto.message)) return failure('The server did not confirm the rules update. Refresh the settings before trying again.');
-        if (number(updates.demurrageGracePeriodMinutes) !== freeDays * 1440 || number(updates.demurrageRatePerDay) !== rate) {
-          const confirmation = await baseQuery({ url: '/admin/config' });
-          const saved = record(unwrapApiResponseData(confirmation.data)?.config?.demurrage);
-          if (confirmation.error || number(saved.freeMinutes) !== freeDays * 1440 || number(saved.ratePerDay) !== rate)
-            return failure('The rules update was sent, but both saved values could not be confirmed. Refresh the settings before saving again.');
-        }
-        return { data: { message: text(dto.message) } };
-      }, invalidatesTags: ['AdminPricingConfig', 'AdminDemurrage', 'AdminDemurrageCalculation'],
-    }),
   }),
 });
 export const { useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageStatsQuery, useGetAdminDemurrageSummaryQuery, useGetAdminDemurrageDetailQuery,
   useGetAdminDemurrageInvoicesQuery, useGetAdminDemurrageDisputesQuery, useLazyGetAdminDemurrageBulkCalculationQuery, useGetAdminDemurrageJobContextQuery, useLazyGetAdminDemurrageInvoiceQuery,
   useCreateAdminDemurrageMutation, useSaveAdminDemurrageNoteMutation, useRaiseAdminDemurrageDisputeMutation, useResolveAdminDemurrageMutation,
-  useEmailAdminDemurrageInvoiceMutation, useGetAdminDemurrageRulesQuery, useUpdateAdminDemurrageRulesMutation } = demurrageApi;
+  useEmailAdminDemurrageInvoiceMutation } = demurrageApi;

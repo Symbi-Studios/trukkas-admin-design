@@ -3,7 +3,6 @@ import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
 import { ViewToggle, TableToolbar } from '../ds.js';
 
-import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
@@ -17,8 +16,6 @@ import {
   SectionCard,
   SearchField,
   DataTable,
-  DonutChart,
-  LegendList,
   Pagination,
   Badge,
   Icon,
@@ -27,14 +24,22 @@ import {
   Select,
   Skeleton,
   StatsPanel,
+  Tabs,
 } from "../ds.js";
 import {
-  useGetAdminDemurrageDirectoryQuery, useGetAdminDemurrageRulesQuery, useUpdateAdminDemurrageRulesMutation, useLazyGetAdminDemurrageBulkCalculationQuery,
-  useGetAdminDemurrageStatsQuery, useGetAdminDemurrageSummaryQuery, useCreateAdminDemurrageMutation,
-  demurrageMoney as money, demurrageSummary, demurrageDetailUrl, demurragePeriod,
+  useGetAdminDemurrageDirectoryQuery,
+  useGetAdminDemurrageStatsQuery, useCreateAdminDemurrageMutation,
+  demurrageMoney as money, demurrageSummary, demurrageDetailUrl,
 } from "../store/features/demurrage/demurrageApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
+import { FeeRecordsTab } from "./FeeTabs.jsx";
+import { DATE_PRESETS, FilterChip, datePresetRange } from "../components/FilterChip.jsx";
+import { initialSearch, initialTab } from "../domain/urlState.js";
+
+// Demurrage covers both kinds of lateness: forwarders billed for late offloading, and truckers
+// whose final payment is reduced for late delivery. Rates and free windows are on Platform Rates.
+const TABS = ["Late Offloading", "Driver Delays"];
 import styles from "./Demurrage.module.css";
 const PAGE_SIZE = 8;
 const EMPTY_ROWS = [];
@@ -44,20 +49,13 @@ const STATUS_TONE = {
   Resolved: "success",
   Dispute: "purple",
 };
-const DEMURRAGE_SUMMARY = [
-  { label: "Active", value: null, display: "—", color: "#f14b67" },
-  { label: "Upcoming", value: null, display: "—", color: "#f2b400" },
-  { label: "Resolved", value: null, display: "—", color: "#0da56a" },
-  { label: "Disputes", value: null, display: "—", color: "#762ce8" },
-  { label: "Waived", value: null, display: "—", color: "var(--tk-ink-300)" },
-];
 function exportCsv(rows) {
   const csv = [
     [
       "Job ID",
       "Container",
-      "Vessel",
       "Customer",
+      "Trucker",
       "Free Days",
       "Days Used",
       "Charge",
@@ -67,8 +65,8 @@ function exportCsv(rows) {
     ...rows.map((r) => [
       r.jobId,
       r.container,
-      r.vessel,
       r.customer,
+      r.assignedTo,
       r.freeDays,
       r.daysUsed ?? "—",
       r.charge,
@@ -104,28 +102,22 @@ function DemurrageScreen() {
   const scope={owner,role},active=useRef(true);
   const navigate = useNavigate();
   const directoryQuery = useGetAdminDemurrageDirectoryQuery(scope,{skip:!authenticated});
-  const rulesQuery = useGetAdminDemurrageRulesQuery(scope,{skip:!authenticated});
   const statsQuery = useGetAdminDemurrageStatsQuery(scope,{skip:!authenticated});
   const [createCharge, createState] = useCreateAdminDemurrageMutation();
   const canCreate = useSelector((state) => ["SUPER_ADMIN", "FINANCE_ADMIN"].includes(state.auth.admin?.role));
   const creating = useRef(false);
-  const [updateRules, updateState] = useUpdateAdminDemurrageRulesMutation();
-  const [calculateBulk, bulkState] = useLazyGetAdminDemurrageBulkCalculationQuery();
-  const canSaveRules = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
   const directory = directoryQuery.error ? null : directoryQuery.currentData;
   const rows = directory?.rows || EMPTY_ROWS;
   const summary = useMemo(() => demurrageSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.error, statsQuery.currentData]);
-  const toastTimer = useRef(null), savingRules = useRef(false), rulesDirty = useRef(false), bulkPending = useRef(false);
-  const tab = 'All Demurrage',
-    [q, setQ] = usePageSearchState("", () => setPage(1)),
+  const toastTimer = useRef(null);
+  const [tab, setTab] = useState(() => initialTab(TABS, "Late Offloading"));
+  const [q, setQ] = usePageSearchState(initialSearch(), () => setPage(1), tab === "Late Offloading"),
     [status, setStatus] = useState("All"),
     [jobType, setJobType] = useState("All"),
-    [date, setDate] = useState(""),
+    [datePreset, setDatePreset] = useState("All Dates"),
     [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(PAGE_SIZE),
-    [period, setPeriod] = useState("This Month"),
     [create, setCreate] = useState(false),
-    [rules, setRules] = useState(false),
     [form, setForm] = useState({
       jobId: "",
       container: "",
@@ -134,40 +126,29 @@ function DemurrageScreen() {
       daysOver: "",
       rate: "",
     }),
-    [ruleForm, setRuleForm] = useState({ freeDays: "", rate: "" }),
     [toast, setToast] = useState("");
 
-  const dateQuery = useGetAdminDemurrageDirectoryQuery({ ...scope, ...(date ? { dateFrom: `${date}T00:00:00+01:00`, dateTo: `${date}T23:59:59.999+01:00` } : {}) }, { skip: !authenticated || !date });
-  const visibleQuery = date ? dateQuery : directoryQuery;
+  const dateRange = datePresetRange(datePreset);
+  const dateQuery = useGetAdminDemurrageDirectoryQuery({ ...scope, ...(dateRange.from ? { dateFrom: `${dateRange.from}T00:00:00+01:00`, dateTo: `${dateRange.to}T23:59:59.999+01:00` } : {}) }, { skip: !authenticated || !dateRange.from });
+  const visibleQuery = dateRange.from ? dateQuery : directoryQuery;
   const visibleDirectory = visibleQuery.error ? null : visibleQuery.currentData;
   const visibleRows = visibleDirectory?.rows || EMPTY_ROWS;
-  const periodRange = useMemo(() => demurragePeriod(period), [period]);
-  const periodQuery = useGetAdminDemurrageSummaryQuery({...periodRange,...scope},{skip:!authenticated});
-  const periodSummary = periodQuery.error ? null : periodQuery.currentData;
-  const periodItems = periodSummary?.items || DEMURRAGE_SUMMARY;
-  const periodMetric = (value) => !periodSummary && periodQuery.isFetching ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
   useEffect(() => { active.current=true; return () => { active.current=false; clearTimeout(toastTimer.current); }; }, []);
-  useEffect(() => { const error = statsQuery.error || periodQuery.error || dateQuery.error; if (error) notify(getApiErrorMessage(error)); }, [statsQuery.error, periodQuery.error, dateQuery.error]);
+  useEffect(() => { const error = statsQuery.error || dateQuery.error; if (error) notify(getApiErrorMessage(error)); }, [statsQuery.error, dateQuery.error]);
   useEffect(() => { if (directoryQuery.error) notify(getApiErrorMessage(directoryQuery.error)); }, [directoryQuery.error]);
-  useEffect(() => {
-    if (!rules || rulesDirty.current) return;
-    const values = rulesQuery.error ? null : rulesQuery.currentData;
-    setRuleForm({ freeDays: values?.freeDays ?? "", rate: values?.rate ?? "" });
-  }, [rules, rulesQuery.currentData, rulesQuery.error]);
   const metric = (value) => (!directory && directoryQuery.isFetching) || (!statsQuery.currentData && statsQuery.isFetching) ? <Skeleton as="span" width={54} height={23} /> : value ?? "—";
   const filtered = useMemo(
     () =>
       visibleRows.filter(
         (r) =>
-          (tab === "All Demurrage" || r.status === (tab === "Disputes" ? "Dispute" : tab)) &&
           (status === "All" || r.status === status) &&
           (jobType === "All" || r.jobType === jobType) &&
           (!q ||
-            [r.jobId, r.container, r.customer, r.vessel].some((v) =>
+            [r.jobId, r.container, r.customer, r.assignedTo].some((v) =>
               v?.toLowerCase().includes(q.toLowerCase()),
             )),
       ),
-    [visibleRows, tab, status, jobType, q],
+    [visibleRows, status, jobType, q],
   );
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const paged = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -189,32 +170,17 @@ function DemurrageScreen() {
     } catch (error) { notify(getApiErrorMessage(error)); }
     finally { creating.current = false; }
   }
-  async function saveRules() {
-    if (savingRules.current || updateState.isLoading || !canSaveRules) return;
-    savingRules.current = true;
-    try {
-      const result = await updateRules({...ruleForm,...scope}).unwrap();
-      if (!active.current) return;
-      setRules(false); notify(result.message);
-    } catch (error) { if (active.current) { setRules(false); notify(getApiErrorMessage(error)); } }
-    finally { savingRules.current = false; }
-  }
-  async function bulkCalculate() {
-    if (bulkPending.current || bulkState.isFetching || visibleQuery.isFetching) return;
-    if (!visibleDirectory || !paged.length) { notify("Load demurrage records before calculating."); return; }
-    bulkPending.current = true;
-    try {
-      const result = await calculateBulk({ids:paged.map((row) => row.chargeApiId),...scope}, false).unwrap();
-      notify(`Bulk calculation completed for ${result.count} visible records.`);
-    } catch (error) { notify(getApiErrorMessage(error)); }
-    finally { bulkPending.current = false; }
-  }
+
   return (
     <div className="grid grid-cols-1 gap-tk-section-gap min-w-0">
       <PageHeader
         crumbs={["Finance", "Demurrage"]}
         title="Demurrage"
-        description="Track and manage demurrage and detention charges across all shipments and containers."
+        description="Charges for lateness: forwarders billed for late offloading, and truckers whose final payment is reduced for late delivery."
+        actions={<>
+          <Button variant="outline" icon="sliders-horizontal" onClick={() => navigate("/rates")}>Rates & Free Windows</Button>
+          <Button icon="plus" disabled={!canCreate} onClick={() => setCreate(true)}>Create Charge</Button>
+        </>}
       />
       <StatsPanel fixedLabel="All time" fixedHint="Demurrage totals cover all time; the demurrage stats API can’t be filtered by date yet.">
         <StatCard
@@ -254,65 +220,23 @@ function DemurrageScreen() {
           caption={`${money(summary.disputeAmount)} In Dispute`}
         />
       </StatsPanel>
-      <div className="grid grid-cols-[minmax(0,1fr)_310px] gap-4 items-start max-[1200px]:grid-cols-1">
+      <div className="grid grid-cols-1 gap-4 items-start">
         <div className="grid grid-cols-1 gap-3.5 content-start min-w-0">
-          <SectionCard title="" pad="none">
+          <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
+            <Tabs value={tab} onChange={(value) => { setTab(value); setPage(1); }} style={{ padding: "0 var(--tk-card-pad)" }} items={TABS} />
+            {tab === "Driver Delays" ? <FeeRecordsTab kind="deductions" rules={[]} /> : <>
 
-            <TableToolbar search={<><SearchField
-                className="flex-1 min-w-[220px] max-[760px]:min-w-0"
-                placeholder="Search by job ID, container no., customer..."
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(1);
-                }}
-              /></>} filters={<><CustomSelect
-                className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
-                aria-label="Status filter"
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {["All", "Active", "Upcoming", "Resolved", "Dispute"].map(
-                  (x) => (
-                    <option key={x}>{x}</option>
-                  ),
-                )}
-              </CustomSelect><CustomSelect
-                className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
-                aria-label="Job type filter"
-                value={jobType}
-                onChange={(e) => {
-                  setJobType(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option>All</option>
-                {[...new Set(rows.map((r) => r.jobType).filter((value) => value !== "—"))].map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
-              </CustomSelect><input
-                className="h-[38px] border border-tk-line-strong rounded-[7px] px-2.5 box-border w-full text-xs font-tk-sans outline-none focus:border-tk-blue focus:shadow-tk-focus"
-                aria-label="Date range"
-                style={{ width: 145 }}
-                type="date"
-                value={date}
-                onChange={(e) => { setDate(e.target.value); setPage(1); }}
-              /><Button
-                variant="outline"
-                icon="rotate-ccw"
-                onClick={() => {
-                  setQ("");
-                  setStatus("All");
-                  setJobType("All");
-                  setDate("");
-                  setPage(1);
-                }}
-              >
-                Reset
-              </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button></>} />
+            <TableToolbar
+              search={<SearchField placeholder="Search by job ID, container, customer or trucker…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+              filters={<>
+                <FilterChip name="Status" icon="circle-dot" value={status} allValue="All" options={[{ value: "All", label: "All Statuses" }, "Active", "Upcoming", "Resolved", "Dispute"]} onChange={(v) => { setStatus(v); setPage(1); }} />
+                <FilterChip name="Job Type" icon="route" value={jobType} allValue="All" options={[{ value: "All", label: "All Job Types" }, ...new Set(rows.map((r) => r.jobType).filter((value) => value !== "—"))]} onChange={(v) => { setJobType(v); setPage(1); }} />
+                <FilterChip name="Free Period Ended" icon="calendar" value={datePreset} allValue="All Dates" options={DATE_PRESETS} onChange={(v) => { setDatePreset(v); setPage(1); }} />
+              </>}
+              onClear={status !== "All" || jobType !== "All" || datePreset !== "All Dates" || q.trim() ? () => { setQ(""); setStatus("All"); setJobType("All"); setDatePreset("All Dates"); setPage(1); } : undefined}
+              viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
+              trailing={<Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button>}
+            />
             {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.demurrage} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.key}
@@ -347,20 +271,6 @@ function DemurrageScreen() {
                   ),
                 },
                 {
-                  key: "vessel",
-                  header: "Vessel / Voyage",
-                  render: (r) => (
-                    <span className="grid gap-0.5 whitespace-nowrap">
-                      <strong className="text-tk-meta text-tk-ink-700">
-                        {r.vessel}
-                      </strong>
-                      <small className="text-tk-micro text-tk-ink-400">
-                        {r.voyage}
-                      </small>
-                    </span>
-                  ),
-                },
-                {
                   key: "customer",
                   header: "Customer",
                   render: (r) => (
@@ -374,6 +284,7 @@ function DemurrageScreen() {
                     </span>
                   ),
                 },
+                { key: "assignedTo", header: "Trucker" },
                 {
                   key: "freeDays",
                   header: "Free Days",
@@ -482,134 +393,7 @@ function DemurrageScreen() {
                 setPage(1);
               }}
             />
-          </SectionCard>
-        </div>
-        <div className="grid grid-cols-1 gap-3.5 content-start min-w-0 max-[1200px]:grid-cols-2 max-[1200px]:[&>:last-child:nth-child(odd)]:col-span-full max-[760px]:grid-cols-1">
-          <SectionCard
-            title="Demurrage Summary"
-            action={
-              <CustomSelect
-                aria-label="Summary period"
-                className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-              >
-                <option>This Month</option>
-                <option>Last Month</option>
-                <option>This Year</option>
-              </CustomSelect>
-            }
-          >
-            <div className="flex flex-col items-center gap-4 w-full">
-              <DonutChart
-                size={180}
-                thickness={18}
-                centerValue={periodMetric(money(periodSummary?.totalCharges))}
-                centerLabel="Total Charges"
-                style={{ flex: "0 0 auto" }}
-                data={periodSummary?.chart || []}
-              />
-              <LegendList
-                items={periodItems}
-                showShare={false}
-                style={{ flex: 1, width: "100%" }}
-              />
-            </div>
-            <div className="border-t border-tk-line mt-3.5 pt-1.5">
-              <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
-                <span>Total Charges</span>
-                <b>{periodMetric(money(periodSummary?.totalCharges))}</b>
-              </div>
-              <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
-                <span>Total Collected</span>
-                <b>{periodMetric(money(periodSummary?.totalCollected))}</b>
-              </div>
-              <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
-                <span>Outstanding</span>
-                <b>{periodMetric(money(periodSummary?.outstanding))}</b>
-              </div>
-              <div className="flex justify-between gap-2 py-1.5 text-tk-meta text-tk-ink-500">
-                <span>Collection Rate</span>
-                <b>{periodMetric(periodSummary?.collectionRate == null ? "—" : `${periodSummary.collectionRate}%`)}</b>
-              </div>
-            </div>
-          </SectionCard>
-          <SectionCard title="Quick Actions">
-            <Action
-              icon="clipboard-plus"
-              title="Create Demurrage Charge"
-              hint="Manually create a demurrage charge"
-              onClick={() => setCreate(true)}
-            />
-            <Action
-              icon="clipboard-list"
-              title="Demurrage Rules"
-              hint="Manage free days and rate rules"
-              onClick={() => { rulesDirty.current = false; setRules(true); if (rulesQuery.error) notify(getApiErrorMessage(rulesQuery.error)); }}
-            />
-            <Action
-              icon="calculator"
-              title="Bulk Demurrage Calculation"
-              hint="Calculate demurrage for multiple jobs"
-              onClick={bulkCalculate}
-            />
-            <Action
-              icon="file-chart-column"
-              title="Demurrage Reports"
-              hint="View and export demurrage reports"
-              onClick={() => visibleDirectory && !visibleQuery.isFetching ? exportCsv(filtered) : notify("Load demurrage records before exporting." )}
-            />
-          </SectionCard>
-          <SectionCard
-            title="Recent Demurrage"
-            action={
-              <button
-                style={{
-                  border: 0,
-                  background: "none",
-                  color: "var(--tk-blue)",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  setStatus("All");
-                  setPage(1);
-                }}
-              >
-                View all
-              </button>
-            }
-          >
-            {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={3} label="Loading recent demurrage" /> : rows.slice(0, 4).map((r) => (
-              <button
-                className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-1.75 py-2 border-b border-tk-line text-tk-micro w-full border-l-0 border-r-0 border-t-0 bg-transparent cursor-pointer text-left"
-                key={r.key}
-                onClick={() => navigate(demurrageDetailUrl(r))}
-              >
-                <span>
-                  <strong className="text-tk-blue">{r.jobId}</strong>
-                  <br />
-                  <Badge
-                    tone={STATUS_TONE[r.status]}
-                    style={{ height: 17, fontSize: 8 }}
-                  >
-                    {r.status}
-                  </Badge>
-                </span>
-                <span>
-                  {r.container}
-                  <br />
-                  <small>{r.dischargeDate}</small>
-                </span>
-                <span style={{ textAlign: "right" }}>
-                  <b>{money(r.charge)}</b>
-                  <br />
-                  <small>
-                    {r.daysOver != null ? r.daysOver + " days over" : r.overSince}
-                  </small>
-                </span>
-              </button>
-            ))}
-            {!directoryQuery.isFetching && !rows.length && "—"}
+            </>}
           </SectionCard>
         </div>
       </div>
@@ -676,56 +460,11 @@ function DemurrageScreen() {
           />
         </div>
       </Modal>
-      <Modal
-        open={rules}
-        onClose={() => { if (!savingRules.current) setRules(false); }}
-        title="Demurrage Rules"
-        description="Default free-time and daily charge settings."
-        width={520}
-        footer={
-          <Button
-            disabled={!canSaveRules || updateState.isLoading || rulesQuery.isFetching || ruleForm.freeDays === "" || ruleForm.rate === ""}
-            onClick={saveRules}
-          >
-            Save Rules
-          </Button>
-        }
-      >
-        <div className="grid grid-cols-2 gap-3 max-[760px]:grid-cols-1">
-          <TextField label="Default Free Days" type="number" placeholder="—" value={ruleForm.freeDays} disabled={!canSaveRules || updateState.isLoading} onChange={(e) => { rulesDirty.current = true; setRuleForm({ ...ruleForm, freeDays: e.target.value }); }} />
-          <TextField
-            label="Default Daily Rate (₦)"
-            money
-            type="number"
-            placeholder="—"
-            value={ruleForm.rate}
-            disabled={!canSaveRules || updateState.isLoading}
-            onChange={(e) => { rulesDirty.current = true; setRuleForm({ ...ruleForm, rate: e.target.value }); }}
-          />
-        </div>
-      </Modal>
       {toast && (
         <div className="fixed right-6 bottom-6 z-100 bg-tk-ink-900 text-white rounded-[9px] px-4 py-3 shadow-tk-menu text-xs font-medium font-tk-sans">
           {toast}
         </div>
       )}
     </div>
-  );
-}
-function Action({ icon, title, hint, onClick }) {
-  return (
-    <button
-      className="w-full flex gap-2.25 items-center px-1 py-2 border-0 bg-transparent text-left cursor-pointer hover:bg-tk-surface-sunk"
-      onClick={onClick}
-    >
-      <span className="w-7 h-7 rounded-tk-sm bg-tk-blue-soft text-tk-blue grid place-items-center shrink-0">
-        <Icon name={icon} size={13} />
-      </span>
-      <span className="flex-1">
-        <strong className="block text-tk-meta text-tk-ink-900">{title}</strong>
-        <small className="block text-tk-micro text-tk-ink-400">{hint}</small>
-      </span>
-      <Icon name="chevron-right" size={13} />
-    </button>
   );
 }

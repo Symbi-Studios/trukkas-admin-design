@@ -13,28 +13,12 @@ import {
 } from '../store/features/settlements/settlementsApi.js';
 
 import { useSettlementOperations } from '../store/features/settlements/useSettlementOperations.js';
+import { transactionDetailUrl } from '../store/features/transactions/transactionsApi.js';
+import { FinanceRelatedLinks } from './FinanceRelatedLinks.jsx';
+import { withParams } from '../domain/urlState.js';
 
 const STATUS_TONE = { Completed: 'success', Pending: 'warning', 'On Hold': 'info', Failed: 'danger' };
 
-function Fact({ icon, iconTint = 'blue', label, value }) {
-  const TINT = {
-    blue: ['var(--tk-blue-soft)', 'var(--tk-blue)'],
-    green: ['var(--tk-success-soft)', 'var(--tk-success)'],
-    amber: ['var(--tk-warning-soft)', 'var(--tk-warning)'],
-    purple: ['var(--tk-purple-soft)', 'var(--tk-purple)'],
-  };
-  const [bg, fg] = TINT[iconTint] || TINT.blue;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0' }}>
-      <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: bg, color: fg,
-                     display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-        <Icon name={icon} size={17} />
-      </span>
-      <span style={{ flex: 1, font: '400 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>{label}</span>
-      <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)', textAlign: 'right' }}>{value}</span>
-    </div>
-  );
-}
 
 export function SettlementDetail() {
   const { settlementId } = useParams(), search = useSearchParams();
@@ -76,7 +60,7 @@ function SettlementDetailScreen() {
 
   return (
     <>
-      <PageHeader crumbs={['Business & Finance', 'Settlements', r.id]} title={<span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{r.id}</span>}
+      <PageHeader crumbs={['Finance', 'Settlements', r.id]} title={<span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{r.id}</span>}
         description="Detailed view of this settlement."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back</Button>
@@ -148,10 +132,14 @@ function SettlementDetailScreen() {
           <SectionCard title="Settlement Timeline">
             <Timeline items={timeline.map((item) => ({ ...item, title: value(item.title), description: value(item.description), time: value(item.time) }))} />
           </SectionCard>
-          <SectionCard title="Parties" pad="none" style={{ padding: '4px var(--tk-card-pad) 8px' }}>
-            <Fact icon="arrow-up-right" iconTint="blue" label="Payer" value={value(`${r.payer} (${r.payerType})`)} />
-            <Fact icon="arrow-down-left" iconTint="green" label="Payee" value={value(`${r.payee} (${r.payeeType})`)} />
-          </SectionCard>
+          {row && (
+            <FinanceRelatedLinks items={[
+              row.jobUrl && { icon: 'package', label: `Job ${r.relatedTo}`, description: r.route, to: row.jobUrl },
+              row.escrowId && { icon: 'lock', label: 'Escrow hold', description: 'The escrow this money was released from', to: '/escrow/detail?id=' + encodeURIComponent(row.escrowId) },
+              ...row.transactionIds.map((id, index) => ({ icon: 'receipt', label: row.transactionReferences[index] || id, description: 'Ledger transaction', to: transactionDetailUrl(id) })),
+              row.isBankPayout && row.transactionReferences[0] && { icon: 'banknote', label: 'Withdrawal request', description: 'Review on Payouts', to: withParams('/payouts', { q: row.transactionReferences[0] }) },
+            ]} />
+          )}
         </div>
       </div>
     </>

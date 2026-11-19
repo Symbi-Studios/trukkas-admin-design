@@ -65,7 +65,7 @@ export function PricingDetail() {
       <Card>
         {pricingQuery.isFetching ? <DriverLoadingNotice>Loading pricing entry…</DriverLoadingNotice> : <span className="tk-body">{pricingQuery.error || actionError ? pricingError(actionError || pricingQuery.error) : <>No pricing entry found with ID {priceId}.</>}</span>}
         <div style={{ marginTop: 12 }}>
-          <Button variant="outline" icon="arrow-left" onClick={() => navigate('/pricing')}>Back to Pricing Management</Button>
+          <Button variant="outline" icon="arrow-left" onClick={() => navigate('/pricing')}>Back to Pricing</Button>
         </div>
       </Card>
     );
@@ -73,7 +73,7 @@ export function PricingDetail() {
 
   return (
     <>
-      <PageHeader crumbs={['Business & Finance', 'Pricing Management', 'Service Pricing', r.id]} title={r.service}
+      <PageHeader crumbs={['Finance', 'Pricing', 'Service Pricing', r.id]} title={r.service}
         description="Detailed view of this service pricing entry."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/pricing')}>Back</Button>

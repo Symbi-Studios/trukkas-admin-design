@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
-import { useNavigate, useParams } from '../router.js';
+import { Link, useNavigate, useParams } from '../router.js';
 import {
   PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline, Skeleton,
 } from '../ds.js';
@@ -14,6 +14,9 @@ import {
 
 import { escrowCanRelease, escrowMoneyRoles } from '../store/features/wallets/walletActionsApi.js';
 import { WalletActionDialog } from './WalletActionDialog.jsx';
+import { FinanceRelatedLinks } from './FinanceRelatedLinks.jsx';
+import { transactionDetailUrl } from '../store/features/transactions/transactionsApi.js';
+import { withParams } from '../domain/urlState.js';
 
 function Fact({ icon, iconTint = 'blue', label, value }) {
   const TINT = {
@@ -73,7 +76,7 @@ function EscrowDetailScreen() {
       <Card>
         <span className="tk-body">No escrow hold found with ID {holdId}.</span>
         <div style={{ marginTop: 12 }}>
-          <Button variant="outline" icon="arrow-left" onClick={() => navigate('/wallets')}>Back to Escrow Wallet</Button>
+          <Button variant="outline" icon="arrow-left" onClick={() => navigate('/wallets')}>Back to Escrow</Button>
         </div>
       </Card>
     );
@@ -89,7 +92,7 @@ function EscrowDetailScreen() {
 
   return (
     <>
-      <PageHeader crumbs={['Business & Finance', 'Escrow & Wallets', 'Holds', r.holdId]} title={r.holdId}
+      <PageHeader crumbs={['Finance', 'Escrow', 'Holds', r.holdId]} title={r.holdId}
         description="Detailed view of this escrow hold."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/wallets')}>Back</Button>
@@ -160,10 +163,17 @@ function EscrowDetailScreen() {
           </SectionCard>
           {release && (
             <SectionCard title="Release Record" pad="none" style={{ padding: '4px var(--tk-card-pad) 8px' }}>
-              <Fact icon="hash" iconTint="blue" label="Release ID" value={release.releaseId} />
+              <Fact icon="hash" iconTint="blue" label="Release ID" value={release.releaseId === '—' ? '—' : <Link to={transactionDetailUrl(release.releaseId)}>{release.releaseId}</Link>} />
               <Fact icon="user" iconTint="green" label="Released To" value={release.releasedTo} />
               <Fact icon="file-text" iconTint="purple" label="Settlement Reference" value={release.settlementReference} />
             </SectionCard>
+          )}
+          {hold && (
+            <FinanceRelatedLinks items={[
+              hold.jobApiId && { icon: 'package', label: `Job ${r.jobId}`, description: r.route, to: '/jobs/detail?id=' + encodeURIComponent(hold.jobApiId) },
+              { icon: 'coins', label: 'Releases from this escrow', description: 'Mobilisation, final payment, dispute settlements and refunds', to: withParams('/settlements', { tab: 'Escrow Releases', q: r.holdId }) },
+              { icon: 'receipt', label: 'Escrow transactions for this job', description: 'Funding, holds and releases in the ledger', to: withParams('/transactions', { type: 'Escrow', q: r.jobId }) },
+            ]} />
           )}
         </div>
       </div>

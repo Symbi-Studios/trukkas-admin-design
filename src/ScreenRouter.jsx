@@ -30,6 +30,7 @@ import { SupportTickets } from './screens/SupportTickets.jsx';
 import { KnowledgeBase } from './screens/KnowledgeBase.jsx';
 import { Feedback } from './screens/Feedback.jsx';
 import { Demurrage } from './screens/Demurrage.jsx';
+import { PlatformRates } from './screens/PlatformRates.jsx';
 import { Maintenance } from './screens/Maintenance.jsx';
 import { NotificationCenter } from './screens/NotificationCenter.jsx';
 import { AuditLogs } from './screens/AuditLogs.jsx';
@@ -51,6 +52,7 @@ const screens = {
   payouts: RequestedPayouts,
   reports: ReportsAnalytics,
   fees: FeesCommission,
+  rates: PlatformRates,
   announcements: Announcements,
   jobs: JobsTrips,
   trips: TripsSegments,

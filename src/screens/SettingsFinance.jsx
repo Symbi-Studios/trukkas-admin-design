@@ -4,6 +4,7 @@
 import { Button } from '../ds.js';
 import { SettingsTextField as TextField, SettingsSelect as Select, SettingsSwitch as Switch, SettingsReadNotice } from './settingsValues.jsx';
 import { useSettingsEditor } from './useSettingsEditor.js';
+import { useNavigate } from '../router.js';
 
 
 import { SettingsSectionHeader, SettingsPanelLoading, SettingsGrid, SettingsCard, SettingsCardSave } from './settingsShared.jsx';
@@ -11,7 +12,6 @@ import { SettingsSectionHeader, SettingsPanelLoading, SettingsGrid, SettingsCard
 const CURRENCIES = ['Nigerian Naira (NGN)', 'US Dollar (USD)', 'Ghanaian Cedi (GHS)', 'Kenyan Shilling (KES)'];
 const CURRENCY_FORMATS = ['₦1,234,567.00', '₦1.234.567,00', '1,234,567.00 ₦'];
 const DECIMAL_PLACES = ['2 (e.g. 1,234.56)', '0 (e.g. 1,235)'];
-const COMMISSION_TYPES = ['Percentage (%)', 'Flat Fee', 'Tiered'];
 const AUTO_RELEASE = ['Enabled', 'Disabled', 'Manual Only'];
 const PAYOUT_METHODS = ['Bank Transfer', 'Mobile Money', 'Wallet Credit'];
 const PROCESSING_TIMES = ['Instant (≤ 1 hour)', 'Same Day', 'Next Business Day'];
@@ -21,26 +21,16 @@ const ACCOUNTING_INTEGRATIONS = ['None', 'Xero', 'QuickBooks', 'Wave'];
 
 function Field({ children }) { return <div style={{ marginBottom: 14 }}>{children}</div>; }
 
-function MiniSwitch({ checked, label, onChange }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0' }}>
-      <Switch checked={checked} onChange={onChange} />
-      <span style={{ font: '400 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{label}</span>
-    </div>
-  );
-}
-
 export function SettingsFinance() {
   const editor = useSettingsEditor('finance');
+  const navigate = useNavigate();
   const updateFinancialPolicies = editor.change('settingsFinancialPolicies');
-  const updatePlatformFees = editor.change('settingsPlatformFees');
   const updateEscrowSettingsForm = editor.change('settingsEscrow');
   const updatePayoutSettingsForm = editor.change('settingsPayout');
   const updateInvoicingReceipts = editor.change('settingsInvoicing');
   const updateAccountingTax = editor.change('settingsAccountingTax');
   const resetFinanceSettings = () => editor.reset();
   const policies = editor.group('settingsFinancialPolicies');
-  const fees = editor.group('settingsPlatformFees');
   const escrow = editor.group('settingsEscrow');
   const payout = editor.group('settingsPayout');
   const invoicing = editor.group('settingsInvoicing');
@@ -48,13 +38,13 @@ export function SettingsFinance() {
   const meta = editor.group('settingsMeta');
 
   if (editor.loading) return <SettingsPanelLoading />;
-  if (!policies || !fees || !escrow || !payout || !invoicing || !tax) return null;
+  if (!policies || !escrow || !payout || !invoicing || !tax) return null;
 
 
   return (
     <>
       <SettingsSectionHeader title="Finance"
-        description="Configure financial rules, fees, escrow, payouts, and accounting preferences."
+        description="Configure financial policies, escrow handling, payouts, invoicing and accounting preferences."
         actions={<>
           <Button variant="outline" icon="rotate-ccw" onClick={() => resetFinanceSettings()}>Reset to Default</Button>
         </>} />
@@ -86,30 +76,10 @@ export function SettingsFinance() {
           </div>
         </SettingsCard>) }
 
-        {editor.groupVisible('settingsPlatformFees') && (<SettingsCard description="Configure platform fees, commissions, and additional charges." title="Platform Fees & Commission" save={<SettingsCardSave editor={editor} group="settingsPlatformFees" />}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 6 }}>
-            {editor.visible('settingsPlatformFees', 'platformCommissionType') && (<Select label="Platform Commission Type" options={COMMISSION_TYPES} value={fees.platformCommissionType}
-              onChange={(e) => updatePlatformFees({ platformCommissionType: e.target.value })} />) }
-            {editor.visible('settingsPlatformFees', 'commissionRate') && (<TextField label="Commission Rate (%)" value={fees.commissionRate} suffix={<span className="tk-meta">%</span>}
-              onChange={(e) => updatePlatformFees({ commissionRate: e.target.value })} />) }
-            {editor.visible('settingsPlatformFees', 'transactionFeePerPayment') && (<TextField label="Transaction Fee (per payment)" money value={fees.transactionFeePerPayment}
-              hint="Fixed fee charged per transaction."
-              onChange={(e) => updatePlatformFees({ transactionFeePerPayment: e.target.value })} />) }
-            {editor.visible('settingsPlatformFees', 'vatRate') && (<TextField label="VAT Rate (%)" value={fees.vatRate} suffix={<span className="tk-meta">%</span>}
-              onChange={(e) => updatePlatformFees({ vatRate: e.target.value })} />) }
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>Additional Fees</span>
-            {editor.visible('settingsPlatformFees', 'applyVatOnCommission') && (<MiniSwitch checked={fees.applyVatOnCommission} label="Apply VAT on commission"
-              onChange={(v) => updatePlatformFees({ applyVatOnCommission: v })} />) }
-            {editor.visible('settingsPlatformFees', 'includeTransactionFeeInCustomerBill') && (<MiniSwitch checked={fees.includeTransactionFeeInCustomerBill} label="Include transaction fee in customer bill"
-              onChange={(v) => updatePlatformFees({ includeTransactionFeeInCustomerBill: v })} />) }
-            {editor.visible('settingsPlatformFees', 'allowCustomFeesPerJob') && (<MiniSwitch checked={fees.allowCustomFeesPerJob} label="Allow custom fees per job"
-              onChange={(v) => updatePlatformFees({ allowCustomFeesPerJob: v })} />) }
-            {editor.visible('settingsPlatformFees', 'enablePromotionalDiscounts') && (<MiniSwitch checked={fees.enablePromotionalDiscounts} label="Enable promotional discounts"
-              onChange={(v) => updatePlatformFees({ enablePromotionalDiscounts: v })} />) }
-          </div>
-        </SettingsCard>) }
+        <SettingsCard title="Platform Fees & Rates" description="Platform fee, commission, VAT, mobilization, demurrage and cancellation rates are managed in Finance.">
+          <p className="tk-meta" style={{ margin: '0 0 14px' }}>These values decide what every job is charged, so they are edited in one place alongside pricing and fee rules.</p>
+          <Button variant="outline" icon="sliders-horizontal" onClick={() => navigate('/rates')}>Open Platform Rates</Button>
+        </SettingsCard>
 
         {editor.groupVisible('settingsEscrow') && (<SettingsCard description="Manage how escrow payments are handled." title="Escrow Settings" save={<SettingsCardSave editor={editor} group="settingsEscrow" />}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
@@ -121,10 +91,6 @@ export function SettingsFinance() {
                 onChange={(e) => updateEscrowSettingsForm({ autoReleaseOnPod: e.target.value })} />) }
               <span className="tk-meta">Automatically release funds after proof of delivery.</span>
             </div>
-            {editor.visible('settingsEscrow', 'mobilizationPercent') && (<TextField label="Mobilization (%)" type="number" min={0} max={100} step="any" value={escrow.mobilizationPercent}
-              suffix={<span className="tk-meta">%</span>}
-              hint="Released to the trucker at pickup for newly accepted offers; the rest on completion. Existing jobs keep their split."
-              onChange={(e) => updateEscrowSettingsForm({ mobilizationPercent: e.target.value })} />) }
           </div>
           {editor.visible('settingsEscrow', 'requireManualReviewForHighValueJobs') && (<Field><Switch checked={escrow.requireManualReviewForHighValueJobs} label="Require manual review for high-value jobs"
             hint="Jobs above a threshold require admin approval."

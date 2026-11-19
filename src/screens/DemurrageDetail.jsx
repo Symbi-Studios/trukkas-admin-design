@@ -319,19 +319,9 @@ function DemurrageDetailScreen() {
           {tab === "Overview" ? (
             <>
               <div className="grid grid-cols-3 gap-3.5 max-[1200px]:grid-cols-2 max-[760px]:grid-cols-1">
-                <SectionCard title="Container & Voyage" icon="inbox">
+                <SectionCard title="Container" icon="inbox">
                   <Row label="Container No." value={r.container} />
                   <Row label="Size / Type" value={r.size} />
-                  <Row
-                    label="Vessel / Voyage"
-                    value={
-                      <>
-                        {r.vessel}
-                        <br />
-                        <small>{r.voyage}</small>
-                      </>
-                    }
-                  />
                   <Row label="Discharge Port" value={r.dischargePort} />
                   <Row label="Discharge Date" value={r.dischargeDate} />
                 </SectionCard>

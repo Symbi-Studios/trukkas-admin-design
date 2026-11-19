@@ -5,8 +5,9 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Link } from '../router.js';
-import { Banner, BarChart, Badge, Button, DataTable, EmptyState, LabelValue, Modal, Pagination, SectionCard, Select, TextField } from '../ds.js';
+import { Banner, BarChart, Badge, Button, DataTable, EmptyState, LabelValue, Modal, Pagination, SearchField, SectionCard, Select, TableToolbar } from '../ds.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
+import { DATE_PRESETS, FilterChip, datePresetRange } from '../components/FilterChip.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { feeDetailUrl, feeMoney, feePeriods } from '../store/features/fees/feesApi.js';
 import { feeAuditScopes, feeLedgerCategories, feeRangeValid, useGetAdminFeeDeductionsQuery, useGetAdminFeeTransactionsQuery, useGetAdminFeeAuditQuery, useGetAdminFeeAnalyticsQuery } from '../store/features/fees/feeTabsApi.js';
@@ -33,13 +34,17 @@ export function FeeRecordsTab({ kind, rules }) {
   const owner = useSelector(state => state.auth.admin?.id), authenticated = useSelector(state => Boolean(state.auth.accessToken));
   const deductions = kind === 'deductions';
   const [page, setPage] = useState(1), [limit, setLimit] = useState(25), [search, setSearch] = usePageSearchState('', () => setPage(1));
-  const [dateFrom, setFrom] = useState(''), [dateTo, setTo] = useState(''), [filter, setFilter] = useState(''), [ruleId, setRuleId] = useState('');
+  const [datePreset, setDatePreset] = useState('All Dates'), [filter, setFilter] = useState(''), [ruleId, setRuleId] = useState('');
+  const { from: dateFrom, to: dateTo } = datePresetRange(datePreset);
   const datesValid = feeRangeValid(dateFrom, dateTo), args = { owner, page, limit, search, dateFrom, dateTo, ...(deductions ? { status: filter } : { category: filter, feeRuleId: ruleId }) };
   const deductionQuery = useGetAdminFeeDeductionsQuery(args, { skip: !authenticated || !owner || !deductions || !datesValid, refetchOnMountOrArgChange: true });
   const transactionQuery = useGetAdminFeeTransactionsQuery(args, { skip: !authenticated || !owner || deductions || !datesValid, refetchOnMountOrArgChange: true });
   const query = deductions ? deductionQuery : transactionQuery, data = !authenticated || !datesValid || query.error ? null : query.currentData;
   const [selected, setSelected] = useState(null);
   const change = setter => event => { setter(event.target.value); setPage(1); setSelected(null); };
+  const choose = setter => value => { setter(value); setPage(1); setSelected(null); };
+  const filterOptions = [{ value: '', label: deductions ? 'All Statuses' : 'All Categories' }, ...(deductions ? ['ASSESSED', 'APPLIED', 'WAIVED', 'REFUNDED'] : feeLedgerCategories).map(value => ({ value, label: value.replaceAll('_', ' ') }))];
+  const filtersActive = Boolean(search.trim() || filter || ruleId || datePreset !== 'All Dates');
   const columns = deductions ? [
     { key: 'job', header: 'Job', render: job }, { key: 'user', header: 'Trucker' }, { key: 'type', header: 'Type' },
     { key: 'amount', header: 'Amount (₦)', render: row => feeMoney(row.amount) }, { key: 'status', header: 'Status', render: row => <Badge>{row.status}</Badge> },
@@ -51,14 +56,15 @@ export function FeeRecordsTab({ kind, rules }) {
     { key: 'status', header: 'Status', render: row => <Badge>{row.status}</Badge> }, { key: 'createdAt', header: 'Collected At' },
   ];
   return <div style={space}>
-    <div style={grid}>
-      <TextField label="Search" placeholder={deductions ? 'Job number or trucker' : 'Reference, job, payer or fee'} value={search} onChange={change(setSearch)} />
-      <TextField label="From (Lagos day)" type="date" value={dateFrom} onChange={change(setFrom)} />
-      <TextField label="To (Lagos day)" type="date" value={dateTo} onChange={change(setTo)} />
-      <Select label={deductions ? 'Status' : 'Category'} value={filter} onChange={change(setFilter)}
-        options={[{ value: '', label: deductions ? 'All Statuses' : 'All Categories' }, ...(deductions ? ['ASSESSED', 'APPLIED', 'WAIVED', 'REFUNDED'] : feeLedgerCategories).map(value => ({ value, label: value.replaceAll('_', ' ') }))]} />
-      {!deductions && <Select label="Fee Rule" value={ruleId} onChange={change(setRuleId)} options={[{ value: '', label: 'All Rules' }, ...rules.map(rule => ({ value: rule.id, label: rule.name }))]} />}
-    </div>
+    <TableToolbar style={{ padding: 0 }}
+      search={<SearchField placeholder={deductions ? 'Search by job number or trucker…' : 'Search by reference, job, payer or fee…'} value={search} onChange={change(setSearch)} />}
+      filters={<>
+        <FilterChip name={deductions ? 'Status' : 'Category'} icon="circle-dot" value={filter} allValue="" options={filterOptions} onChange={choose(setFilter)} />
+        {!deductions && <FilterChip name="Fee Rule" icon="percent" value={ruleId} allValue="" options={[{ value: '', label: 'All Rules' }, ...rules.map(rule => ({ value: rule.id, label: rule.name }))]} onChange={choose(setRuleId)} />}
+        <FilterChip name="Date" icon="calendar" value={datePreset} allValue="All Dates" options={DATE_PRESETS} onChange={choose(setDatePreset)} />
+      </>}
+      onClear={filtersActive ? () => { setSearch(''); setFilter(''); setRuleId(''); setDatePreset('All Dates'); setPage(1); setSelected(null); } : undefined}
+    />
     {!datesValid && <Banner tone="warning">Select valid dates with the start on or before the end.</Banner>}
     {datesValid && query.error && <QueryError query={query} />}
     <Period value={data?.period} />
@@ -115,13 +121,17 @@ function AuditDetail({ id, owner, role, onClose }) {
 }
 export function FeeAuditTab() {
   const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role), authenticated = useSelector(state => Boolean(state.auth.accessToken));
-  const [scope, setScope] = useState('config'), [page, setPage] = useState(1), [from, setFrom] = useState(''), [to, setTo] = useState(''), [selected, setSelected] = useState(null);
+  const [scope, setScope] = useState('config'), [page, setPage] = useState(1), [datePreset, setDatePreset] = useState('All Dates'), [selected, setSelected] = useState(null);
+  const { from, to } = datePresetRange(datePreset);
   const allowed = authenticated && role === 'SUPER_ADMIN', datesValid = feeRangeValid(from, to);
   const query = useGetAdminFeeAuditQuery({ owner, role, scope, page, limit: 20, dateFrom: from, dateTo: to }, { skip: !allowed || !datesValid, refetchOnMountOrArgChange: true });
   const data = allowed && datesValid && !query.error ? query.currentData : null;
   if (!allowed) return <div style={space}><EmptyState icon="shield" title="Super Admin access required" description="Only Super Admins can view the fee audit log." /></div>;
   return <div style={space}>
-    <div style={grid}><Select label="Change Source" value={scope} options={feeAuditScopes} onChange={event => { setScope(event.target.value); setPage(1); setSelected(null); }} /><TextField label="From (Lagos day)" type="date" value={from} onChange={event => { setFrom(event.target.value); setPage(1); setSelected(null); }} /><TextField label="To (Lagos day)" type="date" value={to} onChange={event => { setTo(event.target.value); setPage(1); setSelected(null); }} /></div>
+    <TableToolbar style={{ padding: 0 }} filters={<>
+      <FilterChip name="Change Source" icon="layers" value={scope} allValue="" options={feeAuditScopes} onChange={value => { setScope(value || 'config'); setPage(1); setSelected(null); }} />
+      <FilterChip name="Date" icon="calendar" value={datePreset} allValue="All Dates" options={DATE_PRESETS} onChange={value => { setDatePreset(value); setPage(1); setSelected(null); }} />
+    </>} />
     <p className="tk-meta" style={{ margin: 0 }}>Platform configuration and Finance settings can include changes to non-fee settings. Terminal fee audit entries are recorded from 18 Oct 2026; earlier changes are available in each fee rule’s history.</p>
     {!datesValid && <Banner tone="warning">Select valid dates with the start on or before the end.</Banner>}
     {datesValid && query.error && <QueryError query={query} />}

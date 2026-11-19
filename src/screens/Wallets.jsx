@@ -1,54 +1,45 @@
 "use client";
 import { usePageSearchState, matchesPageSearch } from '../components/PageSearch.jsx';
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { Link, useNavigate } from "../router.js";
 import {
   PageHeader,
   Button,
   StatCard,
-  Card,
   SectionCard,
   Tabs,
   DataTable,
   Badge,
-  DonutChart,
-  LegendList,
-  ListRow,
   IconButton,
   DropdownMenu,
   Icon,
-  Modal,
-  TextField,
   Timeline,
-  AlertRow,
-  FilterSelect,
+  TableToolbar,
+  SearchField,
   EmptyState,
   Skeleton,
   StatsPanel,
 } from "../ds.js";
 import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
+import { initialSearch, initialTab } from '../domain/urlState.js';
+import { FilterChip } from '../components/FilterChip.jsx';
 import {
   useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery,
-  useGetAdminEscrowLedgerQuery, useGetAdminEscrowDisputesQuery,
-  useGetAdminEscrowRulesQuery, useGetAdminEscrowActivityQuery,
-  emptyEscrowOverview, adaptEscrowRules,
-  escrowMoney as formatNaira, escrowNumber, escrowMillions, escrowCount,
-  useGetAdminEscrowReleasesQuery, useGetAdminEscrowAccountsQuery, useGetAdminEscrowAlertsQuery,
+  useGetAdminEscrowDisputesQuery, useGetAdminEscrowActivityQuery,
+  emptyEscrowOverview,
+  escrowMoney as formatNaira, escrowNumber,
 } from "../store/features/wallets/walletsApi.js";
 import { escrowCanRelease, escrowMoneyRoles } from '../store/features/wallets/walletActionsApi.js';
 import { WalletActionDialog } from './WalletActionDialog.jsx';
 import { DriverTableLoading } from "./DriversLoading.jsx";
 
+// Escrow covers money while it is held. Releases are listed under Settlements,
+// every escrow movement is in Transactions, and escrow terms are on Platform Rates.
 const TABS = [
-  "Escrow Overview",
-  "Escrow Accounts",
   "Holds",
-  "Releases",
   "Disputes",
-  "Transactions",
-  "Escrow Rules",
   "Activity Log",
 ];
 
@@ -71,33 +62,6 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
   );
 }
 
-function FlowBox({ label, value, caption, color }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        minWidth: 0,
-        display: "grid",
-        gap: 2,
-        textAlign: "center",
-      }}
-    >
-      <span style={{ font: "700 16px/22px var(--tk-font-sans)", color }}>
-        {value}
-      </span>
-      <span
-        style={{
-          font: "600 12px/16px var(--tk-font-sans)",
-          color: "var(--tk-ink-700)",
-        }}
-      >
-        {label}
-      </span>
-      <span className="tk-meta">{caption}</span>
-    </div>
-  );
-}
-
 export function Wallets() {
   const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
   const authenticated = useSelector(state => Boolean(state.auth.accessToken));
@@ -106,46 +70,41 @@ export function Wallets() {
 function WalletScreen() {
   const role = useSelector(state => state.auth.admin?.role);
   const [action, setAction] = useState(null);
-  const [tab, setTab] = useState("Escrow Overview");
-  const [search] = usePageSearchState('', undefined, tab !== 'Escrow Rules');
-  const [modal, setModal] = useState(null);
-  const [amount, setAmount] = useState("");
-  const busy = false;
+  const [tab, setTab] = useState(() => initialTab(TABS, "Holds"));
+  const [search, setSearch] = usePageSearchState(initialSearch());
+  const [holdStatus, setHoldStatus] = useState("All Statuses");
+  const [disputeStatus, setDisputeStatus] = useState("All Statuses");
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const overviewQuery = useGetAdminEscrowOverviewQuery({ owner, role, ...statsRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const registerQuery = useGetAdminEscrowRegisterQuery({ owner, role }, { skip: !authenticated || !["Escrow Overview", "Holds"].includes(tab), refetchOnMountOrArgChange: true });
-  const releasesQuery = useGetAdminEscrowReleasesQuery({ owner, role }, { skip: !authenticated || !["Escrow Overview", "Releases"].includes(tab), refetchOnMountOrArgChange: true });
-  const ledgerQuery = useGetAdminEscrowLedgerQuery({ owner, role }, { skip: !authenticated || tab !== "Transactions", refetchOnMountOrArgChange: true });
-  const accountsQuery = useGetAdminEscrowAccountsQuery({ owner, role }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const alertsQuery = useGetAdminEscrowAlertsQuery({ owner, role }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const registerQuery = useGetAdminEscrowRegisterQuery({ owner, role }, { skip: !authenticated || tab !== "Holds", refetchOnMountOrArgChange: true });
   const disputesQuery = useGetAdminEscrowDisputesQuery({ owner, role }, { skip: !authenticated || tab !== "Disputes", refetchOnMountOrArgChange: true });
-  const rulesQuery = useGetAdminEscrowRulesQuery({ owner, role }, { skip: !authenticated || tab !== "Escrow Rules", refetchOnMountOrArgChange: true });
   const activityQuery = useGetAdminEscrowActivityQuery({ owner, role }, { skip: !authenticated || tab !== "Activity Log", refetchOnMountOrArgChange: true });
-  const { summary, breakdown: escrowBalanceBreakdown, breakdownTotal, weeklyActivity: escrowWeeklyActivity } = authenticated && !overviewQuery.error ? overviewQuery.currentData || emptyEscrowOverview : emptyEscrowOverview;
-  const accounts = (authenticated && !accountsQuery.error ? accountsQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
-  const holds = (authenticated && !registerQuery.error ? registerQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
-  const tx = (authenticated && !ledgerQuery.error ? ledgerQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
-  const releases = (authenticated && !releasesQuery.error ? releasesQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
-  const disputes = (authenticated && !disputesQuery.error ? disputesQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
-  const escrowRules = authenticated && !rulesQuery.error ? rulesQuery.currentData || adaptEscrowRules(null) : adaptEscrowRules(null);
+  const { summary } = authenticated && !overviewQuery.error ? overviewQuery.currentData || emptyEscrowOverview : emptyEscrowOverview;
+  const allHolds = authenticated && !registerQuery.error ? registerQuery.currentData || [] : [];
+  const holds = allHolds.filter(row => matchesPageSearch(row, search) && (holdStatus === "All Statuses" || row.status === holdStatus));
+  const allDisputes = authenticated && !disputesQuery.error ? disputesQuery.currentData || [] : [];
+  const disputes = allDisputes.filter(row => matchesPageSearch(row, search) && (disputeStatus === "All Statuses" || row.status === disputeStatus));
+  const statusOptions = (rows) => ["All Statuses", ...new Set(rows.map((row) => row.status).filter((value) => value && value !== "—"))];
   const escrowActivityLog = (authenticated && !activityQuery.error ? activityQuery.currentData || [] : []).filter(row => matchesPageSearch(row, search));
-  const escrowAlerts = authenticated && !alertsQuery.error ? alertsQuery.currentData || [] : [];
   const metric = (value) => overviewQuery.isLoading ? <Skeleton as="span" width={96} height={23} /> : formatNaira(value);
 
   return (
     <>
       <PageHeader
-        crumbs={["Business & Finance", "Escrow & Wallets"]}
-        title="Escrow Wallet"
-        description="Secure funds in escrow and manage holds, releases, and settlements."
+        crumbs={["Finance", "Escrow"]}
+        title="Escrow"
+        description="Job payments held in escrow until they are released to truckers or refunded to forwarders."
         actions={
           <>
-            <Button icon="plus" onClick={() => setModal("add")}>
-              Add Funds
+            <Button variant="outline" icon="coins" onClick={() => navigate("/settlements?tab=Escrow%20Releases")}>
+              View Releases
+            </Button>
+            <Button variant="outline" icon="receipt" onClick={() => navigate("/transactions?type=Escrow")}>
+              Escrow Transactions
             </Button>
           </>
         }
@@ -207,7 +166,7 @@ function WalletScreen() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 320px",
+          gridTemplateColumns: "minmax(0, 1fr)",
           gap: "var(--tk-grid-gap)",
           alignItems: "start",
         }}
@@ -219,315 +178,14 @@ function WalletScreen() {
             style={{ padding: "0 var(--tk-card-pad)" }}
             items={TABS}
           />
-
-          {tab === "Escrow Overview" && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr)",
-                gap: 20,
-                padding: "18px var(--tk-card-pad) var(--tk-card-pad)",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
-                  gap: "var(--tk-grid-gap)",
-                }}
-              >
-                <Card>
-                  <h3 className="tk-section" style={{ marginBottom: 14 }}>
-                    Escrow Balance Overview
-                  </h3>
-                  <div
-                    style={{ display: "grid", justifyItems: "center", gap: 14 }}
-                  >
-                    <DonutChart
-                      size={160}
-                      thickness={18}
-                      centerValue={escrowMillions(breakdownTotal)}
-                      centerLabel="Total Balance"
-                      data={escrowBalanceBreakdown.filter((d) => d.chartValue != null).map((d) => ({
-                        label: d.label,
-                        value: d.chartValue,
-                        color: d.color,
-                      }))}
-                    />
-                    <LegendList
-                      style={{ width: "100%" }}
-                      items={escrowBalanceBreakdown.map((d) => ({
-                        label: d.label,
-                        value: d.value,
-                        display: d.value == null ? "—" : `${formatNaira(d.value)} (${d.pct})`,
-                        color: d.color,
-                      }))}
-                      showShare={false}
-                    />
-                  </div>
-                </Card>
-                <Card>
-                  <h3 className="tk-section" style={{ marginBottom: 14 }}>
-                    Escrow Activity (This Week)
-                  </h3>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 12,
-                    }}
-                  >
-                    {[
-                      {
-                        icon: "lock",
-                        tint: "amber",
-                        label: "Funds Held",
-                        value: formatNaira(escrowWeeklyActivity.fundsHeld),
-                        caption: escrowCount(escrowWeeklyActivity.fundsHeldTx, "transactions"),
-                      },
-                      {
-                        icon: "lock-open",
-                        tint: "green",
-                        label: "Funds Released",
-                        value: formatNaira(escrowWeeklyActivity.fundsReleased),
-                        caption: escrowCount(escrowWeeklyActivity.fundsReleasedTx, "transactions"),
-                      },
-                      {
-                        icon: "coins",
-                        tint: "blue",
-                        label: "Settlements Made",
-                        value: formatNaira(
-                          escrowWeeklyActivity.settlementsMade,
-                        ),
-                        caption: escrowCount(escrowWeeklyActivity.settlementsCount, "settlements"),
-                      },
-                      {
-                        icon: "triangle-alert",
-                        tint: "red",
-                        label: "New Disputes",
-                        value: escrowNumber(escrowWeeklyActivity.newDisputes),
-                        caption: `${formatNaira(escrowWeeklyActivity.newDisputesAmount)}`,
-                      },
-                    ].map((s) => (
-                      <div
-                        key={s.label}
-                        style={{
-                          border: "1px solid var(--tk-line)",
-                          borderRadius: "var(--tk-r-lg)",
-                          padding: 12,
-                          display: "grid",
-                          gap: 6,
-                        }}
-                      >
-                        <Icon
-                          name={s.icon}
-                          size={16}
-                          color={`var(--tk-${s.tint === "amber" ? "warning" : s.tint === "green" ? "success" : s.tint === "red" ? "danger" : "blue"})`}
-                        />
-                        <span
-                          style={{
-                            font: "700 15px/20px var(--tk-font-sans)",
-                            color: "var(--tk-ink-900)",
-                          }}
-                        >
-                          {s.value}
-                        </span>
-                        <span className="tk-meta">{s.label}</span>
-                        <span className="tk-meta">{s.caption}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              </div>
-
-              <SectionCard
-                title="Recent Escrow Holds"
-                pad="none"
-                action={
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setTab("Holds");
-                    }}
-                  >
-                    View All Holds
-                  </a>
-                }
-              >
-                {registerQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
-                  rows={holds.slice(0, 5)}
-                  rowKey={(r) => r.holdId}
-                  columns={[
-                    {
-                      key: "holdId",
-                      header: "Hold ID",
-                      render: (r) => (
-                        <Link to={r.detailUrl} className="tk-mono">
-                          {r.holdId}
-                        </Link>
-                      ),
-                    },
-                    { key: "jobId", header: "Job/Trip ID" },
-                    { key: "customer", header: "Customer" },
-                    { key: "route", header: "Route" },
-                    {
-                      key: "amount",
-                      header: "Amount (₦)",
-                      align: "right",
-                      render: (r) => escrowNumber(r.amount),
-                    },
-                    {
-                      key: "heldOn",
-                      header: "Held On",
-                      render: (r) => (
-                        <span style={{ display: "grid", gap: 2 }}>
-                          <span>{r.heldOn}</span>
-                          <span className="tk-meta">{r.heldTime}</span>
-                        </span>
-                      ),
-                    },
-                    {
-                      key: "status",
-                      header: "Status",
-                      render: (r) => <Badge>{r.status}</Badge>,
-                    },
-                    {
-                      key: "x",
-                      header: "",
-                      width: 60,
-                      render: (r) => (
-                        <span style={{ display: "flex", gap: 6 }}>
-                          <IconButton
-                            icon="eye"
-                            onClick={() => navigate(r.detailUrl)}
-                          />
-                        </span>
-                      ),
-                    },
-                  ]}
-                />)}
-              </SectionCard>
-
-              <SectionCard
-                title="Recent Escrow Releases"
-                pad="none"
-                action={
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setTab("Releases");
-                    }}
-                  >
-                    View All Releases
-                  </a>
-                }
-              >
-                {releasesQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
-                  rows={releases.slice(0, 5)}
-                  rowKey={(r) => r.releaseId}
-                  columns={[
-                    {
-                      key: "releaseId",
-                      header: "Release ID",
-                      render: (r) => (
-                        <span className="tk-mono">{r.releaseId}</span>
-                      ),
-                    },
-                    { key: "jobId", header: "Job/Trip ID" },
-                    { key: "releasedTo", header: "Released To" },
-                    {
-                      key: "amount",
-                      header: "Amount (₦)",
-                      align: "right",
-                      render: (r) => escrowNumber(r.amount),
-                    },
-                    {
-                      key: "releasedOn",
-                      header: "Released On",
-                      render: (r) => (
-                        <span style={{ display: "grid", gap: 2 }}>
-                          <span>{r.releasedOn}</span>
-                          <span className="tk-meta">{r.releasedTime}</span>
-                        </span>
-                      ),
-                    },
-                    { key: "releasedBy", header: "Released By" },
-                    {
-                      key: "reference",
-                      header: "Reference",
-                      render: (r) => (
-                        <span className="tk-mono">{r.reference}</span>
-                      ),
-                    },
-                    {
-                      key: "status",
-                      header: "Status",
-                      render: (r) => <Badge>{r.status}</Badge>,
-                    },
-                  ]}
-                />)}
-              </SectionCard>
-            </div>
-          )}
-
-          {tab === "Escrow Accounts" && (
-            <>{accountsQuery.isLoading ? <DriverTableLoading columns={4} label="Loading escrow records" /> : (<DataTable
-              rows={accounts}
-              rowKey={(r) => r.id}
-              columns={[
-                {
-                  key: "name",
-                  header: "Account",
-                  render: (r) => (
-                    <span
-                      style={{ display: "flex", alignItems: "center", gap: 10 }}
-                    >
-                      <span
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "var(--tk-r-sm)",
-                          background: "var(--tk-blue-soft)",
-                          color: "var(--tk-blue)",
-                          display: "grid",
-                          placeItems: "center",
-                          flex: "0 0 auto",
-                        }}
-                      >
-                        <Icon name="landmark" size={16} />
-                      </span>
-                      <span
-                        style={{
-                          font: "600 13px/18px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        {r.name}
-                      </span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "id",
-                  header: "Account ID",
-                  render: (r) => <span className="tk-mono">{r.id}</span>,
-                },
-                {
-                  key: "balance",
-                  header: "Balance (₦)",
-                  align: "right",
-                  render: (r) => <b>{escrowNumber(r.balance)}</b>,
-                },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (r) => <Badge>{r.status}</Badge>,
-                },
-              ]}
-            />)}</>
+          {(tab === "Holds" || tab === "Disputes") && (
+            <TableToolbar
+              search={<SearchField placeholder={tab === "Holds" ? "Search by hold ID, job, customer or route…" : "Search by dispute, job, hold or customer…"} value={search} onChange={(e) => setSearch(e.target.value)} />}
+              filters={tab === "Holds"
+                ? <FilterChip name="Status" icon="circle-dot" value={holdStatus} allValue="All Statuses" options={statusOptions(allHolds)} onChange={setHoldStatus} />
+                : <FilterChip name="Status" icon="circle-dot" value={disputeStatus} allValue="All Statuses" options={statusOptions(allDisputes)} onChange={setDisputeStatus} />}
+              onClear={(tab === "Holds" ? holdStatus : disputeStatus) !== "All Statuses" || search.trim() ? () => { setSearch(""); setHoldStatus("All Statuses"); setDisputeStatus("All Statuses"); } : undefined}
+            />
           )}
 
           {tab === "Holds" && (
@@ -586,49 +244,6 @@ function WalletScreen() {
                         Release
                       </Button>
                     ),
-                },
-              ]}
-            />)}</>
-          )}
-
-          {tab === "Releases" && (
-            <>{releasesQuery.isLoading ? <DriverTableLoading columns={8} label="Loading escrow records" /> : (<DataTable
-              rows={releases}
-              rowKey={(r) => r.releaseId}
-              columns={[
-                {
-                  key: "releaseId",
-                  header: "Release ID",
-                  render: (r) => <span className="tk-mono">{r.releaseId}</span>,
-                },
-                { key: "jobId", header: "Job/Trip ID" },
-                { key: "releasedTo", header: "Released To" },
-                {
-                  key: "amount",
-                  header: "Amount (₦)",
-                  align: "right",
-                  render: (r) => escrowNumber(r.amount),
-                },
-                {
-                  key: "releasedOn",
-                  header: "Released On",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span>{r.releasedOn}</span>
-                      <span className="tk-meta">{r.releasedTime}</span>
-                    </span>
-                  ),
-                },
-                { key: "releasedBy", header: "Released By" },
-                {
-                  key: "reference",
-                  header: "Reference",
-                  render: (r) => <span className="tk-mono">{r.reference}</span>,
-                },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (r) => <Badge>{r.status}</Badge>,
                 },
               ]}
             />)}</>
@@ -703,75 +318,6 @@ function WalletScreen() {
               />)}</>
             ))}
 
-          {tab === "Transactions" && (
-            <>{ledgerQuery.isLoading ? <DriverTableLoading columns={6} label="Loading escrow records" /> : (<DataTable
-              rows={tx}
-              rowKey={(r) => r.id}
-              columns={[
-                {
-                  key: "id",
-                  header: "Transaction ID",
-                  render: (r) => <span className="tk-mono">{r.id}</span>,
-                },
-                {
-                  key: "type",
-                  header: "Type",
-                  render: (r) => (
-                    <span
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <Icon name={r.icon} size={15} color={r.tone} />
-                      {r.type}
-                    </span>
-                  ),
-                },
-                { key: "jobId", header: "Job ID" },
-                { key: "party", header: "Party" },
-                {
-                  key: "amount",
-                  header: "Amount (₦)",
-                  align: "right",
-                  render: (r) => (
-                    <span
-                      style={{
-                        font: "600 13px/18px var(--tk-font-sans)",
-                        color: r.pos ? "var(--tk-success)" : "var(--tk-danger)",
-                      }}
-                    >
-                      {r.amount == null ? "" : r.pos === true ? "+" : r.pos === false ? "-" : ""}
-                      {escrowNumber(r.amount)}
-                    </span>
-                  ),
-                },
-                {
-                  key: "date",
-                  header: "Date",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span>{r.date}</span>
-                      <span className="tk-meta">{r.time}</span>
-                    </span>
-                  ),
-                },
-              ]}
-            />)}</>
-          )}
-
-          {tab === "Escrow Rules" && (
-            <div style={{ padding: "4px var(--tk-card-pad) 8px" }}>
-              {escrowRules.map((r) => (
-                <ListRow
-                  key={r.id}
-                  icon={r.icon}
-                  iconTint={r.iconTint}
-                  title={r.name}
-                  subtitle={r.description}
-                  value={rulesQuery.isLoading ? <Skeleton as="span" width={54} height={14} /> : r.value}
-                />
-              ))}
-            </div>
-          )}
-
           {tab === "Activity Log" && (
             <div
               style={{ padding: "18px var(--tk-card-pad) var(--tk-card-pad)" }}
@@ -789,134 +335,8 @@ function WalletScreen() {
           )}
         </SectionCard>
 
-        <div
-          style={{
-            display: "grid",
-            gap: "var(--tk-grid-gap)",
-            alignContent: "start",
-          }}
-        >
-          <SectionCard
-            title="Escrow Accounts"
-            action={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setTab("Escrow Accounts");
-                }}
-              >
-                Manage Accounts →
-              </a>
-            }
-          >
-            {accountsQuery.isLoading ? <DriverTableLoading columns={3} label="Loading escrow records" /> : accounts.map((a) => (
-              <ListRow
-                key={a.id}
-                icon="landmark"
-                title={a.name}
-                subtitle={a.id}
-                value={formatNaira(a.balance)}
-                trailing={<Badge tone="success">{a.status}</Badge>}
-              />
-            ))}
-          </SectionCard>
-
-          <SectionCard
-            title="Funds Flow (This Week)"
-            footer={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setTab("Transactions");
-                }}
-              >
-                View Report →
-              </a>
-            }
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <FlowBox
-                label="Funds Held"
-                value={escrowMillions(escrowWeeklyActivity.fundsHeld)}
-                caption={escrowCount(escrowWeeklyActivity.fundsHeldTx, "transactions")}
-                color="var(--tk-warning)"
-              />
-              <Icon name="arrow-right" size={16} color="var(--tk-ink-300)" />
-              <FlowBox
-                label="Funds Released"
-                value={escrowMillions(escrowWeeklyActivity.fundsReleased)}
-                caption={escrowCount(escrowWeeklyActivity.fundsReleasedTx, "transactions")}
-                color="var(--tk-success)"
-              />
-              <Icon name="arrow-right" size={16} color="var(--tk-ink-300)" />
-              <FlowBox
-                label="Settlements Made"
-                value={escrowMillions(escrowWeeklyActivity.settlementsMade)}
-                caption={escrowCount(escrowWeeklyActivity.settlementsCount, "settlements")}
-                color="var(--tk-blue)"
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Escrow Alerts"
-            action={
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setTab("Disputes");
-                }}
-              >
-                View All
-              </a>
-            }
-          >
-            {alertsQuery.isLoading ? <DriverTableLoading columns={3} label="Loading escrow records" /> : escrowAlerts.map((a, i) => (
-              <AlertRow
-                key={i}
-                icon={a.icon}
-                tone={a.tone}
-                title={a.title}
-                description={a.description}
-                action={<span className="tk-meta">{a.time}</span>}
-              />
-            ))}
-          </SectionCard>
-        </div>
       </div>
 
-      <Modal
-        open={modal === "add"}
-        onClose={() => setModal(null)}
-        title="Add Funds to Escrow"
-        description="Top up the platform escrow balance."
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setModal(null)}>
-              Cancel
-            </Button>
-            <Button
-              disabled
-            >
-              {busy ? "Processing…" : "Add Funds"}
-            </Button>
-          </>
-        }
-      >
-        <TextField
-          label="Amount (₦)"
-          money
-          required
-          type="number"
-          min="1"
-          placeholder="e.g. 500000"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-      </Modal>
       {action && <WalletActionDialog key={action.kind+':'+(action.record.holdId || action.record.id)} kind={action.kind} record={action.record} owner={owner} role={role} onClose={() => setAction(null)} />}
     </>
   );
