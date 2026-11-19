@@ -1,59 +1,60 @@
-import React from "react";
+import React from 'react';
+import { RouteStack } from '../patterns/RouteStack.jsx';
+import { Badge } from '../core/Badge.jsx';
 
-const ACTION_KEYS = new Set(["a", "actions", "action", "menu"]);
-const textOf = (value) => (value == null ? "" : String(value)).trim();
+const ACTION_KEYS = new Set(['a', 'x', 'actions', 'action', 'menu', 'expand']);
+const textOf = (value) => (value == null ? '' : String(value)).trim();
 
-/**
- * Board (kanban) view of the same rows and columns a DataTable shows.
- * Rows are grouped into columns by `groupBy(row)`; each card shows the first column as its
- * title and the other columns as label/value pairs, so pages get a board for free.
- *  - groups: optional ordered group names; groups not listed are appended in the order they appear
- *  - fields: optional column keys to show on cards (default: every column except the first and actions)
- */
-export function DataBoard({ columns = [], rows = [], groupBy, groups, fields, onRowClick, rowKey = (r, i) => r.id ?? i, selectedKey, emptyLabel = "Nothing here" }) {
-  const label = (row) => textOf(groupBy?.(row)) || "Other";
-  const order = [...(groups || [])];
-  rows.forEach((row) => { const g = label(row); if (!order.includes(g)) order.push(g); });
-  const [titleColumn, ...rest] = columns.filter((c) => !ACTION_KEYS.has(c.key));
-  const shown = fields ? rest.filter((c) => fields.includes(c.key)) : rest;
-  const render = (column, row) => (column.render ? column.render(row) : row[column.key] ?? "—");
-  return (
-    <div className="tk-board">
-      {order.map((group) => {
-        const items = rows.filter((row) => label(row) === group);
-        return (
-          <section className="tk-board-column" key={group} aria-label={group}>
-            <header className="tk-board-column-head">
-              <strong>{group}</strong>
-              <span className="tk-count-pill">{items.length}</span>
-            </header>
-            <div className="tk-board-cards">
-              {items.length === 0 && <div className="tk-board-empty">{emptyLabel}</div>}
-              {items.map((row, i) => {
-                const key = rowKey(row, i);
-                const Tag = onRowClick ? "button" : "div";
-                return (
-                  <Tag key={key} type={onRowClick ? "button" : undefined}
-                    className={"tk-board-card" + (selectedKey != null && selectedKey === key ? " active" : "")}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}>
-                    {titleColumn && <span className="tk-board-card-title">{render(titleColumn, row)}</span>}
-                    {shown.length > 0 && (
-                      <dl className="tk-board-card-fields">
-                        {shown.map((column) => (
-                          <div key={column.key}>
-                            <dt>{column.header}</dt>
-                            <dd>{render(column, row)}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
-                  </Tag>
-                );
-              })}
+/** Fixed status lanes and compact cards, using the Jobs board's visual structure. */
+export function DataBoard({ columns = [], rows = [], groupBy, groups = [], card, fields, onRowClick,
+  rowKey = (row, index) => row.id ?? index, selectedKey, hideEmpty = false, expandedRowKeys = [], renderExpandedRow, emptyLabel = 'No items' }) {
+  const label = (row) => textOf(groupBy?.(row)) || 'Unavailable';
+  const lanes = groups.map((group) => typeof group === 'string' ? { value: group, label: group } : group);
+  // Keep unexpected server statuses visible without dropping records.
+  rows.forEach((row) => { const value = label(row); if (!lanes.some((lane) => lane.value === value)) lanes.push({ value, label: value }); });
+  const usable = columns.filter((column) => !ACTION_KEYS.has(column.key) && column.key !== 'status');
+  const slots = card || { title: usable[0]?.key, body: fields || usable.slice(1, 3).map((column) => column.key), footer: usable.slice(3, 5).map((column) => column.key) };
+  const render = (key, row) => {
+    if (typeof key === 'function') return key(row);
+    const column = columns.find((item) => item.key === key);
+    return column ? column.render ? column.render(row) : row[key] ?? '—' : null;
+  };
+  const activate = (event, row) => {
+    if (event.target.closest('a, button, input, select, textarea, [role="combobox"]')) return;
+    onRowClick?.(row);
+  };
+  // Compute keys before grouping so index-based keys stay stable across lanes.
+  const keyedRows = rows.map((row, index) => ({ row, key: rowKey(row, index) }));
+  const visibleLanes = hideEmpty ? lanes.filter((lane) => keyedRows.some(({ row }) => label(row) === lane.value)) : lanes;
+  return <div className="tk-board tk-scroll" style={{ '--tk-board-lane-count': Math.max(1, lanes.length), '--tk-board-gap-space': `${Math.max(0, lanes.length - 1) * 14}px` }}>
+    {!visibleLanes.length && <div className="tk-board-empty">{emptyLabel}</div>}
+    {visibleLanes.map((lane) => {
+      const items = keyedRows.filter(({ row }) => label(row) === lane.value);
+      return <section className="tk-board-column" key={lane.value} aria-label={lane.label}>
+        <header className="tk-board-column-head">
+          <Badge tone={lane.tone} dot>{lane.label}</Badge>
+          <span className="tk-count-pill">{items.length}</span>
+        </header>
+        <div className="tk-board-cards">
+          {!items.length && <div className="tk-board-empty">{emptyLabel}</div>}
+          {items.map(({ row, key }) => <React.Fragment key={key}>
+            <div className={'tk-board-card' + (selectedKey != null && selectedKey === key ? ' active' : '')}
+              role={onRowClick ? 'button' : undefined} tabIndex={onRowClick ? 0 : undefined}
+              onClick={onRowClick ? (event) => activate(event, row) : undefined}
+              onKeyDown={onRowClick ? (event) => { if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onRowClick(row); } } : undefined}>
+              <div className="tk-board-card-top">
+                <div className="tk-board-card-title">{render(slots.title, row)}</div>
+                {slots.value && <div className="tk-board-card-value">{render(slots.value, row)}</div>}
+              </div>
+              {slots.subtitle && <div className="tk-board-card-subtitle">{render(slots.subtitle, row)}</div>}
+              {slots.route && <RouteStack {...slots.route(row)} />}
+              {!!slots.body?.length && <div className="tk-board-card-body">{slots.body.map((field, index) => <div key={index}>{render(field, row)}</div>)}</div>}
+              {!!slots.footer?.length && <div className="tk-board-card-foot">{slots.footer.map((field, index) => <div key={index}>{render(field, row)}</div>)}</div>}
             </div>
-          </section>
-        );
-      })}
-    </div>
-  );
+            {expandedRowKeys.includes(key) && renderExpandedRow?.(row)}
+          </React.Fragment>)}
+        </div>
+      </section>;
+    })}
+  </div>;
 }

@@ -1,4 +1,8 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -71,6 +75,8 @@ function ForwarderCell({ f }) {
 }
 
 export function Forwarders() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const authenticated = useSelector(state => Boolean(state.auth.accessToken));
   const owner = useSelector(state => state.auth.admin?.id);
@@ -206,8 +212,11 @@ export function Forwarders() {
         />
       </StatsPanel>
 
-      <Card pad="none">
-        <TableToolbar
+
+
+      <div className="fw-layout">
+        <SectionCard pad="none">
+<TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           search={
             <SearchField
               placeholder="Search by name, forwarder ID, email, phone..."
@@ -352,11 +361,8 @@ export function Forwarders() {
           }
           trailing={<Button variant="outline" icon="download" disabled={!directoryQuery.currentData || Boolean(directoryQuery.error)} onClick={exportList}>Export</Button>}
         />
-      </Card>
 
-      <div className="fw-layout">
-        <SectionCard pad="none">
-          {directoryQuery.error ? <EmptyState icon="users" title="Forwarder list unavailable" description="Retry to load the directory." /> : !filtered.length ? <EmptyState icon="users" title="No forwarders found" description="Try different filters or search terms." /> : <DataTable
+          {directoryQuery.error ? <EmptyState icon="users" title="Forwarder list unavailable" description="Retry to load the directory." /> : !filtered.length && tableView !== 'board' ? <EmptyState icon="users" title="No forwarders found" description="Try different filters or search terms." /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.forwarders} boardOnRowClick={(row) => navigate(`/forwarders/detail?id=${encodeURIComponent(row.id)}`)} view={tableView} boardGroupBy={(row) => row.status}
             rows={filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
             rowKey={(r) => r.id}
             columns={[

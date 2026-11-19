@@ -1,4 +1,8 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -118,6 +122,8 @@ export function Settlements() {
   return <SettlementsScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
 }
 function SettlementsScreen() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const filtersRef = useRef(null);
   const navigate = useNavigate();
   const [tab, setTab] = useState("All Settlements");
@@ -282,7 +288,7 @@ function SettlementsScreen() {
           />
 
           <div ref={filtersRef} style={{ scrollMarginTop: 80 }}>
-          <TableToolbar
+          <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
             filters={
               <>
                 <FilterButton
@@ -408,7 +414,7 @@ function SettlementsScreen() {
 
           {loading ? (
             <DriverTableLoading columns={10} label="Loading settlements" />
-          ) : knownCollection && filtered.length === 0 ? (
+          ) : knownCollection && filtered.length === 0 && tableView !== 'board' ? (
             <EmptyState
               icon="coins"
               title="No settlements found"
@@ -416,7 +422,7 @@ function SettlementsScreen() {
             />
           ) : (
             <>
-              <DataTable
+              <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.settlements} boardOnRowClick={(row) => navigate(settlementDetailUrl(row))} view={tableView} boardGroupBy={(row) => row.status}
                 rows={paged}
                 rowKey={(r) => r.key}
                 columns={[

@@ -1,4 +1,8 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle, TableToolbar } from '../ds.js';
+
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -11,7 +15,6 @@ import {
   Button,
   StatCard,
   SectionCard,
-  Tabs,
   SearchField,
   DataTable,
   DonutChart,
@@ -94,6 +97,8 @@ export function Demurrage() {
   return <DemurrageScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
 }
 function DemurrageScreen() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const owner=useSelector(state=>state.auth.admin?.id),role=useSelector(state=>state.auth.admin?.role);
   const authenticated=useSelector(state=>Boolean(state.auth.accessToken && state.auth.admin?.id));
   const scope={owner,role},active=useRef(true);
@@ -111,7 +116,7 @@ function DemurrageScreen() {
   const rows = directory?.rows || EMPTY_ROWS;
   const summary = useMemo(() => demurrageSummary(directory, statsQuery.error ? null : statsQuery.currentData), [directory, statsQuery.error, statsQuery.currentData]);
   const toastTimer = useRef(null), savingRules = useRef(false), rulesDirty = useRef(false), bulkPending = useRef(false);
-  const [tab, setTab] = useState("All Demurrage"),
+  const tab = 'All Demurrage',
     [q, setQ] = usePageSearchState("", () => setPage(1)),
     [status, setStatus] = useState("All"),
     [jobType, setJobType] = useState("All"),
@@ -252,23 +257,8 @@ function DemurrageScreen() {
       <div className="grid grid-cols-[minmax(0,1fr)_310px] gap-4 items-start max-[1200px]:grid-cols-1">
         <div className="grid grid-cols-1 gap-3.5 content-start min-w-0">
           <SectionCard title="" pad="none">
-            <Tabs
-              value={tab}
-              onChange={(v) => {
-                setTab(v);
-                setPage(1);
-              }}
-              items={[
-                { label: "All Demurrage", value: "All Demurrage" },
-                { label: "Active", value: "Active", count: summary.active ?? "—" },
-                { label: "Upcoming", value: "Upcoming", count: summary.upcoming ?? "—" },
-                { label: "Resolved", value: "Resolved", count: summary.resolved ?? "—" },
-                { label: "Disputes", value: "Disputes", count: summary.disputes ?? "—" },
-              ]}
-              style={{ padding: "0 16px" }}
-            />
-            <div className="flex gap-2.5 items-center flex-wrap px-4 py-3.5 border-b border-tk-line max-[760px]:[&>*]:w-full">
-              <SearchField
+
+            <TableToolbar search={<><SearchField
                 className="flex-1 min-w-[220px] max-[760px]:min-w-0"
                 placeholder="Search by job ID, container no., customer..."
                 value={q}
@@ -276,9 +266,7 @@ function DemurrageScreen() {
                   setQ(e.target.value);
                   setPage(1);
                 }}
-              />
-              <Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button>
-              <CustomSelect
+              /></>} filters={<><CustomSelect
                 className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
                 aria-label="Status filter"
                 value={status}
@@ -292,8 +280,7 @@ function DemurrageScreen() {
                     <option key={x}>{x}</option>
                   ),
                 )}
-              </CustomSelect>
-              <CustomSelect
+              </CustomSelect><CustomSelect
                 className="h-[38px] border border-tk-line-strong rounded-tk-sm bg-white text-tk-ink-700 pl-[11px] pr-7 text-xs font-medium font-tk-sans cursor-pointer"
                 aria-label="Job type filter"
                 value={jobType}
@@ -306,16 +293,14 @@ function DemurrageScreen() {
                 {[...new Set(rows.map((r) => r.jobType).filter((value) => value !== "—"))].map((x) => (
                   <option key={x}>{x}</option>
                 ))}
-              </CustomSelect>
-              <input
+              </CustomSelect><input
                 className="h-[38px] border border-tk-line-strong rounded-[7px] px-2.5 box-border w-full text-xs font-tk-sans outline-none focus:border-tk-blue focus:shadow-tk-focus"
                 aria-label="Date range"
                 style={{ width: 145 }}
                 type="date"
                 value={date}
                 onChange={(e) => { setDate(e.target.value); setPage(1); }}
-              />
-              <Button
+              /><Button
                 variant="outline"
                 icon="rotate-ccw"
                 onClick={() => {
@@ -327,9 +312,8 @@ function DemurrageScreen() {
                 }}
               >
                 Reset
-              </Button>
-            </div>
-            {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable
+              </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button></>} />
+            {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.demurrage} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.key}
               onRowClick={(r) => navigate(demurrageDetailUrl(r))}
@@ -587,7 +571,7 @@ function DemurrageScreen() {
                   cursor: "pointer",
                 }}
                 onClick={() => {
-                  setTab("All Demurrage");
+                  setStatus("All");
                   setPage(1);
                 }}
               >

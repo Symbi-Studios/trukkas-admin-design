@@ -6,6 +6,7 @@ export interface TableToolbarProps {
   filters?: React.ReactNode;
   /** right-aligned extras, e.g. an Apply Filters button */
   trailing?: React.ReactNode;
+  viewControl?: React.ReactNode;
   onClear?: () => void;
   style?: React.CSSProperties;
 }

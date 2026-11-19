@@ -566,8 +566,12 @@
   flex: 0 1 300px;
   min-width: 220px;
 }
+.toolbar > :global(.tk-list-toolbar-filters) {
+  flex: 1 0 auto;
+  max-width: 100%;
+}
 .toolbarRight {
-  margin-left: auto;
+  margin-left: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -619,7 +623,7 @@
 .board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(268px, 1fr);
+  grid-auto-columns: max(268px, calc((100% - var(--tk-board-gap-space, 0px)) / var(--tk-board-lane-count, 1)));
   gap: 14px;
   padding: 16px 20px 20px;
   overflow-x: auto;

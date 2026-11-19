@@ -180,7 +180,7 @@ const HEALTH = [
     label: "GPS & Tracking",
     status: "Healthy",
     tone: "success",
-    route: "/tracking",
+    route: "/trips?view=map",
   },
   {
     apiKey: "payments",

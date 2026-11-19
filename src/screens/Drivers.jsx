@@ -1,10 +1,14 @@
 'use client';
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from '../router.js';
+import { Link, useNavigate } from '../router.js';
 import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader,
@@ -23,7 +27,6 @@ import {
   IconButton,
   Avatar,
   Icon,
-  Tabs,
   Banner,
   EmptyState,
   Modal,
@@ -50,7 +53,7 @@ const REG_TYPES = ['Individual Driver', 'Company Driver'];
 const LICENSE_STATUSES = ['Valid', 'Expiring Soon', 'Expired', 'Pending Review', 'Rejected'];
 const STATUS_QUERY = {
   Active: 'ACTIVE', 'On Trip': 'ON_TRIP', Inactive: 'INACTIVE',
-  'Pending Profile': 'PENDING_PROFILE', 'Pending Review': 'PENDING_REVIEW',
+  'Pending Profile': 'PENDING_PROFILE', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED',
 };
 const TAB_QUERY = { Active: 'ACTIVE', 'On Trip': 'ON_TRIP', Inactive: 'INACTIVE', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
 const LICENSE_QUERY = { Valid: 'VALID', 'Expiring Soon': 'EXPIRING_SOON', Expired: 'EXPIRED', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
@@ -121,6 +124,9 @@ function DriverRowMenu({ anchor, items, onClose }) {
 }
 
 export function Drivers() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
+  const navigate = useNavigate();
   const [tab, setTab] = useState('All Drivers');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -149,7 +155,7 @@ export function Drivers() {
   const companyOptions = companyRecords.map((item) => ({ ...item, label: companyRecords.filter((other) => other.name === item.name).length > 1 ? `${item.name} · ${item.email || item.id}` : item.name }));
   const filters = {
     search, status: STATUS_QUERY[status] || TAB_QUERY[tab],
-    tabStatus: TAB_QUERY[tab], onTrip: tab === 'Active' ? false : tab === 'On Trip' ? true : undefined,
+    tabStatus: TAB_QUERY[tab], onTrip: status === 'Active' ? false : status === 'On Trip' ? true : undefined,
     registrationType: regType === 'Company Driver' ? 'company' : regType === 'Individual Driver' ? 'individual' : undefined,
     companyId: companyOptions.find((item) => item.label === company)?.id,
     licenseStatus: LICENSE_QUERY[licenseStatus],
@@ -217,8 +223,8 @@ export function Drivers() {
   }
 
   function changeTab(value) {
-    setTab(value);
-    setStatus('All Status');
+    setTab('All Drivers');
+    setStatus(value === 'All Drivers' ? 'All Status' : value);
     setPage(1);
   }
 
@@ -363,29 +369,22 @@ export function Drivers() {
 
     <div className="drivers-layout">
       <Card pad="none">
-        <TableToolbar
+        <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           search={<SearchField placeholder="Search by driver name, license number, phone, or company..." value={q} onChange={(event) => setQ(event.target.value)} />}
           filters={<>
             <span style={{ position: 'relative' }}><FilterSelect label={regType} active={regType !== 'All Account Types'} onClick={() => setOpenMenu(openMenu === 'reg' ? null : 'reg')} />{filterMenu(openMenu === 'reg', setOpenMenu, ['All Account Types', ...REG_TYPES], regType, setRegType)}</span>
-            <span style={{ position: 'relative' }}><FilterSelect label={status} active={status !== 'All Status'} onClick={() => setOpenMenu(openMenu === 'status' ? null : 'status')} />{filterMenu(openMenu === 'status', setOpenMenu, ['All Status', 'Active', 'On Trip', 'Inactive', 'Pending Profile', 'Pending Review'], status, setStatus)}</span>
+            <span style={{ position: 'relative' }}><FilterSelect label={status} active={status !== 'All Status'} onClick={() => setOpenMenu(openMenu === 'status' ? null : 'status')} />{filterMenu(openMenu === 'status', setOpenMenu, ['All Status', 'Active', 'On Trip', 'Inactive', 'Pending Profile', 'Pending Review', 'Rejected'], status, setStatus)}</span>
             <span style={{ position: 'relative' }}><FilterSelect label={company} active={company !== 'All Companies'} onClick={() => setOpenMenu(openMenu === 'company' ? null : 'company')} />{filterMenu(openMenu === 'company', setOpenMenu, ['All Companies', ...companies], company, setCompany)}</span>
             <span style={{ position: 'relative' }}><FilterSelect label={licenseStatus === 'All' ? 'All License Status' : licenseStatus} active={licenseStatus !== 'All'} onClick={() => setOpenMenu(openMenu === 'license' ? null : 'license')} />{filterMenu(openMenu === 'license', setOpenMenu, ['All', ...LICENSE_STATUSES], licenseStatus, setLicenseStatus)}</span>
           </>}
           trailing={<Button variant="outline" icon="download" disabled={driversQuery.isFetching} onClick={exportRoster}>Export</Button>}
         />
-        <Tabs style={{ padding: '0 var(--tk-card-pad)' }} value={tab} onChange={changeTab} items={[
-          { value: 'All Drivers', label: 'All Drivers', count: counts.total ?? undefined },
-          { value: 'Pending Review', label: 'Pending Review', count: counts.pending ?? undefined },
-          { value: 'Active', label: 'Active', count: counts.active ?? undefined },
-          { value: 'On Trip', label: 'On Trip' },
-          { value: 'Inactive', label: 'Inactive', count: counts.inactive ?? undefined },
-          { value: 'Rejected', label: 'Rejected' },
-        ]} />
+
 
         {driversQuery.isFetching ? <DriverTableLoading />
           : driversQuery.error ? <div style={{ padding: 'var(--tk-card-pad)' }}><Banner tone="danger" title="Unable to load drivers">{adminDriverError(driversQuery.error)}</Banner><Button variant="outline" onClick={() => driversQuery.refetch()}>Retry</Button></div>
-            : filtered.length === 0 ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this page match the selected filters.' : 'No drivers match this search or status.'} />
-              : <DataTable rows={filtered} rowKey={(driver) => driver.id} columns={[
+            : filtered.length === 0 && tableView !== 'board' ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this page match the selected filters.' : 'No drivers match this search or status.'} />
+              : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.drivers} boardOnRowClick={(row) => navigate(driverDetailUrl(row.id))} view={tableView} boardGroupBy={(row) => row.status} rows={filtered} rowKey={(driver) => driver.id} columns={[
                 { key: 'name', header: 'Driver', render: driverCell },
                 { key: 'registrationType', header: 'Account Type', render: (driver) => <Badge tone={driver.registrationType === 'Company Driver' ? 'info' : 'neutral'}>{driver.registrationType}</Badge> },
                 { key: 'company', header: 'Company', render: (driver) => driver.company || '—' },

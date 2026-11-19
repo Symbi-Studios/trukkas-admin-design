@@ -1,4 +1,8 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle, TableToolbar } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -11,8 +15,8 @@ import {
   Button,
   Card,
   DataTable,
-  DonutChart,
   DropdownMenu,
+  FilterSelect,
   Icon,
   Modal,
   PageHeader,
@@ -20,14 +24,13 @@ import {
   SearchField,
   Skeleton,
   Sparkline,
-  Tabs,
   TextField,
   StatsPanel,
 } from "../ds.js";
-import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
+import { DEFAULT_STATS_PERIOD, statsPeriodRange } from '../domain/statsPeriod.js';
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
-import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenTopCompaniesQuery, useGetAdminBidScreenOfferQuery, useLazyExportAdminBidFunnelQuery } from "../store/features/bids/bidScreenApi.js";
+import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenOfferQuery } from "../store/features/bids/bidScreenApi.js";
 import { useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation } from "../store/features/jobs/jobDetailApi.js";
 import "./Operations.css";
 
@@ -93,7 +96,7 @@ function BidsTableLoading({ columns }) {
 
 function BidsMetricsLoading() {
   return (
-    <div className="kpi-grid" role="status" aria-label="Loading bid analytics" aria-busy="true">
+    <div className="kpi-grid" role="status" aria-label="Loading bid stats" aria-busy="true">
       {Array.from({ length: 6 }, (_, index) => (
         <Card className="metric-card" key={index}>
           <Skeleton width="46%" height={12} />
@@ -113,8 +116,10 @@ export function BidsOffers() {
   return <BidsOffersContent key={[owner,role,authenticated].join(":")} owner={owner} role={role} authenticated={authenticated}/>;
 }
 function BidsOffersContent({owner,role,authenticated}) {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const navigate=useNavigate();
-  const [tab,setTab]=useState("Bid Overview"),[page,setPage]=useState(1),[q,setQ]=usePageSearchState("", () => setPage(1));
+  const [bidType,setBidType]=useState("All Bids"),[page,setPage]=useState(1),[q,setQ]=usePageSearchState("", () => setPage(1));
   const [statusFilter,setStatusFilter]=useState("All Status"),[dateKey,setDateKey]=useState("week");
   const [menu,setMenu]=useState(null),[offerModal,setOfferModal]=useState(null),[toast,setToast]=useState(null),[offerError,setOfferError]=useState("");
   const [offerReason,setOfferReason]=useState("");
@@ -126,29 +131,25 @@ function BidsOffersContent({owner,role,authenticated}) {
   const [statsPeriodKey,setStatsPeriodKey]=useState(DEFAULT_STATS_PERIOD);
   const statsRange=useMemo(()=>statsPeriodRange(statsPeriodKey),[statsPeriodKey]);
   const analyticsQuery=useGetAdminBidScreenAnalyticsQuery({...session,...statsRange},{skip:!authenticated,refetchOnMountOrArgChange:true});
-  const topQuery=useGetAdminBidScreenTopCompaniesQuery({...session,dateFrom:dateOptions[0].dateFrom,dateTo:dateOptions[0].dateTo},{skip:!authenticated,refetchOnMountOrArgChange:true});
   const offerQuery=useGetAdminBidScreenOfferQuery({...session,id:offerModal?.bidId},{skip:!authenticated||!offerModal?.bidId,refetchOnMountOrArgChange:true});
   const actionDetail=useGetAdminJobBidActionDetailQuery({...session,id:offerModal?.bidId,jobId:offerModal?.jobId},{skip:!authenticated||!offerModal?.bidId||!offerModal?.jobId,refetchOnMountOrArgChange:true});
   const [performAdminAction,{isLoading:acting}]=usePerformAdminJobActionMutation();
-  const [exportFunnel]=useLazyExportAdminBidFunnelQuery();
   const data=directoryQuery.error?null:directoryQuery.currentData;
   const analytics=analyticsQuery.error?null:analyticsQuery.currentData;
   const analyticsLoading=authenticated&&analyticsQuery.isFetching&&!analytics;
-  const topCompanies=topQuery.error?null:topQuery.currentData?.rows;
   const selectedOffer=offerQuery.error?null:offerQuery.currentData;
-  const selection=useMemo(()=>selectBidScreenRows(data,{tab,query:q,statusFilter,...dates}),[data,tab,q,statusFilter,dates.dateFrom,dates.dateTo]);
-  const pageRows=selection.rows,offers=selection.offers,isCounterTab=tab==="Counter Offers";
+  const selection=useMemo(()=>selectBidScreenRows(data,{tab:bidType === "Counter Offers" ? "Counter Offers" : "Bid Overview",query:q,statusFilter,...dates}),[data,bidType,q,statusFilter,dates.dateFrom,dates.dateTo]);
+  const isCounterOfferView=bidType === "Counter Offers";
+  const pageRows=isCounterOfferView && statusFilter !== "All Status" ? selection.rows.filter((row) => row.statusCode === statusFilter.toUpperCase().replaceAll(" ", "_")) : selection.rows;
   const pageCount=Math.max(1,Math.ceil(pageRows.length/8));
-  const overviewKnown=Boolean(data?.overviewKnown),rowsKnown=Boolean(data&&(isCounterTab?data.offersKnown:overviewKnown));
-  const emptyFunnel=[["Jobs Published",null,"#8d58e8"],["Jobs with Bids",null,"#5b79e5"],["Bids Received",null,"#74d1b1"],["Bids Accepted",null,"#ffa11e"],["Jobs Completed",null,"#ff676d"]];
-  const funnelData=analytics?.funnel||emptyFunnel,funnelMax=Math.max(1,...funnelData.map((x)=>x[1]??0));
-  const breakdown=analytics?.breakdown||[{label:"Lowest Bids",color:"#4c16ac",value:null,display:"—"},{label:"Competing Bids",color:"#2469e8",value:null,display:"—"},{label:"Counter Offers",color:"#12a150",value:null,display:"—"},{label:"Expired Offers",color:"#f27602",value:null,display:"—"}];
+  const overviewKnown=Boolean(data?.overviewKnown),rowsKnown=Boolean(data&&(isCounterOfferView?data.offersKnown:overviewKnown));
   useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(null),2600);return()=>clearTimeout(timer);},[toast]);
-  useEffect(()=>{setPage(1);},[tab,q,statusFilter,dateKey]);
+  useEffect(()=>{setPage(1);},[bidType,q,statusFilter,dateKey]);
   useEffect(()=>{if(page>pageCount)setPage(pageCount);},[page,pageCount]);
   function openMenu(event,key){const anchor=event.currentTarget;setMenu((previous)=>previous?.key===key?null:{key,anchor});}
   const menuItems=menu?.key==="date"?dateOptions.map((d)=>({label:d.label,icon:d.key===dateKey?"check":undefined,onClick:()=>{setDateKey(d.key);setPage(1);setMenu(null);}}))
-    :["All Status",...STATUSES].map((s)=>({label:s,icon:s===statusFilter?"check":undefined,onClick:()=>{setStatusFilter(s);setPage(1);setMenu(null);}}));
+    :menu?.key === "type" ? ["All Bids", "Counter Offers"].map((value) => ({label:value,icon:value===bidType?"check":undefined,onClick:()=>{setBidType(value);setStatusFilter("All Status");setPage(1);setMenu(null);}}))
+    :["All Status",...(isCounterOfferView ? ["Pending", "Accepted", "Rejected", "Expired", "Withdrawn"] : STATUSES)].map((s)=>({label:s,icon:s===statusFilter?"check":undefined,onClick:()=>{setStatusFilter(s);setPage(1);setMenu(null);}}));
   function viewJob(row){if(row.jobId)navigate("/jobs/detail?id="+encodeURIComponent(row.jobId));else setToast({tone:"info",title:"Job details are unavailable."});}
   async function resolveOffer(offer,accept){
     if (!offerModal || offerModal.bidId !== offer?.bidId) { openOffer(offer); return; }
@@ -164,17 +165,11 @@ function BidsOffersContent({owner,role,authenticated}) {
     } finally { offerActionLock.current=false; }
   }
   function openOffer(row){setOfferError("");setOfferReason("");setOfferModal(row);setMenu(null);}
-  async function exportFunnelReport(){
-    try {
-      const csv=await exportFunnel({...session,...dates}).unwrap();
-      const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})),link=document.createElement("a");
-      link.href=url;link.download="bid-funnel.csv";document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),0);
-    } catch(error) { setToast({tone:"warning",title:getApiErrorMessage(error)}); }
-  }
+
   function exportRows(){
     if(!rowsKnown)return;
-    const header=isCounterTab?["Job ID","Bidding Company","Offer Amount (₦)","Δ vs Lowest"]:["Job ID","Route","Customer","Bids","Lowest Bid (₦)","Winning Bid (₦)","Status","Created At","Time"];
-    const rows=pageRows.map((r)=>isCounterTab?[r.id,r.company,r.amountValue??"—",r.deltaValue??"—"]:[r.id,r.route,r.customer,r.bids,r.lowValue??"—",r.winValue??"—",r.status,r.date,r.time]);
+    const header=isCounterOfferView?["Job ID","Bidding Company","Offer Amount (₦)","Δ vs Lowest"]:["Job ID","Route","Customer","Bids","Lowest Bid (₦)","Winning Bid (₦)","Status","Created At","Time"];
+    const rows=pageRows.map((r)=>isCounterOfferView?[r.id,r.company,r.amountValue??"—",r.deltaValue??"—"]:[r.id,r.route,r.customer,r.bids,r.lowValue??"—",r.winValue??"—",r.status,r.date,r.time]);
     const cell=(v)=>{const s=String(v??"");return '"'+(/^[=+\-@\t\r]/.test(s)?"'":"")+s.replaceAll('"','""')+'"';};
     const csv=[header,...rows].map((r)=>r.map(cell).join(",")).join("\r\n");
     const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})),link=document.createElement("a");
@@ -265,7 +260,7 @@ function BidsOffersContent({owner,role,authenticated}) {
       {toast && <Banner tone={toast.tone} title={toast.title} />}
       {directoryQuery.error && <Banner tone="danger" title={getApiErrorMessage(directoryQuery.error)} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
       {data?.errors.length > 0 && <Banner tone="warning" title={"Unable to load: " + data.errors.join(", ") + "."} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
-      {(analyticsQuery.error || topQuery.error) && <Banner tone="warning" title="Bid analytics are temporarily unavailable." action={<Button size="sm" variant="outline" onClick={() => { analyticsQuery.refetch(); topQuery.refetch(); }}>Retry analytics</Button>} />}
+      {analyticsQuery.error && <Banner tone="warning" title="Bid stats are temporarily unavailable." action={<Button size="sm" variant="outline" onClick={analyticsQuery.refetch}>Retry stats</Button>} />}
 
       {analyticsLoading ? <BidsMetricsLoading /> : <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
         <Metric
@@ -298,54 +293,27 @@ function BidsOffersContent({owner,role,authenticated}) {
         />
       </StatsPanel>}
 
-      <Tabs
-        items={[
-          "Bid Overview",
-          "Counter Offers",
-          "Awarded / Won",
-          "Expired",
-          "Cancelled",
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
 
-      <div className="bids-layout">
-        <div className="ops-panel">
-          <div className="ops-panel-head">
-            <div>
-              <h3>{tab}</h3>
-            </div>
-            <span style={{ position: "relative" }}>
-              <button
-                className="date-button"
-                onClick={(event) => openMenu(event, "panel")}
-              >
-                {statusFilter}⌄
-              </button>
-            </span>
-            <SearchField
-              placeholder="Search by Job ID, Company, Truck, Driver..."
-              style={{ width: 260 }}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-            <span style={{ position: "relative" }}>
-              <button className="date-button" onClick={(event) => openMenu(event, "date")}>
-                <Icon name="calendar" size={15} />
-                <span>{dateRange}</span>
-                <Icon name="chevron-down" size={14} />
-              </button>
-            </span>
-            <Button variant="outline" icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button>
-          </div>
-          {directoryQuery.isFetching ? <BidsTableLoading columns={isCounterTab ? offerCols : cols} /> : !rowsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : isCounterTab ? (
-            <DataTable
+
+      <div className="ops-panel">
+          <TableToolbar
+            search={<SearchField placeholder="Search by Job ID, Company, Truck, Driver..." value={q} onChange={(event) => setQ(event.target.value)} />}
+            filters={<>
+              <FilterSelect prefix="Status" icon="circle-dot" label={statusFilter} active={statusFilter !== 'All Status'} onClick={(event) => openMenu(event, 'status')} onClear={() => setStatusFilter('All Status')} />
+              <FilterSelect prefix="Type" icon="layers" label={bidType} active={bidType !== 'All Bids'} onClick={(event) => openMenu(event, 'type')} onClear={() => { setBidType('All Bids'); setStatusFilter('All Status'); }} />
+              <FilterSelect prefix="Date" icon="calendar" label={dateRange} active onClick={(event) => openMenu(event, 'date')} />
+            </>}
+            viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
+            trailing={<Button variant="outline" icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button>}
+            onClear={q || statusFilter !== 'All Status' || bidType !== 'All Bids' || dateKey !== 'week' ? () => { setQ(''); setStatusFilter('All Status'); setBidType('All Bids'); setDateKey('week'); setPage(1); setMenu(null); } : undefined}
+          />
+          {directoryQuery.isFetching ? <BidsTableLoading columns={isCounterOfferView ? offerCols : cols} /> : !rowsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : isCounterOfferView ? (
+            <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.offers} boardOnRowClick={openOffer} view={tableView} boardGroupBy={(row) => row.statusCode}
               rows={pageRows.slice((page - 1) * 8, page * 8)}
               rowKey={(r) => r.bidId}
               columns={offerCols}
             />
-          ) : pageRows.length === 0 ? (
+          ) : pageRows.length === 0 && tableView !== 'board' ? (
             <div
               style={{ padding: "40px 18px", textAlign: "center" }}
               className="tk-meta"
@@ -353,7 +321,7 @@ function BidsOffersContent({owner,role,authenticated}) {
               No bids match the current filters.
             </div>
           ) : (
-            <DataTable
+            <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.bids} boardOnRowClick={viewJob} view={tableView} boardGroupBy={(row) => row.status}
               rows={pageRows.slice((page - 1) * 8, page * 8)}
               columns={cols}
             />
@@ -368,117 +336,7 @@ function BidsOffersContent({owner,role,authenticated}) {
           />
         </div>
 
-        <div className="bid-rail">
-          <div className="ops-panel">
-            <div className="ops-panel-head">
-              <div>
-                <h3>Bid Analytics</h3>
-              </div>
-              <a onClick={() => setTab("Bid Overview")}>View Report</a>
-            </div>
-            {analyticsLoading ? <div className="bid-analytics" role="status" aria-label="Loading bid analytics" aria-busy="true">
-              <Skeleton width={130} height={130} radius={65} />
-              <div style={{ display: "grid", gap: 12 }}>
-                {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} width="100%" height={13} />)}
-              </div>
-            </div> : <div className="bid-analytics">
-              <DonutChart
-                size={130}
-                thickness={20}
-                centerValue={analytics?.total ?? "—"}
-                centerLabel="Total Bids"
-                data={breakdown.every((item) => item.value != null) ? breakdown.map((item) => ({ label: item.label, value: item.value, color: item.color })) : []}
-              />
-              <div>
-                {breakdown.map((item) => <div className="bid-legend" key={item.label}><span><i style={{ background: item.color }} />{item.label}</span><b>{item.display}</b></div>)}
-              </div>
-            </div>}
-          </div>
-          <div className="ops-panel">
-            <div className="ops-panel-head">
-              <div>
-                <h3>Recent Counter Offers</h3>
-              </div>
-              <a onClick={() => setTab("Counter Offers")}>View All</a>
-            </div>
-            {!data?.offersKnown && <DriverLoadingNotice>—</DriverLoadingNotice>}
-            {data?.offersKnown && offers.length === 0 && (
-              <div style={{ padding: "20px 14px" }} className="tk-meta">
-                No open counter offers.
-              </div>
-            )}
-            {(data?.offersKnown ? offers : []).map((o, i) => (
-              <div
-                className="offer-row"
-                key={o.bidId}
-                onClick={() => openOffer(o)}
-              >
-                <i>
-                  <Icon
-                    name={i % 2 ? "gavel" : "briefcase-business"}
-                    size={16}
-                  />
-                </i>
-                <span>
-                  <strong>{o.id}</strong>
-                  <small>{o.company}</small>
-                </span>
-                <span className="amount">
-                  <b>{o.amount}</b>
-                  <em>{o.delta}</em>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      <div className="bottom-bid-grid">
-        <div className="ops-panel">
-          <div className="ops-panel-head">
-            <div>
-              <h3>
-                Top Bidding Companies <small>(This Week)</small>
-              </h3>
-            </div>
-          </div>
-          {topCompanies == null ? <DriverLoadingNotice>—</DriverLoadingNotice> : topCompanies.map((company, i) => (
-            <div className="rank-row" key={company.id || i}><b>{i + 1}</b><span>{company.name}</span><span>{company.totalBids ?? "—"} Bids</span><span>Won: {company.won ?? "—"}</span><span>Win Rate {company.winRate == null ? "—" : company.winRate + "%"}</span></div>
-          ))}
-        </div>
-        <div className="ops-panel">
-          <div className="ops-panel-head">
-            <div>
-              <h3>Bid Conversion Funnel</h3>
-            </div>
-            <a
-              onClick={exportFunnelReport}
-            >
-              View Report
-            </a>
-          </div>
-          <div className="funnel" aria-busy={analyticsLoading || undefined}>
-            {analyticsLoading ? emptyFunnel.map((x) => (
-              <div className="funnel-row" key={x[0]}>
-                <span>{x[0]}</span>
-                <Skeleton height={18} radius={3} />
-                <Skeleton width={32} height={12} />
-              </div>
-            )) : funnelData.map((x) => (
-              <div className="funnel-row" key={x[0]}>
-                <span>{x[0]}</span>
-                <i
-                  style={{
-                    background: x[2],
-                    width: (x[1] == null || x[1] === 0 ? 0 : Math.max(18, (x[1] / funnelMax) * 100)) + "%",
-                  }}
-                />
-                <b>{x[1] ?? "—"}</b>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {menu && <BidScreenMenu anchor={menu.anchor} items={menuItems} onClose={setMenu} />}
 

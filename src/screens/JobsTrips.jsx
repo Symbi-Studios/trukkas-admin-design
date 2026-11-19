@@ -209,11 +209,11 @@ function AssigneeCell({ job, size = 32, compact = false }) {
   </span>;
 }
 
-function JobBoard({ jobs, selectedJobId, onOpen, tab }) {
-  const columns = BOARD_COLUMNS.filter(([stage]) =>
-    tab === "All Jobs" ? !["flagged", "rejected"].includes(stage) || jobs.some((job) => job.stage === stage) : TAB_API_VALUE[tab] === stage);
+function JobBoard({ jobs, selectedJobId, onOpen, hideEmpty }) {
+  const columns = hideEmpty ? BOARD_COLUMNS.filter(([stage]) => jobs.some((job) => job.stage === stage)) : BOARD_COLUMNS;
   return (
-    <div className={styles.board}>
+    <div className={styles.board} style={{ '--tk-board-lane-count': BOARD_COLUMNS.length, '--tk-board-gap-space': `${(BOARD_COLUMNS.length - 1) * 14}px` }}>
+      {!columns.length && <div className={styles.boardEmpty}>No jobs</div>}
       {columns.map(([stage, label, tone]) => {
         const items = jobs.filter((job) => job.stage === stage);
         return (
@@ -461,6 +461,7 @@ function JobsLoading() {
 }
 
 export function JobsTrips() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const navigate = useNavigate();
   const adminRole = useSelector((state) => state.auth.admin?.role);
   const canDeliver = DELIVERY_ROLES.has(adminRole);
@@ -912,7 +913,7 @@ export function JobsTrips() {
             {filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}
           </div>
           <div className={styles.toolbarRight}>
-            <ViewToggle value={view} onChange={(next) => { setView(next); if (next === "board") setSelected([]); }} />
+            <ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={view} onChange={(next) => { setView(next); if (next === "board") setSelected([]); }} />
             <Button
               variant="outline"
               icon="download"
@@ -954,7 +955,7 @@ export function JobsTrips() {
             onPageSize={(size) => { setPageSize(size); setPage(1); }}
           />
         </> : <>
-          <JobBoard jobs={filtered} selectedJobId={selectedJobId} onOpen={setSelectedJobId} tab={tab} />
+          <JobBoard hideEmpty={hideEmptyColumns} jobs={filtered} selectedJobId={selectedJobId} onOpen={setSelectedJobId} />
           {(jobsResponse?.pagination?.total ?? 0) > rawJobs.length && (
             <div className={styles.boardNote}>Showing the {rawJobs.length} most recent of {jobsResponse.pagination.total} jobs. Use filters or the list view to see the rest.</div>
           )}

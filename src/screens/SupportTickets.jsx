@@ -1,4 +1,8 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle, TableToolbar } from '../ds.js';
+
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -46,6 +50,8 @@ const statusTone = {
 const priorityTone = { High: "danger", Medium: "warning", Low: "neutral" };
 
 export function SupportTickets() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
@@ -166,8 +172,7 @@ export function SupportTickets() {
         />
       </StatsPanel>
       <SectionCard title="" pad="none">
-        <div className="support-toolbar">
-          <SearchField
+        <TableToolbar search={<><SearchField
             className="grow"
             style={{ flex: 1, minWidth: 240 }}
             placeholder="Search tickets, customers, subjects..."
@@ -176,8 +181,7 @@ export function SupportTickets() {
               setQ(e.target.value);
               setPage(1);
             }}
-          />
-          <CustomSelect
+          /></>} filters={<><CustomSelect
             aria-label="Filter by status"
             className="support-select"
             value={status}
@@ -196,8 +200,7 @@ export function SupportTickets() {
             ].map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </CustomSelect>
-          <CustomSelect
+          </CustomSelect><CustomSelect
             aria-label="Filter by priority"
             className="support-select"
             value={priority}
@@ -209,8 +212,7 @@ export function SupportTickets() {
             {["All", "High", "Medium", "Low"].map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </CustomSelect>
-          <CustomSelect
+          </CustomSelect><CustomSelect
             aria-label="Filter by category"
             className="support-select"
             value={category}
@@ -223,8 +225,7 @@ export function SupportTickets() {
             {categories.map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </CustomSelect>
-          <Button
+          </CustomSelect><Button
             variant="outline"
             icon="rotate-ccw"
             onClick={() => {
@@ -236,9 +237,8 @@ export function SupportTickets() {
             }}
           >
             Reset
-          </Button>
-        </div>
-        {loading ? <DriverTableLoading columns={7} label="Loading tickets" /> : <DataTable
+          </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<></>} />
+        {loading ? <DriverTableLoading columns={7} label="Loading tickets" /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.tickets} view={tableView} boardGroupBy={(row) => row.status}
           rows={paged}
           rowKey={(r) => r.id}
           onRowClick={(r) => navigate(ticketDetailUrl(r.id))}

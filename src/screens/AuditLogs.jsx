@@ -1,4 +1,8 @@
 'use client';
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle, TableToolbar } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -90,6 +94,8 @@ export function AuditLogs() {
 }
 
 function AuditLogsScreen() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const role = useSelector((state) => state.auth.admin?.role);
   const owner = useSelector((state) => state.auth.admin?.id);
@@ -183,15 +189,15 @@ function AuditLogsScreen() {
     <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}><StatCard icon="files" tint="blue" label="Total Logs" value={metric(summary?.totalLogs)} delta={delta('totalLogs')} direction={direction('totalLogs')} caption={statsPeriod(statsPeriodKey).vs} /><StatCard icon="users" tint="navy" label="Active Users" value={metric(summary?.activeUsers)} delta={delta('activeUsers')} direction={direction('activeUsers')} caption={statsPeriod(statsPeriodKey).vs} /><StatCard icon="shield-alert" tint="red" label="Security Events" value={metric(summary?.securityEvents)} delta={delta('securityEvents')} direction={direction('securityEvents')} caption={statsPeriod(statsPeriodKey).vs} /><StatCard icon="triangle-alert" tint="amber" label="Failed Actions" value={metric(summary?.failedActions)} delta={delta('failedActions')} direction={direction('failedActions')} caption={statsPeriod(statsPeriodKey).vs} /></StatsPanel>
     <Card pad="none" style={{ minWidth: 0 }}>
       <Tabs value={tab} onChange={(value) => { if ((value === 'System Events') !== systemEvents) { setSelectedAuditId(null); setSelectedRows([]); } setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
-      <div className="audit-filter-row">
+
+      <TableToolbar search={<><SearchField placeholder="Search audit logs..." value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /></>} filters={<>
         <MenuFilter value={draft.date} options={DATE_OPTIONS} icon="calendar-days" onChange={(date) => setDraft((old) => ({ ...old, date }))} />
         <MenuFilter value={draft.user} options={users} onChange={(user) => setDraft((old) => ({ ...old, user }))} />
         <MenuFilter value={draft.module} options={modules} onChange={(module) => setDraft((old) => ({ ...old, module }))} />
         <MenuFilter value={draft.action} options={actions} onChange={(action) => setDraft((old) => ({ ...old, action }))} />
         <MenuFilter value={draft.status} options={['All Statuses', 'Success', 'Failed']} onChange={(status) => setDraft((old) => ({ ...old, status }))} />
-      </div>
-      <div className="audit-search-row"><SearchField placeholder="Search audit logs..." value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /><div /><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button variant="outline" icon="download" onClick={exportRows}>Export</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); notify('Filters applied'); }}>Apply</Button></div>
-      {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={() => { if (canView) logsQuery.refetch(); else notify('Only Super Admins can view audit logs.'); }}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length ? <><DataTable rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
+      <><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); notify('Filters applied'); }}>Apply</Button></></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" onClick={exportRows}>Export</Button></>} />
+      {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={() => { if (canView) logsQuery.refetch(); else notify('Only Super Admins can view audit logs.'); }}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length || tableView === 'board' ? <><DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.audit} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
         { key: 'date', header: 'Date & Time', width: 126, render: (r) => <span className="audit-cell-stack"><span>{r.date}</span><small>{r.time}</small></span> },
         { key: 'user', header: 'User', width: 175, render: (r) => <span className="audit-user-cell"><Avatar name={r.user} size={32} /><span className="audit-cell-stack"><strong>{r.user}</strong><small>{r.email}</small></span></span> },
         { key: 'action', header: 'Action', width: 200, render: (r) => <Badge tone={ACTION_TONE[r.action]} style={{ maxWidth: '100%', height: 'auto', minHeight: 'var(--tk-h-badge)', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: '16px', padding: '3px 8px' }}>{r.action}</Badge> },

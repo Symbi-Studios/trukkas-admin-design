@@ -1,4 +1,8 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
+import { ViewToggle, TableToolbar } from '../ds.js';
+
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -12,7 +16,6 @@ import {
   StatCard,
   SectionCard,
   Card,
-  Tabs,
   SearchField,
   DataTable,
   Pagination,
@@ -94,6 +97,8 @@ function csv(content) {
   URL.revokeObjectURL(u);
 }
 export function Maintenance() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const authenticated = useSelector(state => Boolean(state.auth.accessToken));
   const owner = useSelector(state => state.auth.admin?.id);
@@ -416,9 +421,12 @@ export function Maintenance() {
         </SectionCard>
       </div>
       <div>
-        <Card pad="none">
-          <div className="maint-toolbar">
-            <SearchField
+
+      </div>
+      <div className="maint-layout">
+        <div className="maint-main">
+          <SectionCard title="" pad="none">
+<TableToolbar search={<><SearchField
               className="search"
               style={{ flex: 1 }}
               placeholder="Search by company, asset, maintenance ID, or description..."
@@ -427,20 +435,18 @@ export function Maintenance() {
                 setQ(e.target.value);
                 setPage(1);
               }}
-            />
-            <CustomSelect
+            /></>} filters={<><CustomSelect
               className="maint-select"
               value={status}
               onChange={(e) => {
-                setStatus(e.target.value);
+                setPendingOnly(false); setTab("All Maintenance"); setStatus(e.target.value);
                 setPage(1);
               }}
             >
               {STATUSES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </CustomSelect>
-            <CustomSelect
+            </CustomSelect><CustomSelect
               className="maint-select"
               value={priority}
               onChange={(e) => {
@@ -451,8 +457,7 @@ export function Maintenance() {
               {PRIORITIES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </CustomSelect>
-            <CustomSelect
+            </CustomSelect><CustomSelect
               className="maint-select"
               value={type}
               onChange={(e) => {
@@ -463,14 +468,12 @@ export function Maintenance() {
               {TYPES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </CustomSelect>
-            <input
+            </CustomSelect><input
               className="maint-select"
               type="date"
               value={date}
               onChange={(e) => { setDate(e.target.value); setPage(1); }}
-            />
-            <Button
+            /><Button
               variant="outline"
               icon="rotate-ccw"
               onClick={() => {
@@ -484,31 +487,10 @@ export function Maintenance() {
               }}
             >
               Reset
-            </Button>
-          </div>
-        </Card>
-      </div>
-      <div className="maint-layout">
-        <div className="maint-main">
-          <SectionCard title="" pad="none">
-            <Tabs
-              value={tab}
-              onChange={(v) => {
-                setPendingOnly(false);
-                setTab(v);
-                setPage(1);
-              }}
-              items={[
-                "All Maintenance",
-                "Scheduled",
-                "In Progress",
-                "Completed",
-                "Overdue",
-                "Cancelled",
-              ]}
-              style={{ padding: "0 16px" }}
-            />
-            {list.isFetching && !conflicting ? <DriverTableLoading columns={10} label="Loading maintenance" /> : list.error ? <EmptyState icon="wrench" title={maintenanceError(list.error)} /> : <DataTable
+            </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<></>} />
+
+
+            {list.isFetching && !conflicting ? <DriverTableLoading columns={10} label="Loading maintenance" /> : list.error ? <EmptyState icon="wrench" title={maintenanceError(list.error)} /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.maintenance} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.id}
               onRowClick={(r) => navigate(maintenanceHref(r.id))}
@@ -776,8 +758,8 @@ export function Maintenance() {
               hint="Generate and export reports"
               onClick={() => {
                 setPendingOnly(false);
-                setStatus("All Statuses");
-                setTab("Completed");
+                setStatus("Completed");
+                setTab("All Maintenance");
                 setPage(1);
               }}
             />
