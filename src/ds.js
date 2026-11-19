@@ -65,6 +65,8 @@ export { AttachmentCard } from './ds/components/patterns/AttachmentCard.jsx';
 export { EntityHeaderCard } from './ds/components/patterns/EntityHeaderCard.jsx';
 export { ListRow } from './ds/components/patterns/ListRow.jsx';
 export { MapPanel } from './ds/components/patterns/MapPanel.jsx';
+export { SideDrawer, DrawerSection, DrawerFacts } from './ds/components/patterns/SideDrawer.jsx';
+export { RouteStack } from './ds/components/patterns/RouteStack.jsx';
 export { MessageBubble } from './ds/components/patterns/MessageBubble.jsx';
 export { NotificationItem } from './ds/components/patterns/NotificationItem.jsx';
 export { PermissionRow } from './ds/components/patterns/PermissionRow.jsx';

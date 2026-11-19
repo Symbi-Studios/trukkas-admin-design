@@ -3,7 +3,8 @@ import { Checkbox } from "../forms/Checkbox.jsx";
 
 /**
  * The console list table. Columns declare { key, header, width, align, render }.
- * Rows are 56px, separated by hairlines; the header row is uppercase-free 12px ink-400.
+ * Rows are separated by hairlines; the header row is an 11px uppercase ink-400 band on surface-sunk.
+ * Clickable rows highlight on hover (see ds/styles.css).
  */
 export function DataTable({
   columns = [],
@@ -60,14 +61,16 @@ export function DataTable({
                   ...cell,
                   width: c.width,
                   textAlign: c.align || "left",
-                  font: "var(--tk-body-strong-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans)",
+                  paddingTop: 12,
+                  paddingBottom: 12,
+                  font: "600 11px/16px var(--tk-font-sans)",
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
                   color: "var(--tk-ink-400)",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
-                  backgroundColor: coloredHeader
-                    ? "var(--tk-surface-soft)"
-                    : "transparent",
+                  backgroundColor: "var(--tk-surface-sunk)",
                 }}
               >
                 {c.header}
@@ -88,7 +91,7 @@ export function DataTable({
                 onClick={() => onRowClick?.(r)}
                 style={{
                   borderBottom: "1px solid var(--tk-line)",
-                  background: on ? "var(--tk-surface-soft)" : "transparent",
+                  background: on ? "var(--tk-surface-soft)" : undefined,
                   cursor: onRowClick ? "pointer" : "default",
                   
                 }}
