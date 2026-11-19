@@ -473,3 +473,71 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Focused job detail workspace. */
+.jd-detail-page { display: grid; gap: 24px; min-width: 0; padding-bottom: 24px; }
+.jd-detail-nav { min-width: 0; border: 1px solid var(--tk-line); border-radius: 12px; background: #fff; overflow: hidden; }
+.jd-detail-nav .tk-tabs { padding: 0 20px !important; border-bottom: 0 !important; gap: 26px !important; }
+.jd-detail-nav .tk-tabs > button { padding-block: 16px !important; font-size: 13px !important; }
+.jd-tab-stack { display: grid; gap: 20px; min-width: 0; align-content: start; }
+.jd-tab-heading { display: grid; gap: 5px; padding: 2px 0 0; }
+.jd-tab-heading h2 { margin: 0; color: var(--tk-ink-900); font: 650 21px/28px var(--tk-font-sans); letter-spacing: -.35px; }
+.jd-tab-heading p { margin: 0; color: var(--tk-ink-400); font: 400 13px/20px var(--tk-font-sans); }
+.jd-info-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; min-width: 0; }
+.jd-detail-page .tk-section-card { border-radius: 14px; }
+.jd-detail-page .tk-section-card-header { padding: 20px 22px 0 !important; }
+.jd-detail-page .tk-section-card-header .tk-section { font: 600 15px/22px var(--tk-font-sans); letter-spacing: -.15px; }
+.jd-info-layout .tk-section-card-body { padding: 22px !important; }
+.jd-info-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 20px; margin: 0; }
+.jd-info-fact { display: grid; align-content: start; gap: 7px; min-width: 0; }
+.jd-info-fact.wide { grid-column: span 2; }
+.jd-info-fact dt, .jd-field-label { color: var(--tk-ink-400); font: 500 12px/18px var(--tk-font-sans); }
+.jd-info-fact dd { margin: 0; color: var(--tk-ink-900); font: 500 14px/21px var(--tk-font-sans); overflow-wrap: anywhere; }
+.jd-instructions { display: grid; gap: 8px; margin-top: 22px; padding: 16px; border: 1px solid var(--tk-line); border-radius: 9px; background: var(--tk-surface-sunk); }
+.jd-instructions p { margin: 0; color: var(--tk-ink-700); font: 400 13px/21px var(--tk-font-sans); white-space: pre-wrap; }
+.jd-text-link { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; cursor: pointer; color: var(--tk-blue); font: 500 12px/18px var(--tk-font-sans); margin-top: 20px; }
+.jd-text-link:hover { text-decoration: underline; }
+.jd-text-link:focus-visible { outline: 2px solid var(--tk-blue); outline-offset: 4px; }
+.jd-price-column { min-width: 0; }
+.jd-currency { padding: 4px 8px; border: 1px solid var(--tk-line); border-radius: 5px; color: var(--tk-ink-400); font: 600 11px/16px var(--tk-font-sans); }
+.jd-price-hero { display: grid; gap: 8px; padding: 0 0 24px; border-bottom: 1px solid var(--tk-line); }
+.jd-price-hero > strong { font: 650 32px/40px var(--tk-font-sans); letter-spacing: -1px; color: var(--tk-ink-900); overflow-wrap: anywhere; }
+.jd-price-breakdown { display: grid; gap: 18px; padding-top: 20px; }
+.jd-price-breakdown > div { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; font: 400 12px/19px var(--tk-font-sans); color: var(--tk-ink-500); }
+.jd-price-breakdown strong { color: var(--tk-ink-900); font-weight: 600; text-align: right; }
+.jd-price-breakdown small { display: block; color: var(--tk-ink-400); font-size: 11px; }
+.jd-route-stops { display: grid; position: relative; gap: 28px; }
+.jd-route-stops::before { content: ''; position: absolute; left: 16px; top: 28px; bottom: 30px; border-left: 1px dashed var(--tk-line-strong); }
+.jd-route-stop { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; align-items: start; }
+.jd-stop-marker { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: var(--tk-blue); background: var(--tk-blue-soft); }
+.jd-stop-marker.destination { color: var(--tk-success); background: var(--tk-success-soft); }
+.jd-stop-content { display: grid; gap: 3px; min-width: 0; }
+.jd-stop-content h4 { margin: 0; color: var(--tk-ink-900); font: 550 14px/21px var(--tk-font-sans); }
+.jd-stop-content p { margin: 0; color: var(--tk-ink-400); font: 400 12px/18px var(--tk-font-sans); }
+.jd-stop-date { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--tk-ink-500); font: 400 12px/18px var(--tk-font-sans); }
+.jd-route-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 22px 0 0; padding-top: 20px; border-top: 1px solid var(--tk-line); }
+.jd-metric-strip { display: grid; grid-template-columns: repeat(var(--jd-metric-columns), minmax(0, 1fr)); padding: 20px 4px; border: 1px solid var(--tk-line); border-radius: 12px; background: #fff; }
+.jd-metric { display: grid; align-content: start; gap: 8px; padding: 0 20px; min-width: 0; }
+.jd-metric + .jd-metric { border-left: 1px solid var(--tk-line); }
+.jd-metric > span { color: var(--tk-ink-400); font: 500 12px/18px var(--tk-font-sans); }
+.jd-metric > strong { color: var(--tk-ink-900); font: 600 22px/29px var(--tk-font-sans); letter-spacing: -.4px; overflow-wrap: anywhere; }
+.jd-metric > small { color: var(--tk-ink-400); font: 400 11px/16px var(--tk-font-sans); }
+.jd-finance-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; min-width: 0; }
+.jd-detail-page .jd-documents-layout { grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); }
+.jd-detail-page .jd-layout > *, .jd-finance-layout > * { min-width: 0; }
+.jd-detail-page .jd-trip-selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+@media (max-width: 1150px) {
+  .jd-info-layout, .jd-finance-layout, .jd-detail-page .jd-documents-layout { grid-template-columns: minmax(0, 1fr); }
+  .jd-info-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .jd-info-facts, .jd-route-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .jd-metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 20px; }
+  .jd-metric:nth-child(odd) { border-left: 0; }
+}
+@media (max-width: 480px) {
+  .jd-info-facts, .jd-route-facts { grid-template-columns: minmax(0, 1fr); }
+  .jd-info-fact.wide { grid-column: auto; }
+}
+.jd-instructions[data-empty="true"] { padding: 16px 0 0; border: 0; border-top: 1px solid var(--tk-line); border-radius: 0; background: none; gap: 4px; }
+.jd-instructions[data-empty="true"] p { color: var(--tk-ink-400); }

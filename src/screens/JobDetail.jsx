@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "../router.js";
@@ -20,9 +20,6 @@ import {
   Avatar,
   Pagination,
   EmptyState,
-  StatCard,
-  BarChart,
-  DonutChart,
   SearchField,
   FilterSelect,
   SplitButton,
@@ -31,29 +28,13 @@ import {
   Select,
 } from "../ds.js";
 import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
-import { useGetAdminCompanyDocumentPreviewQuery, useLazyGetAdminCompanyDocumentPreviewQuery } from "../store/features/companies/companyDocumentsApi.js";
+import { useGetAdminCompanyDocumentPreviewQuery } from "../store/features/companies/companyDocumentsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { JobDetailMap } from "./JobDetailMap.jsx";
 import { useGetAdminTrackingOverviewQuery } from "../store/features/tracking/trackingApi.js";
 import "./JobDetail.css";
 
-const STAGES = [
-  "Created",
-  "Pending Approval",
-  "Bidding",
-  "Assigned",
-  "In Transit",
-  "Delivered",
-];
-const STAGE_ICONS = [
-  "file-plus",
-  "hourglass",
-  "gavel",
-  "truck",
-  "route",
-  "circle-check",
-];
 const STATUS_TONE = {
   "Pending Approval": "warning",
   Bidding: "purple",
@@ -72,249 +53,24 @@ const STATUS_TONE = {
 };
 export const statusTone = (s) => STATUS_TONE[s] || "neutral";
 const naira = (n) => typeof n === "number" && Number.isFinite(n) ? "₦" + n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-const nairaShort = naira;
+
 const displayCount = (n) => n == null ? "—" : n;
 const percentage = (n) => n == null ? "—" : n + "%";
-const TINT = {
-  blue: ["var(--tk-blue-soft)", "var(--tk-blue)"],
-  green: ["var(--tk-success-soft)", "var(--tk-success)"],
-  purple: ["var(--tk-purple-soft)", "var(--tk-purple)"],
-  amber: ["var(--tk-warning-soft)", "var(--tk-warning)"],
-  neutral: ["var(--tk-surface-sunk)", "var(--tk-ink-400)"],
-};
+
+function JobTabHeading({ title, description }) {
+  return <header className="jd-tab-heading"><h2>{title}</h2><p>{description}</p></header>;
+}
+
+function JobFact({ label, children, wide = false }) {
+  return <div className={'jd-info-fact' + (wide ? ' wide' : '')}><dt>{label}</dt><dd>{children ?? '—'}</dd></div>;
+}
 
 function InfoStrip({ items }) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-        gap: 12,
-      }}
-    >
-      {items.map((it, i) => (
-        <Card
-          key={i}
-          pad="tight"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            minWidth: 0,
-          }}
-        >
-          <span
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: "var(--tk-r-sm)",
-              background: TINT[it.tint || "blue"][0],
-              color: TINT[it.tint || "blue"][1],
-              display: "grid",
-              placeItems: "center",
-              flex: "0 0 auto",
-            }}
-          >
-            <Icon name={it.icon} size={16} />
-          </span>
-          <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
-            <span className="tk-meta">{it.label}</span>
-            <strong
-              style={{
-                font: "600 13px/18px var(--tk-font-sans)",
-                color: "var(--tk-ink-900)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {it.value}
-            </strong>
-            {it.caption && (
-              <span
-                className="tk-meta"
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {it.caption}
-              </span>
-            )}
-          </span>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function StatusStepper({ stageIndex, dates = [], terminal }) {
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start" }}>
-      {STAGES.map((s, i) => (
-        <Fragment key={s}>
-          <div
-            style={{
-              display: "grid",
-              justifyItems: "center",
-              gap: 6,
-              width: 60,
-            }}
-          >
-            <span
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: 999,
-                display: "grid",
-                placeItems: "center",
-                flex: "0 0 auto",
-                background: terminal
-                  ? "var(--tk-surface-sunk)"
-                  : i < stageIndex
-                    ? "var(--tk-success)"
-                    : i === stageIndex
-                      ? "var(--tk-blue)"
-                      : "var(--tk-surface-sunk)",
-                color:
-                  !terminal && i <= stageIndex ? "#fff" : "var(--tk-ink-300)",
-                font: "700 12px var(--tk-font-sans)",
-              }}
-            >
-              {!terminal && i < stageIndex ? (
-                <Icon name="check" size={13} color="#fff" />
-              ) : (
-                i + 1
-              )}
-            </span>
-            <span
-              style={{
-                font:
-                  (i === stageIndex && !terminal ? "700" : "500") +
-                  " 11px/14px var(--tk-font-sans)",
-                color:
-                  !terminal && i <= stageIndex
-                    ? "var(--tk-ink-900)"
-                    : "var(--tk-ink-300)",
-                textAlign: "center",
-              }}
-            >
-              {s}
-            </span>
-            {dates[i] && (
-              <span className="tk-meta" style={{ fontSize: 10 }}>
-                {dates[i]}
-              </span>
-            )}
-          </div>
-          {i < STAGES.length - 1 && (
-            <span
-              style={{
-                flex: 1,
-                height: 2,
-                marginTop: 13,
-                background:
-                  !terminal && i < stageIndex
-                    ? "var(--tk-success)"
-                    : "var(--tk-line)",
-              }}
-            />
-          )}
-        </Fragment>
-      ))}
-    </div>
-  );
-}
-
-function EntityRow({ icon, tint = "blue", label, value, action }) {
-  return (
-    <div className="jd-entity-row">
-      <span
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: "var(--tk-r-sm)",
-          background: TINT[tint][0],
-          color: TINT[tint][1],
-          display: "grid",
-          placeItems: "center",
-          flex: "0 0 auto",
-        }}
-      >
-        <Icon name={icon} size={16} />
-      </span>
-      <span style={{ display: "grid", gap: 2, minWidth: 0, flex: 1 }}>
-        <span className="tk-meta">{label}</span>
-        <strong
-          style={{
-            font: "600 13px/18px var(--tk-font-sans)",
-            color: "var(--tk-ink-900)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {value}
-        </strong>
-      </span>
-      {action}
-    </div>
-  );
-}
-
-function NeedHelpCard({ topic, onContact }) {
-  return (
-    <SectionCard title="Need Help?">
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "flex-start",
-          marginBottom: 12,
-        }}
-      >
-        <span
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: "var(--tk-r-sm)",
-            background: "var(--tk-blue-soft)",
-            color: "var(--tk-blue)",
-            display: "grid",
-            placeItems: "center",
-            flex: "0 0 auto",
-          }}
-        >
-          <Icon name="headset" size={16} />
-        </span>
-        <span className="tk-meta">
-          Have questions about {topic}? Contact your operations team.
-        </span>
-      </div>
-      <Button variant="outline" fullWidth icon="mail" onClick={onContact}>
-        Contact Support
-      </Button>
-    </SectionCard>
-  );
-}
-
-function ExternalLink({ children, onClick }) {
-  return (
-    <a
-      onClick={onClick}
-      style={{
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-      <Icon name="arrow-right" size={12} />
-    </a>
-  );
+  return <div className="jd-metric-strip" style={{ '--jd-metric-columns': items.length }}>
+    {items.map((item, index) => <div className="jd-metric" key={index}>
+      <span>{item.label}</span><strong>{item.value ?? '—'}</strong>{item.caption && <small>{item.caption}</small>}
+    </div>)}
+  </div>;
 }
 
 function TripActionMenu({ anchor, items, onClose }) {
@@ -388,7 +144,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     if (job?.errors.length) setToast({ tone: "warning", title: "Unable to load: " + job.errors.join(", ") + ". Refresh to try again." });
   }, [job]);
 
-  const [tab, setTab] = useState("Overview");
+  const [tab, setTab] = useState("Job Information");
   const [moreOpen, setMoreOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -401,7 +157,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     { skip: !authenticated || !jobId || !reviewDoc?.url || tab !== "Documents" },
   );
   const previewUrl = documentPreview.error ? null : documentPreview.currentData?.url;
-  const [loadDocument] = useLazyGetAdminCompanyDocumentPreviewQuery();
   const [toast, setToast] = useState(null);
 
   const [docQuery, setDocQuery] = usePageSearchState("", undefined, tab === "Documents");
@@ -410,7 +165,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const [logPage, setLogPage] = useState(1);
   const [activityFilter, setActivityFilter] = useState("All Activities");
   const [activityOpenFilter, setActivityOpenFilter] = useState(false);
-  const [currency] = useState("NGN");
   const [tripMenu, setTripMenu] = useState(null);
   const [selectedTripId, setSelectedTripId] = useState(null);
 
@@ -482,15 +236,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   }
 
   const terminal = job.status === "Cancelled" || job.status === "Rejected";
-  const workflowStatus = ["Awaiting Assignment", "Partially Assigned"].includes(job.status)
-    ? "Assigned"
-    : job.status === "Partially Delivered" || job.status === "Attention Required"
-      ? "In Transit"
-      : job.status;
-  const stageIndex = terminal
-    ? STAGES.indexOf("Pending Approval")
-    : STAGES.indexOf(workflowStatus);
-  const stageDates = job.stageDates;
 
   const fee = job.fee, driverPayment = job.driverPayment, demurrage = job.demurrage;
   const otherCosts = job.otherCosts, netEarnings = job.netEarnings;
@@ -579,24 +324,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
       if (active.current) notify("info", "Tracking data refreshed.");
     } catch (error) { if (active.current) notify("danger", getApiErrorMessage(error)); }
   }
-  async function downloadRelatedDocument(doc) {
-    if (!doc.url || !authenticated || !jobId) {
-      notify("info", "This document is unavailable.");
-      return;
-    }
-    try {
-      const file = await loadDocument({ companyId: jobId, id: doc.id, url: doc.url, owner }).unwrap();
-      if (!active.current) return;
-      const link = document.createElement("a");
-      link.href = file.url;
-      link.download = doc.name && doc.name !== "—" ? doc.name : "document";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch {
-      if (active.current) notify("warning", "Unable to download this document. Please try again.");
-    }
-  }
+
   function exportActivity() {
     if (!job.activityKnown) { unavailable("Export Log"); return; }
     const rows = [["Date & Time", "User", "Role", "Action", "Details"], ...activityLog.map((a) => [a.time, a.user, a.role, a.action, a.details])];
@@ -766,7 +494,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const activityCount = job.activityKnown ? activityLog.length : "—";
 
   return (
-    <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
+    <div className="jd-detail-page">
       <PageHeader
         crumbs={["Jobs & Trips", "Jobs", job.id]}
         title={job.id}
@@ -799,11 +527,11 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
         </Banner>
       )}
 
-      <Tabs
+      <div className="jd-detail-nav"><Tabs
         value={tab}
         onChange={setTab}
         items={[
-          { value: "Overview", label: "Overview" },
+          { value: "Job Information", label: "Job Information" },
           {
             value: "Bids & Responses",
             label: "Bids & Responses",
@@ -813,497 +541,67 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
           { value: "Tracking & Updates", label: "Tracking & Updates" },
           { value: "Documents", label: "Documents", count: docsCount },
           { value: "Financials", label: "Financials" },
-          { value: "Activity Log", label: "Activity Log" },
+          { value: "Activity Log", label: "Activity Log", count: activityCount },
         ]}
-      />
+      /></div>
 
-      {tab === "Overview" && (
-        <div className="jd-layout">
-          <div className="jd-main">
-            <SectionCard
-              title="Job Information"
-              action={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  icon="pencil"
-                  onClick={() =>
-                    unavailable("Edit Job")
-                  }
-                >
-                  Edit
-                </Button>
-              }
-            >
-              <div className="jd-facts">
-                <div className="jd-fact">
-                  <span className="tk-meta">Job ID</span>
-                  <strong>{job.id}</strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Request Type</span>
-                  <Badge tone="purple">{job.requestType}</Badge>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Customer / Forwarder</span>
-                  <strong
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    {job.contactPerson}
-                  </strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Contact Details</span>
-                  <strong>{job.contactPhone}</strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Trip Type</span>
-                  <strong>{job.tripType}</strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Cargo Type</span>
-                  <strong>{job.cargoType}</strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Cargo Details</span>
-                  <strong>{job.cargoDetails || job.cargo}</strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Total Weight</span>
-                  <strong>{job.totalWeight ?? "—"}</strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Pickup Location</span>
-                  <strong
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    <Icon name="map-pin" size={14} color="var(--tk-success)" />
-                    {job.origin}
-                  </strong>
-                  <span className="tk-meta">{job.originCountry}</span>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Delivery Location</span>
-                  <strong
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    <Icon name="map-pin" size={14} color="var(--tk-danger)" />
-                    {job.destination}
-                  </strong>
-                  <span className="tk-meta">{job.destCountry}</span>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Preferred Pickup Date</span>
-                  <strong>{job.pickupDate || "—"}</strong>
-                </div>
-                <div className="jd-fact">
-                  <span className="tk-meta">Preferred Delivery Date</span>
-                  <strong>{job.deliveryDate || "—"}</strong>
-                </div>
-                <div className="jd-fact" style={{ gridColumn: "1 / -1" }}>
-                  <span className="tk-meta">Special Instructions</span>
-                  <span
-                    style={{
-                      font: "400 13px/20px var(--tk-font-sans)",
-                      color: "var(--tk-ink-700)",
-                    }}
-                  >
-                    {job.specialInstructions || "—"}
-                  </span>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Route Details"
-              action={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  icon="map"
-                  onClick={() => setMapOpen(true)}
-                >
-                  View on Map
-                </Button>
-              }
-            >
-              <div className="jd-route-grid">
-                <div className="jd-route-points">
-                  <div className="jd-route-point">
-                    <span
-                      className="jd-route-dot"
-                      style={{ background: "var(--tk-blue)" }}
-                    />
-                    <div>
-                      <strong>{job.origin}</strong>
-                      <span className="tk-meta">{job.originCountry}</span>
-                    </div>
-                    <span className="tk-meta">{job.pickupDate}</span>
-                  </div>
-                  <div className="jd-route-line" />
-                  <div className="jd-route-point">
-                    <span
-                      className="jd-route-dot"
-                      style={{ background: "var(--tk-danger)" }}
-                    />
-                    <div>
-                      <strong>{job.destination}</strong>
-                      <span className="tk-meta">{job.destCountry}</span>
-                    </div>
-                    <span className="tk-meta">{job.deliveryDate}</span>
-                  </div>
-                </div>
-                <div className="jd-map-placeholder jd-map-active">
-                  <JobDetailMap origin={job.origin} destination={job.destination} ariaLabel="Job pickup and delivery route map" />
-                </div>
-              </div>
-              <div className="jd-route-stats">
-                <span>
-                  <span className="tk-meta">Distance</span>
-                  <strong>
-                    {job.distanceKm != null ? `${job.distanceKm} km` : "—"}
-                  </strong>
-                </span>
-                <span>
-                  <span className="tk-meta">Estimated Duration</span>
-                  <strong>{job.durationLabel || "—"}</strong>
-                </span>
-                <span>
-                  <span className="tk-meta">Route Type</span>
-                  <strong>{job.routeType || "—"}</strong>
-                </span>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Assigned & Bidding"
-              action={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setTab("Bids & Responses")}
-                >
-                  View All Bids
-                </Button>
-              }
-            >
-              <div className="jd-route-stats" style={{ marginBottom: 14 }}>
-                <span>
-                  <span className="tk-meta">Assignment Status</span>
-                  <Badge tone={job.truckingCompany ? "info" : "neutral"} dot>
-                    {job.assignmentStatus}
-                  </Badge>
-                </span>
-                <span>
-                  <span className="tk-meta">Total Bids</span>
-                  <strong>{bidsCount}</strong>
-                </span>
-                <span>
-                  <span className="tk-meta">Bidding Closes</span>
-                  <strong
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    <Icon name="clock" size={13} color="var(--tk-danger)" />
-                    {job.biddingCloses || "—"}
-                  </strong>
-                </span>
-              </div>
-              {!job.bidsKnown ? <DriverLoadingNotice>Bid data is unavailable. Refresh to try again.</DriverLoadingNotice> : bids.length > 0 ? (
-                <DataTable
-                  rows={bids.slice(0, 4)}
-                  rowKey={(r) => r.id}
-                  columns={[
-                    {
-                      key: "i",
-                      header: "#",
-                      width: 30,
-                      render: (r, i) => bids.indexOf(r) + 1,
-                    },
-                    {
-                      key: "company",
-                      header: "Company",
-                      render: (r) => r.company,
-                    },
-                    {
-                      key: "amount",
-                      header: "Amount (₦)",
-                      render: (r) => naira(r.amount),
-                    },
-                    {
-                      key: "est",
-                      header: "Est. Delivery",
-                      render: (r) => r.estDeliveryDate,
-                    },
-                    {
-                      key: "submitted",
-                      header: "Submitted",
-                      render: (r) => r.submittedAt,
-                    },
-                    {
-                      key: "x",
-                      header: "",
-                      width: 70,
-                      render: (r) => (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setTab("Bids & Responses")}
-                        >
-                          View
-                        </Button>
-                      ),
-                    },
-                  ]}
-                />
-              ) : (
-                <EmptyState
-                  icon="gavel"
-                  title="No bids yet"
-                  description="Trucking companies have not submitted any bids for this job."
-                />
-              )}
-            </SectionCard>
+      {tab === "Job Information" && (<section className="jd-tab-stack">
+  <JobTabHeading title="Job information" description="The request, route and agreed price for this job." />
+  <div className="jd-info-layout">
+    <div className="jd-tab-stack">
+      <SectionCard title="Job details"  icon="package">
+        <dl className="jd-info-facts">
+          <JobFact label="Request type"><Badge tone="purple">{job.requestType || '—'}</Badge></JobFact>
+          <JobFact label="Trip type">{job.tripType}</JobFact>
+          <JobFact label="Trucks required">{displayCount(job.requiredTrucks)}</JobFact>
+          <JobFact label="Customer / forwarder">{job.contactPerson || job.forwarder || '—'}</JobFact>
+          <JobFact label="Contact phone">{job.contactPhone || '—'}</JobFact>
+          <JobFact label="Cargo type">{job.cargoType || '—'}</JobFact>
+          <JobFact label="Cargo details" wide>{job.cargoDetails || job.cargo || '—'}</JobFact>
+          <JobFact label="Total weight">{job.totalWeight ?? '—'}</JobFact>
+        </dl>
+        {job.forwarderId && <button type="button" className="jd-text-link" onClick={() => navigate('/forwarders/detail?id=' + encodeURIComponent(job.forwarderId))}>View customer profile <Icon name="arrow-up-right" size={13} /></button>}
+        <div data-empty={!job.specialInstructions || job.specialInstructions === '—'} className="jd-instructions">
+          <span className="jd-field-label">Special instructions</span>
+          <p>{job.specialInstructions || '—'}</p>
+        </div>
+      </SectionCard>
+      <SectionCard title="Route details" description="Pickup, delivery and schedule" icon="route"
+        action={<Button size="sm" variant="outline" icon="map" onClick={() => setMapOpen(true)}>View map</Button>}>
+        <div className="jd-route-stops">
+          <div className="jd-route-stop">
+            <span className="jd-stop-marker"><Icon name="circle-dot" size={18} /></span>
+            <div className="jd-stop-content"><span className="jd-field-label">Pickup</span><h4>{job.origin || '—'}</h4><p>{job.originCountry || '—'}</p><span className="jd-stop-date"><Icon name="calendar" size={13} />{job.pickupDate || '—'}</span></div>
           </div>
-
-          <div className="jd-rail">
-            <SectionCard title="Status">
-              <StatusStepper
-                stageIndex={stageIndex}
-                dates={stageDates}
-                terminal={terminal}
-              />
-              {job.status === "Pending Approval" && (
-                <div className="jd-note">
-                  This job is awaiting admin approval. Please review all
-                  documents and details before approving.
-                </div>
-              )}
-              {job.status === "Bidding" && (
-                <div className="jd-note jd-note-info">
-                  This job is published and open for carrier bidding until{" "}
-                  {job.biddingCloses}.
-                </div>
-              )}
-              {job.status === "Assigned" && (
-                <div className="jd-note jd-note-info">
-                  This job is assigned to {job.truckingCompany} and awaiting
-                  dispatch.
-                </div>
-              )}
-              {job.status === "In Transit" && (
-                <div className="jd-note jd-note-info">
-                  This job is currently in transit. See Tracking & Updates for
-                  live status.
-                </div>
-              )}
-              {job.status === "Delivered" && (
-                <div className="jd-note jd-note-success">
-                  This job has been delivered successfully.
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard
-              title="Financial Summary"
-              action={
-                <FilterSelect
-                  label={currency}
-                  onClick={() =>
-                    unavailable("Currency conversion")
-                  }
-                />
-              }
-            >
-              <div className="jd-finance-rows">
-                <div>
-                  <span>Job Value (Forwarder Payment)</span>
-                  <strong>{naira(job.jobValue)}</strong>
-                </div>
-                <div>
-                  <span>Platform Fee ({percentage(job.platformFeePct)})</span>
-                  <strong>{naira(fee)}</strong>
-                </div>
-                <div>
-                  <span>Driver/Company Payment</span>
-                  <strong>{naira(driverPayment)}</strong>
-                </div>
-                <div>
-                  <span>Demurrage (Est.)</span>
-                  <strong>{naira(demurrage)}</strong>
-                </div>
-                <div>
-                  <span>Other Costs (Est.)</span>
-                  <strong>{naira(otherCosts)}</strong>
-                </div>
-              </div>
-              <div className="jd-finance-total">
-                <span>Estimated Platform Earnings</span>
-                <strong style={{ color: "var(--tk-success)" }}>
-                  {naira(netEarnings)}
-                </strong>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Related Entities">
-              <EntityRow
-                icon="file-text"
-                tint="blue"
-                label="Forwarder"
-                value={job.contactPerson || "—"}
-                action={
-                  <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
-                    View Profile
-                  </ExternalLink>
-                }
-              />
-
-              <EntityRow
-                icon="route"
-                tint="purple"
-                label="Associated Trips"
-                value={`${displayCount(job.assignedTrips)} of ${displayCount(tripCounts.total)} assigned`}
-                action={<a style={{ cursor: "pointer" }} onClick={() => setTab("Associated Trips")}>View Trips →</a>}
-              />
-              <EntityRow
-                icon="truck"
-                tint="amber"
-                label="Trucking Company"
-                value={job.truckingCompany || "—"}
-                action={
-                  job.truckingCompany ? (
-                    <ExternalLink onClick={() => job.truckerId ? navigate("/users/detail?id=" + encodeURIComponent(job.truckerId) + "&source=user") : unavailable("Trucking company profile")}>
-                      View Profile
-                    </ExternalLink>
-                  ) : (
-                    <a
-                      style={{ cursor: "pointer" }}
-                      onClick={() => setTab("Bids & Responses")}
-                    >
-                      Assign →
-                    </a>
-                  )
-                }
-              />
-            </SectionCard>
-
-            <SectionCard
-              title={`Documents (${docsCount})`}
-              action={
-                <a
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setTab("Documents")}
-                >
-                  View All
-                </a>
-              }
-            >
-              {documents.slice(0, 3).map((d) => (
-                <div key={d.id} className="jd-doc-row">
-                  <Icon
-                    name={
-                      d.name.endsWith(".xlsx")
-                        ? "sheet"
-                        : d.name.endsWith(".zip")
-                          ? "image"
-                          : "file-text"
-                    }
-                    size={16}
-                    color="var(--tk-blue)"
-                  />
-                  <span
-                    style={{ flex: 1, display: "grid", gap: 1, minWidth: 0 }}
-                  >
-                    <span
-                      style={{
-                        font: "500 13px/18px var(--tk-font-sans)",
-                        color: "var(--tk-ink-900)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {d.name}
-                    </span>
-                    <span className="tk-meta">
-                      {d.size} · {d.date}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </SectionCard>
-
-            <SectionCard
-              title="Recent Activity"
-              action={
-                <a
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setTab("Activity Log")}
-                >
-                  View All
-                </a>
-              }
-            >
-              {activityLog.slice(0, 3).map((a, i) => (
-                <div key={i} className="jd-activity-row">
-                  <span className="jd-activity-dot" />
-                  <span style={{ display: "grid", gap: 1 }}>
-                    <span
-                      style={{
-                        font: "500 13px/18px var(--tk-font-sans)",
-                        color: "var(--tk-ink-900)",
-                      }}
-                    >
-                      {a.action === "Job Created"
-                        ? `Job submitted by ${a.user}`
-                        : `${a.action} — ${a.details}`}
-                    </span>
-                    <span className="tk-meta">{a.time}</span>
-                  </span>
-                </div>
-              ))}
-            </SectionCard>
+          <div className="jd-route-stop">
+            <span className="jd-stop-marker destination"><Icon name="map-pin" size={18} /></span>
+            <div className="jd-stop-content"><span className="jd-field-label">Delivery</span><h4>{job.destination || '—'}</h4><p>{job.destCountry || '—'}</p><span className="jd-stop-date"><Icon name="calendar" size={13} />{job.deliveryDate || '—'}</span></div>
           </div>
         </div>
-      )}
+        <dl className="jd-route-facts">
+          <JobFact label="Distance">{job.distanceKm != null ? `${job.distanceKm} km` : '—'}</JobFact>
+          <JobFact label="Estimated duration">{job.durationLabel || '—'}</JobFact>
+          <JobFact label="Route type">{job.routeType || '—'}</JobFact>
+        </dl>
+      </SectionCard>
+    </div>
+    <aside className="jd-price-column">
+      <SectionCard title="Price" action={<span className="jd-currency">NGN</span>}>
+        <div className="jd-price-hero"><span className="jd-field-label">Total job value</span><strong>{naira(job.jobValue)}</strong></div>
 
-      {tab === "Bids & Responses" && (
-        <>
-          <InfoStrip
-            items={[
-              {
-                icon: "route",
-                label: "Route",
-                value: job.route || `${job.origin} → ${job.destination}`,
-              },
-              {
-                icon: "package",
-                label: "Cargo",
-                value: job.cargo,
-                tint: "green",
-              },
-              {
-                icon: "truck",
-                label: "Required Trucks",
-                value: job.requiredTrucks == null ? "—" : `${job.requiredTrucks} Truck${job.requiredTrucks === 1 ? "" : "s"}`,
-                tint: "amber",
-              },
-              {
-                icon: "calendar",
-                label: "Pickup Date",
-                value: job.pickupDate || "—",
-                tint: "purple",
-              },
-              {
-                icon: "banknote",
-                label: "Job Value",
-                value: naira(job.jobValue),
-                tint: "green",
-              },
-            ]}
-          />
-          <div className="jd-layout">
-            <div className="jd-main">
-              <SectionCard
+        <button type="button" className="jd-text-link" onClick={() => setTab('Financials')}>View financial details <Icon name="arrow-right" size={13} /></button>
+      </SectionCard>
+    </aside>
+  </div>
+</section>
+)}
+
+      {tab === "Bids & Responses" && (<section className="jd-tab-stack"><JobTabHeading title="Bids & responses" description="Review trucking company quotes and responses." /><InfoStrip items={[
+ {label:'Bids received',value:bidsCount},
+ {label:'Lowest bid',value:bids.length && bidAmountsKnown ? naira(Math.min(...bids.map((bid)=>bid.amount))) : '—'},
+ {label:'Highest bid',value:bids.length && bidAmountsKnown ? naira(Math.max(...bids.map((bid)=>bid.amount))) : '—'},
+ {label:'Average bid',value:bids.length && bidAmountsKnown ? naira(bids.reduce((sum,bid)=>sum+bid.amount,0)/bids.length) : '—'}
+]} /><SectionCard
                 title={`Bids Received (${bidsCount})`}
                 description="Bids from trucking companies for this job. Assignment is handled by the selected trucking company."
                 action={
@@ -1317,10 +615,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                   </Badge>
                 }
               >
-                <Banner tone="info" style={{ marginBottom: 14 }}>
-                  The Super Admin can view all bids for oversight. Trucking
-                  companies manage their own truck and driver assignment.
-                </Banner>
+
                 {!job.bidsKnown ? <DriverLoadingNotice>Bid data is unavailable. Refresh to try again.</DriverLoadingNotice> : bids.length ? (
                   <DataTable
                     rows={bids}
@@ -1445,155 +740,10 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     description="Trucking companies have not submitted any bids for this job."
                   />
                 )}
-              </SectionCard>
-
-              <div className="jd-row2">
-                <SectionCard title="Bid Comparison">
-                  <BarChart
-                    height={200}
-                    labels={bids.filter((b) => b.amount != null).map((b) => b.company.split(" ")[0])}
-                    series={[
-                      {
-                        name: "Amount",
-                        color: "var(--tk-blue)",
-                        points: bids.filter((b) => b.amount != null).map((b) => b.amount),
-                      },
-                    ]}
-                    format={nairaShort}
-                  />
-                </SectionCard>
-                <SectionCard title="Company Insights">
-                  {bids.map((b) => (
-                    <div key={b.id} className="jd-insight-row">
-                      <Avatar name={b.company} size={30} />
-                      <span
-                        style={{
-                          flex: 1,
-                          display: "grid",
-                          gap: 1,
-                          minWidth: 0,
-                        }}
-                      >
-                        <strong
-                          style={{
-                            font: "600 13px/18px var(--tk-font-sans)",
-                            color: "var(--tk-ink-900)",
-                          }}
-                        >
-                          {b.company}
-                        </strong>
-                        <span className="tk-meta">
-                          {displayCount(b.trips)} completed trips
-                        </span>
-                      </span>
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          font: "700 13px/18px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        <Icon name="star" size={13} color="var(--tk-warning)" />
-                        {displayCount(b.rating)}
-                      </span>
-                    </div>
-                  ))}
-                </SectionCard>
-              </div>
-            </div>
-
-            <div className="jd-rail">
-              <SectionCard title="Job Status">
-                <StatusStepper
-                  stageIndex={stageIndex}
-                  dates={stageDates}
-                  terminal={terminal}
-                />
-              </SectionCard>
-              <SectionCard title="Bid Summary">
-                <div className="jd-finance-rows">
-                  <div>
-                    <span>Total Bids</span>
-                    <strong>{bidsCount}</strong>
-                  </div>
-                  <div>
-                    <span>Lowest Bid</span>
-                    <strong>
-                      {bids.length && bidAmountsKnown
-                        ? naira(Math.min(...bids.map((b) => b.amount)))
-                        : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Highest Bid</span>
-                    <strong>
-                      {bids.length && bidAmountsKnown
-                        ? naira(Math.max(...bids.map((b) => b.amount)))
-                        : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Average Bid</span>
-                    <strong>
-                      {bids.length && bidAmountsKnown
-                        ? naira(
-                            bids.reduce((s, b) => s + b.amount, 0) /
-                              bids.length,
-                          )
-                        : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Bid Spread</span>
-                    <strong>
-                      {bids.length > 1 && bidAmountsKnown
-                        ? naira(
-                            Math.max(...bids.map((b) => b.amount)) -
-                              Math.min(...bids.map((b) => b.amount)),
-                          )
-                        : "—"}
-                    </strong>
-                  </div>
-                </div>
-              </SectionCard>
-              <SectionCard title="Related Entities">
-                <EntityRow
-                  icon="file-text"
-                  tint="blue"
-                  label="Forwarder"
-                  value={job.forwarder}
-                  action={
-                    <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
-                      View Profile
-                    </ExternalLink>
-                  }
-                />
-                <EntityRow
-                  icon="map-pin"
-                  tint="purple"
-                  label="Pickup Location"
-                  value={job.origin}
-                />
-                <EntityRow
-                  icon="map-pin"
-                  tint="amber"
-                  label="Delivery Location"
-                  value={job.destination}
-                />
-              </SectionCard>
-              <NeedHelpCard
-                topic="bids or the job"
-                onContact={() => navigate("/tickets")}
-              />
-            </div>
-          </div>
-        </>
-      )}
+              </SectionCard></section>)}
 
       {tab === "Associated Trips" && (
-        <>
+        <section className="jd-tab-stack"><JobTabHeading title="Trips" description="Truck assignments and the movements fulfilling this job." />
           <InfoStrip
             items={[
               { icon: "truck", label: "Trucks Requested", value: displayCount(tripCounts.required), tint: "amber" },
@@ -1634,48 +784,10 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               <EmptyState icon="route" title="No trips assigned" description="Select a trucking company, then assign the required truck and driver pairs." action={<Button onClick={() => navigate("/dispatch")}>Open Dispatch Center</Button>}/>
             )}
           </SectionCard>
-        </>
+        </section>
       )}
 
-      {tab === "Tracking & Updates" && (
-        <>
-          <InfoStrip
-            items={[
-              {
-                icon: "route",
-                label: "Route",
-                value: job.route || `${job.origin} → ${job.destination}`,
-              },
-              {
-                icon: "package",
-                label: "Cargo",
-                value: job.cargo,
-                tint: "green",
-              },
-              {
-                icon: "truck",
-                label: "Assigned Trucks",
-                value: displayCount(job.assignedTruckCount),
-                tint: "amber",
-              },
-              {
-                icon: "user",
-                label: "Assigned Drivers",
-                value: job.assignedDriverCount == null ? "—" : `${job.assignedDriverCount} driver${job.assignedDriverCount === 1 ? "" : "s"}`,
-                caption: job.truckingCompany,
-                tint: "purple",
-              },
-              {
-                icon: "calendar",
-                label: "Estimated Delivery",
-                value: job.deliveryDate || "—",
-                tint: "green",
-              },
-            ]}
-          />
-          <div className="jd-layout">
-            <div className="jd-main">
-              {jobTrips.length > 0 && (
+      {tab === "Tracking & Updates" && (<section className="jd-tab-stack"><JobTabHeading title="Tracking & updates" description="Live location and recorded updates for the selected trip." />{jobTrips.length > 0 && (
                 <SectionCard title="Select Trip" description="Tracking and updates are recorded per truck movement.">
                   <div className="jd-trip-selector">
                     {jobTrips.map((trip) => (
@@ -1685,8 +797,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     ))}
                   </div>
                 </SectionCard>
-              )}
-              <SectionCard
+              )}<SectionCard
                 title="Live Tracking"
                 description={
                   selectedTrip?.livePosition
@@ -1745,9 +856,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     <strong>{job.destination}</strong>
                   </span>
                 </div>
-              </SectionCard>
-
-              <SectionCard title="Tracking Updates" pad="none">
+              </SectionCard><SectionCard title="Tracking Updates" pad="none">
                 {trackingUpdates.length ? (
                   <DataTable
                     rows={trackingUpdates}
@@ -1813,33 +922,10 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     description="Updates will appear once the job is assigned and moving."
                   />
                 )}
-              </SectionCard>
-            </div>
-
-            <div className="jd-rail">
-              <SectionCard title="Tracking Timeline">
-                <Timeline
-                  items={trackingUpdates
-                    .slice()
-                    .reverse()
-                    .map((u, i, arr) => ({
-                      title: u.status,
-                      description: `${u.location !== "—" ? u.location + " — " : ""}${u.details}`,
-                      time: u.time,
-                      state: u.completed === true ? "done" : "pending",
-                      icon:
-                        u.status === "Delivered"
-                          ? "check"
-                          : u.status === "In Transit"
-                            ? "truck"
-                            : "circle",
-                    }))}
-                />
-              </SectionCard>
-              {photos.length > 0 && (
+              </SectionCard>{photos.length > 0 && (
                 <SectionCard
                   title="Photos & Proof"
-                  action={<a style={{ cursor: "pointer" }}>View All</a>}
+
                 >
                   <div
                     style={{
@@ -1861,79 +947,12 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     ))}
                   </div>
                 </SectionCard>
-              )}
-              <SectionCard title="Related Information">
-                <EntityRow
-                  icon="truck"
-                  tint="blue"
-                  label="Trucking Company"
-                  value={job.truckingCompany || "—"}
-                  action={
-                    job.truckingCompany && (
-                      <ExternalLink onClick={() => job.truckerId ? navigate("/users/detail?id=" + encodeURIComponent(job.truckerId) + "&source=user") : unavailable("Trucking company profile")}>
-                        View Profile
-                      </ExternalLink>
-                    )
-                  }
-                />
-                <EntityRow
-                  icon="user"
-                  tint="purple"
-                  label="Drivers"
-                  value={job.assignedDriverCount == null ? "—" : `${job.assignedDriverCount} assigned`}
-                  action={<a style={{ cursor: "pointer" }} onClick={() => setTab("Associated Trips")}>View Trips →</a>}
-                />
-                <EntityRow
-                  icon="file-text"
-                  tint="amber"
-                  label="Forwarder"
-                  value={job.forwarder}
-                  action={
-                    <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
-                      View Profile
-                    </ExternalLink>
-                  }
-                />
-              </SectionCard>
-            </div>
-          </div>
-        </>
-      )}
+              )}</section>)}
 
       {tab === "Documents" && (
-        <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-              gap: "var(--tk-space-4)",
-            }}
-          >
-            <StatCard
-              icon="file-text"
-              label="Total Documents"
-              value={displayCount(documentStatusCounts.total)}
-            />
-            <StatCard
-              icon="circle-check"
-              tint="green"
-              label="Approved"
-              value={displayCount(documentStatusCounts.approved)}
-            />
-            <StatCard
-              icon="clock"
-              tint="amber"
-              label="Pending Review"
-              value={displayCount(documentStatusCounts.pending)}
-            />
-            <StatCard
-              icon="circle-x"
-              tint="red"
-              label="Rejected"
-              value={displayCount(documentStatusCounts.rejected)}
-            />
-          </div>
-          <div className="jd-layout">
+        <section className="jd-tab-stack"><JobTabHeading title="Documents" description="Review submitted documents and their approval status." />
+          <InfoStrip items={[{label:'Total documents',value:displayCount(documentStatusCounts.total)},{label:'Approved',value:displayCount(documentStatusCounts.approved)},{label:'Pending review',value:displayCount(documentStatusCounts.pending)},{label:'Rejected',value:displayCount(documentStatusCounts.rejected)}]} />
+          <div className="jd-layout jd-documents-layout">
             <div className="jd-main">
               <SectionCard
                 title={`Documents (${job.documentsKnown ? filteredDocuments.length : "—"})`}
@@ -2226,247 +1245,10 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               </SectionCard>
             </div>
           </div>
-        </>
+        </section>
       )}
 
-      {tab === "Financials" && (
-        <>
-          <InfoStrip
-            items={[
-              {
-                icon: "banknote",
-                label: "Job Value",
-                value: naira(job.jobValue),
-              },
-              {
-                icon: "shield-check",
-                label: "Platform Fee",
-                value: `${percentage(job.platformFeePct)}`,
-                caption: naira(fee),
-                tint: "green",
-              },
-              {
-                icon: "wallet-cards",
-                label: "Driver/Company Payout",
-                value: naira(driverPayment),
-                tint: "amber",
-              },
-              {
-                icon: "clock",
-                label: "Demurrage (Est.)",
-                value: naira(demurrage),
-                tint: "purple",
-              },
-              {
-                icon: "truck",
-                label: "Status",
-                value: job.status,
-                tint: "blue",
-              },
-            ]}
-          />
-          <div className="jd-layout">
-            <div className="jd-main">
-              <SectionCard
-                title="Payment Flow"
-                description="How the money flows from the forwarder to service providers and Trukkas."
-              >
-                <div className="jd-flow">
-                  <div className="jd-flow-box">
-                    <Icon name="user" size={16} color="var(--tk-ink-500)" />
-                    <strong>{naira(job.jobValue)}</strong>
-                    <span className="tk-meta">Paid by {job.forwarder}</span>
-                  </div>
-                  <Icon
-                    name="arrow-right"
-                    size={18}
-                    color="var(--tk-ink-300)"
-                  />
-                  <div className="jd-flow-box">
-                    <Icon name="database" size={16} color="var(--tk-blue)" />
-                    <strong>{naira(fee)}</strong>
-                    <span className="tk-meta">Trukkas Platform Fee</span>
-                  </div>
-                  <Icon
-                    name="arrow-right"
-                    size={18}
-                    color="var(--tk-ink-300)"
-                  />
-                  <div className="jd-flow-stack">
-                    <div className="jd-flow-box">
-                      <Icon name="truck" size={16} color="var(--tk-success)" />
-                      <strong>
-                        {naira(driverPayment)}
-                      </strong>
-                      <span className="tk-meta">
-                        Paid to {job.truckingCompany || "Trucking Company"}
-                      </span>
-                    </div>
-                    <div className="jd-flow-box">
-                      <Icon name="clock" size={16} color="var(--tk-warning)" />
-                      <strong>{naira(demurrage)}</strong>
-                      <span className="tk-meta">Demurrage (if any)</span>
-                    </div>
-                  </div>
-                </div>
-              </SectionCard>
-
-              {tripFinancials.length > 0 && (
-                <SectionCard title="Trip-level Costs" description="Operational costs stay attached to each truck movement and roll up to the job." pad="none">
-                  <DataTable rows={tripFinancials} rowKey={(trip) => trip.id} coloredHeader columns={[
-                    { key: "id", header: "Container / Route", render: (trip) => <strong className="jd-trip-id">{trip.containerNumber} · {trip.route}</strong> },
-                    { key: "truckPlate", header: "Truck" },
-                    { key: "driverName", header: "Driver" },
-                    { key: "cost", header: "Trip Cost", render: (trip) => naira(trip.cost) },
-                    { key: "driverPayment", header: "Driver Payment", render: (trip) => naira(trip.driverPayment) },
-                    { key: "expenses", header: "Expenses", render: (trip) => naira(trip.expenses) },
-                    { key: "status", header: "Status", render: (trip) => <Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge> },
-                  ]}/>
-                </SectionCard>
-              )}
-
-              <SectionCard title={`Related Payouts (${job.relatedPayoutsKnown ? relatedPayouts.length : "—"})`} description="Company payouts are reconciled to the individual trips included in this job." pad="none">
-                {relatedPayouts.length ? <DataTable rows={relatedPayouts} rowKey={(payout) => payout.id} coloredHeader onRowClick={(payout) => navigate(`/payouts/${payout.id}`)} columns={[
-                  { key: "id", header: "Payout ID", render: (payout) => <strong className="jd-trip-id">{payout.id}</strong> },
-                  { key: "party", header: "Beneficiary" },
-                  { key: "trips", header: "Trips Included", render: (payout) => `${payout.tripIds?.length || 0} of ${jobTrips.length}` },
-                  { key: "gross", header: "Gross", render: (payout) => naira(payout.grossAmount ?? payout.amount) },
-                  { key: "net", header: "Net", render: (payout) => naira(payout.netAmount ?? payout.amount) },
-                  { key: "status", header: "Status", render: (payout) => <Badge dot tone={statusTone(payout.status)}>{payout.status}</Badge> },
-                  { key: "eligibility", header: "Eligibility", render: (payout) => <Badge tone={payout.approvalReady ? "success" : "warning"}>{payout.eligibility || "Legacy"}</Badge> },
-                ]} /> : !job.relatedPayoutsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <EmptyState icon="wallet" title="No payout created" description="A company payout can be reconciled after eligible trips are delivered." />}
-              </SectionCard>
-
-              <div className="jd-row2">
-                <SectionCard title="Earnings Breakdown">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 20,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <DonutChart
-                      size={200}
-                      thickness={18}
-                      centerValue={naira(job.jobValue).replace("₦", "₦")}
-                      centerLabel="Total Job Value"
-                      data={[driverPayment, fee, demurrage, otherCosts].every((value) => value != null) ? [
-                        {
-                          label: "Trucking Payout",
-                          value: driverPayment,
-                          color: "var(--tk-blue)",
-                        },
-                        {
-                          label: "Platform Fee",
-                          value: fee,
-                          color: "var(--tk-success)",
-                        },
-                        {
-                          label: "Demurrage",
-                          value: demurrage,
-                          color: "var(--tk-warning)",
-                        },
-                        {
-                          label: "Other Adjustments",
-                          value: otherCosts,
-                          color: "var(--tk-neutral)",
-                        },
-                      ] : []}
-                    />
-                    <div
-                      style={{
-                        flex: 1,
-                        minWidth: 180,
-                        display: "grid",
-                        gap: 8,
-                      }}
-                    >
-                      {[
-                        [
-                          "Trucking Payout",
-                          driverPayment,
-                          "var(--tk-blue)",
-                        ],
-                        ["Platform Fee", fee, "var(--tk-success)"],
-                        ["Demurrage", demurrage, "var(--tk-warning)"],
-                        ["Other Adjustments", otherCosts, "var(--tk-neutral)"],
-                      ].map(([label, val, color]) => (
-                        <div
-                          key={label}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 999,
-                              background: color,
-                            }}
-                          />
-                          <span
-                            style={{
-                              flex: 1,
-                              font: "400 13px/18px var(--tk-font-sans)",
-                              color: "var(--tk-ink-500)",
-                            }}
-                          >
-                            {label}
-                          </span>
-                          <strong
-                            style={{
-                              font: "600 13px/18px var(--tk-font-sans)",
-                              color: "var(--tk-ink-900)",
-                            }}
-                          >
-                            {naira(val)}
-                          </strong>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </SectionCard>
-                <SectionCard title="Key Amounts">
-                  <div className="jd-finance-rows">
-                    <div>
-                      <span>Job Value</span>
-                      <strong>{naira(job.jobValue)}</strong>
-                    </div>
-                    <div>
-                      <span>Platform Fee ({percentage(job.platformFeePct)})</span>
-                      <strong>{naira(fee)}</strong>
-                    </div>
-                    <div>
-                      <span>Driver/Company Payout</span>
-                      <strong>
-                        {naira(driverPayment)}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Demurrage (Est.)</span>
-                      <strong>{naira(demurrage)}</strong>
-                    </div>
-                    <div>
-                      <span>Other Adjustments</span>
-                      <strong>{naira(otherCosts)}</strong>
-                    </div>
-                  </div>
-                  <div className="jd-finance-total">
-                    <span>Net Platform Earnings</span>
-                    <strong style={{ color: "var(--tk-success)" }}>
-                      {naira(netEarnings)}
-                    </strong>
-                  </div>
-                </SectionCard>
-              </div>
-
-              <SectionCard title="Transactions" pad="none">
+      {tab === "Financials" && (<section className="jd-tab-stack"><JobTabHeading title="Financials" description="Payments, costs and payouts for this job." /><InfoStrip items={[{label:'Job value',value:naira(job.jobValue)},{label:'Platform fee',value:naira(fee),caption:percentage(job.platformFeePct)},{label:'Company payment',value:naira(driverPayment)},{label:'Net platform earnings',value:naira(netEarnings)}]} /><div className="jd-finance-layout"><div className="jd-tab-stack"><SectionCard title="Transactions" pad="none">
                 {!job.transactionsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <DataTable
                   rows={transactions}
                   rowKey={(r, i) => i}
@@ -2527,117 +1309,33 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     },
                   ]}
                 />}
-              </SectionCard>
-            </div>
+              </SectionCard>{tripFinancials.length > 0 && (
+                <SectionCard title="Trip-level Costs" description="Operational costs stay attached to each truck movement and roll up to the job." pad="none">
+                  <DataTable rows={tripFinancials} rowKey={(trip) => trip.id} coloredHeader columns={[
+                    { key: "id", header: "Container / Route", render: (trip) => <strong className="jd-trip-id">{trip.containerNumber} · {trip.route}</strong> },
+                    { key: "truckPlate", header: "Truck" },
+                    { key: "driverName", header: "Driver" },
+                    { key: "cost", header: "Trip Cost", render: (trip) => naira(trip.cost) },
+                    { key: "driverPayment", header: "Driver Payment", render: (trip) => naira(trip.driverPayment) },
+                    { key: "expenses", header: "Expenses", render: (trip) => naira(trip.expenses) },
+                    { key: "status", header: "Status", render: (trip) => <Badge dot tone={statusTone(trip.status)}>{trip.status}</Badge> },
+                  ]}/>
+                </SectionCard>
+              )}<SectionCard title={`Related Payouts (${job.relatedPayoutsKnown ? relatedPayouts.length : "—"})`} description="Company payouts are reconciled to the individual trips included in this job." pad="none">
+                {relatedPayouts.length ? <DataTable rows={relatedPayouts} rowKey={(payout) => payout.id} coloredHeader onRowClick={(payout) => navigate(`/payouts/${payout.id}`)} columns={[
+                  { key: "id", header: "Payout ID", render: (payout) => <strong className="jd-trip-id">{payout.id}</strong> },
+                  { key: "party", header: "Beneficiary" },
+                  { key: "trips", header: "Trips Included", render: (payout) => `${payout.tripIds?.length || 0} of ${jobTrips.length}` },
+                  { key: "gross", header: "Gross", render: (payout) => naira(payout.grossAmount ?? payout.amount) },
+                  { key: "net", header: "Net", render: (payout) => naira(payout.netAmount ?? payout.amount) },
+                  { key: "status", header: "Status", render: (payout) => <Badge dot tone={statusTone(payout.status)}>{payout.status}</Badge> },
+                  { key: "eligibility", header: "Eligibility", render: (payout) => <Badge tone={payout.approvalReady ? "success" : "warning"}>{payout.eligibility || "Legacy"}</Badge> },
+                ]} /> : !job.relatedPayoutsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <EmptyState icon="wallet" title="No payout created" description="A company payout can be reconciled after eligible trips are delivered." />}
+              </SectionCard></div><aside className="jd-tab-stack"><SectionCard title="Payment status">
+                <Timeline items={financialTimeline.slice(0, 3)} />
+              </SectionCard><SectionCard title="Additional costs"><div className="jd-price-breakdown"><div><span>Demurrage (estimated)</span><strong>{naira(demurrage)}</strong></div><div><span>Other adjustments</span><strong>{naira(otherCosts)}</strong></div></div></SectionCard></aside></div></section>)}
 
-            <div className="jd-rail">
-              <SectionCard title="Financial Status">
-                <Timeline items={financialTimeline} />
-              </SectionCard>
-              <SectionCard
-                title="Related Documents"
-                action={
-                  <a
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setTab("Documents")}
-                  >
-                    View All
-                  </a>
-                }
-              >
-                {documents.slice(0, 4).map((d) => (
-                  <div key={d.id} className="jd-doc-row">
-                    <Icon name="file-text" size={15} color="var(--tk-blue)" />
-                    <span
-                      style={{
-                        flex: 1,
-                        font: "500 13px/18px var(--tk-font-sans)",
-                        color: "var(--tk-ink-900)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {d.name}
-                    </span>
-                    <button type="button" aria-label={"Download " + d.name} disabled={!d.url} onClick={() => void downloadRelatedDocument(d)} style={{ border: 0, padding: 0, background: "none", cursor: d.url ? "pointer" : "not-allowed", display: "inline-flex" }}>
-                      <Icon name="download" size={14} color="var(--tk-ink-300)" />
-                    </button>
-                  </div>
-                ))}
-              </SectionCard>
-              <SectionCard title="Related Entities">
-                <EntityRow
-                  icon="file-text"
-                  tint="blue"
-                  label="Forwarder"
-                  value={job.forwarder}
-                  action={
-                    <ExternalLink onClick={() => job.forwarderId ? navigate("/forwarders/detail?id=" + encodeURIComponent(job.forwarderId)) : unavailable("Forwarder profile")}>
-                      View Profile
-                    </ExternalLink>
-                  }
-                />
-                <EntityRow
-                  icon="truck"
-                  tint="amber"
-                  label="Trucking Company"
-                  value={job.truckingCompany || "—"}
-                  action={
-                    job.truckingCompany && (
-                      <ExternalLink onClick={() => job.truckerId ? navigate("/users/detail?id=" + encodeURIComponent(job.truckerId) + "&source=user") : unavailable("Trucking company profile")}>
-                        View Profile
-                      </ExternalLink>
-                    )
-                  }
-                />
-              </SectionCard>
-              <NeedHelpCard
-                topic="this job's financials"
-                onContact={() => navigate("/tickets")}
-              />
-            </div>
-          </div>
-        </>
-      )}
-
-      {tab === "Activity Log" && (
-        <>
-          <InfoStrip
-            items={[
-              {
-                icon: "route",
-                label: "Route",
-                value: job.route || `${job.origin} → ${job.destination}`,
-              },
-              {
-                icon: "package",
-                value: job.cargo,
-                tint: "green",
-              },
-              {
-                icon: "truck",
-                label: "Trucking Company",
-                value: job.truckingCompany || "—",
-                tint: "amber",
-              },
-              {
-                icon: "circle-check",
-                label: "Status",
-                value: job.status,
-                tint: "purple",
-              },
-              {
-                icon: "banknote",
-                label: "Job Value",
-                value: naira(job.jobValue),
-                tint: "green",
-              },
-            ]}
-          />
-          <div className="jd-layout">
-            <div className="jd-main">
-              <SectionCard
+      {tab === "Activity Log" && (<section className="jd-tab-stack"><JobTabHeading title="Activity log" description="A chronological record of changes and actions on this job." /><InfoStrip items={[{label:'Activities recorded',value:activityCount},{label:'People involved',value:displayCount(uniqueActivityUsers)},{label:'Most active',value:job.mostActiveUser || '—'}]} /><SectionCard
                 title="Activity Log"
                 description="A chronological record of all key activities and updates related to this job."
                 pad="none"
@@ -2760,106 +1458,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                     { key: "details", header: "Details" },
                   ]}
                 />}
-              </SectionCard>
-            </div>
-
-            <div className="jd-rail">
-              <SectionCard
-                title="Job Summary"
-                action={
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    icon="pencil"
-                    onClick={() =>
-                      unavailable("Edit Job")
-                    }
-                  >
-                    Edit Job
-                  </Button>
-                }
-              >
-                <div className="jd-finance-rows">
-                  <div>
-                    <span>Job ID</span>
-                    <strong>{job.id}</strong>
-                  </div>
-                  <div>
-                    <span>Status</span>
-                    <Badge tone={statusTone(job.status)}>{job.status}</Badge>
-                  </div>
-                  <div>
-                    <span>Route</span>
-                    <strong style={{ textAlign: "right" }}>
-                      {job.route || `${job.origin} → ${job.destination}`}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Cargo</span>
-                    <strong>{job.cargo}</strong>
-                  </div>
-                  <div>
-                    <span>Job Value</span>
-                    <strong>{naira(job.jobValue)}</strong>
-                  </div>
-                  <div>
-                    <span>Created</span>
-                    <strong>{job.createdAt || job.published}</strong>
-                  </div>
-                  <div>
-                    <span>Last Updated</span>
-                    <strong>{job.updatedAt || "—"}</strong>
-                  </div>
-                </div>
-              </SectionCard>
-              <SectionCard title="Activity Insights">
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 10,
-                  }}
-                >
-                  <div className="jd-insight-tile">
-                    <Icon name="list" size={16} color="var(--tk-blue)" />
-                    <strong>{activityCount}</strong>
-                    <span className="tk-meta">Total Activities</span>
-                  </div>
-                  <div className="jd-insight-tile">
-                    <Icon name="users" size={16} color="var(--tk-purple)" />
-                    <strong>{displayCount(uniqueActivityUsers)}</strong>
-                    <span className="tk-meta">Unique Users</span>
-                  </div>
-                  <div className="jd-insight-tile">
-                    <Icon name="clock" size={16} color="var(--tk-warning)" />
-                    <strong>
-                      {STAGES.indexOf(job.status) >= 0
-                        ? STAGES.indexOf(job.status) + 1
-                        : "—"}
-                    </strong>
-                    <span className="tk-meta">Stages Reached</span>
-                  </div>
-                  <div className="jd-insight-tile">
-                    <Icon
-                      name="trending-up"
-                      size={16}
-                      color="var(--tk-success)"
-                    />
-                    <strong style={{ fontSize: 13 }}>
-                      {job.mostActiveUser}
-                    </strong>
-                    <span className="tk-meta">Most Active</span>
-                  </div>
-                </div>
-              </SectionCard>
-              <NeedHelpCard
-                topic="this job's activity log"
-                onContact={() => navigate("/tickets")}
-              />
-            </div>
-          </div>
-        </>
-      )}
+              </SectionCard></section>)}
 
       {tripActionTarget && <TripActionMenu anchor={tripMenu.anchor} onClose={setTripMenu} items={["Assigned", "At Pickup", "In Transit", "At Delivery", "Delivered", "Delayed"].filter((status) => status !== tripActionTarget.status).map((status) => ({ label: "Mark " + status, icon: status === "Delivered" ? "circle-check" : status === "Delayed" ? "triangle-alert" : "route", tone: status === "Delayed" ? "danger" : undefined, onClick: () => doTripStatus(tripActionTarget.id, status) }))} />}
 
