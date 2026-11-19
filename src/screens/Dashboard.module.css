@@ -146,6 +146,9 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--tk-space-4);
 }
+.dashboard :global(.tk-stats-grid) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .stats > div {
   min-height: 86px;
   padding: var(--tk-space-4) var(--tk-card-pad-tight) !important;
@@ -553,7 +556,8 @@
   .motto {
     display: none;
   }
-  .stats {
+  .stats,
+  .dashboard :global(.tk-stats-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .financeGrid {
@@ -587,6 +591,7 @@
     width: 100%;
   }
   .stats,
+  .dashboard :global(.tk-stats-grid),
   .insightsGrid {
     grid-template-columns: minmax(0, 1fr);
   }

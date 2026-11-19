@@ -1,8 +1,7 @@
 "use client";
-import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate } from "../router.js";
 import {
   Avatar,
@@ -11,11 +10,8 @@ import {
   Card,
   DataTable,
   DonutChart,
-  DropdownMenu,
-  FilterSelect,
   Icon,
   LegendList,
-  LineChart,
   PageHeader,
   ProgressBar,
   SectionCard,
@@ -23,107 +19,17 @@ import {
   StatCard,
   StatsPanel,
 } from "../ds.js";
-import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodDates } from '../domain/statsPeriod.js';
-import { useCollection } from "../mock/useCollection.js";
-import { getJobTrips } from "../domain/jobTrips.js";
 import { formatNaira } from "../mock/format.js";
 import { statusTone } from "./JobDetail.jsx";
 import { useGetAdminOverviewQuery } from "../store/features/overview/overviewApi.js";
 import styles from "./Dashboard.module.css";
 
-const DATE_RANGES = [
-  "Sep 1, 2026 – Sep 30, 2026",
-  "Last 30 days",
-  "Last 90 days",
-  "This year",
-];
-const TREND_PERIODS = ["Last 6 Months", "Last 3 Months", "This Year"];
-const ACTIVITY_PERIODS = ["Last 30 days", "Last 90 days", "This year"];
-function dashboardDates(value) {
-  if (value === DATE_RANGES[0]) return { from: '2026-09-01', to: '2026-09-30' };
-  if (value === 'All Time') return undefined;
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const field = (key) => Number(parts.find((part) => part.type === key).value);
-  const today = new Date(Date.UTC(field('year'), field('month') - 1, field('day')));
-  const end = new Date(today);
-  const start = new Date(today);
-  if (value === 'Last 30 days') start.setUTCDate(start.getUTCDate() - 29);
-  else if (value === 'Last 90 days') start.setUTCDate(start.getUTCDate() - 89);
-  else if (value === 'This year' || value === 'This Year') start.setUTCMonth(0, 1);
-  else if (value === 'This Month') start.setUTCDate(1);
-  else if (value === 'Last Month') { start.setUTCDate(1); end.setTime(start.getTime() - 86400000); start.setTime(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1)); }
-  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
-}
-const REGISTRATION_TABS = [
-  "Drivers",
-  "Trucking Companies",
-  "Forwarders",
-  "Exporters",
-];
-const REGISTRATION_API_GROUP = {
-  Drivers: "drivers",
-  "Trucking Companies": "truckingCompanies",
-  Forwarders: "forwarders",
-  Exporters: "exporters",
-};
 const compactNaira = (value) => formatNaira(value);
-
-function MenuSelect({
-  id,
-  value,
-  options,
-  openMenu,
-  setOpenMenu,
-  onChange,
-  icon,
-}) {
-  return (
-    <span className={`${styles.menuWrap} ${id === 'date' ? styles.dateMenu : ''}`}>
-      <FilterSelect
-        label={value}
-        icon={icon}
-        active={openMenu === id}
-        onClick={() => setOpenMenu(openMenu === id ? null : id)}
-        style={id === 'date' ? { maxWidth: '100%', width: '100%', justifyContent: 'center' } : undefined}
-      />
-      {openMenu === id && (
-        <span className={styles.menu}>
-          <DropdownMenu
-            width={220}
-            items={options.map((option) => ({
-              label: option,
-              icon: option === value ? "check" : undefined,
-              onClick: () => {
-                onChange(option);
-                setOpenMenu(null);
-              },
-            }))}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
-
-function FlowNode({ icon, tint = "blue", value, label, note, onClick }) {
-  return (
-    <button type="button" className={styles.flowNode} onClick={onClick}>
-      <span className={`${styles.flowIcon} ${styles[tint]}`}>
-        <Icon name={icon} size={18} />
-      </span>
-      <span>
-        <strong>{value}</strong>
-        <small>{label}</small>
-        {note && <em>{note}</em>}
-      </span>
-    </button>
-  );
-}
 
 function StarRating({ rating, reviews, trend, breakdown, allTime }) {
   const rows = [5, 4, 3, 2, 1].map((stars) => ({
     stars,
-    pct: breakdown?.[stars] ?? 0,
+    pct: breakdown?.[stars],
   }));
   const trendLabel = Number.isFinite(trend)
     ? `${trend < 0 ? "↓" : "↑"} ${Math.abs(trend)} from ${allTime ? "last month" : "previous period"}`
@@ -147,7 +53,7 @@ function StarRating({ rating, reviews, trend, breakdown, allTime }) {
               {row.stars} <Icon name="star" size={11} />
             </span>
             <ProgressBar
-              value={row.pct}
+              value={row.pct ?? 0}
               color={
                 row.stars === 5
                   ? "var(--tk-success)"
@@ -157,7 +63,7 @@ function StarRating({ rating, reviews, trend, breakdown, allTime }) {
               }
               height={16}
             />
-            <small>{row.pct}%</small>
+            <small>{row.pct == null ? "—" : `${row.pct}%`}</small>
           </div>
         ))}
       </div>
@@ -170,52 +76,36 @@ const HEALTH = [
     apiKey: "platformApi",
     icon: "server",
     label: "Platform",
-    status: "Healthy",
-    tone: "success",
     route: "/settings",
   },
   {
     apiKey: "gpsTracking",
     icon: "map-pin",
     label: "GPS & Tracking",
-    status: "Healthy",
-    tone: "success",
     route: "/trips?view=map",
   },
   {
     apiKey: "payments",
     icon: "credit-card",
     label: "Payments",
-    status: "Healthy",
-    tone: "success",
     route: "/transactions",
   },
   {
     apiKey: "notifications",
     icon: "bell",
     label: "Notifications",
-    status: "Degraded",
-    tone: "warning",
     route: "/notifications",
   },
   {
     apiKey: "database",
     icon: "database",
     label: "Database",
-    status: "Healthy",
-    tone: "success",
     route: "/settings",
   },
 ];
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
-  const dateRange = statsPeriod(statsPeriodKey).summary;
-  const statsDates = useMemo(() => statsPeriodDates(statsPeriodKey), [statsPeriodKey]);
-  const [activityPeriod, setActivityPeriod] = useState(null);
-  const [revenuePeriod, setRevenuePeriod] = useState(null);
-  const [ratingPeriod, setRatingPeriod] = useState(null);
   const {
     currentData: overview,
     isLoading: isOverviewLoading,
@@ -223,325 +113,50 @@ export function Dashboard() {
     isUninitialized: isOverviewUninitialized,
     isError: isOverviewError,
     refetch: refetchOverview,
-  } = useGetAdminOverviewQuery(statsDates.from ? statsDates : undefined);
-  const earningsQuery = useGetAdminOverviewQuery(dashboardDates(revenuePeriod), { skip: revenuePeriod == null });
-  const activityQuery = useGetAdminOverviewQuery(dashboardDates(activityPeriod), { skip: activityPeriod == null });
-  const ratingQuery = useGetAdminOverviewQuery(dashboardDates(ratingPeriod), { skip: ratingPeriod == null });
-  const jobs = useCollection("jobs") || [];
-  const drivers = useCollection("drivers") || [];
-  const companies = useCollection("companies") || [];
-  const trucks = useCollection("trucks") || [];
-  const [trendPeriod, setTrendPeriod] = useState(TREND_PERIODS[0]);
-  const [registrationTab, setRegistrationTab] = useState("Drivers");
-  const [openMenu, setOpenMenu] = useState(null);
-  const [query, setQuery] = usePageSearchState("");
-
-
-  const data = useMemo(() => {
-    const normalized = jobs.map((job) => ({
-      ...job,
-      value: job.jobValue ?? job.amount ?? 0,
-      routeLabel:
-        job.route || `${job.origin || "—"} → ${job.destination || "—"}`,
-      company: job.forwarder || "—",
-      created: job.createdAt || job.published || "",
-    }));
-    const totalRevenue = normalized.reduce((sum, job) => sum + job.value, 0);
-    const platformFees = Math.round(totalRevenue * 0.087);
-    const driverPayouts = Math.round(totalRevenue * 0.732);
-    const companyPayouts = Math.round(totalRevenue * 0.184);
-    const demurrage = Math.round(totalRevenue * 0.056);
-    const otherCosts = Math.round(totalRevenue * 0.028);
-    const actualTrips = normalized.flatMap((job) => getJobTrips(job));
-    const activeTrips = actualTrips.filter((trip) =>
-      [
-        "In Transit",
-        "At Pickup",
-        "At Delivery",
-        "Returning Container",
-      ].includes(trip.status),
-    ).length;
-    const completed = actualTrips.filter((trip) =>
-      ["Delivered", "Completed"].includes(trip.status),
-    ).length;
-    const assignedPending = actualTrips.filter((trip) =>
-      ["Assigned", "Scheduled"].includes(trip.status),
-    ).length;
-    const unassignedRequested = normalized.reduce(
-      (sum, job) =>
-        sum + Math.max(0, (job.requiredTrucks || 1) - getJobTrips(job).length),
-      0,
-    );
-    const scheduled = assignedPending + unassignedRequested;
-    const cancelled =
-      actualTrips.filter((trip) => trip.status === "Cancelled").length +
-      normalized.filter(
-        (job) => job.status === "Rejected" && !getJobTrips(job).length,
-      ).length;
-    const forwarders = new Set(
-      normalized.map((job) => job.company).filter((name) => name !== "—"),
-    );
-    const exporters = new Set(
-      normalized
-        .filter((job) => job.requestType === "Export")
-        .map((job) => job.company),
-    );
-    const routes = Object.values(
-      normalized.reduce((acc, job) => {
-        if (!acc[job.routeLabel])
-          acc[job.routeLabel] = { route: job.routeLabel, trips: 0 };
-        acc[job.routeLabel].trips += job.requiredTrucks || 1;
-        return acc;
-      }, {}),
-    )
-      .sort((a, b) => b.trips - a.trips)
-      .slice(0, 10);
-    const totalRouteTrips =
-      routes.reduce((sum, route) => sum + route.trips, 0) || 1;
-    const recentJobs = [...normalized]
-      .sort(
-        (a, b) =>
-          Number(b.id.match(/\d+$/)?.[0] || 0) -
-          Number(a.id.match(/\d+$/)?.[0] || 0),
-      )
-      .filter(
-        (job) =>
-          !query ||
-          [job.id, job.routeLabel, job.company, job.cargo].some((field) =>
-            String(field || "")
-              .toLowerCase()
-              .includes(query.toLowerCase()),
-          ),
-      )
-      .slice(0, 5);
-    const ratings = drivers
-      .map((driver) => driver.rating)
-      .filter(Number.isFinite);
-    return {
-      normalized,
-      totalRevenue,
-      platformFees,
-      driverPayouts,
-      companyPayouts,
-      demurrage,
-      otherCosts,
-      activeTrips,
-      completed,
-      scheduled,
-      cancelled,
-      forwarders: forwarders.size,
-      exporters: exporters.size,
-      routes: routes.map((route) => ({
-        ...route,
-        pct: `${((route.trips / totalRouteTrips) * 100).toFixed(1)}%`,
-      })),
-      recentJobs,
-      rating:
-        ratings.reduce((sum, value) => sum + value, 0) / (ratings.length || 1),
-      reviews: drivers.reduce((sum, driver) => sum + (driver.reviews || 0), 0),
-    };
-  }, [jobs, drivers, query]);
-
+  } = useGetAdminOverviewQuery(undefined, { refetchOnMountOrArgChange: true });
   const registrations = useMemo(() => {
-    let rows;
-    if (overview) {
-      rows =
-        overview.recentRegistrations?.[
-          REGISTRATION_API_GROUP[registrationTab]
-        ] || [];
-    } else if (registrationTab === "Drivers")
-      rows = drivers.map((driver) => ({
-        id: driver.id,
-        name: driver.name,
-        type: driver.registrationType?.includes("Company")
-          ? "Company"
-          : "Individual",
-        contact: driver.phone,
-        joined: driver.joined,
-        status: driver.kyc === "Approved" ? "Approved" : "Pending",
-        route: `/drivers/${driver.id}`,
-        avatar: driver.name,
-      }));
-    else if (registrationTab === "Trucking Companies")
-      rows = companies.map((company) => ({
-        id: company.id,
-        name: company.name,
-        type: "Company",
-        contact: company.contactPhone,
-        joined: company.joined,
-        status: company.verification,
-        route: `/companies/${company.id}`,
-        avatar: company.name,
-      }));
-    else {
-      const names = [
-        ...new Set(
-          jobs
-            .filter(
-              (job) =>
-                registrationTab === "Forwarders" ||
-                job.requestType === "Export",
-            )
-            .map((job) => job.forwarder)
-            .filter(Boolean),
-        ),
-      ];
-      rows = names.map((name, index) => ({
-        id: `PARTNER-${index + 1}`,
-        name,
-        type: registrationTab.slice(0, -1),
-        contact: "Operations contact",
-        joined: "Recent",
-        status: "Pending",
-        route: "/forwarders",
-        avatar: name,
-      }));
-    }
-    return rows
-      .filter(
-        (row) =>
-          !query ||
-          [row.name, row.contact, row.type].some((field) =>
-            field.toLowerCase().includes(query.toLowerCase()),
-          ),
-      )
+    const records = Object.values(overview?.recentRegistrations || {}).flat();
+    return [...new Map(records.map((row) => [row.id, row])).values()]
+      .sort((a, b) => (b.joinedTimestamp ?? -Infinity) - (a.joinedTimestamp ?? -Infinity))
       .slice(0, 5);
-  }, [overview, registrationTab, drivers, companies, jobs, query]);
+  }, [overview]);
 
-  const earningsOverview = revenuePeriod == null ? overview : earningsQuery.currentData;
-  const activityOverview = activityPeriod == null ? overview : activityQuery.currentData;
-  const ratingOverview = ratingPeriod == null ? overview : ratingQuery.currentData;
+  const earningsOverview = overview;
+  const activityOverview = overview;
+  const ratingOverview = overview;
   const apiTripActivity = activityOverview?.tripActivity;
-  const activityCompleted =
-    apiTripActivity?.completed ?? overview?.jobs.completed ?? (overview ? 0 : data.completed);
-  const activityInTransit =
-    apiTripActivity?.inTransit ?? overview?.jobs.active ?? (overview ? 0 : data.activeTrips);
-  const activityCancelled =
-    apiTripActivity?.cancelled ?? overview?.jobs.cancelled ?? (overview ? 0 : data.cancelled);
-  const activityTotal = overview
-    ? apiTripActivity?.totalTrips ?? overview.jobs.total ?? 0
-    : data.completed + data.activeTrips + data.scheduled + data.cancelled || 1;
-  const activityScheduled = overview
-    ? apiTripActivity?.scheduled ?? Math.max(
-        0,
-        (overview.jobs.total ?? 0) -
-          activityCompleted -
-          activityInTransit -
-          activityCancelled,
-      )
-    : data.scheduled;
-  const recentJobs = useMemo(() => {
-    // An empty list is a valid API result. Do not replace it with fixture rows.
-    const rows = overview ? overview.recentJobs : data.recentJobs;
-    if (!query) return rows;
-    const normalizedQuery = query.toLowerCase();
-    return rows.filter((job) =>
-      [job.displayId, job.id, job.routeLabel, job.company, job.cargo, job.truckerName].some((field) =>
-        String(field || "").toLowerCase().includes(normalizedQuery),
-      ),
-    );
-  }, [overview, data.recentJobs, query]);
+  const activityTotal = apiTripActivity?.totalTrips;
+  const recentJobs = overview?.recentJobs || [];
   const activityData = [
-    { label: "Completed", value: activityCompleted, color: "var(--tk-success)" },
-    { label: "In Transit", value: activityInTransit, color: "var(--tk-blue)" },
-    { label: "Scheduled", value: activityScheduled, color: "var(--tk-purple)" },
-    { label: "Cancelled", value: activityCancelled, color: "var(--tk-danger)" },
+    { label: "Completed", value: apiTripActivity?.completed, color: "var(--tk-success)" },
+    { label: "In Transit", value: apiTripActivity?.inTransit, color: "var(--tk-blue)" },
+    { label: "Scheduled", value: apiTripActivity?.scheduled, color: "var(--tk-purple)" },
+    { label: "Cancelled", value: apiTripActivity?.cancelled, color: "var(--tk-danger)" },
   ];
+  const activityKnown = activityData.every((item) => item.value != null);
   const earnings = [
-    {
-      label: "Drivers",
-      value: earningsOverview
-        ? earningsOverview.earningsBreakdown.drivers.percent ?? earningsOverview.earningsBreakdown.drivers.amount ?? 0
-        : data.driverPayouts,
-      amount: earningsOverview ? earningsOverview.earningsBreakdown.drivers.amount : data.driverPayouts,
-      percent: earningsOverview?.earningsBreakdown.drivers.percent,
-      color: "var(--tk-blue)",
-    },
-    {
-      label: "Companies",
-      value: earningsOverview
-        ? earningsOverview.earningsBreakdown.companies.percent ?? earningsOverview.earningsBreakdown.companies.amount ?? 0
-        : data.companyPayouts,
-      amount: earningsOverview ? earningsOverview.earningsBreakdown.companies.amount : data.companyPayouts,
-      percent: earningsOverview?.earningsBreakdown.companies.percent,
-      color: "var(--tk-success)",
-    },
-    {
-      label: "Platform Fees",
-      value: earningsOverview
-        ? earningsOverview.earningsBreakdown.platformFees.percent ?? earningsOverview.earningsBreakdown.platformFees.amount ?? 0
-        : data.platformFees,
-      amount: earningsOverview ? earningsOverview.earningsBreakdown.platformFees.amount : data.platformFees,
-      percent: earningsOverview?.earningsBreakdown.platformFees.percent,
-      color: "var(--tk-warning)",
-    },
-    {
-      label: "Demurrage",
-      value: earningsOverview
-        ? earningsOverview.earningsBreakdown.demurrage.percent ?? earningsOverview.earningsBreakdown.demurrage.amount ?? 0
-        : data.demurrage,
-      amount: earningsOverview ? earningsOverview.earningsBreakdown.demurrage.amount : data.demurrage,
-      percent: earningsOverview?.earningsBreakdown.demurrage.percent,
-      color: "var(--tk-purple)",
-    },
-    {
-      label: "Other Costs",
-      value: earningsOverview
-        ? earningsOverview.earningsBreakdown.otherCosts.percent ?? earningsOverview.earningsBreakdown.otherCosts.amount ?? 0
-        : data.otherCosts,
-      amount: earningsOverview ? earningsOverview.earningsBreakdown.otherCosts.amount : data.otherCosts,
-      percent: earningsOverview?.earningsBreakdown.otherCosts.percent,
-      color: "var(--tk-ink-300)",
-    },
-  ];
-  const routes = overview
-    ? overview.topRoutesByVolume.slice(0, 10).map((route) => ({
-        ...route,
-        pct: route.percentOfTotal == null
-          ? "—"
-          : `${Number(route.percentOfTotal.toFixed(1))}%`,
-      }))
-    : data.routes;
+    { key: "drivers", label: "Drivers", color: "var(--tk-blue)" },
+    { key: "companies", label: "Companies", color: "var(--tk-success)" },
+    { key: "platformFees", label: "Platform Fees", color: "var(--tk-warning)" },
+    { key: "demurrage", label: "Demurrage", color: "var(--tk-purple)" },
+    { key: "otherCosts", label: "Other Costs", color: "var(--tk-ink-300)" },
+  ].map((item) => {
+    const part = earningsOverview?.earningsBreakdown[item.key];
+    return { ...item, value: part?.amount, amount: part?.amount, percent: part?.percent };
+  });
+  const earningsKnown = earnings.every((item) => item.value != null);
+  const routes = (overview?.topRoutesByVolume || []).slice(0, 10).map((route) => ({
+    ...route,
+    pct: route.percentOfTotal == null ? "—" : `${Number(route.percentOfTotal.toFixed(1))}%`,
+  }));
   const rating = ratingOverview?.averageRating.average;
   const reviewCount = ratingOverview?.averageRating.totalReviews;
   const ratingTrend = ratingOverview?.averageRating.trendVsLastMonth;
   const ratingBreakdown = ratingOverview?.averageRating.breakdown;
-  const systemHealth = overview
-    ? HEALTH.map((item) => ({
-        ...item,
-        ...(overview.systemHealth[item.apiKey] || {
-          status: "—",
-          tone: "neutral",
-        }),
-      }))
-    : HEALTH;
-  const trendScale =
-    trendPeriod === "Last 3 Months"
-      ? 0.72
-      : trendPeriod === "This Year"
-        ? 1.35
-        : 1;
-  const trendLabels =
-    trendPeriod === "This Year"
-      ? ["Jan", "Mar", "May", "Jul", "Sep", "Nov"]
-      : ["Apr", "May", "Jun", "Jul", "Aug", "Sep"];
-  const trendBase = Math.max(1, data.totalRevenue / 1000000);
-  const trendSeries = [
-    {
-      name: "Total Revenue",
-      color: "var(--tk-blue)",
-      points: [0.48, 0.59, 0.68, 0.81, 0.92, 1].map((x) =>
-        Math.round(trendBase * x * trendScale),
-      ),
-    },
-    {
-      name: "Platform Fees",
-      color: "var(--tk-success)",
-      points: [0.03, 0.05, 0.07, 0.1, 0.12, 0.14].map((x) =>
-        Math.max(1, Math.round(trendBase * x * trendScale)),
-      ),
-    },
-  ];
+  const systemHealth = HEALTH.map((item) => ({
+    ...item,
+    ...(overview?.systemHealth[item.apiKey] || { status: "—", tone: "neutral" }),
+  }));
 
   if (!overview && (isOverviewLoading || isOverviewFetching || isOverviewUninitialized)) {
     return <DashboardLoading />;
@@ -560,7 +175,7 @@ export function Dashboard() {
           </>
         }
         description={
-          <>Here&apos;s what&apos;s happening on Trukkas{statsPeriodKey === 'all' ? ' overall' : ` in the ${dateRange.toLowerCase()}`}.</>
+          <>Here&apos;s what&apos;s happening on Trukkas overall.</>
         }
         actions={
           <>
@@ -571,233 +186,62 @@ export function Dashboard() {
           </>
         }
       />
-      <StatsPanel period={statsPeriodKey} onPeriodChange={(key) => { setStatsPeriodKey(key); setRevenuePeriod(null); setActivityPeriod(null); setRatingPeriod(null); }}>
+      <StatsPanel>
         <StatCard
           icon="user-round"
           label="Total Drivers"
-          value={overview ? overview.users.drivers.total ?? "—" : drivers.length}
-          delta={overview
-            ? overview.range?.registrations.drivers != null
-              ? String(overview.range.registrations.drivers)
-              : undefined
-            : "12%"}
+          value={overview?.users.drivers.total ?? "—"}
           direction="up"
-          caption={overview
-            ? overview.range?.registrations.drivers != null
-              ? "New in selected period"
-              : undefined
-            : `${drivers.filter((d) => d.registrationType?.includes("Individual")).length} Individual`}
         />
         <StatCard
           icon="building-2"
           tint="green"
           label="Trucking Companies"
-          value={overview ? overview.users.truckers.total ?? "—" : companies.length}
-          delta={overview
-            ? overview.range?.registrations.truckers != null
-              ? String(overview.range.registrations.truckers)
-              : undefined
-            : "8%"}
+          value={overview?.users.truckers.total ?? "—"}
           direction="up"
-          caption={overview
-            ? overview.range?.registrations.truckers != null
-              ? "New in selected period"
-              : "—"
-            : `${companies.filter((c) => c.status === "Active").length} Active`}
         />
         <StatCard
           icon="users-round"
           tint="purple"
           label="Forwarders"
-          value={overview ? overview.users.forwarders.total ?? "—" : data.forwarders}
-          delta={overview
-            ? overview.range?.registrations.forwarders != null
-              ? String(overview.range.registrations.forwarders)
-              : undefined
-            : "15%"}
+          value={overview?.users.forwarders.total ?? "—"}
           direction="up"
-          caption={overview
-            ? overview.range?.registrations.forwarders != null
-              ? "New in selected period"
-              : undefined
-            : `${Math.max(0, data.forwarders - 1)} Active`}
         />
         <StatCard
           icon="box"
           label="Exporters"
-          value={overview
-            ? overview.users.forwarders.exporterCount ?? "—"
-            : data.exporters}
-          delta={overview ? overview.range?.registrations.exporters != null ? String(overview.range.registrations.exporters) : undefined : "10%"}
-          caption={overview ? overview.range?.registrations.exporters != null ? "New in selected period" : undefined : `${data.exporters} Active`}
+          value={overview?.users.forwarders.exporterCount ?? "—"}
         />
         <StatCard
           icon="truck"
           label="Trucks & Fleet"
-          value={overview ? overview.fleet.trucksTotal ?? "—" : trucks.length}
-          delta={overview ? undefined : "6%"}
-          caption={overview
-            ? overview.fleet.trucksActive != null
-              ? `${overview.fleet.trucksActive} Active`
-              : undefined
-            : `${trucks.filter((t) => ["On Trip", "Available"].includes(t.status)).length} Active`}
+          value={overview?.fleet.trucksTotal ?? "—"}
+          caption={overview?.fleet.trucksActive != null ? `${overview.fleet.trucksActive} Active` : undefined}
         />
         <StatCard
           icon="route"
           label="Active Trips"
-          value={overview ? overview.trips.activeTrips ?? "—" : data.activeTrips}
-          delta={overview ? undefined : "14%"}
+          value={overview?.trips.activeTrips ?? "—"}
           caption="Live operations"
         />
         <StatCard
           icon="circle-check"
           tint="green"
           label="Completed Jobs"
-          value={overview ? overview.range?.jobs.completed ?? "—" : data.completed}
-          delta={overview
-            ? overview.range?.jobs.completedTrendPercent != null
-              ? `${Math.abs(overview.range.jobs.completedTrendPercent)}%`
-              : undefined
-            : "18%"}
-          direction={(overview?.range?.jobs.completedTrendPercent ?? 0) < 0 ? "down" : "up"}
-          caption={overview
-            ? overview.range?.jobs.completedTrendPercent != null
-              ? "Compared with previous period"
-              : undefined
-            : `${Math.round((data.completed / (jobs.length || 1)) * 100)}% Success Rate`}
+          value={overview?.jobs.completed ?? "—"}
         />
         <StatCard
           icon="container"
           tint="red"
           label="Containers Moved"
-          value={overview
-            ? overview.range?.jobs.containersMoved ?? "—"
-            : jobs.reduce((sum, job) => sum + (job.requiredTrucks || 1), 0)}
-          delta={overview
-            ? overview.range?.jobs.containersMovedTrendPercent != null
-              ? `${Math.abs(overview.range.jobs.containersMovedTrendPercent)}%`
-              : undefined
-            : "11%"}
-          direction={(overview?.range?.jobs.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
-          caption="Selected period"
+          value={overview?.trips.containersMovedThisMonth ?? "—"}
+          delta={overview?.trips.containersMovedTrendPercent != null ? `${Math.abs(overview.trips.containersMovedTrendPercent)}%` : undefined}
+          direction={(overview?.trips.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
+          caption="This month"
         />
       </StatsPanel>
 
       <section className={styles.financeGrid}>
-        {/* <SectionCard
-          title="Revenue Flow"
-          tooltip="How order value is distributed"
-          action={
-            <MenuSelect
-              id="revenue"
-              value={revenuePeriod ?? dateRange}
-              options={["This Month", "Last Month", "This Year"]}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setRevenuePeriod}
-            />
-          }
-        >
-          <div className={styles.flowTop}>
-            <FlowNode
-              icon="files"
-              tint="green"
-              value={formatNaira(data.totalRevenue)}
-              label="Orders from Forwarders & Exporters"
-              onClick={() => navigate("/jobs")}
-            />
-            <Icon name="arrow-right" size={18} />
-            <FlowNode
-              icon="coins"
-              tint="amber"
-              value={formatNaira(data.platformFees)}
-              label="Platform Fees"
-              note="(8.7%)"
-              onClick={() => navigate("/fees")}
-            />
-            <Icon name="arrow-right" size={18} />
-            <FlowNode
-              icon="wallet"
-              value={formatNaira(data.totalRevenue - data.platformFees)}
-              label="Available for Operations"
-              onClick={() => navigate("/wallets")}
-            />
-          </div>
-          <div className={styles.flowBranches}>
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
-          <div className={styles.flowBottom}>
-            <FlowNode
-              icon="truck"
-              value={formatNaira(data.driverPayouts)}
-              label="Paid to Drivers"
-              note="(73.2%)"
-              onClick={() => navigate("/payouts")}
-            />
-            <FlowNode
-              icon="building-2"
-              value={formatNaira(data.companyPayouts)}
-              label="Paid to Companies"
-              note="(18.4%)"
-              onClick={() => navigate("/payouts")}
-            />
-            <FlowNode
-              icon="clock-3"
-              tint="red"
-              value={formatNaira(data.demurrage)}
-              label="Demurrage"
-              note="(5.6%)"
-              onClick={() => navigate("/demurrage")}
-            />
-            <FlowNode
-              icon="ellipsis"
-              tint="navy"
-              value={formatNaira(data.otherCosts)}
-              label="Other Costs"
-              note="(2.8%)"
-              onClick={() => navigate("/transactions")}
-            />
-          </div>
-        </SectionCard> */}
-
-        {/* <SectionCard
-          title="Revenue Trend"
-          action={
-            <MenuSelect
-              id="trend"
-              value={trendPeriod}
-              options={TREND_PERIODS}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setTrendPeriod}
-            />
-          }
-        >
-          <div className={styles.trendValue}>
-            <strong>{formatNaira(data.totalRevenue)}</strong>
-            <span>↑ 18% vs previous month</span>
-          </div>
-          <LineChart
-            height={170}
-            labels={trendLabels}
-            series={trendSeries}
-            area
-          />
-          <div className={styles.chartLegend}>
-            <span>
-              <i className={styles.blueDot} />
-              Total Revenue
-            </span>
-            <span>
-              <i className={styles.greenDot} />
-              Platform Fees
-            </span>
-          </div>
-        </SectionCard> */}
-
         <SectionCard
           title="Top Routes by Volume"
           action={
@@ -836,85 +280,55 @@ export function Dashboard() {
 
         <SectionCard
           title="Earnings Breakdown"
-          action={
-            <MenuSelect
-              id="earnings"
-              value={revenuePeriod ?? dateRange}
-              options={["This Month", "Last Month", "This Year"]}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setRevenuePeriod}
-            />
-          }
+          description="This month"
         >
-          {revenuePeriod != null && !earningsOverview ? (earningsQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <div className={styles.earnings}>
+          <div className={styles.earnings}>
             <DonutChart
               size={150}
               thickness={20}
-              data={earnings}
-              centerValue={compactNaira(
-                earningsOverview
-                  ? earningsOverview.earningsBreakdown.totalOrders ?? 0
-                  : data.totalRevenue,
-              )}
+              data={earningsKnown ? earnings : []}
+              centerValue={earningsOverview?.earningsBreakdown.totalOrders == null ? "—" : compactNaira(earningsOverview.earningsBreakdown.totalOrders)}
               centerLabel="Total Orders"
             />
             <LegendList
               style={{ width: "100%" }}
+              showShare={earnings.every((item) => item.percent != null)}
               items={earnings.map((item) => ({
                 ...item,
                 display: item.amount == null ? "—" : compactNaira(item.amount),
               }))}
             />
-          </div>}
+          </div>
         </SectionCard>
       </section>
 
       <section className={styles.insightsGrid}>
         <SectionCard
           title="Trip Activity"
-          action={
-            <MenuSelect
-              id="activity"
-              value={activityPeriod ?? dateRange}
-              options={ACTIVITY_PERIODS}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setActivityPeriod}
-            />
-          }
+          description="Last 30 days"
         >
-          {activityPeriod != null && !activityOverview ? (activityQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <div className={styles.activity}>
+          <div className={styles.activity}>
             <DonutChart
               size={150}
               thickness={20}
-              data={activityData}
-              centerValue={activityTotal}
+              data={activityKnown ? activityData : []}
+              centerValue={activityTotal ?? "—"}
               centerLabel="Total Trips"
             />
-            <LegendList style={{ width: "100%" }} items={activityData} />
-          </div>}
+            <LegendList style={{ width: "100%" }} showShare={activityKnown} items={activityData.map((item) => ({ ...item, display: item.value ?? "—" }))} />
+          </div>
         </SectionCard>
         <SectionCard
           title="Average Rating"
-          action={
-            <MenuSelect
-              id="rating"
-              value={ratingPeriod ?? dateRange}
-              options={["All Time", "This Month", "This Year"]}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setRatingPeriod}
-            />
-          }
+          description="All time"
         >
-          {ratingPeriod != null && !ratingOverview ? (ratingQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <StarRating
+          <StarRating
             rating={rating}
             reviews={reviewCount}
             trend={ratingTrend}
             breakdown={ratingBreakdown}
-            allTime={ratingPeriod === "All Time"}
-          />}
+            allTime
+          />
         </SectionCard>
         <SectionCard
           title="System Health"
@@ -965,14 +379,12 @@ export function Dashboard() {
             <DataTable
               rows={recentJobs}
               rowKey={(job) => job.id}
-              onRowClick={overview ? undefined : (job) => navigate(`/jobs/${job.id}`)}
+              onRowClick={(job) => navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`)}
               columns={[
                 {
                   key: "id",
                   header: "Job ID",
-                  render: (job) => job.detailAvailable === false
-                    ? (job.displayId || job.id)
-                    : <Link to={`/jobs/${job.id}`}>{job.displayId || job.id}</Link>,
+                  render: (job) => <Link to={`/jobs/detail?id=${encodeURIComponent(job.id)}`}>{job.displayId || job.id}</Link>,
                 },
                 {
                   key: "route",
@@ -1003,33 +415,13 @@ export function Dashboard() {
           action={
             <button
               className={styles.linkButton}
-              onClick={() =>
-                navigate(
-                  registrationTab === "Drivers"
-                    ? "/drivers"
-                    : registrationTab === "Trucking Companies"
-                      ? "/companies"
-                      : "/forwarders",
-                )
-              }
+              onClick={() => navigate("/users")}
             >
               View all
             </button>
           }
           pad="none"
         >
-          <div className={styles.registrationTabs}>
-            {REGISTRATION_TABS.map((tab) => (
-              <button
-                type="button"
-                key={tab}
-                className={registrationTab === tab ? styles.activeRegTab : ""}
-                onClick={() => setRegistrationTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
           <div className={styles.compactTable}>
             <DataTable
               rows={registrations}
@@ -1117,8 +509,7 @@ function DashboardLoading() {
           <Skeleton width={330} height={14} />
         </div>
         <div className={styles.loadingHeaderControls} aria-hidden="true">
-          <Skeleton width={220} height={42} radius={10} />
-          <Skeleton width={150} height={42} radius={10} />
+          <Skeleton width={350} height={42} radius={10} />
         </div>
       </div>
 
@@ -1174,12 +565,6 @@ function DashboardLoading() {
           <DashboardLoadingTable columns={6} />
         </SectionCard>
         <SectionCard title="Recent Registrations" pad="none">
-          <div className={styles.loadingTabs}>
-            <Skeleton width={72} height={28} radius={8} />
-            <Skeleton width={116} height={28} radius={8} />
-            <Skeleton width={82} height={28} radius={8} />
-            <Skeleton width={72} height={28} radius={8} />
-          </div>
           <DashboardLoadingTable columns={5} />
         </SectionCard>
       </section>
