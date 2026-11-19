@@ -5,7 +5,7 @@ export function WorkspaceSearchResults({ groups, query, loading, unavailable, ac
   const hits = groups.flatMap(group => group.items);
   return <div id="tk-workspace-search-results" role="listbox" className="tk-scroll" style={{
     position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 100, width: '100%', minWidth: 'min(360px, calc(100vw - 24px))',
-    maxHeight: 'min(480px, calc(100dvh - 96px))', overflowY: 'auto', padding: 6, background: '#fff',
+    maxHeight: 'min(480px, calc(100dvh - 96px))', overflowY: 'auto', padding: 6, background: 'var(--tk-surface)',
     borderRadius: 'var(--tk-r-lg)', border: '1px solid var(--tk-line)', boxShadow: 'var(--tk-shadow-menu)',
   }}>
     {loading ? <div className="tk-meta" role="status" style={{ padding: '14px 10px' }}>Searching…</div> : <>

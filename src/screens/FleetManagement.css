@@ -25,7 +25,7 @@
   height: 38px;
   border: 1px solid var(--tk-line-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--tk-surface);
   color: var(--tk-ink-600);
   padding: 0 28px 0 10px;
   font: 500 11px var(--tk-font-sans);
@@ -540,7 +540,7 @@
   position: absolute;
   left: 58%;
   top: 69%;
-  background: #fff;
+  background: var(--tk-surface);
   padding: 4px 8px;
   border-radius: 5px;
   font-size: var(--tk-meta-size);

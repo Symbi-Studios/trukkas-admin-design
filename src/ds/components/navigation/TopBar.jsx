@@ -4,6 +4,7 @@ import { Avatar } from '../core/Avatar.jsx';
 import { SearchField } from '../forms/SearchField.jsx';
 import { DropdownMenu } from '../feedback/DropdownMenu.jsx';
 import { WorkspaceSearchResults } from './WorkspaceSearchResults.jsx';
+import { ThemeToggle } from './ThemeToggle.jsx';
 
 /** Sticky application bar: menu toggle, global search, system health, notifications, account. */
 export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, companies, exporters...',
@@ -57,14 +58,14 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
   return (
     <header className="tk-topbar" style={{
       display: 'flex', alignItems: 'center', gap: 16, height: 'var(--tk-h-topbar)',
-      padding: '0 var(--tk-page-gutter)', background: '#fff',
+      padding: '0 var(--tk-page-gutter)', background: 'var(--tk-surface)',
       borderBottom: '1px solid var(--tk-line)', ...style,
     }}>
       {onMenu && (
         <button className="tk-topbar-menu" type="button" onClick={onMenu} aria-label="Toggle navigation"
           style={{ width: 34, height: 34, display: 'grid', placeItems: 'center', cursor: 'pointer',
                    borderRadius: 'var(--tk-r-sm)', border: '1px solid var(--tk-line-strong)',
-                   background: '#fff', color: 'var(--tk-ink-500)' }}>
+                   background: 'var(--tk-surface)', color: 'var(--tk-ink-500)' }}>
           <Icon name="menu" size={16} />
         </button>
       )}
@@ -95,13 +96,14 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
           {health}
         </span>
       )}
+      <ThemeToggle compact />
       <div ref={accountRef} className="tk-topbar-account-wrap" style={{ position: 'relative' }}>
         <button className="tk-topbar-account" type="button" onClick={() => setAccountOpen((open) => !open)}
           aria-label={`Account menu for ${user}`} aria-haspopup="menu" aria-expanded={accountOpen}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 0,
                    background: accountOpen ? 'var(--tk-surface-sunk)' : 'transparent', cursor: 'pointer',
                    padding: '5px 7px', borderRadius: 'var(--tk-r-md)' }}>
-          <Avatar name={user} square size={34} tone="var(--tk-navy)" />
+          <Avatar name={user} square size={34} tone="var(--tk-account-avatar)" style={{ color: "#fff" }} />
           <span className="tk-topbar-account-copy" style={{ textAlign: 'left', lineHeight: 1.25 }}>
             <span style={{ display: 'block', font: '600 14px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{user}</span>
             <span style={{ display: 'block', font: '400 12px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>{role}</span>

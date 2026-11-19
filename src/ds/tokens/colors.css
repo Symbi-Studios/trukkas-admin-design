@@ -14,6 +14,7 @@
   --tk-orange-ink: #e53510;
 
   --tk-navy: #000822; /* display headings, tooltips, the wallet card */
+  --tk-account-avatar: #000822;
   --tk-navy-raised: #0b1738;
 
   /* ---- Ink ------------------------------------------------------------ */
@@ -83,3 +84,55 @@ a:hover {
   color: var(--tk-blue-hover);
   text-decoration: underline;
 }
+
+/* ---- Dark theme ------------------------------------------------------ */
+/* Applied by setting data-theme="dark" on <html> (ThemeToggle, saved in localStorage). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --tk-blue: #4d7dff;
+  --tk-blue-hover: #6b93ff;
+  --tk-blue-press: #3a6af0;
+  --tk-blue-soft: rgba(77, 125, 255, 0.16);
+  --tk-blue-ink: #a9c0ff;
+  --tk-blue-light: #3a5bb8;
+  --tk-orange-soft: rgba(253, 83, 1, 0.16);
+
+  --tk-navy: #e9edf7;
+  --tk-account-avatar: linear-gradient(135deg, #2f6bff, #0241e8);
+  --tk-navy-raised: #1b2440;
+
+  --tk-ink-900: #f3f5fb;
+  --tk-ink-700: #dde2ef;
+  --tk-ink-500: #b9c0d4;
+  --tk-ink-400: #8f97b0;
+  --tk-ink-300: #687089;
+  --tk-ink-on-navy: #0b1020;
+  --tk-ink-on-navy-dim: #4c5570;
+
+  --tk-surface: #141a2b;
+  --tk-surface-page: #0d1220;
+  --tk-surface-sunk: #1a2134;
+  --tk-surface-cool: #1c2742;
+  --tk-surface-soft: #18203a;
+
+  --tk-line: #232b40;
+  --tk-line-strong: #2e3750;
+  --tk-line-navy: rgba(0, 0, 0, 0.2);
+
+  --tk-success: #3fcf7c;
+  --tk-success-soft: rgba(63, 207, 124, 0.14);
+  --tk-warning: #ffb347;
+  --tk-warning-soft: rgba(255, 179, 71, 0.14);
+  --tk-danger: #ff6b6b;
+  --tk-danger-soft: rgba(255, 107, 107, 0.14);
+  --tk-info: #6b93ff;
+  --tk-info-soft: rgba(77, 125, 255, 0.16);
+  --tk-neutral: #9aa2be;
+  --tk-neutral-soft: rgba(154, 162, 190, 0.14);
+  --tk-purple: #b69bff;
+  --tk-purple-soft: rgba(182, 155, 255, 0.14);
+  --tk-teal: #4fd1db;
+  --tk-teal-soft: rgba(79, 209, 219, 0.14);
+  --tk-viz-track: #232b40;
+}
+:root[data-theme="dark"] img { color-scheme: normal; }

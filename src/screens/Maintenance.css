@@ -37,7 +37,7 @@
   height: 38px;
   border: 1px solid var(--tk-line-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--tk-surface);
   padding: 0 28px 0 11px;
   color: var(--tk-ink-700);
   font: 500 12px var(--tk-font-sans);
@@ -128,7 +128,7 @@
   display: grid;
   place-items: center;
   text-align: center;
-  background: #fff;
+  background: var(--tk-surface);
   color: var(--tk-ink-900);
   font: 700 16px/18px var(--tk-font-sans);
 }
