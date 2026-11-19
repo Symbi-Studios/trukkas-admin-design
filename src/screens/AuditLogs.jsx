@@ -1,4 +1,6 @@
 'use client';
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle, TableToolbar } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -194,7 +196,7 @@ function AuditLogsScreen() {
         <MenuFilter value={draft.action} options={actions} onChange={(action) => setDraft((old) => ({ ...old, action }))} />
         <MenuFilter value={draft.status} options={['All Statuses', 'Success', 'Failed']} onChange={(status) => setDraft((old) => ({ ...old, status }))} />
       <><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); notify('Filters applied'); }}>Apply</Button></></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" onClick={exportRows}>Export</Button></>} />
-      {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={() => { if (canView) logsQuery.refetch(); else notify('Only Super Admins can view audit logs.'); }}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length ? <><DataTable view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
+      {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={() => { if (canView) logsQuery.refetch(); else notify('Only Super Admins can view audit logs.'); }}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length || tableView === 'board' ? <><DataTable boardConfig={BOARD_LAYOUTS.audit} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
         { key: 'date', header: 'Date & Time', width: 126, render: (r) => <span className="audit-cell-stack"><span>{r.date}</span><small>{r.time}</small></span> },
         { key: 'user', header: 'User', width: 175, render: (r) => <span className="audit-user-cell"><Avatar name={r.user} size={32} /><span className="audit-cell-stack"><strong>{r.user}</strong><small>{r.email}</small></span></span> },
         { key: 'action', header: 'Action', width: 200, render: (r) => <Badge tone={ACTION_TONE[r.action]} style={{ maxWidth: '100%', height: 'auto', minHeight: 'var(--tk-h-badge)', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: '16px', padding: '3px 8px' }}>{r.action}</Badge> },

@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -411,7 +413,7 @@ function SettlementsScreen() {
 
           {loading ? (
             <DriverTableLoading columns={10} label="Loading settlements" />
-          ) : knownCollection && filtered.length === 0 ? (
+          ) : knownCollection && filtered.length === 0 && tableView !== 'board' ? (
             <EmptyState
               icon="coins"
               title="No settlements found"
@@ -419,7 +421,7 @@ function SettlementsScreen() {
             />
           ) : (
             <>
-              <DataTable view={tableView} boardGroupBy={(row) => row.status}
+              <DataTable boardConfig={BOARD_LAYOUTS.settlements} boardOnRowClick={(row) => navigate(settlementDetailUrl(row))} view={tableView} boardGroupBy={(row) => row.status}
                 rows={paged}
                 rowKey={(r) => r.key}
                 columns={[

@@ -1,4 +1,6 @@
 'use client';
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -168,7 +170,7 @@ function VerificationScreen() {
 
 
 
-        <DataTable view={tableView} boardGroupBy={(row) => row.status} rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
+        <DataTable boardConfig={BOARD_LAYOUTS.verification} boardOnRowClick={(row) => navigate(verificationDetailUrl(row))} view={tableView} boardGroupBy={(row) => row.status} rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
           columns={[
             { key: 'id', header: 'Verification ID', render: (r) => <CopyableId id={r.id} size="sm" onCopy={() => { if (r.id !== '—') navigator.clipboard?.writeText(r.id).catch(() => unavailable('Copy verification ID')); }} /> },
             { key: 'entity', header: 'Entity / Company', render: (r) => (

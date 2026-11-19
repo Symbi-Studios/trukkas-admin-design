@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle, TableToolbar } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -335,12 +337,12 @@ function BidsOffersContent({owner,role,authenticated}) {
               </button>
             </span></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button></>} />
           {directoryQuery.isFetching ? <BidsTableLoading columns={isCounterTab ? offerCols : cols} /> : !rowsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : isCounterTab ? (
-            <DataTable view={tableView} boardGroupBy={(row) => row.statusCode}
+            <DataTable boardConfig={BOARD_LAYOUTS.offers} boardOnRowClick={viewJob} view={tableView} boardGroupBy={(row) => row.statusCode}
               rows={pageRows.slice((page - 1) * 8, page * 8)}
               rowKey={(r) => r.bidId}
               columns={offerCols}
             />
-          ) : pageRows.length === 0 ? (
+          ) : pageRows.length === 0 && tableView !== 'board' ? (
             <div
               style={{ padding: "40px 18px", textAlign: "center" }}
               className="tk-meta"
@@ -348,7 +350,7 @@ function BidsOffersContent({owner,role,authenticated}) {
               No bids match the current filters.
             </div>
           ) : (
-            <DataTable view={tableView} boardGroupBy={(row) => row.status}
+            <DataTable boardConfig={BOARD_LAYOUTS.bids} boardOnRowClick={viewJob} view={tableView} boardGroupBy={(row) => row.status}
               rows={pageRows.slice((page - 1) * 8, page * 8)}
               columns={cols}
             />

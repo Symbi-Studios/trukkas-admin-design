@@ -210,8 +210,7 @@ function AssigneeCell({ job, size = 32, compact = false }) {
 }
 
 function JobBoard({ jobs, selectedJobId, onOpen, tab }) {
-  const columns = BOARD_COLUMNS.filter(([stage]) =>
-    tab === "All Jobs" ? !["flagged", "rejected"].includes(stage) || jobs.some((job) => job.stage === stage) : TAB_API_VALUE[tab] === stage);
+  const columns = BOARD_COLUMNS;
   return (
     <div className={styles.board}>
       {columns.map(([stage, label, tone]) => {

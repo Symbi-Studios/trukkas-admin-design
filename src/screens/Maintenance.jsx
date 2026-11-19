@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle, TableToolbar } from '../ds.js';
 
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
@@ -487,7 +489,7 @@ export function Maintenance() {
             </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<></>} />
 
 
-            {list.isFetching && !conflicting ? <DriverTableLoading columns={10} label="Loading maintenance" /> : list.error ? <EmptyState icon="wrench" title={maintenanceError(list.error)} /> : <DataTable view={tableView} boardGroupBy={(row) => row.status}
+            {list.isFetching && !conflicting ? <DriverTableLoading columns={10} label="Loading maintenance" /> : list.error ? <EmptyState icon="wrench" title={maintenanceError(list.error)} /> : <DataTable boardConfig={BOARD_LAYOUTS.maintenance} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.id}
               onRowClick={(r) => navigate(maintenanceHref(r.id))}

@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle, TableToolbar, SearchField } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -289,10 +291,10 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
             <TriangulationGoogleMap points={mapPoints} selectedId={selectedId}
               onSelect={(id) => { const trip = trips.find((row) => row.id === id); if (trip) selectTrip(trip); }}
               ariaLabel="Trip locations map" emptyMessage="No truck GPS positions are available for the trips on this page." />
-          </div> : !listLoading && tripsResponse && trips.length > 0 ? <DataTable view={tableView} boardGroupBy={(row) => row.status}
+          </div> : !listLoading && tripsResponse && (trips.length > 0 || tableView === 'board') ? <DataTable boardConfig={BOARD_LAYOUTS.trips} view={tableView} boardGroupBy={(row) => row.status}
           rows={paged} columns={cols} onRowClick={selectTrip} selected={selectedId ? [selectedId] : []}
           boardSelectedKey={selectedId} /> : null}
-        {tableView !== 'map' && !listLoading && tripsResponse && !trips.length && <div className="tk-board-empty">No trips match the current filters.</div>}
+        {tableView === 'list' && !listLoading && tripsResponse && !trips.length && <div className="tk-board-empty">No trips match the current filters.</div>}
         {!listLoading && <Pagination
           page={page}
           pageCount={tripsResponse?.pagination.totalPages ?? 1}

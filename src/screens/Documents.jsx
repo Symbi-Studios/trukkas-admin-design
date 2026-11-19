@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -436,8 +438,8 @@ export function Documents() {
           </div>
         ) : queueError ? (
           <EmptyState icon="file-text" title={queueError.status === 403 ? "Access denied" : "Document queue unavailable"} description="Please try again." />
-        ) : filtered.length ? (
-          <DataTable view={tableView} boardGroupBy={(row) => row.summary.rejected > 0 ? 'Rejected' : row.summary.pending > 0 ? 'Pending' : row.summary.missing > 0 ? 'Missing Documents' : row.summary.approved > 0 ? 'Approved' : 'Unavailable'}
+        ) : filtered.length || tableView === 'board' ? (
+          <DataTable boardConfig={BOARD_LAYOUTS.documents} view={tableView} boardGroupBy={(row) => row.summary.rejected > 0 ? 'Rejected' : row.summary.pending > 0 ? 'Pending' : row.summary.missing > 0 ? 'Missing Documents' : row.summary.approved > 0 ? 'Approved' : 'Unavailable'}
             columns={columns}
             boardColumns={columns.filter((column) => column.key !== 'expand')}
             boardOnRowClick={(row) => { setExpandedJob(expandedJob === row.id ? null : row.id); setSelectedDocs([]); }}

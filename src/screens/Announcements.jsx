@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle, TableToolbar } from '../ds.js';
 
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
@@ -275,7 +277,7 @@ export function Announcements() {
             >
               Export
             </Button></>} />
-          {loading ? <DriverTableLoading columns={7} label="Loading announcements" /> : <DataTable view={tableView} boardGroupBy={(row) => row.st}
+          {loading ? <DriverTableLoading columns={7} label="Loading announcements" /> : <DataTable boardConfig={BOARD_LAYOUTS.announcements} view={tableView} boardGroupBy={(row) => row.st}
             rows={paged}
             rowKey={(r) => r.id}
             onRowClick={(r) => navigate(announcementDetailUrl(r.id))}
@@ -385,7 +387,7 @@ export function Announcements() {
               },
             ]}
           />}
-          {!loading && !paged.length && (
+          {tableView === 'list' && !loading && !paged.length && (
             <div
               style={{
                 padding: 40,

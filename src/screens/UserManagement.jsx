@@ -1,4 +1,6 @@
 'use client';
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -221,7 +223,7 @@ export function UserManagement() {
             trailing={<Button variant="outline" icon="download" onClick={exportUsers}>Export</Button>}
             onClear={resetFilters} />
 
-          {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
+          {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable boardConfig={BOARD_LAYOUTS.users} boardOnRowClick={(row) => navigate(profilePath(row))} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
             columns={[
               { key: 'user', header: 'User', render: (r) => (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', minWidth: 240 }}

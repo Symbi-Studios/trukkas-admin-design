@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle, TableToolbar } from '../ds.js';
 
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
@@ -235,7 +237,7 @@ export function SupportTickets() {
           >
             Reset
           </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<></>} />
-        {loading ? <DriverTableLoading columns={7} label="Loading tickets" /> : <DataTable view={tableView} boardGroupBy={(row) => row.status}
+        {loading ? <DriverTableLoading columns={7} label="Loading tickets" /> : <DataTable boardConfig={BOARD_LAYOUTS.tickets} view={tableView} boardGroupBy={(row) => row.status}
           rows={paged}
           rowKey={(r) => r.id}
           onRowClick={(r) => navigate(ticketDetailUrl(r.id))}

@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -310,7 +312,7 @@ export function RequestedPayouts() {
           </Button>}
         />
 
-        {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading payout requests" /> : filtered.length === 0 ? (
+        {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading payout requests" /> : filtered.length === 0 && tableView !== 'board' ? (
           <EmptyState
             icon="banknote"
             title="No payout requests found"
@@ -318,7 +320,7 @@ export function RequestedPayouts() {
           />
         ) : (
           <>
-            <DataTable view={tableView} boardGroupBy={(row) => row.status}
+            <DataTable boardConfig={BOARD_LAYOUTS.payouts} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.key}
               onRowClick={(r) => navigate(payoutDetailUrl(r))}

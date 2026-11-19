@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle, TableToolbar } from '../ds.js';
 
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
@@ -310,7 +312,7 @@ function DemurrageScreen() {
               >
                 Reset
               </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button></>} />
-            {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable view={tableView} boardGroupBy={(row) => row.status}
+            {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable boardConfig={BOARD_LAYOUTS.demurrage} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.key}
               onRowClick={(r) => navigate(demurrageDetailUrl(r))}

@@ -1,4 +1,6 @@
 "use client";
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -573,7 +575,7 @@ export function Transactions() {
 
           {!ledger && ledgerQuery.isFetching ? <DriverTableLoading columns={10} label="Loading transactions" /> : (
             <>
-              <DataTable view={tableView} boardGroupBy={(row) => row.status}
+              <DataTable boardConfig={BOARD_LAYOUTS.transactions} boardOnRowClick={(row) => navigate(transactionDetailUrl(row.id))} view={tableView} boardGroupBy={(row) => row.status}
                 rows={paged}
                 rowKey={(r) => r.id}
                 selectable
@@ -720,7 +722,7 @@ export function Transactions() {
                   },
                 ]}
               />
-              {filtered.length === 0 && <EmptyState icon="receipt" title="No transactions found"
+              {tableView === 'list' && filtered.length === 0 && <EmptyState icon="receipt" title="No transactions found"
                 description={ledgerQuery.error || statsQuery.error ? getApiErrorMessage(ledgerQuery.error || statsQuery.error) : "Try adjusting your filters or search."} />}
               <Pagination
                 page={page}

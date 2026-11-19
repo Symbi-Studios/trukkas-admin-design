@@ -1,4 +1,6 @@
 'use client';
+import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+
 import { ViewToggle } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -6,7 +8,7 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from '../router.js';
+import { Link, useNavigate } from '../router.js';
 import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader,
@@ -123,6 +125,7 @@ function DriverRowMenu({ anchor, items, onClose }) {
 
 export function Drivers() {
   const [tableView, setTableView] = useState('list');
+  const navigate = useNavigate();
   const [tab, setTab] = useState('All Drivers');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -379,8 +382,8 @@ export function Drivers() {
 
         {driversQuery.isFetching ? <DriverTableLoading />
           : driversQuery.error ? <div style={{ padding: 'var(--tk-card-pad)' }}><Banner tone="danger" title="Unable to load drivers">{adminDriverError(driversQuery.error)}</Banner><Button variant="outline" onClick={() => driversQuery.refetch()}>Retry</Button></div>
-            : filtered.length === 0 ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this page match the selected filters.' : 'No drivers match this search or status.'} />
-              : <DataTable view={tableView} boardGroupBy={(row) => row.status} rows={filtered} rowKey={(driver) => driver.id} columns={[
+            : filtered.length === 0 && tableView !== 'board' ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this page match the selected filters.' : 'No drivers match this search or status.'} />
+              : <DataTable boardConfig={BOARD_LAYOUTS.drivers} boardOnRowClick={(row) => navigate(driverDetailUrl(row.id))} view={tableView} boardGroupBy={(row) => row.status} rows={filtered} rowKey={(driver) => driver.id} columns={[
                 { key: 'name', header: 'Driver', render: driverCell },
                 { key: 'registrationType', header: 'Account Type', render: (driver) => <Badge tone={driver.registrationType === 'Company Driver' ? 'info' : 'neutral'}>{driver.registrationType}</Badge> },
                 { key: 'company', header: 'Company', render: (driver) => driver.company || '—' },
