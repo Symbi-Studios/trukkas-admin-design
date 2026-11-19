@@ -27,9 +27,11 @@ export function DataTable({
   boardGroups,
   boardFields,
   boardSelectedKey,
+  boardColumns,
+  boardOnRowClick,
 }) {
   if (view === "board" && boardGroupBy) {
-    return <DataBoard columns={columns} rows={rows} groupBy={boardGroupBy} groups={boardGroups} fields={boardFields} onRowClick={onRowClick} rowKey={rowKey} selectedKey={boardSelectedKey} />;
+    return <DataBoard columns={boardColumns || columns} rows={rows} groupBy={boardGroupBy} groups={boardGroups} fields={boardFields} onRowClick={boardOnRowClick || onRowClick} rowKey={rowKey} selectedKey={boardSelectedKey} expandedRowKeys={expandedRowKeys} renderExpandedRow={renderExpandedRow} />;
   }
   const allOn = rows.length > 0 && selected.length === rows.length;
   const cell = {
@@ -104,7 +106,7 @@ export function DataTable({
                   borderBottom: "1px solid var(--tk-line)",
                   background: on ? "var(--tk-surface-soft)" : undefined,
                   cursor: onRowClick ? "pointer" : "default",
-                  
+
                 }}
               >
                 {selectable && (

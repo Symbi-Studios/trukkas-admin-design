@@ -2,7 +2,7 @@ import React from "react";
 import { Icon } from "../../assets/icons/Icon.jsx";
 
 /** List / Board switch for a table's toolbar. */
-export function ViewToggle({ value = "list", onChange, style }) {
+export function ViewToggle({ value = "list", onChange, style, map = false }) {
   return (
     <div className="tk-view-toggle" role="group" aria-label="View" style={style}>
       <button type="button" aria-pressed={value === "list"} className={value === "list" ? "active" : undefined} onClick={() => onChange?.("list")}>
@@ -11,6 +11,9 @@ export function ViewToggle({ value = "list", onChange, style }) {
       <button type="button" aria-pressed={value === "board"} className={value === "board" ? "active" : undefined} onClick={() => onChange?.("board")}>
         <Icon name="square-kanban" size={15} /> Board
       </button>
+      {map && <button type="button" aria-pressed={value === 'map'} className={value === 'map' ? 'active' : undefined} onClick={() => onChange?.('map')}>
+        <Icon name="map-pin" size={15} /> Map
+      </button>}
     </div>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
@@ -24,7 +26,6 @@ import {
   Skeleton,
   StatCard,
   TableToolbar,
-  Tabs,
   Textarea,
   StatsPanel,
 } from "../ds.js";
@@ -52,6 +53,8 @@ const requirementLabels = {
 
 const statusOptions = [
   ["All statuses", "all"],
+  ["Needs attention", "all"],
+  ["Missing Documents", "all"],
   ["Awaiting approval", "awaiting"],
   ["Approved", "approved"],
   ["Rejected", "rejected"],
@@ -80,10 +83,10 @@ function DocumentsLoading() {
 }
 
 export function Documents() {
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
-  const [tab, setTab] = useState("all");
   const [searchInput, setSearchInput] = usePageSearchState("", () => setPage(1));
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All document types");
@@ -115,8 +118,8 @@ export function Documents() {
   } = useGetAdminDocReviewQueueQuery({ owner, status: queueStatus, search, page, limit: pageSize,
     documentType: typeFilter === "All document types" ? undefined : typeFilter,
     companyId: companyFilter === "All companies" ? undefined : companyFilter,
-    missing: tab === "missing" ? true : undefined,
-    attentionOnly: tab === "status" && statusFilter === "All statuses",
+    missing: statusFilter === "Missing Documents" ? true : undefined,
+    attentionOnly: statusFilter === "Needs attention",
   }, {
     skip: !authenticated || search !== searchInput.trim(),
     refetchOnMountOrArgChange: true,
@@ -134,7 +137,7 @@ export function Documents() {
   const totals = authenticated && !statsError ? stats?.documentCounts : null;
   const filtered = grouped;
   const loadingQueue = queueFetching || authenticated && search !== searchInput.trim();
-  useEffect(() => { setSelectedDocs([]); setExpandedJob(null); setAction(null); }, [tab, searchInput, typeFilter, statusFilter, companyFilter, page, pageSize, owner]);
+  useEffect(() => { setSelectedDocs([]); setExpandedJob(null); setAction(null); }, [searchInput, typeFilter, statusFilter, companyFilter, page, pageSize, owner]);
 
   const reviewableSelected = selectedDocs.filter(canReviewDocument);
 
@@ -144,7 +147,6 @@ export function Documents() {
     setTypeFilter("All document types");
     setStatusFilter("All statuses");
     setCompanyFilter("All companies");
-    setTab("all");
     setOpenFilter(null);
     setPage(1);
     setSelectedDocs([]);
@@ -344,25 +346,9 @@ export function Documents() {
         />
       </StatsPanel>
 
-      <Tabs
-        value={tab}
-        onChange={(value) => {
-          setTab(value);
-          setPage(1);
-        }}
-        items={[
-          { value: "all", label: "All Jobs" },
-          { value: "type", label: "By Document Type" },
-          { value: "status", label: "By Status" },
-          {
-            value: "missing",
-            label: "Missing Documents",
-            count: totals?.missing ?? undefined,
-          },
-        ]}
-      />
+
       <Card className="documents-table-card" pad="none">
-        <TableToolbar
+        <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
           style={{ padding: "var(--tk-space-4) var(--tk-card-pad-tight)" }}
           search={
             <SearchField
@@ -451,8 +437,10 @@ export function Documents() {
         ) : queueError ? (
           <EmptyState icon="file-text" title={queueError.status === 403 ? "Access denied" : "Document queue unavailable"} description="Please try again." />
         ) : filtered.length ? (
-          <DataTable
+          <DataTable view={tableView} boardGroupBy={(row) => row.summary.rejected > 0 ? 'Rejected' : row.summary.pending > 0 ? 'Pending' : row.summary.missing > 0 ? 'Missing Documents' : row.summary.approved > 0 ? 'Approved' : 'Unavailable'}
             columns={columns}
+            boardColumns={columns.filter((column) => column.key !== 'expand')}
+            boardOnRowClick={(row) => { setExpandedJob(expandedJob === row.id ? null : row.id); setSelectedDocs([]); }}
             rows={filtered}
             rowKey={(row) => row.id}
             coloredHeader
@@ -471,8 +459,8 @@ export function Documents() {
         ) : (
           <EmptyState
             icon="file-text"
-            title={tab === "missing" && grouped.length && grouped.every((row) => row.summary.missing == null) ? "Missing document data unavailable" : "No job documents found"}
-            description={tab === "missing" && grouped.length && grouped.every((row) => row.summary.missing == null) ? "Missing document counts are not available." : "Try adjusting the current filters."}
+            title={statusFilter === "Missing Documents" && grouped.length && grouped.every((row) => row.summary.missing == null) ? "Missing document data unavailable" : "No job documents found"}
+            description={statusFilter === "Missing Documents" && grouped.length && grouped.every((row) => row.summary.missing == null) ? "Missing document counts are not available." : "Try adjusting the current filters."}
           />
         )}
         <Pagination

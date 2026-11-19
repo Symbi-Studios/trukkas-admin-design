@@ -27,6 +27,13 @@ export interface DataTableProps<T = any> {
   tableLayout?: 'auto' | 'fixed';
   expandedRowKeys?: Array<string | number>;
   renderExpandedRow?: (row: T) => React.ReactNode;
+  view?: 'list' | 'board';
+  boardGroupBy?: (row: T) => string | null | undefined;
+  boardGroups?: string[];
+  boardFields?: string[];
+  boardSelectedKey?: string | number;
+  boardColumns?: DataTableColumn<T>[];
+  boardOnRowClick?: (row: T) => void;
   style?: React.CSSProperties;
 }
 export declare function DataTable<T>(props: DataTableProps<T>): JSX.Element;

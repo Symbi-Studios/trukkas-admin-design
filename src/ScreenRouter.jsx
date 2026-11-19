@@ -10,7 +10,6 @@ import { JobsTrips } from './screens/JobsTrips.jsx';
 import { TripsSegments } from './screens/TripsSegments.jsx';
 import { BidsOffers } from './screens/BidsOffers.jsx';
 import { DispatchCenter } from './screens/DispatchCenter.jsx';
-import { LiveTracking } from './screens/LiveTracking.jsx';
 import { Documents } from './screens/Documents.jsx';
 import { ContainerTriangulation } from './screens/ContainerTriangulation.jsx';
 import { Drivers } from './screens/Drivers.jsx';
@@ -57,7 +56,7 @@ const screens = {
   trips: TripsSegments,
   bids: BidsOffers,
   dispatch: DispatchCenter,
-  tracking: LiveTracking,
+  tracking: TripsSegments,
   documents: Documents,
   triangulation: ContainerTriangulation,
   drivers: Drivers,

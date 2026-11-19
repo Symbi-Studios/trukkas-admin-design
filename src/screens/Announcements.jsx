@@ -1,4 +1,6 @@
 "use client";
+import { ViewToggle, TableToolbar } from '../ds.js';
+
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -13,7 +15,6 @@ import {
   StatCard,
   Card,
   SectionCard,
-  Tabs,
   SearchField,
   DataTable,
   Pagination,
@@ -81,10 +82,11 @@ function AnnouncementMenuPortal({ anchor, onClose, children }) {
 }
 
 export function Announcements() {
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
-  const [tab, setTab] = useState("All Announcements"),
+  const tab = 'All Announcements',
     [q, setQ] = usePageSearchState("", () => setPage(1)),
     [status, setStatus] = useState("All"),
     [type, setType] = useState("All"),
@@ -204,23 +206,8 @@ export function Announcements() {
       </StatsPanel>
       <div className="engagement-layout">
         <SectionCard title="" pad="none">
-          <Tabs
-            value={tab}
-            onChange={(v) => {
-              setTab(v);
-              setPage(1);
-            }}
-            items={[
-              "All Announcements",
-              "Published",
-              "Scheduled",
-              "Drafts",
-              "Expired",
-            ]}
-            style={{ padding: "0 16px" }}
-          />
-          <div className="engagement-toolbar">
-            <SearchField
+
+          <TableToolbar search={<><SearchField
               className="search"
               style={{ flex: 1 }}
               placeholder="Search announcements..."
@@ -229,15 +216,7 @@ export function Announcements() {
                 setQ(e.target.value);
                 setPage(1);
               }}
-            />
-            <Button style={{ flex: "0 0 auto" }}
-              variant="outline"
-              icon="download"
-              onClick={() => { if (!available || loading) { window.alert(source.error ? getApiErrorMessage(source.error) : 'The complete announcement results are unavailable for export.'); return; } csvExport(filtered); }}
-            >
-              Export
-            </Button>
-            <CustomSelect
+            /></>} filters={<><CustomSelect
               aria-label="Status filter"
               className="engagement-select"
               value={status}
@@ -251,8 +230,7 @@ export function Announcements() {
                   <option key={x}>{x}</option>
                 ),
               )}
-            </CustomSelect>
-            <CustomSelect
+            </CustomSelect><CustomSelect
               aria-label="Type filter"
               className="engagement-select"
               value={type}
@@ -265,8 +243,7 @@ export function Announcements() {
               {Object.keys(ICON).map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </CustomSelect>
-            <CustomSelect
+            </CustomSelect><CustomSelect
               aria-label="Audience filter"
               className="engagement-select"
               value={audience}
@@ -279,8 +256,7 @@ export function Announcements() {
               {[...new Set((allRows || []).filter((r) => r.audienceKnown).map((r) => r.aud))].map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </CustomSelect>
-            <Button
+            </CustomSelect><Button
               variant="outline"
               icon="rotate-ccw"
               onClick={() => {
@@ -292,9 +268,14 @@ export function Announcements() {
               }}
             >
               Reset
-            </Button>
-          </div>
-          {loading ? <DriverTableLoading columns={7} label="Loading announcements" /> : <DataTable
+            </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<><Button style={{ flex: "0 0 auto" }}
+              variant="outline"
+              icon="download"
+              onClick={() => { if (!available || loading) { window.alert(source.error ? getApiErrorMessage(source.error) : 'The complete announcement results are unavailable for export.'); return; } csvExport(filtered); }}
+            >
+              Export
+            </Button></>} />
+          {loading ? <DriverTableLoading columns={7} label="Loading announcements" /> : <DataTable view={tableView} boardGroupBy={(row) => row.st}
             rows={paged}
             rowKey={(r) => r.id}
             onRowClick={(r) => navigate(announcementDetailUrl(r.id))}
@@ -466,7 +447,7 @@ export function Announcements() {
                 className="engagement-primary"
                 style={{ border: 0, background: "none" }}
                 onClick={() => {
-                  setTab("All Announcements");
+                  setStatus("All");
                   setPage(1);
                 }}
               >

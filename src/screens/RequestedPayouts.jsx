@@ -1,4 +1,6 @@
 "use client";
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -9,7 +11,6 @@ import {
   Button,
   StatCard,
   SectionCard,
-  Tabs,
   TableToolbar,
   SearchField,
   FilterSelect,
@@ -111,6 +112,7 @@ function exportPayouts(rows) {
 }
 
 export function RequestedPayouts() {
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const directoryQuery = useGetAdminPayoutDirectoryQuery();
   const statsQuery = useGetAdminPayoutSummaryQuery();
@@ -123,7 +125,7 @@ export function RequestedPayouts() {
   const directory = directoryQuery.error ? null : directoryQuery.currentData;
   const all = directory?.rows || EMPTY_ROWS;
 
-  const [tab, setTab] = useState("All Requests");
+  const tab = 'All Requests';
   const [q, setQ] = usePageSearchState("", () => setPage(1));
   const [type, setType] = useState("All Payout Types");
   const [status, setStatus] = useState("All Statuses");
@@ -191,17 +193,6 @@ export function RequestedPayouts() {
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const TABS = [
-    {
-      value: "All Requests",
-      label: "All Requests",
-      count: counts["All Requests"] ?? "—",
-    },
-    { value: "Pending", label: "Pending", count: counts.Pending ?? "—" },
-    { value: "Approved", label: "Approved", count: counts.Approved ?? "—" },
-    { value: "Rejected", label: "Rejected", count: counts.Rejected ?? "—" },
-    { value: "Processing", label: "Processing", count: counts.Processing ?? "—" },
-  ];
 
   return (
     <>
@@ -209,7 +200,7 @@ export function RequestedPayouts() {
         crumbs={["Business & Finance", "Payouts", "Requested Payouts"]}
         title="Requested Payouts"
         description="Review and manage all payout requests from drivers and trucking companies."
-        actions={<Button icon="plus" onClick={() => { setTab("Pending"); setStatus("Pending Review"); setType("Company Payout"); setParty("company"); setPage(1); }}>Review Company Payouts</Button>}
+        actions={<Button icon="plus" onClick={() => { setStatus("Pending Review"); setType("Company Payout"); setParty("company"); setPage(1); }}>Review Company Payouts</Button>}
       />
 
       <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
@@ -251,29 +242,9 @@ export function RequestedPayouts() {
       </StatsPanel>
 
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 var(--tk-card-pad)",
-          }}
-        >
-          <Tabs
-            value={tab}
-            onChange={(v) => {
-              setTab(v);
-              setPage(1);
-            }}
-            style={{ border: "none", flex: 1 }}
-            items={TABS}
-          />
-          <Button variant="outline" icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportPayouts(filtered)}>
-            Export
-          </Button>
-        </div>
 
-        <TableToolbar
+
+        <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
           filters={
             <>
               <FilterButton
@@ -326,8 +297,7 @@ export function RequestedPayouts() {
               />
             </>
           }
-          trailing={
-            <SearchField
+          search={<SearchField
               placeholder="Search payout requests..."
               style={{ minWidth: 240 }}
               value={q}
@@ -335,8 +305,9 @@ export function RequestedPayouts() {
                 setQ(e.target.value);
                 setPage(1);
               }}
-            />
-          }
+            />} trailing={<Button variant="outline" icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportPayouts(filtered)}>
+            Export
+          </Button>}
         />
 
         {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading payout requests" /> : filtered.length === 0 ? (
@@ -347,7 +318,7 @@ export function RequestedPayouts() {
           />
         ) : (
           <>
-            <DataTable
+            <DataTable view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.key}
               onRowClick={(r) => navigate(payoutDetailUrl(r))}

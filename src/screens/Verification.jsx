@@ -1,4 +1,6 @@
 'use client';
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -12,7 +14,6 @@ import {
   Button,
   StatCard,
   SectionCard,
-  Tabs,
   TableToolbar,
   SearchField,
   FilterSelect,
@@ -70,6 +71,7 @@ export function Verification() {
 }
 
 function VerificationScreen() {
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const operations = useVerificationOperations();
   const [range, setRange] = useState(null);
@@ -127,7 +129,7 @@ function VerificationScreen() {
   }
 
   function resetFilters() {
-    setEntityType('All Types'); setVerType('All Types'); setStatus('All Statuses');
+    setTab('All Verifications'); setEntityType('All Types'); setVerType('All Types'); setStatus('All Statuses');
     setRiskLevel('All Levels'); setQ(''); setRange(null); setPage(1);
   }
 
@@ -147,7 +149,7 @@ function VerificationScreen() {
       </StatsPanel>
 
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
-        <TableToolbar
+        <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
           search={<SearchField placeholder="Search by company, entity, verification ID..." value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
@@ -155,8 +157,8 @@ function VerificationScreen() {
               onChange={(v) => { if (verificationFilterValue('entityType', v) === undefined) { unavailable(v); return; } setEntityType(v); setPage(1); }} />
             <FilterButton value={verType} options={['All Types', ...VERIFICATION_TYPES]} active={verType !== 'All Types'}
               onChange={(v) => { if (verificationFilterValue('verificationType', v) === undefined) { unavailable(v); return; } setVerType(v); setPage(1); }} />
-            <FilterButton value={status} options={['All Statuses', ...STATUSES]} active={status !== 'All Statuses'}
-              onChange={(v) => { setStatus(v); setPage(1); }} />
+            <FilterButton value={tab === 'Expiring Soon' ? tab : status} options={['All Statuses', ...STATUSES, 'Expiring Soon']} active={status !== 'All Statuses' || tab === 'Expiring Soon'}
+              onChange={(v) => { setStatus(v === 'Expiring Soon' ? 'All Statuses' : v); setTab(v === 'Expiring Soon' ? v : 'All Verifications'); setPage(1); }} />
             <FilterButton value={riskLevel} options={['All Levels', ...RISK_LEVELS]} active={riskLevel !== 'All Levels'}
               onChange={(v) => { setRiskLevel(v); setPage(1); }} />
             <FilterSelect label="Date Range" icon="calendar" active={Boolean(range)} onClick={() => setDateDialog(true)} />
@@ -164,15 +166,9 @@ function VerificationScreen() {
           trailing={<Button variant="outline" icon="download" onClick={exportReport}>Export</Button>}
           onClear={resetFilters} />
 
-        <Tabs value={tab} onChange={(t) => { setTab(t); setPage(1); }} style={{ padding: '0 var(--tk-card-pad)' }}
-          items={['All Verifications',
-            { value: 'Pending', label: 'Pending', count: summary.pending },
-            { value: 'In Review', label: 'In Review', count: summary.inReview },
-            { value: 'Verified', label: 'Verified', count: summary.verified },
-            { value: 'Rejected', label: 'Rejected', count: summary.rejected },
-            { value: 'Expiring Soon', label: 'Expiring Soon', count: summary.expiringSoon }]} />
 
-        <DataTable rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
+
+        <DataTable view={tableView} boardGroupBy={(row) => row.status} rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
           columns={[
             { key: 'id', header: 'Verification ID', render: (r) => <CopyableId id={r.id} size="sm" onCopy={() => { if (r.id !== '—') navigator.clipboard?.writeText(r.id).catch(() => unavailable('Copy verification ID')); }} /> },
             { key: 'entity', header: 'Entity / Company', render: (r) => (

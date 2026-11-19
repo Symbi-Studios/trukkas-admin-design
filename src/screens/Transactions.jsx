@@ -1,4 +1,6 @@
 "use client";
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -11,7 +13,6 @@ import {
   Button,
   StatCard,
   SectionCard,
-  Tabs,
   TableToolbar,
   SearchField,
   Select,
@@ -43,17 +44,6 @@ import styles from "./Transactions.module.css";
 
 const EMPTY_ROWS = [];
 
-const TABS = [
-  "All Transactions",
-  "Escrow",
-  "Payments In",
-  "Payments Out",
-  "Wallet Transfers",
-  "Settlements",
-  "Refunds",
-  "Fees & Charges",
-  "Reversals",
-];
 const PAGE_SIZE = 10;
 
 const STATUS_TONE = {
@@ -244,6 +234,7 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
 }
 
 export function Transactions() {
+  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const ledgerQuery = useGetAdminTransactionLedgerQuery();
   const ledger = ledgerQuery.error ? null : ledgerQuery.currentData;
@@ -258,7 +249,7 @@ export function Transactions() {
   const operationPending = useRef(false);
   const busy = retryState.isLoading || reverseState.isLoading || ledgerQuery.isFetching || detailState.isFetching || receiptState.isFetching || reportState.isFetching;
 
-  const [tab, setTab] = useState("All Transactions");
+  const tab = 'All Transactions';
   const [datePresets] = useState(() => transactionDatePresets());
   const defaultFilters = useMemo(() => ({ ...DEFAULT_FILTERS, from: datePresets[0].from, to: datePresets[0].to }), [datePresets]);
   const filtersRef = useRef(null);
@@ -401,14 +392,12 @@ export function Transactions() {
     const next = { ...defaultFilters, status };
     setDraft(next);
     setApplied(next);
-    setTab("All Transactions");
     setPage(1);
   }
   function resetToAll() {
     setDraft(defaultFilters);
     setApplied(defaultFilters);
     setQ("");
-    setTab("All Transactions");
     setPage(1);
   }
 
@@ -482,23 +471,11 @@ export function Transactions() {
         }}
       >
         <SectionCard title="" pad="none" className={styles.panel} style={{ paddingTop: 4 }}>
-          <Tabs
-            value={tab}
-            onChange={(v) => {
-              setTab(v);
-              setPage(1);
-            }}
-            style={{ padding: "0 var(--tk-card-pad)" }}
-            items={TABS}
-          />
 
-            <div ref={filtersRef} className={styles.filters}
-              style={{
-                display: "grid",
-                gap: 10,
-                padding: "14px var(--tk-card-pad) 0",
-              }}
-            >
+
+
+
+          <TableToolbar filters={<>
               <Select
                 label="Transaction Type"
                 value={draft.type}
@@ -549,9 +526,7 @@ export function Transactions() {
                   setDraft((d) => ({ ...d, party: e.target.value }))
                 }
               />
-            </div>
-
-          <TableToolbar
+             </>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
             search={
               <SearchField
                 placeholder="Search transactions (reference, job ID, customer...)"
@@ -596,15 +571,9 @@ export function Transactions() {
             onClear={filtersActive || q ? handleReset : undefined}
           />
 
-          {!ledger && ledgerQuery.isFetching ? <DriverTableLoading columns={10} label="Loading transactions" /> : filtered.length === 0 ? (
-            <EmptyState
-              icon="receipt"
-              title="No transactions found"
-              description={ledgerQuery.error || statsQuery.error ? getApiErrorMessage(ledgerQuery.error || statsQuery.error) : "Try adjusting your filters or search."}
-            />
-          ) : (
+          {!ledger && ledgerQuery.isFetching ? <DriverTableLoading columns={10} label="Loading transactions" /> : (
             <>
-              <DataTable
+              <DataTable view={tableView} boardGroupBy={(row) => row.status}
                 rows={paged}
                 rowKey={(r) => r.id}
                 selectable
@@ -751,6 +720,8 @@ export function Transactions() {
                   },
                 ]}
               />
+              {filtered.length === 0 && <EmptyState icon="receipt" title="No transactions found"
+                description={ledgerQuery.error || statsQuery.error ? getApiErrorMessage(ledgerQuery.error || statsQuery.error) : "Try adjusting your filters or search."} />}
               <Pagination
                 page={page}
                 pageSize={PAGE_SIZE}

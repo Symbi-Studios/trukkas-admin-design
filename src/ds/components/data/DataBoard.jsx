@@ -10,7 +10,7 @@ const textOf = (value) => (value == null ? "" : String(value)).trim();
  *  - groups: optional ordered group names; groups not listed are appended in the order they appear
  *  - fields: optional column keys to show on cards (default: every column except the first and actions)
  */
-export function DataBoard({ columns = [], rows = [], groupBy, groups, fields, onRowClick, rowKey = (r, i) => r.id ?? i, selectedKey, emptyLabel = "Nothing here" }) {
+export function DataBoard({ columns = [], rows = [], groupBy, groups, fields, onRowClick, rowKey = (r, i) => r.id ?? i, selectedKey, expandedRowKeys = [], renderExpandedRow, emptyLabel = "Nothing here" }) {
   const label = (row) => textOf(groupBy?.(row)) || "Other";
   const order = [...(groups || [])];
   rows.forEach((row) => { const g = label(row); if (!order.includes(g)) order.push(g); });
@@ -33,7 +33,7 @@ export function DataBoard({ columns = [], rows = [], groupBy, groups, fields, on
                 const key = rowKey(row, i);
                 const Tag = onRowClick ? "button" : "div";
                 return (
-                  <Tag key={key} type={onRowClick ? "button" : undefined}
+                  <React.Fragment key={key}><Tag type={onRowClick ? "button" : undefined}
                     className={"tk-board-card" + (selectedKey != null && selectedKey === key ? " active" : "")}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}>
                     {titleColumn && <span className="tk-board-card-title">{render(titleColumn, row)}</span>}
@@ -47,7 +47,7 @@ export function DataBoard({ columns = [], rows = [], groupBy, groups, fields, on
                         ))}
                       </dl>
                     )}
-                  </Tag>
+                  </Tag>{expandedRowKeys.includes(key) && renderExpandedRow?.(row)}</React.Fragment>
                 );
               })}
             </div>

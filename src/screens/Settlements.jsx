@@ -1,4 +1,6 @@
 "use client";
+import { ViewToggle } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -118,6 +120,7 @@ export function Settlements() {
   return <SettlementsScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
 }
 function SettlementsScreen() {
+  const [tableView, setTableView] = useState('list');
   const filtersRef = useRef(null);
   const navigate = useNavigate();
   const [tab, setTab] = useState("All Settlements");
@@ -282,7 +285,7 @@ function SettlementsScreen() {
           />
 
           <div ref={filtersRef} style={{ scrollMarginTop: 80 }}>
-          <TableToolbar
+          <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
             filters={
               <>
                 <FilterButton
@@ -416,7 +419,7 @@ function SettlementsScreen() {
             />
           ) : (
             <>
-              <DataTable
+              <DataTable view={tableView} boardGroupBy={(row) => row.status}
                 rows={paged}
                 rowKey={(r) => r.key}
                 columns={[

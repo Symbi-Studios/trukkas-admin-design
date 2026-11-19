@@ -1,4 +1,6 @@
 "use client";
+import { ViewToggle, TableToolbar } from '../ds.js';
+
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
@@ -113,6 +115,7 @@ export function BidsOffers() {
   return <BidsOffersContent key={[owner,role,authenticated].join(":")} owner={owner} role={role} authenticated={authenticated}/>;
 }
 function BidsOffersContent({owner,role,authenticated}) {
+  const [tableView, setTableView] = useState('list');
   const navigate=useNavigate();
   const [tab,setTab]=useState("Bid Overview"),[page,setPage]=useState(1),[q,setQ]=usePageSearchState("", () => setPage(1));
   const [statusFilter,setStatusFilter]=useState("All Status"),[dateKey,setDateKey]=useState("week");
@@ -312,35 +315,27 @@ function BidsOffersContent({owner,role,authenticated}) {
 
       <div className="bids-layout">
         <div className="ops-panel">
-          <div className="ops-panel-head">
-            <div>
-              <h3>{tab}</h3>
-            </div>
-            <span style={{ position: "relative" }}>
+          <TableToolbar search={<><SearchField
+              placeholder="Search by Job ID, Company, Truck, Driver..."
+              style={{ width: 260 }}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            /></>} filters={<><span style={{ position: "relative" }}>
               <button
                 className="date-button"
                 onClick={(event) => openMenu(event, "panel")}
               >
                 {statusFilter}⌄
               </button>
-            </span>
-            <SearchField
-              placeholder="Search by Job ID, Company, Truck, Driver..."
-              style={{ width: 260 }}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-            <span style={{ position: "relative" }}>
+            </span><span style={{ position: "relative" }}>
               <button className="date-button" onClick={(event) => openMenu(event, "date")}>
                 <Icon name="calendar" size={15} />
                 <span>{dateRange}</span>
                 <Icon name="chevron-down" size={14} />
               </button>
-            </span>
-            <Button variant="outline" icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button>
-          </div>
+            </span></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button></>} />
           {directoryQuery.isFetching ? <BidsTableLoading columns={isCounterTab ? offerCols : cols} /> : !rowsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : isCounterTab ? (
-            <DataTable
+            <DataTable view={tableView} boardGroupBy={(row) => row.statusCode}
               rows={pageRows.slice((page - 1) * 8, page * 8)}
               rowKey={(r) => r.bidId}
               columns={offerCols}
@@ -353,7 +348,7 @@ function BidsOffersContent({owner,role,authenticated}) {
               No bids match the current filters.
             </div>
           ) : (
-            <DataTable
+            <DataTable view={tableView} boardGroupBy={(row) => row.status}
               rows={pageRows.slice((page - 1) * 8, page * 8)}
               columns={cols}
             />
