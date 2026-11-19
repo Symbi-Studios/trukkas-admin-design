@@ -235,3 +235,22 @@
     animation-duration: 7s;
   }
 }
+
+/* Dark theme */
+:global(:root[data-theme="dark"]) .screen {
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(77, 124, 255, 0.16), transparent 40%),
+    linear-gradient(145deg, #0b1020 0%, var(--tk-surface-page) 50%, #0f1730 100%);
+}
+:global(:root[data-theme="dark"]) .screen::before,
+:global(:root[data-theme="dark"]) .screen::after { border-color: rgba(120, 156, 255, 0.08); }
+:global(:root[data-theme="dark"]) .glow { background: radial-gradient(circle, rgba(77, 124, 255, 0.10), transparent 68%); }
+:global(:root[data-theme="dark"]) .panel {
+  border-color: var(--tk-line);
+  background: color-mix(in srgb, var(--tk-surface) 86%, transparent);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), 0 3px 10px rgba(0, 0, 0, 0.25);
+}
+:global(:root[data-theme="dark"]) .orbit { border-color: rgba(120, 156, 255, 0.16); border-top-color: var(--tk-blue); border-right-color: rgba(120, 156, 255, 0.6); }
+:global(:root[data-theme="dark"]) .orbitAccent { border-color: rgba(120, 156, 255, 0.22); }
+:global(:root[data-theme="dark"]) .logoMark { box-shadow: 0 5px 18px rgba(0, 0, 0, 0.35); }
+:global(:root[data-theme="dark"]) .footerDot { box-shadow: 0 0 0 4px rgba(120, 156, 255, 0.14); }

@@ -16,7 +16,7 @@ export function Avatar({ name = '', src, size = 36, square = false, tone, style 
       width: size, height: size, flex: '0 0 auto',
       borderRadius: square ? 'var(--tk-r-sm)' : 'var(--tk-r-pill)',
       background: bg, overflow: 'hidden',
-      color: '#fff', display: 'grid', placeItems: 'center',
+      color: String(bg).includes('--tk-navy') ? 'var(--tk-ink-on-navy)' : '#fff', display: 'grid', placeItems: 'center',
       font: `600 ${Math.round(size * 0.36)}px/1 var(--tk-font-sans)`, ...style,
     }}>{showImage ? <img src={src} alt="" onError={() => setFailedSrc(src)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}</div>
   );

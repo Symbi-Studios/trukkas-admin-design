@@ -103,7 +103,7 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
           style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 0,
                    background: accountOpen ? 'var(--tk-surface-sunk)' : 'transparent', cursor: 'pointer',
                    padding: '5px 7px', borderRadius: 'var(--tk-r-md)' }}>
-          <Avatar name={user} square size={34} tone="var(--tk-navy)" />
+          <Avatar name={user} square size={34} tone="var(--tk-account-avatar)" style={{ color: "#fff" }} />
           <span className="tk-topbar-account-copy" style={{ textAlign: 'left', lineHeight: 1.25 }}>
             <span style={{ display: 'block', font: '600 14px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{user}</span>
             <span style={{ display: 'block', font: '400 12px var(--tk-font-sans)', color: 'var(--tk-ink-400)' }}>{role}</span>

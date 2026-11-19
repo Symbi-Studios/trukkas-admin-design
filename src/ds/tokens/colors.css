@@ -14,6 +14,7 @@
   --tk-orange-ink: #e53510;
 
   --tk-navy: #000822; /* display headings, tooltips, the wallet card */
+  --tk-account-avatar: #000822;
   --tk-navy-raised: #0b1738;
 
   /* ---- Ink ------------------------------------------------------------ */
@@ -97,6 +98,7 @@ a:hover {
   --tk-orange-soft: rgba(253, 83, 1, 0.16);
 
   --tk-navy: #e9edf7;
+  --tk-account-avatar: linear-gradient(135deg, #2f6bff, #0241e8);
   --tk-navy-raised: #1b2440;
 
   --tk-ink-900: #f3f5fb;
