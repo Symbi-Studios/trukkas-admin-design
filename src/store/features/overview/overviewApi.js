@@ -44,6 +44,7 @@ function mapRegistrations(records, type, route) {
           type: record?.type || type,
           contact: record?.contact || '—',
           joined: formatJoinedAt(record?.joinedAt),
+          joinedTimestamp: Number.isFinite(Date.parse(record?.joinedAt)) ? Date.parse(record.joinedAt) : null,
           status: formatStatus(record?.status),
           route,
           avatar: name,

@@ -1,8 +1,7 @@
 "use client";
-import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate } from "../router.js";
 import {
   Avatar,
@@ -11,8 +10,6 @@ import {
   Card,
   DataTable,
   DonutChart,
-  DropdownMenu,
-  FilterSelect,
   Icon,
   LegendList,
   PageHeader,
@@ -22,78 +19,12 @@ import {
   StatCard,
   StatsPanel,
 } from "../ds.js";
-import { DEFAULT_STATS_PERIOD, STATS_PERIODS, statsPeriod, statsPeriodDates } from '../domain/statsPeriod.js';
 import { formatNaira } from "../mock/format.js";
 import { statusTone } from "./JobDetail.jsx";
 import { useGetAdminOverviewQuery } from "../store/features/overview/overviewApi.js";
 import styles from "./Dashboard.module.css";
 
-const DASHBOARD_STATS_PERIODS = STATS_PERIODS.filter((period) => period.key !== '1d');
-const ACTIVITY_PERIODS = ["Last 30 days", "Last 90 days", "This year"];
-function dashboardDates(value) {
-  if (value === 'All Time') return undefined;
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  const field = (key) => Number(parts.find((part) => part.type === key).value);
-  const today = new Date(Date.UTC(field('year'), field('month') - 1, field('day')));
-  const end = new Date(today);
-  const start = new Date(today);
-  if (value === 'Last 30 days') start.setUTCDate(start.getUTCDate() - 29);
-  else if (value === 'Last 90 days') start.setUTCDate(start.getUTCDate() - 89);
-  else if (value === 'This year' || value === 'This Year') start.setUTCMonth(0, 1);
-  else if (value === 'This Month') start.setUTCDate(1);
-  else if (value === 'Last Month') { start.setUTCDate(1); end.setTime(start.getTime() - 86400000); start.setTime(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1)); }
-  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
-}
-const REGISTRATION_TABS = [
-  "Drivers",
-  "Trucking Companies",
-  "Forwarders",
-  "Exporters",
-];
-const REGISTRATION_API_GROUP = {
-  Drivers: "drivers",
-  "Trucking Companies": "truckingCompanies",
-  Forwarders: "forwarders",
-  Exporters: "exporters",
-};
 const compactNaira = (value) => formatNaira(value);
-
-function MenuSelect({
-  id,
-  value,
-  options,
-  openMenu,
-  setOpenMenu,
-  onChange,
-  icon,
-}) {
-  return (
-    <span className={`${styles.menuWrap} ${id === 'date' ? styles.dateMenu : ''}`}>
-      <FilterSelect
-        label={value}
-        icon={icon}
-        active={openMenu === id}
-        onClick={() => setOpenMenu(openMenu === id ? null : id)}
-        style={id === 'date' ? { maxWidth: '100%', width: '100%', justifyContent: 'center' } : undefined}
-      />
-      {openMenu === id && (
-        <span className={styles.menu}>
-          <DropdownMenu
-            width={220}
-            items={options.map((option) => ({
-              label: option,
-              icon: option === value ? "check" : undefined,
-              onClick: () => {
-                onChange(option);
-                setOpenMenu(null);
-              },
-            }))}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function StarRating({ rating, reviews, trend, breakdown, allTime }) {
   const rows = [5, 4, 3, 2, 1].map((stars) => ({
@@ -175,12 +106,6 @@ const HEALTH = [
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
-  const dateRange = statsPeriod(statsPeriodKey).summary;
-  const statsDates = useMemo(() => statsPeriodDates(statsPeriodKey), [statsPeriodKey]);
-  const [activityPeriod, setActivityPeriod] = useState(null);
-  const [revenuePeriod, setRevenuePeriod] = useState(null);
-  const [ratingPeriod, setRatingPeriod] = useState(null);
   const {
     currentData: overview,
     isLoading: isOverviewLoading,
@@ -188,37 +113,20 @@ export function Dashboard() {
     isUninitialized: isOverviewUninitialized,
     isError: isOverviewError,
     refetch: refetchOverview,
-  } = useGetAdminOverviewQuery(statsDates.from ? statsDates : undefined, { refetchOnMountOrArgChange: true });
-  const earningsQuery = useGetAdminOverviewQuery(dashboardDates(revenuePeriod), { skip: revenuePeriod == null, refetchOnMountOrArgChange: true });
-  const activityQuery = useGetAdminOverviewQuery(dashboardDates(activityPeriod), { skip: activityPeriod == null, refetchOnMountOrArgChange: true });
-  const ratingQuery = useGetAdminOverviewQuery(dashboardDates(ratingPeriod), { skip: ratingPeriod == null, refetchOnMountOrArgChange: true });
-  const [registrationTab, setRegistrationTab] = useState("Drivers");
-  const [openMenu, setOpenMenu] = useState(null);
-  const [query, setQuery] = usePageSearchState("");
-
-
+  } = useGetAdminOverviewQuery(undefined, { refetchOnMountOrArgChange: true });
   const registrations = useMemo(() => {
-    const rows = overview?.recentRegistrations?.[REGISTRATION_API_GROUP[registrationTab]] || [];
-    return rows.filter((row) => !query || [row.name, row.contact, row.type].some((field) =>
-      String(field || "").toLowerCase().includes(query.toLowerCase()),
-    )).slice(0, 5);
-  }, [overview, registrationTab, query]);
+    const records = Object.values(overview?.recentRegistrations || {}).flat();
+    return [...new Map(records.map((row) => [row.id, row])).values()]
+      .sort((a, b) => (b.joinedTimestamp ?? -Infinity) - (a.joinedTimestamp ?? -Infinity))
+      .slice(0, 5);
+  }, [overview]);
 
-  const earningsOverview = revenuePeriod == null ? overview : earningsQuery.currentData;
-  const activityOverview = activityPeriod == null ? overview : activityQuery.currentData;
-  const ratingOverview = ratingPeriod == null ? overview : ratingQuery.currentData;
+  const earningsOverview = overview;
+  const activityOverview = overview;
+  const ratingOverview = overview;
   const apiTripActivity = activityOverview?.tripActivity;
   const activityTotal = apiTripActivity?.totalTrips;
-  const recentJobs = useMemo(() => {
-    const rows = overview?.recentJobs || [];
-    if (!query) return rows;
-    const normalizedQuery = query.toLowerCase();
-    return rows.filter((job) =>
-      [job.displayId, job.id, job.routeLabel, job.company, job.cargo, job.truckerName].some((field) =>
-        String(field || "").toLowerCase().includes(normalizedQuery),
-      ),
-    );
-  }, [overview, query]);
+  const recentJobs = overview?.recentJobs || [];
   const activityData = [
     { label: "Completed", value: apiTripActivity?.completed, color: "var(--tk-success)" },
     { label: "In Transit", value: apiTripActivity?.inTransit, color: "var(--tk-blue)" },
@@ -267,7 +175,7 @@ export function Dashboard() {
           </>
         }
         description={
-          <>Here&apos;s what&apos;s happening on Trukkas{statsPeriodKey === 'all' ? ' overall' : ` in the ${dateRange.toLowerCase()}`}.</>
+          <>Here&apos;s what&apos;s happening on Trukkas overall.</>
         }
         actions={
           <>
@@ -278,39 +186,31 @@ export function Dashboard() {
           </>
         }
       />
-      <StatsPanel periods={DASHBOARD_STATS_PERIODS} period={statsPeriodKey} onPeriodChange={(key) => { setStatsPeriodKey(key); setRevenuePeriod(null); setActivityPeriod(null); setRatingPeriod(null); }}>
+      <StatsPanel>
         <StatCard
           icon="user-round"
           label="Total Drivers"
           value={overview?.users.drivers.total ?? "—"}
-          delta={overview?.range?.registrations.drivers != null ? String(overview.range.registrations.drivers) : undefined}
           direction="up"
-          caption={overview?.range?.registrations.drivers != null ? "New in selected period" : undefined}
         />
         <StatCard
           icon="building-2"
           tint="green"
           label="Trucking Companies"
           value={overview?.users.truckers.total ?? "—"}
-          delta={overview?.range?.registrations.truckers != null ? String(overview.range.registrations.truckers) : undefined}
           direction="up"
-          caption={overview?.range?.registrations.truckers != null ? "New in selected period" : "—"}
         />
         <StatCard
           icon="users-round"
           tint="purple"
           label="Forwarders"
           value={overview?.users.forwarders.total ?? "—"}
-          delta={overview?.range?.registrations.forwarders != null ? String(overview.range.registrations.forwarders) : undefined}
           direction="up"
-          caption={overview?.range?.registrations.forwarders != null ? "New in selected period" : undefined}
         />
         <StatCard
           icon="box"
           label="Exporters"
           value={overview?.users.forwarders.exporterCount ?? "—"}
-          delta={overview?.range?.registrations.exporters != null ? String(overview.range.registrations.exporters) : undefined}
-          caption={overview?.range?.registrations.exporters != null ? "New in selected period" : undefined}
         />
         <StatCard
           icon="truck"
@@ -328,19 +228,16 @@ export function Dashboard() {
           icon="circle-check"
           tint="green"
           label="Completed Jobs"
-          value={(statsPeriodKey === 'all' ? overview?.jobs.completed : overview?.range?.jobs.completed) ?? "—"}
-          delta={overview?.range?.jobs.completedTrendPercent != null ? `${Math.abs(overview.range.jobs.completedTrendPercent)}%` : undefined}
-          direction={(overview?.range?.jobs.completedTrendPercent ?? 0) < 0 ? "down" : "up"}
-          caption={overview?.range?.jobs.completedTrendPercent != null ? "Compared with previous period" : undefined}
+          value={overview?.jobs.completed ?? "—"}
         />
         <StatCard
           icon="container"
           tint="red"
           label="Containers Moved"
-          value={overview?.range?.jobs.containersMoved ?? "—"}
-          delta={overview?.range?.jobs.containersMovedTrendPercent != null ? `${Math.abs(overview.range.jobs.containersMovedTrendPercent)}%` : undefined}
-          direction={(overview?.range?.jobs.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
-          caption="Selected period"
+          value={overview?.trips.containersMovedThisMonth ?? "—"}
+          delta={overview?.trips.containersMovedTrendPercent != null ? `${Math.abs(overview.trips.containersMovedTrendPercent)}%` : undefined}
+          direction={(overview?.trips.containersMovedTrendPercent ?? 0) < 0 ? "down" : "up"}
+          caption="This month"
         />
       </StatsPanel>
 
@@ -383,18 +280,9 @@ export function Dashboard() {
 
         <SectionCard
           title="Earnings Breakdown"
-          action={
-            <MenuSelect
-              id="earnings"
-              value={revenuePeriod ?? (statsPeriodKey === "all" ? "This Month" : dateRange)}
-              options={["This Month", "Last Month", "This Year"]}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setRevenuePeriod}
-            />
-          }
+          description="This month"
         >
-          {revenuePeriod != null && !earningsOverview ? (earningsQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <div className={styles.earnings}>
+          <div className={styles.earnings}>
             <DonutChart
               size={150}
               thickness={20}
@@ -410,25 +298,16 @@ export function Dashboard() {
                 display: item.amount == null ? "—" : compactNaira(item.amount),
               }))}
             />
-          </div>}
+          </div>
         </SectionCard>
       </section>
 
       <section className={styles.insightsGrid}>
         <SectionCard
           title="Trip Activity"
-          action={
-            <MenuSelect
-              id="activity"
-              value={activityPeriod ?? (statsPeriodKey === "all" ? "Last 30 days" : dateRange)}
-              options={ACTIVITY_PERIODS}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setActivityPeriod}
-            />
-          }
+          description="Last 30 days"
         >
-          {activityPeriod != null && !activityOverview ? (activityQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <div className={styles.activity}>
+          <div className={styles.activity}>
             <DonutChart
               size={150}
               thickness={20}
@@ -437,28 +316,19 @@ export function Dashboard() {
               centerLabel="Total Trips"
             />
             <LegendList style={{ width: "100%" }} showShare={activityKnown} items={activityData.map((item) => ({ ...item, display: item.value ?? "—" }))} />
-          </div>}
+          </div>
         </SectionCard>
         <SectionCard
           title="Average Rating"
-          action={
-            <MenuSelect
-              id="rating"
-              value={ratingPeriod ?? (statsPeriodKey === "all" ? "All Time" : dateRange)}
-              options={["All Time", "This Month", "This Year"]}
-              openMenu={openMenu}
-              setOpenMenu={setOpenMenu}
-              onChange={setRatingPeriod}
-            />
-          }
+          description="All time"
         >
-          {ratingPeriod != null && !ratingOverview ? (ratingQuery.isError ? <span className="tk-meta">—</span> : <Skeleton height={150} />) : <StarRating
+          <StarRating
             rating={rating}
             reviews={reviewCount}
             trend={ratingTrend}
             breakdown={ratingBreakdown}
-            allTime={ratingPeriod === "All Time" || ratingPeriod == null && statsPeriodKey === "all"}
-          />}
+            allTime
+          />
         </SectionCard>
         <SectionCard
           title="System Health"
@@ -545,33 +415,13 @@ export function Dashboard() {
           action={
             <button
               className={styles.linkButton}
-              onClick={() =>
-                navigate(
-                  registrationTab === "Drivers"
-                    ? "/drivers"
-                    : registrationTab === "Trucking Companies"
-                      ? "/companies"
-                      : "/forwarders",
-                )
-              }
+              onClick={() => navigate("/users")}
             >
               View all
             </button>
           }
           pad="none"
         >
-          <div className={styles.registrationTabs}>
-            {REGISTRATION_TABS.map((tab) => (
-              <button
-                type="button"
-                key={tab}
-                className={registrationTab === tab ? styles.activeRegTab : ""}
-                onClick={() => setRegistrationTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
           <div className={styles.compactTable}>
             <DataTable
               rows={registrations}
@@ -659,8 +509,7 @@ function DashboardLoading() {
           <Skeleton width={330} height={14} />
         </div>
         <div className={styles.loadingHeaderControls} aria-hidden="true">
-          <Skeleton width={220} height={42} radius={10} />
-          <Skeleton width={150} height={42} radius={10} />
+          <Skeleton width={350} height={42} radius={10} />
         </div>
       </div>
 
@@ -716,12 +565,6 @@ function DashboardLoading() {
           <DashboardLoadingTable columns={6} />
         </SectionCard>
         <SectionCard title="Recent Registrations" pad="none">
-          <div className={styles.loadingTabs}>
-            <Skeleton width={72} height={28} radius={8} />
-            <Skeleton width={116} height={28} radius={8} />
-            <Skeleton width={82} height={28} radius={8} />
-            <Skeleton width={72} height={28} radius={8} />
-          </div>
           <DashboardLoadingTable columns={5} />
         </SectionCard>
       </section>
