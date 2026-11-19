@@ -84,6 +84,7 @@ function AnnouncementMenuPortal({ anchor, onClose, children }) {
 }
 
 export function Announcements() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
@@ -270,14 +271,14 @@ export function Announcements() {
               }}
             >
               Reset
-            </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<><Button style={{ flex: "0 0 auto" }}
+            </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<><Button style={{ flex: "0 0 auto" }}
               variant="outline"
               icon="download"
               onClick={() => { if (!available || loading) { window.alert(source.error ? getApiErrorMessage(source.error) : 'The complete announcement results are unavailable for export.'); return; } csvExport(filtered); }}
             >
               Export
             </Button></>} />
-          {loading ? <DriverTableLoading columns={7} label="Loading announcements" /> : <DataTable boardConfig={BOARD_LAYOUTS.announcements} view={tableView} boardGroupBy={(row) => row.st}
+          {loading ? <DriverTableLoading columns={7} label="Loading announcements" /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.announcements} view={tableView} boardGroupBy={(row) => row.st}
             rows={paged}
             rowKey={(r) => r.id}
             onRowClick={(r) => navigate(announcementDetailUrl(r.id))}

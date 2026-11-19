@@ -97,6 +97,7 @@ function csv(content) {
   URL.revokeObjectURL(u);
 }
 export function Maintenance() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const authenticated = useSelector(state => Boolean(state.auth.accessToken));
@@ -486,10 +487,10 @@ export function Maintenance() {
               }}
             >
               Reset
-            </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<></>} />
+            </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<></>} />
 
 
-            {list.isFetching && !conflicting ? <DriverTableLoading columns={10} label="Loading maintenance" /> : list.error ? <EmptyState icon="wrench" title={maintenanceError(list.error)} /> : <DataTable boardConfig={BOARD_LAYOUTS.maintenance} view={tableView} boardGroupBy={(row) => row.status}
+            {list.isFetching && !conflicting ? <DriverTableLoading columns={10} label="Loading maintenance" /> : list.error ? <EmptyState icon="wrench" title={maintenanceError(list.error)} /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.maintenance} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.id}
               onRowClick={(r) => navigate(maintenanceHref(r.id))}

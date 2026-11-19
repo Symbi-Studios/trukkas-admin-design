@@ -75,6 +75,7 @@ function ForwarderCell({ f }) {
 }
 
 export function Forwarders() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const authenticated = useSelector(state => Boolean(state.auth.accessToken));
@@ -215,7 +216,7 @@ export function Forwarders() {
 
       <div className="fw-layout">
         <SectionCard pad="none">
-<TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
+<TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           search={
             <SearchField
               placeholder="Search by name, forwarder ID, email, phone..."
@@ -361,7 +362,7 @@ export function Forwarders() {
           trailing={<Button variant="outline" icon="download" disabled={!directoryQuery.currentData || Boolean(directoryQuery.error)} onClick={exportList}>Export</Button>}
         />
 
-          {directoryQuery.error ? <EmptyState icon="users" title="Forwarder list unavailable" description="Retry to load the directory." /> : !filtered.length && tableView !== 'board' ? <EmptyState icon="users" title="No forwarders found" description="Try different filters or search terms." /> : <DataTable boardConfig={BOARD_LAYOUTS.forwarders} boardOnRowClick={(row) => navigate(`/forwarders/detail?id=${encodeURIComponent(row.id)}`)} view={tableView} boardGroupBy={(row) => row.status}
+          {directoryQuery.error ? <EmptyState icon="users" title="Forwarder list unavailable" description="Retry to load the directory." /> : !filtered.length && tableView !== 'board' ? <EmptyState icon="users" title="No forwarders found" description="Try different filters or search terms." /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.forwarders} boardOnRowClick={(row) => navigate(`/forwarders/detail?id=${encodeURIComponent(row.id)}`)} view={tableView} boardGroupBy={(row) => row.status}
             rows={filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
             rowKey={(r) => r.id}
             columns={[

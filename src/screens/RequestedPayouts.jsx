@@ -114,6 +114,7 @@ function exportPayouts(rows) {
 }
 
 export function RequestedPayouts() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const directoryQuery = useGetAdminPayoutDirectoryQuery();
@@ -246,7 +247,7 @@ export function RequestedPayouts() {
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
 
 
-        <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
+        <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           filters={
             <>
               <FilterButton
@@ -320,7 +321,7 @@ export function RequestedPayouts() {
           />
         ) : (
           <>
-            <DataTable boardConfig={BOARD_LAYOUTS.payouts} view={tableView} boardGroupBy={(row) => row.status}
+            <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.payouts} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.key}
               onRowClick={(r) => navigate(payoutDetailUrl(r))}

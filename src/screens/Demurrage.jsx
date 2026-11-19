@@ -97,6 +97,7 @@ export function Demurrage() {
   return <DemurrageScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
 }
 function DemurrageScreen() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const owner=useSelector(state=>state.auth.admin?.id),role=useSelector(state=>state.auth.admin?.role);
   const authenticated=useSelector(state=>Boolean(state.auth.accessToken && state.auth.admin?.id));
@@ -311,8 +312,8 @@ function DemurrageScreen() {
                 }}
               >
                 Reset
-              </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button></>} />
-            {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable boardConfig={BOARD_LAYOUTS.demurrage} view={tableView} boardGroupBy={(row) => row.status}
+              </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" disabled={!visibleDirectory || visibleQuery.isFetching} onClick={() => exportCsv(filtered)}>Export</Button></>} />
+            {!visibleDirectory && visibleQuery.isFetching ? <DriverTableLoading columns={10} label="Loading demurrage" /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.demurrage} view={tableView} boardGroupBy={(row) => row.status}
               rows={paged}
               rowKey={(r) => r.key}
               onRowClick={(r) => navigate(demurrageDetailUrl(r))}

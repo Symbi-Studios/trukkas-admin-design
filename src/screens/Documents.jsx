@@ -85,6 +85,7 @@ function DocumentsLoading() {
 }
 
 export function Documents() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
@@ -350,7 +351,7 @@ export function Documents() {
 
 
       <Card className="documents-table-card" pad="none">
-        <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
+        <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           style={{ padding: "var(--tk-space-4) var(--tk-card-pad-tight)" }}
           search={
             <SearchField
@@ -439,7 +440,7 @@ export function Documents() {
         ) : queueError ? (
           <EmptyState icon="file-text" title={queueError.status === 403 ? "Access denied" : "Document queue unavailable"} description="Please try again." />
         ) : filtered.length || tableView === 'board' ? (
-          <DataTable boardConfig={BOARD_LAYOUTS.documents} view={tableView} boardGroupBy={(row) => row.summary.rejected > 0 ? 'Rejected' : row.summary.pending > 0 ? 'Pending' : row.summary.missing > 0 ? 'Missing Documents' : row.summary.approved > 0 ? 'Approved' : 'Unavailable'}
+          <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.documents} view={tableView} boardGroupBy={(row) => row.summary.rejected > 0 ? 'Rejected' : row.summary.pending > 0 ? 'Pending' : row.summary.missing > 0 ? 'Missing Documents' : row.summary.approved > 0 ? 'Approved' : 'Unavailable'}
             columns={columns}
             boardColumns={columns.filter((column) => column.key !== 'expand')}
             boardOnRowClick={(row) => { setExpandedJob(expandedJob === row.id ? null : row.id); setSelectedDocs([]); }}

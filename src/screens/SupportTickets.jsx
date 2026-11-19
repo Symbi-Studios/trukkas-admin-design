@@ -50,6 +50,7 @@ const statusTone = {
 const priorityTone = { High: "danger", Medium: "warning", Low: "neutral" };
 
 export function SupportTickets() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
@@ -236,8 +237,8 @@ export function SupportTickets() {
             }}
           >
             Reset
-          </Button></>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />} trailing={<></>} />
-        {loading ? <DriverTableLoading columns={7} label="Loading tickets" /> : <DataTable boardConfig={BOARD_LAYOUTS.tickets} view={tableView} boardGroupBy={(row) => row.status}
+          </Button></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<></>} />
+        {loading ? <DriverTableLoading columns={7} label="Loading tickets" /> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.tickets} view={tableView} boardGroupBy={(row) => row.status}
           rows={paged}
           rowKey={(r) => r.id}
           onRowClick={(r) => navigate(ticketDetailUrl(r.id))}

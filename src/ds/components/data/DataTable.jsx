@@ -30,9 +30,10 @@ export function DataTable({
   boardColumns,
   boardOnRowClick,
   boardConfig,
+  boardHideEmpty = false,
 }) {
   if (view === "board" && boardGroupBy) {
-    return <DataBoard columns={boardColumns || columns} rows={rows} groupBy={boardGroupBy} groups={boardConfig?.groups || boardGroups} card={boardConfig?.card} emptyLabel={boardConfig?.emptyLabel} fields={boardFields} onRowClick={boardOnRowClick || onRowClick} rowKey={rowKey} selectedKey={boardSelectedKey} expandedRowKeys={expandedRowKeys} renderExpandedRow={renderExpandedRow} />;
+    return <DataBoard columns={boardColumns || columns} rows={rows} groupBy={boardGroupBy} groups={boardConfig?.groups || boardGroups} hideEmpty={boardHideEmpty} card={boardConfig?.card} emptyLabel={boardConfig?.emptyLabel} fields={boardFields} onRowClick={boardOnRowClick || onRowClick} rowKey={rowKey} selectedKey={boardSelectedKey} expandedRowKeys={expandedRowKeys} renderExpandedRow={renderExpandedRow} />;
   }
   const allOn = rows.length > 0 && selected.length === rows.length;
   const cell = {

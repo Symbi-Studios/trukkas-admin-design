@@ -420,7 +420,7 @@
 .tk-view-toggle button.active { background: #fff; color: var(--tk-ink-900); box-shadow: 0 1px 2px rgba(0, 8, 36, 0.1); }
 .tk-view-toggle button:focus-visible { outline: 2px solid var(--tk-blue); outline-offset: 1px; }
 /* The shared board mirrors the Jobs board: badge lanes and compact cards. */
-.tk-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(268px, 1fr); gap: 14px; padding: 16px 20px 20px; overflow-x: auto; min-height: 420px; background: var(--tk-surface-page, #f7f8fb); }
+.tk-board { display: grid; grid-auto-flow: column; grid-auto-columns: max(268px, calc((100% - var(--tk-board-gap-space, 0px)) / var(--tk-board-lane-count, 1))); gap: 14px; padding: 16px 20px 20px; overflow-x: auto; min-height: 420px; background: var(--tk-surface-page, #f7f8fb); }
 .tk-board-column { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--tk-line); border-radius: 12px; background: var(--tk-surface-sunk); }
 .tk-board-column-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px; }
 .tk-board-cards { display: grid; align-content: start; gap: 10px; padding: 0 10px 12px; max-height: 640px; overflow-y: auto; }
@@ -454,3 +454,11 @@
 @media (max-width: 900px) { .tk-table-toolbar-views .tk-table-toolbar-trailing { margin-left: 0; } }
 .tk-table-toolbar-views .tk-select-field > label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tk-table-toolbar-views .tk-select-field > button { height: 32px !important; padding: 0 10px !important; border-radius: 999px !important; border-color: var(--tk-line) !important; box-shadow: none !important; font: 500 12px/18px var(--tk-font-sans) !important; color: var(--tk-ink-700) !important; }
+
+.tk-table-view-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.tk-board-empty-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap; font: 500 12px/18px var(--tk-font-sans); color: var(--tk-ink-500); }
+.tk-board-empty-toggle input { appearance: none; width: 30px; height: 18px; border-radius: 999px; background: var(--tk-line-strong); cursor: pointer; margin: 0; position: relative; flex-shrink: 0; transition: background 120ms ease; }
+.tk-board-empty-toggle input::before { content: ''; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,8,36,.15); transition: transform 120ms ease; }
+.tk-board-empty-toggle input:checked { background: var(--tk-blue); }
+.tk-board-empty-toggle input:checked::before { transform: translateX(12px); }
+.tk-board-empty-toggle input:focus-visible { outline: 2px solid var(--tk-blue); outline-offset: 2px; }

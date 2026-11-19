@@ -73,6 +73,7 @@ export function Verification() {
 }
 
 function VerificationScreen() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const operations = useVerificationOperations();
@@ -151,7 +152,7 @@ function VerificationScreen() {
       </StatsPanel>
 
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
-        <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
+        <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           search={<SearchField placeholder="Search by company, entity, verification ID..." value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
@@ -170,7 +171,7 @@ function VerificationScreen() {
 
 
 
-        <DataTable boardConfig={BOARD_LAYOUTS.verification} boardOnRowClick={(row) => navigate(verificationDetailUrl(row))} view={tableView} boardGroupBy={(row) => row.status} rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
+        <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.verification} boardOnRowClick={(row) => navigate(verificationDetailUrl(row))} view={tableView} boardGroupBy={(row) => row.status} rows={loading ? EMPTY_ROWS : paged} rowKey={(r) => r.key}
           columns={[
             { key: 'id', header: 'Verification ID', render: (r) => <CopyableId id={r.id} size="sm" onCopy={() => { if (r.id !== '—') navigator.clipboard?.writeText(r.id).catch(() => unavailable('Copy verification ID')); }} /> },
             { key: 'entity', header: 'Entity / Company', render: (r) => (

@@ -236,6 +236,7 @@ function RowMenu({ items, id, menuFor, setMenuFor }) {
 }
 
 export function Transactions() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const ledgerQuery = useGetAdminTransactionLedgerQuery();
@@ -528,7 +529,7 @@ export function Transactions() {
                   setDraft((d) => ({ ...d, party: e.target.value }))
                 }
               />
-             </>} viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
+             </>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
             search={
               <SearchField
                 placeholder="Search transactions (reference, job ID, customer...)"
@@ -575,7 +576,7 @@ export function Transactions() {
 
           {!ledger && ledgerQuery.isFetching ? <DriverTableLoading columns={10} label="Loading transactions" /> : (
             <>
-              <DataTable boardConfig={BOARD_LAYOUTS.transactions} boardOnRowClick={(row) => navigate(transactionDetailUrl(row.id))} view={tableView} boardGroupBy={(row) => row.status}
+              <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.transactions} boardOnRowClick={(row) => navigate(transactionDetailUrl(row.id))} view={tableView} boardGroupBy={(row) => row.status}
                 rows={paged}
                 rowKey={(r) => r.id}
                 selectable

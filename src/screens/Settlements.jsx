@@ -122,6 +122,7 @@ export function Settlements() {
   return <SettlementsScreen key={String(owner)+':'+String(role)+':'+authenticated} />;
 }
 function SettlementsScreen() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const filtersRef = useRef(null);
   const navigate = useNavigate();
@@ -287,7 +288,7 @@ function SettlementsScreen() {
           />
 
           <div ref={filtersRef} style={{ scrollMarginTop: 80 }}>
-          <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
+          <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
             filters={
               <>
                 <FilterButton
@@ -421,7 +422,7 @@ function SettlementsScreen() {
             />
           ) : (
             <>
-              <DataTable boardConfig={BOARD_LAYOUTS.settlements} boardOnRowClick={(row) => navigate(settlementDetailUrl(row))} view={tableView} boardGroupBy={(row) => row.status}
+              <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.settlements} boardOnRowClick={(row) => navigate(settlementDetailUrl(row))} view={tableView} boardGroupBy={(row) => row.status}
                 rows={paged}
                 rowKey={(r) => r.key}
                 columns={[

@@ -70,6 +70,7 @@ function FilterButton({ value, options, active, onChange }) {
 }
 
 export function UserManagement() {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
@@ -209,7 +210,7 @@ export function UserManagement() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
         <SectionCard title="" pad="none">
-          <TableToolbar viewControl={<ViewToggle value={tableView} onChange={setTableView} />}
+          <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
             search={<SearchField placeholder="Search by name, email or phone…" value={q}
               onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
             filters={<>
@@ -223,7 +224,7 @@ export function UserManagement() {
             trailing={<Button variant="outline" icon="download" onClick={exportUsers}>Export</Button>}
             onClear={resetFilters} />
 
-          {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable boardConfig={BOARD_LAYOUTS.users} boardOnRowClick={(row) => navigate(profilePath(row))} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
+          {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.users} boardOnRowClick={(row) => navigate(profilePath(row))} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
             columns={[
               { key: 'user', header: 'User', render: (r) => (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', minWidth: 240 }}

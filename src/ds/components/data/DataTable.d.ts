@@ -28,6 +28,7 @@ export interface DataTableProps<T = any> {
   expandedRowKeys?: Array<string | number>;
   renderExpandedRow?: (row: T) => React.ReactNode;
   view?: 'list' | 'board';
+  boardHideEmpty?: boolean;
   boardGroupBy?: (row: T) => string | null | undefined;
   boardGroups?: Array<string | { value: string; label: string; tone?: string }>;
   boardConfig?: {

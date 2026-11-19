@@ -7,7 +7,7 @@ const textOf = (value) => (value == null ? '' : String(value)).trim();
 
 /** Fixed status lanes and compact cards, using the Jobs board's visual structure. */
 export function DataBoard({ columns = [], rows = [], groupBy, groups = [], card, fields, onRowClick,
-  rowKey = (row, index) => row.id ?? index, selectedKey, expandedRowKeys = [], renderExpandedRow, emptyLabel = 'No items' }) {
+  rowKey = (row, index) => row.id ?? index, selectedKey, hideEmpty = false, expandedRowKeys = [], renderExpandedRow, emptyLabel = 'No items' }) {
   const label = (row) => textOf(groupBy?.(row)) || 'Unavailable';
   const lanes = groups.map((group) => typeof group === 'string' ? { value: group, label: group } : group);
   // Keep unexpected server statuses visible without dropping records.
@@ -25,8 +25,10 @@ export function DataBoard({ columns = [], rows = [], groupBy, groups = [], card,
   };
   // Compute keys before grouping so index-based keys stay stable across lanes.
   const keyedRows = rows.map((row, index) => ({ row, key: rowKey(row, index) }));
-  return <div className="tk-board tk-scroll">
-    {lanes.map((lane) => {
+  const visibleLanes = hideEmpty ? lanes.filter((lane) => keyedRows.some(({ row }) => label(row) === lane.value)) : lanes;
+  return <div className="tk-board tk-scroll" style={{ '--tk-board-lane-count': Math.max(1, lanes.length), '--tk-board-gap-space': `${Math.max(0, lanes.length - 1) * 14}px` }}>
+    {!visibleLanes.length && <div className="tk-board-empty">{emptyLabel}</div>}
+    {visibleLanes.map((lane) => {
       const items = keyedRows.filter(({ row }) => label(row) === lane.value);
       return <section className="tk-board-column" key={lane.value} aria-label={lane.label}>
         <header className="tk-board-column-head">

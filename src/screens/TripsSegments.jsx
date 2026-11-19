@@ -107,6 +107,7 @@ export function TripsSegments() {
   return <TripsSegmentsContent key={[owner, role, authenticated].join(":")} owner={owner} role={role} authenticated={authenticated} />;
 }
 function TripsSegmentsContent({ owner, role, authenticated }) {
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   useEffect(() => { if (window.location.pathname === '/tracking' || new URLSearchParams(window.location.search).get('view') === 'map') setTableView('map'); }, []);
@@ -283,7 +284,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
 <FilterChip icon="flag" label="Destination" value={destFilter} active={destFilter !== "All Locations"} onOpen={(e) => openMenu(e, "destination")} onClear={() => choose(setDestFilter, "All Locations")} />
 <FilterChip icon="user" label="Driver" value={driverFilter} active={driverFilter !== "All Drivers"} onOpen={(e) => openMenu(e, "driver")} onClear={() => { setDriverId(null); choose(setDriverFilter, "All Drivers"); }} />
 <FilterChip icon="calendar" label="Date" value={dateFilter} active={dateFilter !== "All Dates"} onOpen={(e) => openMenu(e, "date")} onClear={() => choose(setDateFilter, "All Dates")} />
-{filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}</>} viewControl={<ViewToggle value={tableView} onChange={setTableView} map />} trailing={<Button variant="outline" icon="download" disabled={exporting || !authenticated || total == null || total === 0} onClick={() => void exportTrips()}>Export</Button>} />
+{filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}</>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} map />} trailing={<Button variant="outline" icon="download" disabled={exporting || !authenticated || total == null || total === 0} onClick={() => void exportTrips()}>Export</Button>} />
 
         {tableView !== 'map' && listLoading && <div aria-busy="true" style={{ padding: 18 }}><Skeleton height={260} /></div>}
         {tableView !== 'map' && !listLoading && !tripsResponse && <DriverLoadingNotice>—</DriverLoadingNotice>}
@@ -291,7 +292,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
             <TriangulationGoogleMap points={mapPoints} selectedId={selectedId}
               onSelect={(id) => { const trip = trips.find((row) => row.id === id); if (trip) selectTrip(trip); }}
               ariaLabel="Trip locations map" emptyMessage="No truck GPS positions are available for the trips on this page." />
-          </div> : !listLoading && tripsResponse && (trips.length > 0 || tableView === 'board') ? <DataTable boardConfig={BOARD_LAYOUTS.trips} view={tableView} boardGroupBy={(row) => row.status}
+          </div> : !listLoading && tripsResponse && (trips.length > 0 || tableView === 'board') ? <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.trips} view={tableView} boardGroupBy={(row) => row.status}
           rows={paged} columns={cols} onRowClick={selectTrip} selected={selectedId ? [selectedId] : []}
           boardSelectedKey={selectedId} /> : null}
         {tableView === 'list' && !listLoading && tripsResponse && !trips.length && <div className="tk-board-empty">No trips match the current filters.</div>}
