@@ -541,3 +541,37 @@
 }
 .jd-instructions[data-empty="true"] { padding: 16px 0 0; border: 0; border-top: 1px solid var(--tk-line); border-radius: 0; background: none; gap: 4px; }
 .jd-instructions[data-empty="true"] p { color: var(--tk-ink-400); }
+
+/* Shared job lifecycle, visible before every detail tab. */
+.jd-progress { padding: 20px 22px 24px; border: 1px solid var(--tk-line); border-radius: 14px; background: var(--tk-surface-sunk, #f7f8fa); min-width: 0; }
+.jd-progress-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+.jd-progress-heading > span:first-child { color: var(--tk-ink-900); font: 600 13px/20px var(--tk-font-sans); }
+.jd-progress-updated { margin-left: auto; color: var(--tk-ink-400); font: 400 11px/18px var(--tk-font-sans); }
+.jd-progress-steps { display: grid; grid-template-columns: repeat(6, minmax(145px, 1fr)); list-style: none; padding: 0; margin: 0; overflow-x: auto; }
+.jd-progress-steps li { position: relative; display: grid; align-content: start; gap: 7px; padding-right: 20px; min-width: 0; }
+.jd-progress-steps li:not(:last-child)::after { content: ''; position: absolute; top: 13px; left: 37px; right: 10px; border-top: 2px dotted var(--tk-line-strong, #d9dde5); }
+.jd-progress-steps li.done:not(:last-child)::after { border-color: var(--tk-ink-400); }
+.jd-progress-node { display: grid; place-items: center; height: 28px; width: 28px; border-radius: 50%; border: 1px solid var(--tk-line-strong); color: var(--tk-ink-400); background: #fff; margin-bottom: 4px; }
+.jd-progress-steps .done .jd-progress-node { background: var(--tk-ink-900); border-color: var(--tk-ink-900); color: #fff; }
+.jd-progress-steps .current .jd-progress-node { border-color: var(--tk-blue); background: var(--tk-blue-soft); color: var(--tk-blue); box-shadow: 0 0 0 4px #ffffff; }
+.jd-progress-steps li:last-child.done .jd-progress-node { background: var(--tk-success); border-color: var(--tk-success); }
+.jd-progress-steps strong { color: var(--tk-ink-900); font: 550 12px/18px var(--tk-font-sans); }
+.jd-progress-steps .pending strong { color: var(--tk-ink-400); }
+.jd-progress-steps small { color: var(--tk-ink-400); font: 400 11px/17px var(--tk-font-sans); }
+.jd-detail-nav { background: transparent; border: 0; border-radius: 0; overflow: visible; }
+.jd-detail-nav .tk-tabs { padding: 0 !important; border-bottom: 1px solid var(--tk-line) !important; gap: 24px !important; }
+.jd-detail-nav .tk-tabs > button { display: inline-flex; align-items: center; gap: 7px; }
+.jd-inline-link { display: inline-flex; align-items: center; gap: 4px; border: 0; padding: 2px 0; background: transparent; color: var(--tk-blue); cursor: pointer; font: 500 11px/18px var(--tk-font-sans); }
+.jd-inline-link:focus-visible { outline: 2px solid var(--tk-blue); outline-offset: 4px; }
+.jd-overview-activity { display: grid; gap: 22px; }
+.jd-overview-event { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; }
+.jd-event-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
+.jd-overview-event strong { display: block; color: var(--tk-ink-900); font: 550 12px/18px var(--tk-font-sans); }
+.jd-overview-event p { margin: 4px 0; color: var(--tk-ink-500); font: 400 12px/18px var(--tk-font-sans); overflow-wrap: anywhere; }
+.jd-overview-event small, .jd-overview-empty { margin: 0; color: var(--tk-ink-400); font: 400 11px/18px var(--tk-font-sans); }
+@media (max-width: 760px) {
+  .jd-progress { padding: 18px 16px; }
+  .jd-progress-heading { flex-wrap: wrap; }
+  .jd-progress-updated { margin-left: 0; width: 100%; }
+  .jd-progress-steps { padding-bottom: 8px; }
+}

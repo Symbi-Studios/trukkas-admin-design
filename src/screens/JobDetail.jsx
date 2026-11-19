@@ -73,6 +73,31 @@ function InfoStrip({ items }) {
   </div>;
 }
 
+function JobProgress({ job }) {
+  const stages = [
+    { label: 'Created', icon: 'file-plus', date: job.stageDates?.[0] },
+    { label: 'Document review', icon: 'file-check-2', date: job.stageDates?.[1] },
+    { label: 'Bidding', icon: 'gavel', date: job.stageDates?.[2] },
+    { label: 'Assigned', icon: 'truck', date: job.stageDates?.[3] },
+    { label: 'In transit', icon: 'route', date: job.stageDates?.[4] },
+    { label: 'Delivered', icon: 'circle-check', date: job.stageDates?.[5] },
+  ];
+  const current = { Draft: 0, 'Pending Approval': 1, Bidding: 2, Assigned: 3, 'In Transit': 4, Delivered: 5 }[job.status];
+  return <section className="jd-progress" aria-label="Job status and progress">
+    <div className="jd-progress-heading"><span>Job progress</span><Badge dot tone={statusTone(job.status)}>{job.status}</Badge><span className="jd-progress-updated">Last updated {job.updatedAt || '—'}</span></div>
+    <ol className="jd-progress-steps">
+      {stages.map((stage, index) => {
+        const isCurrent = index === current;
+        const done = Boolean(stage.date) || current != null && (index < current || current === 5);
+        return <li key={stage.label} className={done ? 'done' : isCurrent ? 'current' : 'pending'} aria-current={isCurrent ? 'step' : undefined}>
+          <span className="jd-progress-node"><Icon name={done ? 'check' : stage.icon} size={14} aria-hidden="true" /></span>
+          <strong>{stage.label}</strong><small>{stage.date || (isCurrent ? 'Current stage' : '—')}</small>
+        </li>;
+      })}
+    </ol>
+  </section>;
+}
+
 function TripActionMenu({ anchor, items, onClose }) {
   const menuRef = useRef(null);
   const [position, setPosition] = useState(null);
@@ -144,7 +169,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     if (job?.errors.length) setToast({ tone: "warning", title: "Unable to load: " + job.errors.join(", ") + ". Refresh to try again." });
   }, [job]);
 
-  const [tab, setTab] = useState("Job Information");
+  const [tab, setTab] = useState("Overview");
   const [moreOpen, setMoreOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -527,26 +552,28 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
         </Banner>
       )}
 
+      <JobProgress job={job} />
+
       <div className="jd-detail-nav"><Tabs
         value={tab}
         onChange={setTab}
         items={[
-          { value: "Job Information", label: "Job Information" },
+          { value: "Overview", label: <><Icon name="layout-dashboard" size={15} aria-hidden="true" />Overview</> },
           {
             value: "Bids & Responses",
-            label: "Bids & Responses",
+            label: <><Icon name="gavel" size={15} aria-hidden="true" />Bids & Responses</>,
             count: bidsCount,
           },
-          { value: "Associated Trips", label: "Associated Trips", count: tripsCount },
-          { value: "Tracking & Updates", label: "Tracking & Updates" },
-          { value: "Documents", label: "Documents", count: docsCount },
-          { value: "Financials", label: "Financials" },
-          { value: "Activity Log", label: "Activity Log", count: activityCount },
+          { value: "Associated Trips", label: <><Icon name="truck" size={15} aria-hidden="true" />Associated Trips</>, count: tripsCount },
+          { value: "Tracking & Updates", label: <><Icon name="map-pin" size={15} aria-hidden="true" />Tracking & Updates</> },
+          { value: "Documents", label: <><Icon name="files" size={15} aria-hidden="true" />Documents</>, count: docsCount },
+          { value: "Financials", label: <><Icon name="wallet" size={15} aria-hidden="true" />Financials</> },
+          { value: "Activity Log", label: <><Icon name="history" size={15} aria-hidden="true" />Activity Log</>, count: activityCount },
         ]}
       /></div>
 
-      {tab === "Job Information" && (<section className="jd-tab-stack">
-  <JobTabHeading title="Job information" description="The request, route and agreed price for this job." />
+      {tab === "Overview" && (<section className="jd-tab-stack">
+  <JobTabHeading title="Overview" description="Job details, route and price at a glance." />
   <div className="jd-info-layout">
     <div className="jd-tab-stack">
       <SectionCard title="Job details"  icon="package">
@@ -585,11 +612,17 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
         </dl>
       </SectionCard>
     </div>
-    <aside className="jd-price-column">
+    <aside className="jd-price-column jd-tab-stack">
       <SectionCard title="Price" action={<span className="jd-currency">NGN</span>}>
         <div className="jd-price-hero"><span className="jd-field-label">Total job value</span><strong>{naira(job.jobValue)}</strong></div>
 
         <button type="button" className="jd-text-link" onClick={() => setTab('Financials')}>View financial details <Icon name="arrow-right" size={13} /></button>
+      </SectionCard>
+      <SectionCard title="Activity" icon="history" action={<button type="button" className="jd-inline-link" onClick={() => setTab('Activity Log')}>View all <Icon name="arrow-up-right" size={12} aria-hidden="true" /></button>}>
+        {activityLog.length ? <div className="jd-overview-activity">{activityLog.slice(0, 5).map((entry) => <div key={entry.id} className="jd-overview-event">
+          <span className="jd-event-icon"><Icon name="history" size={13} aria-hidden="true" /></span>
+          <div><strong>{entry.action}</strong><p>{entry.details}</p><small>{entry.user} · {entry.time}</small></div>
+        </div>)}</div> : <p className="jd-overview-empty">{job.activityKnown ? 'No activity yet.' : '—'}</p>}
       </SectionCard>
     </aside>
   </div>
