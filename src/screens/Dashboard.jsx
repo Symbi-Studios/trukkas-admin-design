@@ -22,12 +22,13 @@ import {
   StatCard,
   StatsPanel,
 } from "../ds.js";
-import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodDates } from '../domain/statsPeriod.js';
+import { DEFAULT_STATS_PERIOD, STATS_PERIODS, statsPeriod, statsPeriodDates } from '../domain/statsPeriod.js';
 import { formatNaira } from "../mock/format.js";
 import { statusTone } from "./JobDetail.jsx";
 import { useGetAdminOverviewQuery } from "../store/features/overview/overviewApi.js";
 import styles from "./Dashboard.module.css";
 
+const DASHBOARD_STATS_PERIODS = STATS_PERIODS.filter((period) => period.key !== '1d');
 const ACTIVITY_PERIODS = ["Last 30 days", "Last 90 days", "This year"];
 function dashboardDates(value) {
   if (value === 'All Time') return undefined;
@@ -277,7 +278,7 @@ export function Dashboard() {
           </>
         }
       />
-      <StatsPanel period={statsPeriodKey} onPeriodChange={(key) => { setStatsPeriodKey(key); setRevenuePeriod(null); setActivityPeriod(null); setRatingPeriod(null); }}>
+      <StatsPanel periods={DASHBOARD_STATS_PERIODS} period={statsPeriodKey} onPeriodChange={(key) => { setStatsPeriodKey(key); setRevenuePeriod(null); setActivityPeriod(null); setRatingPeriod(null); }}>
         <StatCard
           icon="user-round"
           label="Total Drivers"
