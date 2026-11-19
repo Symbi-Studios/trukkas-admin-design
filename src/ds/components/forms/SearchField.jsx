@@ -8,7 +8,7 @@ export function SearchField({ placeholder = 'Search…', variant = 'panel', shor
   return (
     <div className={["tk-search-field", className].filter(Boolean).join(" ")} style={{
       display: 'flex', alignItems: 'center', gap: 10, height: 'var(--tk-h-search)',
-      padding: '0 12px', background: global ? 'var(--tk-surface-sunk)' : 'var(--tk-surface)',
+      padding: '0 12px', background: global ? 'var(--tk-surface-sunk)' : '#fff',
       border: '1px solid ' + (f ? 'var(--tk-blue)' : global ? 'transparent' : 'var(--tk-line-strong)'),
       borderRadius: 'var(--tk-r-md)', boxShadow: f ? 'var(--tk-focus-ring)' : 'none',
       transition: 'var(--tk-transition)', ...style,
@@ -19,7 +19,7 @@ export function SearchField({ placeholder = 'Search…', variant = 'panel', shor
                       font: 'var(--tk-body-weight) var(--tk-body-size)/var(--tk-body-lh) var(--tk-font-sans)', color: 'var(--tk-ink-900)' }} />
       {global && (
         <kbd style={{ font: 'var(--tk-micro-weight) var(--tk-micro-size)/var(--tk-micro-lh) var(--tk-font-sans)', color: 'var(--tk-ink-400)',
-                      background: 'var(--tk-surface)', border: '1px solid var(--tk-line-strong)',
+                      background: '#fff', border: '1px solid var(--tk-line-strong)',
                       borderRadius: 6, padding: '4px 6px' }}>{shortcut}</kbd>
       )}
     </div>

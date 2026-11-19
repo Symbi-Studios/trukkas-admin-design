@@ -36,7 +36,7 @@
   height: 36px;
   border: 1px solid var(--tk-line-strong);
   border-radius: 7px;
-  background: var(--tk-surface);
+  background: #fff;
   padding: 0 10px;
   color: var(--tk-ink-700);
   font: 500 var(--tk-meta-size) var(--tk-font-sans);
@@ -247,7 +247,7 @@
   padding: 0 8px;
   border: 1px solid var(--tk-line-strong);
   border-radius: 7px;
-  background: var(--tk-surface);
+  background: #fff;
   color: var(--tk-ink-700);
   font: 500 var(--tk-meta-size) var(--tk-font-sans);
 }
@@ -361,7 +361,7 @@
   width: 68px;
   height: 68px;
   border-radius: 12px;
-  background: var(--tk-surface);
+  background: #fff;
   box-shadow: var(--tk-shadow-card);
 }
 .notify-action-grid {
@@ -450,7 +450,7 @@
   padding: 10px;
   border: 1px solid var(--tk-line);
   border-radius: 7px;
-  background: var(--tk-surface);
+  background: #fff;
   text-align: left;
   cursor: pointer;
   margin-bottom: 8px;

@@ -23,7 +23,7 @@
     min-height: 100dvh;
     overflow: auto;
     padding: 32px 24px max(32px, env(safe-area-inset-bottom));
-    background: var(--tk-surface);
+    background: #fff;
     color: #183b56;
     text-align: center;
   }

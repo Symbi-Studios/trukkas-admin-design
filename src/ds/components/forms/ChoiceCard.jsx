@@ -9,7 +9,7 @@ export function ChoiceCard({ selected, icon, title, description, onSelect, style
       style={{ textAlign: 'left', display: 'grid', gap: 8, padding: 14, cursor: 'pointer',
                borderRadius: 'var(--tk-r-lg)',
                border: '1px solid ' + (selected ? 'var(--tk-blue)' : 'var(--tk-line-strong)'),
-               background: selected ? 'var(--tk-surface-cool)' : 'var(--tk-surface)',
+               background: selected ? 'var(--tk-surface-cool)' : '#fff',
                transition: 'var(--tk-transition)', ...style }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ width: 16, height: 16, borderRadius: 999, display: 'grid', placeItems: 'center',

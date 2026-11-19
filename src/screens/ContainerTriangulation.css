@@ -27,7 +27,7 @@
   width: 28px;
   height: 28px;
   border: 1px solid var(--tk-line-strong);
-  background: var(--tk-surface);
+  background: #fff;
   border-radius: 7px;
   cursor: pointer;
   color: var(--tk-ink-500);

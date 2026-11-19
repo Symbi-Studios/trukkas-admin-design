@@ -16,7 +16,7 @@ export function Sidebar({ collapsed, children, footer, onCollapse, style }) {
         flex: "0 0 auto",
         display: "flex",
         flexDirection: "column",
-        background: "var(--tk-surface)",
+        background: "#fff",
         borderRight: "1px solid var(--tk-line)",
         height: "100%",
         overflowY: "auto",

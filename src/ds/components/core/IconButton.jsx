@@ -5,7 +5,7 @@ export function IconButton({ icon, size = 32, tone = 'ghost', label, style, ...r
   const tones = {
     ghost: { bg: 'transparent', fg: 'var(--tk-ink-400)', bd: 'transparent' },
     sunk:  { bg: 'var(--tk-surface-sunk)', fg: 'var(--tk-ink-500)', bd: 'transparent' },
-    outline: { bg: 'var(--tk-surface)', fg: 'var(--tk-ink-500)', bd: 'var(--tk-line-strong)' },
+    outline: { bg: '#fff', fg: 'var(--tk-ink-500)', bd: 'var(--tk-line-strong)' },
     blue:  { bg: 'var(--tk-blue-soft)', fg: 'var(--tk-blue)', bd: 'transparent' },
   };
   const t = tones[tone] || tones.ghost;

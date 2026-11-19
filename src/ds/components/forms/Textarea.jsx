@@ -3,7 +3,7 @@ import React from 'react';
 const shell = (invalid, focused, disabled) => ({
   display: 'flex', alignItems: 'center', gap: 8,
   height: 'var(--tk-h-input)', padding: '0 12px',
-  background: disabled ? 'var(--tk-surface-sunk)' : 'var(--tk-surface)',
+  background: disabled ? 'var(--tk-surface-sunk)' : '#fff',
   border: '1px solid ' + (invalid ? 'var(--tk-danger)' : focused ? 'var(--tk-blue)' : 'var(--tk-line-strong)'),
   borderRadius: 'var(--tk-r-md)',
   boxShadow: focused ? (invalid ? 'var(--tk-focus-ring-danger)' : 'var(--tk-focus-ring)') : 'none',

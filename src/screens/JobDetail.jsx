@@ -26,12 +26,6 @@ import {
   Skeleton,
   TextField,
   Select,
-  NotAvailable,
-  orNA,
-  isMissing,
-  DocumentPreview,
-  documentTitle,
-  RouteStack,
 } from "../ds.js";
 import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
 import { useGetAdminCompanyDocumentPreviewQuery } from "../store/features/companies/companyDocumentsApi.js";
@@ -68,13 +62,13 @@ function JobTabHeading({ title, description }) {
 }
 
 function JobFact({ label, children, wide = false }) {
-  return <div className={'jd-info-fact' + (wide ? ' wide' : '')}><dt>{label}</dt><dd>{orNA(children)}</dd></div>;
+  return <div className={'jd-info-fact' + (wide ? ' wide' : '')}><dt>{label}</dt><dd>{children ?? '—'}</dd></div>;
 }
 
 function InfoStrip({ items }) {
   return <div className="jd-metric-strip" style={{ '--jd-metric-columns': items.length }}>
     {items.map((item, index) => <div className="jd-metric" key={index}>
-      <span>{item.label}</span><strong>{isMissing(item.value) ? <NotAvailable /> : item.value}</strong>{item.caption && !isMissing(item.caption) && <small>{item.caption}</small>}
+      <span>{item.label}</span><strong>{item.value ?? '—'}</strong>{item.caption && <small>{item.caption}</small>}
     </div>)}
   </div>;
 }
@@ -90,14 +84,14 @@ function JobProgress({ job }) {
   ];
   const current = { Draft: 0, 'Pending Approval': 1, Bidding: 2, Assigned: 3, 'In Transit': 4, Delivered: 5 }[job.status];
   return <section className="jd-progress" aria-label="Job status and progress">
-    <div className="jd-progress-heading"><span>Job progress</span><Badge dot tone={statusTone(job.status)}>{job.status}</Badge>{!isMissing(job.updatedAt) && <span className="jd-progress-updated">Last updated {job.updatedAt}</span>}</div>
+    <div className="jd-progress-heading"><span>Job progress</span><Badge dot tone={statusTone(job.status)}>{job.status}</Badge><span className="jd-progress-updated">Last updated {job.updatedAt || '—'}</span></div>
     <ol className="jd-progress-steps">
       {stages.map((stage, index) => {
         const isCurrent = index === current;
         const done = Boolean(stage.date) || current != null && (index < current || current === 5);
         return <li key={stage.label} className={done ? 'done' : isCurrent ? 'current' : 'pending'} aria-current={isCurrent ? 'step' : undefined}>
           <span className="jd-progress-node"><Icon name={done ? 'check' : stage.icon} size={14} aria-hidden="true" /></span>
-          <strong>{stage.label}</strong><small>{stage.date || (isCurrent ? 'Current stage' : done ? 'Completed' : 'Upcoming')}</small>
+          <strong>{stage.label}</strong><small>{stage.date || (isCurrent ? 'Current stage' : '—')}</small>
         </li>;
       })}
     </ol>
@@ -176,13 +170,13 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   }, [job]);
 
   const [tab, setTab] = useState("Overview");
-    const [approveOpen, setApproveOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [acceptBidFor, setAcceptBidFor] = useState(null);
   const bidActionQuery = useGetAdminJobBidActionDetailQuery({ id: acceptBidFor?.id, jobId: job?.apiId, owner, role }, { skip: !authenticated || !acceptBidFor?.id || !job?.apiId, refetchOnMountOrArgChange: true });
   const [reviewDoc, setReviewDoc] = useState(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
   const documentPreview = useGetAdminCompanyDocumentPreviewQuery(
     { companyId: jobId, id: reviewDoc?.id, url: reviewDoc?.url, owner },
     { skip: !authenticated || !jobId || !reviewDoc?.url || tab !== "Documents" },
@@ -290,7 +284,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     try {
       await changeJob({ id: job.apiId, owner, role, expectedStatus: job.statusCode, action, ...details }).unwrap();
       if (!active.current) return;
-      setApproveOpen(false); setRejectOpen(false); setDelayOpen(null); setTripMenu(null);
+      setApproveOpen(false); setRejectOpen(false); setDelayOpen(null); setTripMenu(null); setMoreOpen(false);
       const messages = { approve: "Job documents approved and released for bidding.", reject: "Job documents rejected.", approveDocument: "Document approved.", rejectDocument: "Document rejected.", deliver: "Job marked delivered.", cancel: "Job cancelled.", atDelivery: "Job and its trips marked at delivery.", delay: "Job and its trips marked delayed." };
       notify("success", messages[action]);
     } catch (error) {
@@ -369,8 +363,90 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
 
   const headerActions = (
     <>
-      {["SUPER_ADMIN", "OPS_ADMIN"].includes(role) && job.adminActions.canEdit === true && job.version && <Button variant="outline" icon="pencil" onClick={() => openAdminAction("edit")}>Edit</Button>}
-      {!(job.reviewFlag && !job.reviewFlag.version) && !terminal && <Button variant="outline" icon="flag" onClick={() => openAdminAction("flag")}>{job.reviewFlag ? "Update flag" : "Flag for review"}</Button>}
+      <span style={{ position: "relative" }}>
+        <Button
+          variant="outline"
+          icon="ellipsis-vertical"
+          onClick={() => setMoreOpen((o) => !o)}
+        />
+        {moreOpen && (
+          <span style={{ position: "absolute", right: 0, top: 44, zIndex: 30 }}>
+            <DropdownMenu
+              width={220}
+              items={[
+                {
+                  label: "Edit Job",
+                  icon: "pencil",
+                  disabled: !["SUPER_ADMIN", "OPS_ADMIN"].includes(role) || job.adminActions.canEdit !== true || !job.version,
+                  onClick: () => { setMoreOpen(false); openAdminAction("edit"); },
+                },
+                {
+                  label: "Duplicate Job",
+                  icon: "copy",
+                  disabled: !["SUPER_ADMIN", "OPS_ADMIN"].includes(role) || job.adminActions.canDuplicate !== true,
+                  onClick: () => {
+                    setMoreOpen(false);
+                    openAdminAction("duplicate");
+                  },
+                },
+                {
+                  label: "Print Job Sheet",
+                  icon: "printer",
+                  onClick: () => {
+                    setMoreOpen(false);
+                    window.print();
+                  },
+                },
+                { divider: true },
+                {
+                  label: "Flag for Review",
+                  icon: "flag",
+                  disabled: Boolean(job.reviewFlag && !job.reviewFlag.version),
+                  onClick: () => {
+                    setMoreOpen(false);
+                    openAdminAction("flag");
+                  },
+                },
+                ...(job.status === "In Transit"
+                  ? [
+                      {
+                        label: "Mark Delivered",
+                        icon: "circle-check",
+                        onClick: () => {
+                          setMoreOpen(false);
+                          doMarkDelivered();
+                        },
+                      },
+                    ]
+                  : []),
+                ...(job.status === "Assigned"
+                  ? [
+                      {
+                        label: "Mark In Transit",
+                        icon: "truck",
+                        disabled: !["SUPER_ADMIN", "OPS_ADMIN"].includes(role) || job.adminActions.canMarkInTransit !== true,
+                        onClick: () => {
+                          setMoreOpen(false);
+                          doMarkInTransit();
+                        },
+                      },
+                    ]
+                  : []),
+                ...(!terminal && job.status !== "Delivered"
+                  ? [
+                      {
+                        label: "Cancel Job",
+                        icon: "ban",
+                        tone: "danger",
+                        onClick: doCancel,
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </span>
+        )}
+      </span>
       <Button
         variant="outline"
         icon="share-2"
@@ -406,11 +482,16 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
           >
             View on Map
           </Button>
-          {job.status === "Assigned" && <Button icon="truck" disabled={!["SUPER_ADMIN", "OPS_ADMIN"].includes(role) || job.adminActions.canMarkInTransit !== true} onClick={doMarkInTransit}>Mark In Transit</Button>}
-          {job.status === "In Transit" && <Button icon="circle-check" onClick={doMarkDelivered}>Mark Delivered</Button>}
+          {/* <Button
+            icon="pencil"
+            onClick={() =>
+              unavailable("Edit Job")
+            }
+          >
+            Edit Job
+          </Button> */}
         </>
       ) : null}
-      {!terminal && job.status !== "Delivered" && <Button variant="danger" icon="ban" disabled={actionBusy} onClick={doCancel}>Cancel job</Button>}
     </>
   );
 
@@ -471,19 +552,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
         </Banner>
       )}
 
-      <section className="jd-hero" aria-label="Job summary">
-        <div className="jd-hero-route">
-          <span className="jd-hero-eyebrow">{job.requestType || "Job"}{!isMissing(job.forwarder) ? " · " + job.forwarder : ""}</span>
-          <RouteStack from={job.origin} to={job.destination} wrap />
-        </div>
-        <dl className="jd-hero-stats">
-          <div><dt>Job value</dt><dd>{orNA(naira(job.jobValue))}</dd></div>
-          <div><dt>Trips</dt><dd>{job.tripsKnown ? `${displayCount(job.assignedTrips)} of ${displayCount(tripCounts.total)}` : <NotAvailable />}</dd></div>
-          <div><dt>Bids</dt><dd>{job.bidsKnown ? bids.length : <NotAvailable />}</dd></div>
-          <div><dt>Trucking company</dt><dd>{orNA(job.truckingCompany, "Not assigned")}</dd></div>
-        </dl>
-      </section>
-
       <JobProgress job={job} />
 
       <div className="jd-detail-nav"><Tabs
@@ -510,19 +578,19 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     <div className="jd-tab-stack">
       <SectionCard title="Job details"  icon="package">
         <dl className="jd-info-facts">
-          <JobFact label="Request type"><Badge tone="purple">{job.requestType}</Badge></JobFact>
+          <JobFact label="Request type"><Badge tone="purple">{job.requestType || '—'}</Badge></JobFact>
           <JobFact label="Trip type">{job.tripType}</JobFact>
           <JobFact label="Trucks required">{displayCount(job.requiredTrucks)}</JobFact>
-          <JobFact label="Customer / forwarder">{job.contactPerson || job.forwarder}</JobFact>
-          <JobFact label="Contact phone">{job.contactPhone}</JobFact>
-          <JobFact label="Cargo type">{job.cargoType}</JobFact>
-          <JobFact label="Cargo details" wide>{job.cargoDetails || job.cargo}</JobFact>
-          <JobFact label="Total weight">{job.totalWeight}</JobFact>
+          <JobFact label="Customer / forwarder">{job.contactPerson || job.forwarder || '—'}</JobFact>
+          <JobFact label="Contact phone">{job.contactPhone || '—'}</JobFact>
+          <JobFact label="Cargo type">{job.cargoType || '—'}</JobFact>
+          <JobFact label="Cargo details" wide>{job.cargoDetails || job.cargo || '—'}</JobFact>
+          <JobFact label="Total weight">{job.totalWeight ?? '—'}</JobFact>
         </dl>
         {job.forwarderId && <button type="button" className="jd-text-link" onClick={() => navigate('/forwarders/detail?id=' + encodeURIComponent(job.forwarderId))}>View customer profile <Icon name="arrow-up-right" size={13} /></button>}
         <div data-empty={!job.specialInstructions || job.specialInstructions === '—'} className="jd-instructions">
           <span className="jd-field-label">Special instructions</span>
-          <p>{isMissing(job.specialInstructions) ? 'No special instructions.' : job.specialInstructions}</p>
+          <p>{job.specialInstructions || '—'}</p>
         </div>
       </SectionCard>
       <SectionCard title="Route details" description="Pickup, delivery and schedule" icon="route"
@@ -530,23 +598,23 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
         <div className="jd-route-stops">
           <div className="jd-route-stop">
             <span className="jd-stop-marker"><Icon name="circle-dot" size={18} /></span>
-            <div className="jd-stop-content"><span className="jd-field-label">Pickup</span><h4>{orNA(job.origin)}</h4>{!isMissing(job.originCountry) && <p>{job.originCountry}</p>}<span className="jd-stop-date"><Icon name="calendar" size={13} />{orNA(job.pickupDate, 'Date not set')}</span></div>
+            <div className="jd-stop-content"><span className="jd-field-label">Pickup</span><h4>{job.origin || '—'}</h4><p>{job.originCountry || '—'}</p><span className="jd-stop-date"><Icon name="calendar" size={13} />{job.pickupDate || '—'}</span></div>
           </div>
           <div className="jd-route-stop">
             <span className="jd-stop-marker destination"><Icon name="map-pin" size={18} /></span>
-            <div className="jd-stop-content"><span className="jd-field-label">Delivery</span><h4>{orNA(job.destination)}</h4>{!isMissing(job.destCountry) && <p>{job.destCountry}</p>}<span className="jd-stop-date"><Icon name="calendar" size={13} />{orNA(job.deliveryDate, 'Date not set')}</span></div>
+            <div className="jd-stop-content"><span className="jd-field-label">Delivery</span><h4>{job.destination || '—'}</h4><p>{job.destCountry || '—'}</p><span className="jd-stop-date"><Icon name="calendar" size={13} />{job.deliveryDate || '—'}</span></div>
           </div>
         </div>
         <dl className="jd-route-facts">
-          <JobFact label="Distance">{job.distanceKm != null ? `${job.distanceKm} km` : null}</JobFact>
-          <JobFact label="Estimated duration">{job.durationLabel}</JobFact>
-          <JobFact label="Route type">{job.routeType}</JobFact>
+          <JobFact label="Distance">{job.distanceKm != null ? `${job.distanceKm} km` : '—'}</JobFact>
+          <JobFact label="Estimated duration">{job.durationLabel || '—'}</JobFact>
+          <JobFact label="Route type">{job.routeType || '—'}</JobFact>
         </dl>
       </SectionCard>
     </div>
     <aside className="jd-price-column jd-tab-stack">
       <SectionCard title="Price" action={<span className="jd-currency">NGN</span>}>
-        <div className="jd-price-hero"><span className="jd-field-label">Total job value</span><strong>{orNA(naira(job.jobValue))}</strong></div>
+        <div className="jd-price-hero"><span className="jd-field-label">Total job value</span><strong>{naira(job.jobValue)}</strong></div>
 
         <button type="button" className="jd-text-link" onClick={() => setTab('Financials')}>View financial details <Icon name="arrow-right" size={13} /></button>
       </SectionCard>
@@ -554,7 +622,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
         {activityLog.length ? <div className="jd-overview-activity">{activityLog.slice(0, 5).map((entry) => <div key={entry.id} className="jd-overview-event">
           <span className="jd-event-icon"><Icon name="history" size={13} aria-hidden="true" /></span>
           <div><strong>{entry.action}</strong><p>{entry.details}</p><small>{entry.user} · {entry.time}</small></div>
-        </div>)}</div> : <p className="jd-overview-empty">{job.activityKnown ? 'No activity yet.' : <NotAvailable />}</p>}
+        </div>)}</div> : <p className="jd-overview-empty">{job.activityKnown ? 'No activity yet.' : '—'}</p>}
       </SectionCard>
     </aside>
   </div>
@@ -582,7 +650,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               >
 
                 {!job.bidsKnown ? <DriverLoadingNotice>Bid data is unavailable. Refresh to try again.</DriverLoadingNotice> : bids.length ? (
-                  <DataTable emptyAs={<NotAvailable />}
+                  <DataTable
                     rows={bids}
                     rowKey={(r) => r.id}
                     columns={[
@@ -729,7 +797,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
             action={<Button size="sm" icon="truck" onClick={() => navigate("/dispatch")}>Manage Assignments</Button>}
           >
             {!job.tripsKnown ? <DriverLoadingNotice>Trip data is unavailable. Refresh to try again.</DriverLoadingNotice> : jobTrips.length ? (
-              <DataTable emptyAs={<NotAvailable />}
+              <DataTable
                 rows={jobTrips}
                 rowKey={(trip) => trip.id}
                 onRowClick={(trip) => { setSelectedTripId(trip.id); setTab("Tracking & Updates"); }}
@@ -803,27 +871,27 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                   <span>
                     <span className="tk-meta">Distance Covered</span>
                     <strong>
-                      {orNA(selectedTrip?.coveredKm != null && selectedTrip?.distanceKm != null ? `${selectedTrip.coveredKm} km / ${selectedTrip.distanceKm} km` : "—")}
+                      {selectedTrip?.coveredKm != null && selectedTrip?.distanceKm != null ? `${selectedTrip.coveredKm} km / ${selectedTrip.distanceKm} km` : "—"}
                     </strong>
                   </span>
                   <span>
                     <span className="tk-meta">Current Speed</span>
                     <strong>
-                      {orNA(selectedTrip?.speedKmH == null ? "—" : `${selectedTrip.speedKmH} km/h`)}
+                      {selectedTrip?.speedKmH == null ? "—" : `${selectedTrip.speedKmH} km/h`}
                     </strong>
                   </span>
                   <span>
                     <span className="tk-meta">ETA</span>
-                    <strong>{orNA(selectedTrip?.eta || job.deliveryDate || "—")}</strong>
+                    <strong>{selectedTrip?.eta || job.deliveryDate || "—"}</strong>
                   </span>
                   <span>
                     <span className="tk-meta">Next Stop</span>
-                    <strong>{orNA(job.destination)}</strong>
+                    <strong>{job.destination}</strong>
                   </span>
                 </div>
               </SectionCard><SectionCard title="Tracking Updates" pad="none">
                 {trackingUpdates.length ? (
-                  <DataTable emptyAs={<NotAvailable />}
+                  <DataTable
                     rows={trackingUpdates}
                     rowKey={(r, i) => i}
                     columns={[
@@ -917,63 +985,304 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
       {tab === "Documents" && (
         <section className="jd-tab-stack"><JobTabHeading title="Documents" description="Review submitted documents and their approval status." />
           <InfoStrip items={[{label:'Total documents',value:displayCount(documentStatusCounts.total)},{label:'Approved',value:displayCount(documentStatusCounts.approved)},{label:'Pending review',value:displayCount(documentStatusCounts.pending)},{label:'Rejected',value:displayCount(documentStatusCounts.rejected)}]} />
-          <SectionCard
-            title={`Documents (${job.documentsKnown ? filteredDocuments.length : "—"})`}
-            description="Select a document to preview it and approve it or request a re-upload."
-            pad="none"
-          >
-            <div className="jd-doc-toolbar">
-              <SearchField placeholder="Search documents…" value={docQuery} onChange={(e) => setDocQuery(e.target.value)} />
-              <span style={{ position: "relative" }}>
-                <FilterSelect prefix="Status" label={docStatusFilter} active={docStatusFilter !== "All Statuses"} onClick={() => setDocOpenFilter((o) => !o)} onClear={() => setDocStatusFilter("All Statuses")} />
-                {docOpenFilter && (
-                  <span style={{ position: "absolute", left: 0, top: 40, zIndex: 30 }}>
-                    <DropdownMenu width={180} items={["All Statuses", "Approved", "Pending", "Rejected"].map((s) => ({ label: s, icon: s === docStatusFilter ? "check" : undefined, onClick: () => { setDocStatusFilter(s); setDocOpenFilter(false); } }))} />
+          <div className="jd-layout jd-documents-layout">
+            <div className="jd-main">
+              <SectionCard
+                title={`Documents (${job.documentsKnown ? filteredDocuments.length : "—"})`}
+                description="Review and approve or reject documents submitted for this job."
+                pad="none"
+              >
+                <div className="jd-doc-toolbar">
+                  <SearchField
+                    placeholder="Search documents…"
+                    value={docQuery}
+                    onChange={(e) => setDocQuery(e.target.value)}
+                  />
+                  <span style={{ position: "relative" }}>
+                    <FilterSelect
+                      label={docStatusFilter}
+                      active={docStatusFilter !== "All Statuses"}
+                      onClick={() => setDocOpenFilter((o) => !o)}
+                    />
+                    {docOpenFilter && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: 44,
+                          zIndex: 30,
+                        }}
+                      >
+                        <DropdownMenu
+                          width={180}
+                          items={[
+                            "All Statuses",
+                            "Approved",
+                            "Pending",
+                            "Rejected",
+                          ].map((s) => ({
+                            label: s,
+                            icon: s === docStatusFilter ? "check" : undefined,
+                            onClick: () => {
+                              setDocStatusFilter(s);
+                              setDocOpenFilter(false);
+                            },
+                          }))}
+                        />
+                      </span>
+                    )}
                   </span>
+                  <Button
+                    variant="outline"
+                    icon="rotate-cw"
+                    onClick={() => {
+                      setDocQuery("");
+                      setDocStatusFilter("All Statuses");
+                    }}
+                  >
+                    Reset
+                  </Button>
+                </div>
+                {!job.documentsKnown ? <DriverLoadingNotice>Document data is unavailable. Refresh to try again.</DriverLoadingNotice> : filteredDocuments.length ? (
+                  <DataTable
+                    rows={filteredDocuments}
+                    rowKey={(r) => r.id}
+                    onRowClick={setReviewDoc}
+                    columns={[
+                      {
+                        key: "name",
+                        header: "Document Name",
+                        render: (r) => (
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <Icon
+                              name={
+                                r.name.endsWith(".xlsx")
+                                  ? "sheet"
+                                  : r.name.endsWith(".zip")
+                                    ? "image"
+                                    : "file-text"
+                              }
+                              size={16}
+                              color="var(--tk-blue)"
+                            />
+                            <strong
+                              style={{
+                                color: "var(--tk-ink-900)",
+                                font: "500 13px/18px var(--tk-font-sans)",
+                              }}
+                            >
+                              {r.name}
+                            </strong>
+                          </span>
+                        ),
+                      },
+                      { key: "type", header: "Type" },
+                      { key: "scope", header: "Scope", render: (r) => <Badge tone={r.tripId ? "info" : "neutral"}>{r.tripId || "Job-wide"}</Badge> },
+                      { key: "submittedBy", header: "Submitted By" },
+                      { key: "date", header: "Date Submitted" },
+                      {
+                        key: "status",
+                        header: "Status",
+                        render: (r) => (
+                          <Badge
+                            tone={
+                              r.status === "Approved"
+                                ? "success"
+                                : r.status === "Rejected"
+                                  ? "danger"
+                                  : "warning"
+                            }
+                            dot
+                          >
+                            {r.status}
+                          </Badge>
+                        ),
+                      },
+                      {
+                        key: "x",
+                        header: "Actions",
+                        render: (r) => (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setReviewDoc(r);
+                            }}
+                          >
+                            View
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
+                ) : (
+                  <EmptyState
+                    icon="file-text"
+                    title="No documents match"
+                    description="Try a different search or filter."
+                  />
                 )}
-              </span>
+              </SectionCard>
             </div>
-            {!job.documentsKnown ? <DriverLoadingNotice>Document data is unavailable. Refresh to try again.</DriverLoadingNotice> : filteredDocuments.length ? (
-              <DataTable emptyAs={<NotAvailable />}
-                rows={filteredDocuments}
-                rowKey={(r) => r.id}
-                onRowClick={(r) => { setReviewDoc(r); setPreviewOpen(true); }}
-                columns={[
-                  { key: "name", header: "Document", render: (r) => (
-                    <span className="jd-doc-cell">
-                      <span className="jd-doc-icon"><Icon name={/\.(xlsx?|csv)$/i.test(r.name) ? "file-spreadsheet" : /\.(png|jpe?g|gif|webp)$/i.test(r.name) ? "image" : "file-text"} size={18} /></span>
-                      <span><strong>{documentTitle(r.type) || r.name}</strong><small title={r.name}>{r.name}</small></span>
+
+            <div className="jd-rail">
+              <SectionCard title="Document Preview">
+                {reviewDoc ? (
+                  <>
+                    {reviewDoc.url ? <div className="jd-doc-preview">{previewUrl ? <iframe src={previewUrl} title={reviewDoc.name + " preview"} loading="lazy" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", minHeight: 220, border: 0 }} /> : documentPreview.error ? <DriverLoadingNotice>Unable to preview this document. Please try again.</DriverLoadingNotice> : <Skeleton height={220} />}</div> : (
+                    <div className="jd-doc-preview">
+                      <strong
+                        style={{
+                          font: "700 12px/16px var(--tk-font-sans)",
+                          color: "var(--tk-ink-300)",
+                          letterSpacing: 1,
+                        }}
+                      >
+                        ▽ TRUKKAS
+                      </strong>
+                      <span
+                        style={{
+                          font: "700 15px/20px var(--tk-font-sans)",
+                          color: "var(--tk-ink-900)",
+                        }}
+                      >
+                        {reviewDoc.type || "DOCUMENT"}
+                      </span>
+                      <Icon
+                        name={
+                          reviewDoc.name.endsWith(".xlsx")
+                            ? "sheet"
+                            : reviewDoc.name.endsWith(".zip")
+                              ? "image"
+                              : "file-text"
+                        }
+                        size={38}
+                        color="var(--tk-ink-300)"
+                      />
+                      <span className="tk-meta">
+                        Preview rendered by the consuming app's document viewer.
+                      </span>
+                    </div>
+                    )}
+                    <div
+                      style={{
+                        marginTop: 12,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <strong
+                        style={{
+                          font: "600 13px/18px var(--tk-font-sans)",
+                          color: "var(--tk-ink-900)",
+                        }}
+                      >
+                        {reviewDoc.name}
+                      </strong>
+                      <Badge
+                        tone={
+                          reviewDoc.status === "Approved"
+                            ? "success"
+                            : reviewDoc.status === "Rejected"
+                              ? "danger"
+                              : "warning"
+                        }
+                      >
+                        {reviewDoc.status}
+                      </Badge>
+                    </div>
+                    <span className="tk-meta">
+                      {reviewDoc.size} · Submitted {reviewDoc.date}
                     </span>
-                  ) },
-                  { key: "scope", header: "Applies to", render: (r) => <Badge tone={r.tripId ? "info" : "neutral"}>{r.tripId || "Whole job"}</Badge> },
-                  { key: "submittedBy", header: "Submitted by" },
-                  { key: "date", header: "Submitted" },
-                  { key: "status", header: "Status", render: (r) => <Badge tone={r.status === "Approved" ? "success" : r.status === "Rejected" ? "danger" : "warning"} dot>{r.status}</Badge> },
-                ]}
-              />
-            ) : (
-              <EmptyState icon="file-text" title="No documents match" description="Try a different search or filter." />
-            )}
-          </SectionCard>
-          <DocumentPreview
-            open={previewOpen}
-            onClose={() => setPreviewOpen(false)}
-            title={`${job.id} documents`}
-            subtitle={`${job.forwarder || job.contactPerson || ""}${job.origin ? " · " + job.origin + " → " + (job.destination || "") : ""}`}
-            documents={filteredDocuments.map((d) => ({ ...d, scope: d.tripId || "Whole job" }))}
-            selectedId={reviewDoc?.id}
-            onSelect={(id) => setReviewDoc(filteredDocuments.find((d) => d.id === id) || null)}
-            preview={{ url: previewUrl, loading: Boolean(reviewDoc?.url) && !previewUrl && !documentPreview.error, error: documentPreview.error }}
-            canReview={(d) => Boolean(job.canApprove && d.canReview && d.apiId)}
-            busy={actionBusy}
-            onApprove={(d) => doReviewDoc(d, true)}
-            onRequestReupload={(d) => doReviewDoc(d, false)}
-          />
+                    {previewUrl && <div style={{ marginTop: 8 }}><a href={previewUrl} download={reviewDoc.name}>Download document</a></div>}
+
+                    <div className="jd-finance-rows" style={{ marginTop: 14 }}>
+                      <div>
+                        <span>File Name</span>
+                        <strong>{reviewDoc.name}</strong>
+                      </div>
+                      <div>
+                        <span>Document Type</span>
+                        <strong>{reviewDoc.type}</strong>
+                      </div>
+                      <div>
+                        <span>Applies To</span>
+                        <strong>{reviewDoc.tripId || "All job trips"}</strong>
+                      </div>
+                      <div>
+                        <span>Submitted By</span>
+                        <strong>{reviewDoc.submittedBy}</strong>
+                      </div>
+                      <div>
+                        <span>Date Submitted</span>
+                        <strong>{reviewDoc.date}</strong>
+                      </div>
+                      <div>
+                        <span>Status</span>
+                        <strong>{reviewDoc.status}</strong>
+                      </div>
+                      <div>
+                        <span>Reviewed By</span>
+                        <strong>{reviewDoc.reviewedBy || "—"}</strong>
+                      </div>
+                      <div>
+                        <span>Reviewed On</span>
+                        <strong>{reviewDoc.reviewedOn || "—"}</strong>
+                      </div>
+                      <div>
+                        <span>Reference No.</span>
+                        <strong>{reviewDoc.reference || "—"}</strong>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 14,
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 8,
+                      }}
+                    >
+                      <Button
+                        variant="outline"
+                        icon="circle-x"
+                        disabled={actionBusy || !job.canApprove || !reviewDoc.canReview || reviewDoc.status === "Rejected"}
+                        onClick={() => doReviewDoc(reviewDoc, false)}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        icon="circle-check"
+                        disabled={actionBusy || !job.canApprove || !reviewDoc.canReview || reviewDoc.status === "Approved"}
+                        onClick={() => doReviewDoc(reviewDoc, true)}
+                      >
+                        Approve
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <EmptyState
+                    icon="file-text"
+                    title="No document selected"
+                    description="Choose a document from the list to preview it."
+                  />
+                )}
+              </SectionCard>
+            </div>
+          </div>
         </section>
       )}
 
       {tab === "Financials" && (<section className="jd-tab-stack"><JobTabHeading title="Financials" description="Payments, costs and payouts for this job." /><InfoStrip items={[{label:'Job value',value:naira(job.jobValue)},{label:'Platform fee',value:naira(fee),caption:percentage(job.platformFeePct)},{label:'Company payment',value:naira(driverPayment)},{label:'Net platform earnings',value:naira(netEarnings)}]} /><div className="jd-finance-layout"><div className="jd-tab-stack"><SectionCard title="Transactions" pad="none">
-                {!job.transactionsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <DataTable emptyAs={<NotAvailable />}
+                {!job.transactionsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <DataTable
                   rows={transactions}
                   rowKey={(r, i) => i}
                   columns={[
@@ -1035,7 +1344,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                 />}
               </SectionCard>{tripFinancials.length > 0 && (
                 <SectionCard title="Trip-level Costs" description="Operational costs stay attached to each truck movement and roll up to the job." pad="none">
-                  <DataTable emptyAs={<NotAvailable />} rows={tripFinancials} rowKey={(trip) => trip.id} coloredHeader columns={[
+                  <DataTable rows={tripFinancials} rowKey={(trip) => trip.id} coloredHeader columns={[
                     { key: "id", header: "Container / Route", render: (trip) => <strong className="jd-trip-id">{trip.containerNumber} · {trip.route}</strong> },
                     { key: "truckPlate", header: "Truck" },
                     { key: "driverName", header: "Driver" },
@@ -1046,7 +1355,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                   ]}/>
                 </SectionCard>
               )}<SectionCard title={`Related Payouts (${job.relatedPayoutsKnown ? relatedPayouts.length : "—"})`} description="Company payouts are reconciled to the individual trips included in this job." pad="none">
-                {relatedPayouts.length ? <DataTable emptyAs={<NotAvailable />} rows={relatedPayouts} rowKey={(payout) => payout.id} coloredHeader onRowClick={(payout) => navigate(`/payouts/${payout.id}`)} columns={[
+                {relatedPayouts.length ? <DataTable rows={relatedPayouts} rowKey={(payout) => payout.id} coloredHeader onRowClick={(payout) => navigate(`/payouts/${payout.id}`)} columns={[
                   { key: "id", header: "Payout ID", render: (payout) => <strong className="jd-trip-id">{payout.id}</strong> },
                   { key: "party", header: "Beneficiary" },
                   { key: "trips", header: "Trips Included", render: (payout) => `${payout.tripIds?.length || 0} of ${jobTrips.length}` },
@@ -1057,7 +1366,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                 ]} /> : !job.relatedPayoutsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <EmptyState icon="wallet" title="No payout created" description="A company payout can be reconciled after eligible trips are delivered." />}
               </SectionCard></div><aside className="jd-tab-stack"><SectionCard title="Payment status">
                 <Timeline items={financialTimeline.slice(0, 3)} />
-              </SectionCard><SectionCard title="Additional costs"><div className="jd-price-breakdown"><div><span>Demurrage (estimated)</span><strong>{orNA(naira(demurrage))}</strong></div><div><span>Other adjustments</span><strong>{orNA(naira(otherCosts))}</strong></div></div></SectionCard></aside></div></section>)}
+              </SectionCard><SectionCard title="Additional costs"><div className="jd-price-breakdown"><div><span>Demurrage (estimated)</span><strong>{naira(demurrage)}</strong></div><div><span>Other adjustments</span><strong>{naira(otherCosts)}</strong></div></div></SectionCard></aside></div></section>)}
 
       {tab === "Activity Log" && (<section className="jd-tab-stack"><JobTabHeading title="Activity log" description="A chronological record of changes and actions on this job." /><InfoStrip items={[{label:'Activities recorded',value:activityCount},{label:'People involved',value:displayCount(uniqueActivityUsers)},{label:'Most active',value:job.mostActiveUser || '—'}]} /><SectionCard
                 title="Activity Log"
@@ -1124,7 +1433,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                   )
                 }
               >
-                {!job.activityKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <DataTable emptyAs={<NotAvailable />}
+                {!job.activityKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : <DataTable
                   rows={pagedActivity}
                   rowKey={(r, i) => i}
                   columns={[
@@ -1211,7 +1520,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
       <Modal
         open={rejectOpen}
         onClose={() => { if (!actionBusy) setRejectOpen(false); }}
-        title={typeof rejectOpen === "object" ? "Request re-upload" : "Reject Job"}
+        title={typeof rejectOpen === "object" ? "Reject Document" : "Reject Job"}
         description={typeof rejectOpen === "object" ? rejectOpen.name : `Reject ${job.id}?`}
         footer={
           <>
@@ -1219,14 +1528,14 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               Cancel
             </Button>
             <Button variant="danger" icon="circle-x" disabled={actionBusy || !job.canApprove || !rejectionReason.trim()} onClick={doReject}>
-              {typeof rejectOpen === "object" ? "Request re-upload" : "Reject Job"}
+              {typeof rejectOpen === "object" ? "Reject Document" : "Reject Job"}
             </Button>
           </>
         }
       >
         <span className="tk-meta">
           {typeof rejectOpen === "object"
-            ? "The document will be marked rejected and the forwarder asked to upload a new copy. Tell them what needs fixing."
+            ? "The selected document will be rejected and the forwarder notified to re-upload it."
             : "This job will be marked as rejected and the forwarder will be notified. This action cannot be undone from this screen."}
         </span>
         <TextField label="Reason" required value={rejectionReason} disabled={actionBusy} onChange={(event) => setRejectionReason(event.target.value)} />

@@ -288,7 +288,7 @@ export function LiveTracking() {
 
       <div className="lt-map-toolbar">
         <span style={{ position: 'relative' }}>
-          <button className="date-button" style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--tk-line-strong)', borderRadius: 8, height: 34, padding: '0 10px', background: 'var(--tk-surface)', cursor: 'pointer', font: '500 12px var(--tk-font-sans)' }}
+          <button className="date-button" style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--tk-line-strong)', borderRadius: 8, height: 34, padding: '0 10px', background: '#fff', cursor: 'pointer', font: '500 12px var(--tk-font-sans)' }}
             onClick={() => setOpenFilter(openFilter === 'style' ? null : 'style')}>Map style　{mapStyle}<Icon name="chevron-down" size={13} /></button>
           {openFilter === 'style' && (
             <span style={{ position: 'absolute', left: 0, bottom: 40, zIndex: 30 }}>
