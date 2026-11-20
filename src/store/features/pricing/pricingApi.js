@@ -238,7 +238,7 @@ async function exportPricingServices({ ids }, _api, _extraOptions, baseQuery) {
 export const platformRateSections = [
   { key: 'job', title: 'Job Fees & Commission', description: 'Charged on every job the platform handles.' },
   { key: 'wallet', title: 'Wallet Fees', description: 'Flat fees on wallet top-ups and bank withdrawals. Bank charges are added on top.' },
-  { key: 'payment', title: 'Payment Terms', description: 'How escrowed job money is released to the trucker.' },
+  { key: 'payment', title: 'Payment Terms & Escrow', description: 'How escrowed job money is released to the trucker, and how long the forwarder has to confirm.' },
   { key: 'fare', title: 'Fare Limits', description: 'Bounds on job fees and bids, relative to the recommended fare.' },
   { key: 'offloading', title: 'Late Offloading Demurrage', description: 'Charged to the forwarder when offloading starts after the free window.' },
   { key: 'driver', title: 'Driver Delay Deductions', description: 'Deducted from the trucker’s final payment for delivery beyond the ETA and grace period.' },
@@ -250,6 +250,7 @@ const fields = [
   { key: 'vatPercent', path: ['pricing', 'vatPercent'], name: 'VAT', description: 'VAT percentage applied to total job cost', appliesTo: 'All jobs', unit: '%', min: 0, max: 100, section: 'job', icon: 'badge-percent' },
   { key: 'withdrawalFee', path: ['pricing', 'withdrawalFee'], name: 'Withdrawal Fee', description: 'Flat Trukkas fee on each wallet → bank withdrawal', appliesTo: 'Wallet withdrawals', unit: 'NGN', min: 0, section: 'wallet', icon: 'wallet' },
   { key: 'depositFee', path: ['pricing', 'depositFee'], name: 'Deposit Fee', description: 'Bank collection fee deducted from each wallet top-up', appliesTo: 'Wallet deposits', unit: 'NGN', min: 0, section: 'wallet', icon: 'wallet' },
+  { key: 'holdPeriodHours', path: ['jobs', 'containerReturnConfirmHours'], name: 'Confirmation Hold', description: 'How long the forwarder has to confirm container return before the final payment releases automatically', unit: 'hours', min: 1, section: 'payment', icon: 'clock' },
   { key: 'mobilizationPercent', path: ['escrow', 'mobilizationPercent'], name: 'Mobilization Payment', description: 'Share of the job value released to the trucker at pickup; the rest is the final payment. Existing jobs keep their split.', unit: '%', min: 0, max: 100, section: 'payment', icon: 'wallet' },
   { key: 'minFeePercent', path: ['pricing', 'minFeePercent'], name: 'Minimum Fare', description: 'Minimum job fee as a percentage of recommended fare', unit: '%', min: 1, max: 100, section: 'fare', icon: 'shield-check' },
   { key: 'maxFeePercent', path: ['pricing', 'maxFeePercent'], name: 'Maximum Fare', description: 'Maximum bid or counter-offer as a percentage of recommended fare', unit: '%', min: 100, max: 500, section: 'fare', icon: 'shield-check' },
@@ -276,18 +277,16 @@ export function adaptAdminPricingConfig(response) {
     const effectiveFrom = record(meta.effectiveFrom)[field.path.join('.')];
     return { ...field, id: `config:${field.key}`, source: 'config', value, rate: rateLabel(value, field.unit), iconTint: 'blue', status: value == null ? 'Unavailable' : 'Configured', effectiveFrom: effectiveFrom === null ? 'Platform default' : dateParts(effectiveFrom).updated, editable: value != null };
   });
-  const escrow = record(dto.escrow), hold = record(escrow.standardHoldDuration);
-  // Minutes are the documented live override and hours the production default: alternatives, not additive.
-  const holdMinutes = number(hold.minutes) != null ? number(hold.minutes) : number(hold.hours) != null ? number(hold.hours) * 60 : null;
+  const escrow = record(dto.escrow);
   const policy = (value) => typeof value === 'boolean' ? (value ? 'Always on' : 'Off') : '—';
   return {
     currency: text(dto.platform?.defaultCurrency), rows,
     escrowPolicy: [
-      { id: 'finalPercent', name: 'Final Payment', description: 'Released after delivery and the forwarder’s confirmation', rate: format(number(escrow.finalPercent), '%') },
-      { id: 'hold', name: 'Confirmation Hold', description: 'How long the final payment waits for the forwarder to confirm container return', rate: holdMinutes == null ? '—' : rateLabel(holdMinutes, 'minutes') },
-      { id: 'autoRelease', name: 'Auto-Release', description: 'Releases the final payment when the hold ends without a dispute', rate: policy(record(escrow.autoRelease).enabled) },
-      { id: 'disputeFreeze', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', rate: policy(record(escrow.disputeFreeze).enabled) },
+      { id: 'finalPercent', name: 'Final Payment', description: 'The rest of the job value, released after delivery and the forwarder’s confirmation. Set by the mobilization share.', rate: format(number(escrow.finalPercent), '%'), fixedBy: 'Follows mobilization' },
+      { id: 'autoRelease', fixedBy: 'Fixed by the platform', name: 'Auto-Release', description: 'Releases the final payment when the hold ends without a dispute', rate: policy(record(escrow.autoRelease).enabled) },
+      { id: 'disputeFreeze', fixedBy: 'Fixed by the platform', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', rate: policy(record(escrow.disputeFreeze).enabled) },
     ],
+    holdOverrideMinutes: number(record(dto.jobs).containerReturnConfirmMinutes),
     updatedAt: dateParts(meta.updatedAt), updatedBy: text(record(meta.updatedBy).name),
   };
 }

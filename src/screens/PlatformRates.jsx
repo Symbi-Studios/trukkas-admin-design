@@ -30,6 +30,7 @@ function RateName({ row }) {
 
 // Rates the backend can pause: switching off sets the fee to 0, switching on restores its last value.
 const PAUSABLE = { platformFee: "platform-fee", commissionPercent: "commission", vatPercent: "vat", withdrawalFee: "withdrawal-fee", depositFee: "deposit-fee" };
+const SECTION_ICONS = { job: "receipt", wallet: "wallet", payment: "lock", fare: "scale", offloading: "hourglass", driver: "truck", cancellation: "circle-x" };
 
 export function PlatformRates() {
   const configQuery = useGetAdminPricingConfigQuery();
@@ -37,6 +38,7 @@ export function PlatformRates() {
   const canEdit = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
   const [setting, setSetting] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [active, setActive] = useState(platformRateSections[0].key);
   const [search] = usePageSearchState("");
   const rows = (config?.rows || []).filter((row) => matchesPageSearch([row.name, row.description, row.appliesTo], search));
   const escrowPolicy = (config?.escrowPolicy || []).filter((row) => matchesPageSearch([row.name, row.description], search));
@@ -51,6 +53,12 @@ export function PlatformRates() {
     if (!(await fees.toggle(rule))) return;
     setNotice(`${row.name} ${rule.statusCode === "ACTIVE" ? "paused" : "switched back on"}.`);
   }
+  // While searching, the menu only lists sections with matches.
+  const sections = platformRateSections.filter((section) => !search.trim() || rows.some((row) => row.section === section.key) || (section.key === "payment" && escrowPolicy.length));
+  const current = sections.find((section) => section.key === active) || sections[0];
+  const sectionRows = current ? rows.filter((row) => row.section === current.key) : [];
+  const holdRow = rows.find((row) => row.key === "holdPeriodHours");
+  const holdOverride = config?.holdOverrideMinutes != null && holdRow?.value != null && config.holdOverrideMinutes !== holdRow.value * 60;
 
   return (
     <>
@@ -63,66 +71,74 @@ export function PlatformRates() {
       {notice && <Banner tone="success" action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice}</Banner>}
       {configQuery.error && <Banner tone="danger" title="Unable to load platform rates" action={<Button variant="outline" onClick={configQuery.refetch}>Retry</Button>}>{pricingError(configQuery.error)}</Banner>}
       {!canEdit && <Banner tone="info">Only Super Admins can change platform rates.</Banner>}
-      {config && (config.updatedBy || config.updatedAt.updated !== "—") && (
-        <p className="tk-meta" style={{ margin: 0 }}>
-          Last changed {config.updatedAt.updated}{config.updatedAt.time !== "—" ? ` at ${config.updatedAt.time}` : ""}{config.updatedBy ? ` by ${config.updatedBy}` : ""}. Every change is recorded in <Link to="/audit">Audit Logs</Link>.
-        </p>
-      )}
       {configQuery.isFetching && config && <DriverLoadingNotice>Refreshing platform rates…</DriverLoadingNotice>}
 
-      <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
-        {platformRateSections.map((section) => {
-          const sectionRows = rows.filter((row) => row.section === section.key);
-          if (config && !sectionRows.length) return null;
-          return (
-            <SectionCard key={section.key} title={section.title} description={section.description} pad="none" className="fin-rates-card">
-              <div style={{ height: 14 }} />
-              {loading ? <DriverTableLoading columns={4} label={`Loading ${section.title.toLowerCase()}`} /> : (
+      <div className="fin-rates-layout">
+        <nav className="fin-rates-nav" aria-label="Rate sections">
+          {sections.map((section) => (
+            <button key={section.key} type="button" className={section.key === current?.key ? "active" : undefined} onClick={() => setActive(section.key)}>
+              <Icon name={SECTION_ICONS[section.key] || "sliders-horizontal"} size={16} />
+              <span>{section.title}</span>
+              <small>{rows.filter((row) => row.section === section.key).length + (section.key === "payment" ? escrowPolicy.length : 0)}</small>
+            </button>
+          ))}
+          {config && (config.updatedBy || config.updatedAt.updated !== "—") && (
+            <p className="fin-note" style={{ padding: "12px 10px 0" }}>
+              Last changed {config.updatedAt.updated}{config.updatedBy ? ` by ${config.updatedBy}` : ""}. Every change is in <Link to="/audit">Audit Logs</Link>.
+            </p>
+          )}
+        </nav>
+
+        {!current ? <EmptyState icon="search" title="No matching rates" description="Try a different search." /> : (
+          <SectionCard key={current.key} title={current.title} description={current.description} pad="none" className="fin-rates-card">
+            <div style={{ height: 14 }} />
+            {loading ? <DriverTableLoading columns={4} label={`Loading ${current.title.toLowerCase()}`} /> : (
+              <DataTable
+                rows={sectionRows}
+                rowKey={(row) => row.id}
+                columns={[
+                  { key: "name", header: "Rate", render: (row) => <RateName row={row} /> },
+                  { key: "rate", header: "Current Value", width: 190, render: (row) => ruleFor(row)?.statusCode === "INACTIVE"
+                    ? <Badge tone="neutral" dot>Paused</Badge>
+                    : <span className="fin-money strong">{row.rate}</span> },
+                  { key: "effectiveFrom", header: "Effective From", width: 150, render: (row) => row.effectiveFrom === "—" ? <span className="tk-meta">Not recorded</span> : row.effectiveFrom },
+                  {
+                    key: "on", header: "On", width: 70,
+                    render: (row) => {
+                      const rule = ruleFor(row);
+                      if (!rule) return null;
+                      return <Switch checked={rule.statusCode === "ACTIVE"} disabled={!fees.canManage || fees.busy || rulesQuery.isFetching || !["ACTIVE", "INACTIVE"].includes(rule.statusCode)} onChange={() => void toggle(row)} />;
+                    },
+                  },
+                  {
+                    key: "edit", header: "", width: 80,
+                    render: (row) => <Button variant="outline" size="sm" disabled={!canEdit || !row.editable || configQuery.isFetching || ruleFor(row)?.statusCode === "INACTIVE"} onClick={() => setSetting(row)}>Edit</Button>,
+                  },
+                ]}
+              />
+            )}
+            {current.key === "payment" && holdOverride && (
+              <Banner tone="warning" style={{ margin: "12px var(--tk-card-pad) 0" }}>A test override of {config.holdOverrideMinutes} minutes is currently active for the confirmation hold. Saving the hold in hours replaces it.</Banner>
+            )}
+            {current.key === "payment" && escrowPolicy.length > 0 && (
+              <>
+                <div style={{ height: 18 }} />
                 <DataTable
-                  rows={sectionRows}
+                  rows={escrowPolicy}
                   rowKey={(row) => row.id}
                   columns={[
-                    { key: "name", header: "Rate", render: (row) => <RateName row={row} /> },
-                    { key: "rate", header: "Current Value", width: 190, render: (row) => ruleFor(row)?.statusCode === "INACTIVE"
-                      ? <Badge tone="neutral" dot>Paused</Badge>
-                      : <span className="fin-money strong">{row.rate}</span> },
-                    { key: "effectiveFrom", header: "Effective From", width: 150, render: (row) => row.effectiveFrom === "—" ? <span className="tk-meta">Not recorded</span> : row.effectiveFrom },
-                    {
-                      key: "on", header: "On", width: 70,
-                      render: (row) => {
-                        const rule = ruleFor(row);
-                        if (!rule) return null;
-                        return <Switch checked={rule.statusCode === "ACTIVE"} disabled={!fees.canManage || fees.busy || rulesQuery.isFetching || !["ACTIVE", "INACTIVE"].includes(rule.statusCode)} onChange={() => void toggle(row)} />;
-                      },
-                    },
-                    {
-                      key: "edit", header: "", width: 80,
-                      render: (row) => <Button variant="outline" size="sm" disabled={!canEdit || !row.editable || configQuery.isFetching || ruleFor(row)?.statusCode === "INACTIVE"} onClick={() => setSetting(row)}>Edit</Button>,
-                    },
+                    { key: "name", header: "Escrow Policy", render: (row) => <RateName row={row} /> },
+                    { key: "rate", header: "Current Value", width: 190, render: (row) => <span className="fin-money strong">{row.rate}</span> },
+                    { key: "note", header: "", width: 230, render: (row) => <span className="tk-meta">{row.fixedBy}</span> },
                   ]}
                 />
-              )}
-              {section.key === "payment" && escrowPolicy.length > 0 && (
-                <>
-                  <div style={{ height: 18 }} />
-                  <DataTable
-                    rows={escrowPolicy}
-                    rowKey={(row) => row.id}
-                    columns={[
-                      { key: "name", header: "Escrow Policy", render: (row) => <RateName row={row} /> },
-                      { key: "rate", header: "Current Value", width: 180, render: (row) => <b>{row.rate}</b> },
-                      { key: "note", header: "", width: 230, render: () => <span className="tk-meta">Fixed platform policy</span> },
-                    ]}
-                  />
-                  <p className="tk-meta" style={{ margin: 0, padding: "12px var(--tk-card-pad)" }}>
-                    The confirmation hold follows the container-return confirmation window. Auto-release and dispute freeze are fixed platform policy.
-                  </p>
-                </>
-              )}
-            </SectionCard>
-          );
-        })}
-        {config && !rows.length && <EmptyState icon="search" title="No matching rates" description="Try a different search." />}
+                <p className="fin-note" style={{ padding: "12px var(--tk-card-pad) 16px" }}>
+                  Auto-release and dispute freeze are built into how escrow works and are always on; the backend has no setting to change them.
+                </p>
+              </>
+            )}
+          </SectionCard>
+        )}
       </div>
 
       {setting && <RateEditDialog key={setting.id} row={setting} readOnly={!canEdit} onClose={() => setSetting(null)} onDone={setNotice} />}

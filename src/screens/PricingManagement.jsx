@@ -23,6 +23,8 @@ import "../components/finance/finance.css";
 // for everything else, the per-km fare and terminal handling fee at each terminal, and surcharges.
 // Platform-wide fees live on Platform Rates. Saving publishes straight away (see usePublishPricing).
 const TABS = ["Rate Cards", "Zone Pricing", "Per-km & Terminal Rates", "Surcharges"];
+// Rate cards are hidden for now (zones and per-km cover pricing); the code stays for when they return.
+const VISIBLE_TABS = TABS.slice(1);
 const STATUS_TONE = { Active: "success", Draft: "neutral", "Pending Approval": "warning", Inactive: "neutral", "Active Terminal": "success", "Inactive Terminal / Port": "neutral" };
 const PAGE_SIZE = 10;
 const statusOptions = (rows) => ["All Statuses", ...new Set(rows.map((row) => row.status).filter((value) => !isMissing(value)))];
@@ -127,7 +129,7 @@ function RecordDrawer({ row, kind, onClose, onEdit, notify }) {
 }
 
 export function PricingManagement() {
-  const [tab, setTab] = useState(TABS[0]);
+  const [tab, setTab] = useState(VISIBLE_TABS[0]);
   const [q, setQ] = usePageSearchState("");
   const [status, setStatus] = useState("All Statuses");
   const [open, setOpen] = useState(null);
@@ -198,19 +200,16 @@ export function PricingManagement() {
   return (
     <>
       <PageHeader crumbs={["Finance", "Pricing"]} title="Pricing"
-        description="What a trip costs: lane rate cards, zone prices by state, per-km fares and terminal fees, and surcharges. Platform fees are on Platform Rates."
-        actions={tab === TABS[1]
-          ? <Button icon="plus" onClick={() => setZoneForm({ id: null })}>New zone</Button>
-          : <Button icon="plus" onClick={() => setForm({ id: null })}>New rate card</Button>} />
+        description="What a trip costs: zone prices by destination state, per-km fares and terminal fees, and surcharges. Platform fees are on Platform Rates."
+        actions={<Button icon="plus" onClick={() => setZoneForm({ id: null })}>New zone</Button>} />
       {notice && <Banner tone="success" title={notice} />}
       <StatsPanel fixedLabel="Current setup" fixedHint="Counts reflect the pricing in use now; average change compares the last 30 days with the 30 before.">
-        <StatCard icon="tag" tint="blue" label="Rate Cards" value={summary?.totalServices ?? "—"} caption="lane prices" />
         <StatCard icon="map" tint="purple" label="Active Zones" value={summary?.activePriceLists ?? "—"} caption="state price lists" />
         <StatCard icon="badge-percent" tint="green" label="Active Surcharges" value={summary?.surchargesActive ?? "—"} caption="added on top of fares" />
         <StatCard icon="trending-up" tint="teal" label="Avg. Price Change" value={summary?.avgPriceChange ?? "—"} caption="last 30 days" />
       </StatsPanel>
       <SectionCard title="" pad="none" className="fin-table" style={{ paddingTop: 4 }}>
-        <Tabs value={tab} onChange={switchTab} style={{ padding: "0 var(--tk-card-pad)" }} items={TABS} />
+        <Tabs value={tab} onChange={switchTab} style={{ padding: "0 var(--tk-card-pad)" }} items={VISIBLE_TABS} />
         <TableToolbar
           search={<SearchField placeholder={`Search ${tab.toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)} />}
           filters={<FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={statusOptions(current)} onChange={setStatus} />}

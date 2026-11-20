@@ -106,3 +106,18 @@
   .fin-zone-row { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-bottom: 10px; border-bottom: 1px solid var(--tk-line); }
   .fin-zone-head { display: none; }
 }
+
+/* ---------- Platform Rates: section menu + one card ---------- */
+.fin-rates-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--tk-grid-gap); align-items: start; }
+.fin-rates-nav { position: sticky; top: 76px; display: grid; gap: 2px; padding: 8px; border: 1px solid var(--tk-line); border-radius: var(--tk-r-lg); background: var(--tk-surface); }
+.fin-rates-nav button { display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--tk-ink-700); font: 500 13px/18px var(--tk-font-sans); text-align: left; cursor: pointer; }
+.fin-rates-nav button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-rates-nav button small { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--tk-surface-sunk); color: var(--tk-ink-400); font: 600 11px/16px var(--tk-font-sans); text-align: center; }
+.fin-rates-nav button:hover { background: var(--tk-surface-sunk); color: var(--tk-ink-900); }
+.fin-rates-nav button.active { background: var(--tk-blue-soft); color: var(--tk-blue); }
+.fin-rates-nav button.active small { background: var(--tk-surface); color: var(--tk-blue); }
+@media (max-width: 900px) {
+  .fin-rates-layout { grid-template-columns: minmax(0, 1fr); }
+  .fin-rates-nav { position: static; grid-auto-flow: column; overflow-x: auto; }
+  .fin-rates-nav button { width: auto; white-space: nowrap; }
+}
