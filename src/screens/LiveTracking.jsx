@@ -1,4 +1,5 @@
 'use client';
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
@@ -342,7 +343,7 @@ export function LiveTracking() {
         </div>
       </div>
 
-      {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
       {tripsLoading && <Banner tone="info" title="Loading trips…" />}
       {(tripsFetching || refreshingTrips) && !tripsLoading && <Banner tone="info" title="Refreshing trips" />}
       {tripsError && <Banner tone="warning" title="Live trip data is unavailable">Trip locations are unavailable right now.</Banner>}

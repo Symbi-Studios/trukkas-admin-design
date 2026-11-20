@@ -1,4 +1,5 @@
 'use client';
+import { showToast } from '../components/ActionToast.jsx';
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -51,7 +52,7 @@ export function FleetManagement() {
   function openTruck(truck) { navigate(`/fleet/detail?id=${encodeURIComponent(truck.id)}`); }
   function scheduleMaintenance(truck) { setMenu(null); navigate(`/maintenance?schedule=1${truck?.id ? `&truckId=${encodeURIComponent(truck.id)}` : ''}`); }
   function openReview(value) { setMenu(null); setReview(value); }
-  function download() { if (!rows.length) { notify('No trucks to export on this page.'); return; } exportCsv(rows); setMenu(null); notify('The displayed page has been exported.'); }
+  function download() { if (!rows.length) { notify('No trucks to export on this page.'); return; } exportCsv(rows); setMenu(null); showToast('The displayed page has been exported.'); }
   function refresh() { query.refetch(); inspections.refetch(); overview.refetch(); }
   return <div className="fleet-page">
     <PageHeader crumbs={['Fleet', 'Fleet Management']} title="Fleet Management" description="Monitor and manage all trucks and fleet assets on the platform." actions={<>

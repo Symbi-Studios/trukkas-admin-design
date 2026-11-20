@@ -1,4 +1,5 @@
 "use client";
+import { showToast } from '../components/ActionToast.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../router.js";
@@ -104,7 +105,7 @@ function DemurrageScreen() {
       if (!active.current) return;
       setCreate(false);
       setForm({ jobId: "", container: "", customer: "", freeDays: "", daysOver: "", rate: "" });
-      notify(result.warning || `Demurrage charge ${result.id} created.`);
+      if (result.warning) notify(result.warning); else showToast(`Demurrage charge ${result.id} created.`);
     } catch (error) { notify(getApiErrorMessage(error)); }
     finally { creating.current = false; }
   }

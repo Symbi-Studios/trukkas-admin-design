@@ -1,4 +1,5 @@
 "use client";
+import { showToast } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 import { DateRangeFilter, EMPTY_RANGE, inRange } from '../components/DateRangeFilter.jsx';
 
@@ -150,7 +151,7 @@ export function Announcements() {
     setMenu(null);
     if (publishing.current || publication.isLoading) return;
     publishing.current = true;
-    try { const response = await operations.perform({ action: 'publish', id }); if (response) notify(response.message); }
+    try { const response = await operations.perform({ action: 'publish', id }); if (response) showToast(response.message); }
     catch (error) { notify(getApiErrorMessage(error)); }
     finally { publishing.current = false; }
   }
@@ -510,7 +511,7 @@ export function Announcements() {
           </Card>
         </div>
       </div>
-      {reasonDialog && reasonDialog.admin === operations.admin && <AnnouncementReasonDialog action={reasonDialog.action} announcement={reasonDialog.announcement} operations={operations} onClose={() => setReasonDialog(null)} onSaved={(result) => notify(result.message)} />}
+      {reasonDialog && reasonDialog.admin === operations.admin && <AnnouncementReasonDialog action={reasonDialog.action} announcement={reasonDialog.announcement} operations={operations} onClose={() => setReasonDialog(null)} onSaved={(result) => showToast(result.message)} />}
       {toast && <div className="eng-toast">{toast}</div>}
     </div>
   );

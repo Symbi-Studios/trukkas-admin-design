@@ -1,8 +1,9 @@
 'use client';
+import { showToast } from '../components/ActionToast.jsx';
 import { DateRangeFilter, isRangeSet, presetRange } from '../components/DateRangeFilter.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
-import { ViewToggle, TableToolbar } from '../ds.js';
+import { ViewToggle, TableToolbar, InlineAlerts } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
@@ -57,7 +58,7 @@ function AuditDrawer({ audit, loading, onClose, onNavigate, onNotify, onCopy }) 
   }, [onClose]);
   const detailValue = (value) => loading ? <Skeleton as="span" width={100} height={16} /> : value;
   if (!audit) return null;
-  return <>
+  return <InlineAlerts>
     <button className="audit-drawer-scrim" aria-label="Close audit details" onClick={onClose} />
     <aside className="audit-drawer" aria-label="Audit log details" role="dialog" aria-modal="true">
       <header className="audit-drawer-header"><h2>Audit Log Details</h2><IconButton icon="x" aria-label="Close" onClick={onClose} /></header>
@@ -85,7 +86,7 @@ function AuditDrawer({ audit, loading, onClose, onNavigate, onNotify, onCopy }) 
         <section className="audit-detail-section"><h3>Additional Information</h3><dl className="audit-facts"><dt>User Agent</dt><dd>{detailValue(audit.userAgent)}</dd><dt>Session ID</dt><dd className="audit-session">{detailValue(audit.sessionId)}</dd><dt>Audit ID</dt><dd className="audit-session">{audit.id}</dd></dl></section>
       </div>
     </aside>
-  </>;
+  </InlineAlerts>;
 }
 
 export function AuditLogs() {
@@ -168,7 +169,7 @@ function AuditLogsScreen() {
     if (!value || value === '—') { notify('There is no reference to copy.'); return; }
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
-      await navigator.clipboard.writeText(value); notify('Reference copied');
+      await navigator.clipboard.writeText(value); showToast('Reference copied');
     } catch { notify('Could not copy the reference.'); }
   }
   function exportRows() {
@@ -179,7 +180,7 @@ function AuditLogsScreen() {
     let url;
     try {
       url = URL.createObjectURL(new Blob([auditCsv(rows)], { type: 'text/csv' }));
-      const link = document.createElement('a'); link.href = url; link.download = 'trukkas-audit-logs.csv'; link.click(); notify('Audit log export downloaded');
+      const link = document.createElement('a'); link.href = url; link.download = 'trukkas-audit-logs.csv'; link.click(); showToast('Audit log export downloaded');
     } catch { notify('Could not export audit logs.'); }
     finally { if (url) window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
   }
@@ -196,7 +197,7 @@ function AuditLogsScreen() {
         <MenuFilter value={draft.module} options={modules} onChange={(module) => setDraft((old) => ({ ...old, module }))} />
         <MenuFilter value={draft.action} options={actions} onChange={(action) => setDraft((old) => ({ ...old, action }))} />
         <MenuFilter value={draft.status} options={['All Statuses', 'Success', 'Failed']} onChange={(status) => setDraft((old) => ({ ...old, status }))} />
-      <><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); notify('Filters applied'); }}>Apply</Button></></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" onClick={exportRows}>Export</Button></>} />
+      <><Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button><Button icon="check" onClick={() => { setFilters(draft); setPage(1); showToast('Filters applied'); }}>Apply</Button></></>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />} trailing={<><Button variant="outline" icon="download" onClick={exportRows}>Export</Button></>} />
       {loading ? <DriverTableLoading columns={9} label="Loading audit logs" /> : error ? <EmptyState icon="triangle-alert" title="Could not load audit logs" description={getApiErrorMessage(error)} action={<Button variant="outline" onClick={() => { if (canView) logsQuery.refetch(); else notify('Only Super Admins can view audit logs.'); }}>Retry</Button>} /> : !auditTabAvailable(tab, audits) ? <EmptyState icon="scroll-text" title="—" description="—" /> : paged.length || tableView === 'board' ? <><DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.audit} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selectedRows} onSelect={setSelectedRows} onRowClick={selectAudit} tableLayout="fixed" columns={[
         { key: 'date', header: 'Date & Time', width: 126, render: (r) => <span className="audit-cell-stack"><span>{r.date}</span><small>{r.time}</small></span> },
         { key: 'user', header: 'User', width: 175, render: (r) => <span className="audit-user-cell"><Avatar name={r.user} size={32} /><span className="audit-cell-stack"><strong>{r.user}</strong><small>{r.email}</small></span></span> },

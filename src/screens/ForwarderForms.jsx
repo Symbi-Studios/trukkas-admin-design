@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
-import { Banner, Button, Checkbox, EmptyState, LabelValue, Modal, SearchField, Select, Textarea, TextField } from '../ds.js';
+import { Badge, Banner, Button, Checkbox, EmptyState, Icon, LabelValue, Modal, SearchField, Select, Textarea, TextField } from '../ds.js';
 import { forwarderError, useCreateAdminForwarderMutation, useUpdateAdminForwarderMutation, useAddAdminForwarderNoteMutation, useVerifyAdminForwardersMutation, useRequestAdminForwarderVerificationMutation } from '../store/features/forwarders/forwardersApi.js';
 function useSave(onClose, onDone) {
   const lock = useRef(false);
@@ -38,7 +38,7 @@ function SaveError({
 }) {
   return state.error ? <Banner tone="danger" title="Unable to confirm the update">{forwarderError(state.error)}</Banner> : null;
 }
-const PROFILE_FIELDS = [['Personal Information', [['firstName', 'First Name'], ['middleName', 'Middle Name'], ['lastName', 'Last Name'], ['dateOfBirth', 'Date of Birth', 'date'], ['gender', 'Gender'], ['nationality', 'Nationality'], ['alternatePhone', 'Alt Phone', 'tel'], ['languages', 'Languages', 'list'], ['yearsExperience', 'Years of Experience', 'number']]], ['Business & Service Details', [['businessName', 'Business Name'], ['businessAddress', 'Business Address'], ['businessType', 'Business Type'], ['cacNumber', 'CAC Number'], ['taxId', 'Tax ID'], ['website', 'Website', 'url'], ['forwardingLicenseNumber', 'Forwarding License No.'], ['forwardingLicenseExpiry', 'License Expiry', 'date'], ['exportLicenseNumber', 'Export License No.'], ['exportLicenseExpiry', 'Export License Expiry', 'date'], ['servicesOffered', 'Services Offered', 'list'], ['coverageArea', 'Coverage Area', 'list'], ['preferredCargoTypes', 'Preferred Cargo Types', 'list'], ['preferredRoutes', 'Preferred Routes', 'list'], ['partnerNetwork', 'Partner Network', 'list'], ['otherInformation', 'Other Information', 'textarea']]], ['Emergency Contact', [['emergencyContactName', 'Name'], ['emergencyContactPhone', 'Phone', 'tel']]]];
+const PROFILE_FIELDS = [['Personal Information', [['firstName', 'First Name'], ['middleName', 'Middle Name'], ['lastName', 'Last Name'], ['dateOfBirth', 'Date of Birth', 'date'], ['nationality', 'Nationality'], ['languages', 'Languages', 'list']]], ['Forwarding License (optional)', [['forwardingLicenseNumber', 'Forwarding License No.']]]];
 const CREATE_FIELDS = [['firstName', 'First Name'], ['lastName', 'Last Name'], ['email', 'Email', 'email'], ['phone', 'Phone', 'tel'], ['dateOfBirth', 'Date of Birth', 'date'], ['businessName', 'Business Name']];
 const LIST_FIELDS = new Set(PROFILE_FIELDS.flatMap(([, fields]) => fields.filter(([,, type]) => type === 'list').map(([key]) => key)));
 function formValues(profile) {
@@ -121,34 +121,59 @@ export function ForwarderNoteModal({
     }}><SaveError state={save} /><Textarea label="Note" value={body} maxLength={2000} rows={6} disabled={state.isLoading || save.unconfirmed} onChange={event => setBody(event.target.value)} /></div>
   </Modal>;
 }
+/** KYC items an admin can ask a forwarder to resubmit. `checkType` is the API value; items without one aren't supported by the API yet. */
+export const KYC_REQUEST_OPTIONS = [
+  { key: 'nin', checkType: 'NATIONAL_ID', icon: 'id-card', label: 'National ID (NIN)', hint: 'Re-check the NIN against their details' },
+  { key: 'address', checkType: 'ADDRESS', icon: 'map-pin', label: 'Proof of Address', hint: 'Ask for a new utility bill or bank statement' },
+  { key: 'license', checkType: 'EXPORT_LICENSE', icon: 'file-badge', label: 'Forwarding License', hint: 'Ask for a current license document' },
+  { key: 'passport', icon: 'image', label: 'Passport Photograph', hint: 'Not available from the API yet' },
+  { key: 'bank', icon: 'landmark', label: 'Bank Account', hint: 'Not available from the API yet' },
+];
+const REASON_PRESETS = ['Document is unclear or unreadable', 'Document has expired', 'Details don’t match the profile', 'Document appears altered'];
+const STATUS_TONE = { Verified: 'success', Pending: 'warning', Rejected: 'danger' };
+
 export function ForwarderVerificationRequestModal({
   forwarder,
+  statuses = {},
+  initialKey,
   onClose,
   onDone
 }) {
-  const [checkType, setCheckType] = useState(''),
+  const initial = KYC_REQUEST_OPTIONS.find(option => option.key === initialKey && option.checkType);
+  const [selected, setSelected] = useState(initial?.key || ''),
     [reason, setReason] = useState(''),
     [request, state] = useRequestAdminForwarderVerificationMutation(),
     save = useSave(onClose, onDone);
   const disabled = state.isLoading || save.unconfirmed;
-  return <Modal open title="Add Verification Request" description={forwarder.name} onClose={save.close} footer={<><Button variant="outline" disabled={state.isLoading} onClick={save.close}>Cancel</Button><Button disabled={disabled || !checkType || !reason.trim()} onClick={() => void save.run(() => request({
+  const option = KYC_REQUEST_OPTIONS.find(item => item.key === selected);
+  return <Modal open width={560} title="Request re-verification" description={`Ask ${forwarder.name} to resubmit a KYC item. They’ll be notified with your reason.`} onClose={save.close} footer={<><Button variant="outline" disabled={state.isLoading} onClick={save.close}>Cancel</Button><Button icon="send" disabled={disabled || !option?.checkType || !reason.trim()} onClick={() => void save.run(() => request({
       id: forwarder.id,
-      checkType,
+      checkType: option.checkType,
       reason
-    }).unwrap(), () => 'Verification request sent.')}>{state.isLoading ? 'Sending…' : 'Send Request'}</Button></>}>
-    <div style={{
-      display: 'grid',
-      gap: 16
-    }}><SaveError state={save} /><Select label="Verification Check" value={checkType} disabled={disabled} onChange={event => setCheckType(event.target.value)} options={[{
-        value: 'NATIONAL_ID',
-        label: 'National ID'
-      }, {
-        value: 'ADDRESS',
-        label: 'Address'
-      }, {
-        value: 'EXPORT_LICENSE',
-        label: 'Export License'
-      }]} /><Textarea label="Reason" value={reason} disabled={disabled} onChange={event => setReason(event.target.value)} /></div>
+    }).unwrap(), () => `Re-verification of ${option.label} requested.`)}>{state.isLoading ? 'Sending…' : 'Send Request'}</Button></>}>
+    <div style={{ display: 'grid', gap: 18 }}>
+      <SaveError state={save} />
+      <div style={{ display: 'grid', gap: 8 }}>
+        <span className="tk-field-label" style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>What needs re-verifying?</span>
+        <div className="fv-options" role="radiogroup" aria-label="KYC item">
+          {KYC_REQUEST_OPTIONS.map(item => {
+            const unsupported = !item.checkType, active = selected === item.key, status = statuses[item.key];
+            return <button key={item.key} type="button" role="radio" aria-checked={active} disabled={disabled || unsupported} className={'fv-option' + (active ? ' active' : '')} onClick={() => setSelected(item.key)}>
+              <span className="fv-option-icon"><Icon name={item.icon} size={16} /></span>
+              <span className="fv-option-text"><strong>{item.label}</strong><small>{item.hint}</small></span>
+              {unsupported ? <Badge tone="neutral">Unavailable</Badge> : status && status !== '—' ? <Badge tone={STATUS_TONE[status] || 'neutral'}>{status}</Badge> : null}
+              <span className="fv-option-radio" aria-hidden="true" />
+            </button>;
+          })}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <Textarea label="Reason" hint="Shared with the forwarder." rows={3} maxLength={500} value={reason} disabled={disabled} placeholder="Explain what’s wrong and what they should upload" onChange={event => setReason(event.target.value)} />
+        <div className="fv-chips" aria-label="Suggested reasons">
+          {REASON_PRESETS.map(text => <button key={text} type="button" className={'fv-chip' + (reason === text ? ' active' : '')} aria-pressed={reason === text} disabled={disabled} onClick={() => setReason(text)}>{text}</button>)}
+        </div>
+      </div>
+    </div>
   </Modal>;
 }
 export function ForwarderBulkVerifyModal({

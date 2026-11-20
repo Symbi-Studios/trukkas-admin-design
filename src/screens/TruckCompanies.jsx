@@ -1,4 +1,5 @@
 'use client';
+import { showToast } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 import { DateRangeFilter, EMPTY_RANGE, inRange } from '../components/DateRangeFilter.jsx';
 
@@ -75,7 +76,7 @@ function CompaniesDirectory() {
     setMenuFor(null);
     if (creating.current || !canCreate) return;
     creating.current = true;
-    try { await resetVerification({ id: company.id, owner, role }).unwrap(); if (active.current) setNotice('Company returned to pending review.'); }
+    try { await resetVerification({ id: company.id, owner, role }).unwrap(); if (active.current) showToast('Company returned to pending review.'); }
     catch (error) { if (active.current) setNotice(companyError(error)); }
     finally { creating.current = false; }
   }
@@ -118,7 +119,7 @@ function CompaniesDirectory() {
       if (!active.current) return;
       setAddOpen(false); setForm(blank);
       const delivery = v => v === true ? 'sent' : v === false ? 'failed' : 'unconfirmed';
-      setNotice(`Company created and queued for review. Invitation SMS: ${delivery(created.sms)}; email: ${delivery(created.email)}.`);
+      showToast(`Company created and queued for review. Invitation SMS: ${delivery(created.sms)}; email: ${delivery(created.email)}.`);
     } catch (error) { if (active.current) setCreateError(companyError(error)); }
     finally { creating.current = false; }
   }

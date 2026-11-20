@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { Badge, Banner, Button, CopyableId, DrawerFacts, DrawerSection, DropdownMenu, Modal, SideDrawer, Skeleton, TextField, Textarea, Timeline, isMissing } from "../ds.js";
@@ -72,7 +73,7 @@ export function TransactionDrawer({ id, row, onClose }) {
       </>}>
       {!r && query.isFetching && <><Skeleton height={88} /><Skeleton height={180} /></>}
       {query.error && <Banner tone="warning" title={getApiErrorMessage(query.error)} action={<Button size="sm" variant="outline" onClick={query.refetch}>Retry</Button>} />}
-      {notice && <Banner tone={notice.tone} title={notice.text} />}
+      {notice && <ToastRelay message={notice.text} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} title={notice.text} /></ToastRelay>}
       {r && <>
         <DrawerSection title="Amount">
           <div className="fin-hero"><span>{r.description}</span><strong>{formatNaira(r.amount, { signed: true, positive: r.pos }) ?? "Not available"}</strong></div>

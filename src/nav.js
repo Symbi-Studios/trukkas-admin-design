@@ -31,7 +31,7 @@ export const NAV = [
   {
     section: "Partners",
     items: [
-      { id: "forwarders", icon: "users", label: "Forwarders / Exporters" },
+      { id: "forwarders", icon: "users", label: "Forwarders" },
       // { id: 'exporters', icon: 'briefcase', label: 'Exporters' },
     ],
   },

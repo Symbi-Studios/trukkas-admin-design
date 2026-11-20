@@ -38,7 +38,7 @@ export const BOARD_LAYOUTS = {
   ], { title: (row) => row.name, value: (row) => row.trucks == null ? '—' : `${row.trucks} trucks`, subtitle: 'location', body: ['contact'], footer: ['verification', 'joined'] }, 'No companies'),
   forwarders: layout([
     ['Active', 'success'], ['Pending', 'warning'], ['Suspended', 'danger'], ['Inactive', 'neutral'], ['Banned', 'danger'],
-  ], { title: (row) => row.name, subtitle: 'location', body: ['email'], footer: ['type', 'verification'] }, 'No forwarders'),
+  ], { title: (row) => row.name, subtitle: 'location', body: ['email'], footer: ['verification', 'joined'] }, 'No forwarders'),
   payouts: layout([
     ['Pending Review', 'warning'], ['Approved', 'success'], ['Rejected', 'danger'], ['Processing', 'info'], ['Completed', 'success'],
   ], {

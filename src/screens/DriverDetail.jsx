@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from '../router.js';
 import {
@@ -320,7 +321,7 @@ export function DriverDetail() {
           </span>
         </>} />
 
-      {toast && <Banner tone="success" title={toast} />}
+      {toast && <ToastRelay message={toast} tone={"success"} onShown={() => setToast(null)}><Banner tone="success" title={toast} /></ToastRelay>}
 
       <Card pad="none">
         <div className="dh-top">

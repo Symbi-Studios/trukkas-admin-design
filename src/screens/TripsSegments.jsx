@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
 import { ViewToggle, TableToolbar, SearchField } from '../ds.js';
@@ -225,7 +226,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
         description="Monitor every trip in real time."
       />
 
-      {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
       {list.error && <Banner tone="danger" title={getApiErrorMessage(list.error)} action={<Button variant="outline" size="sm" onClick={list.refetch}>Retry</Button>} />}
       {statsQuery.error && <Banner tone="warning" title="Unable to load trip totals." action={<Button variant="outline" size="sm" onClick={statsQuery.refetch}>Retry</Button>} />}
 

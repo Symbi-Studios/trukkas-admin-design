@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
 import { ViewToggle, TableToolbar } from '../ds.js';
@@ -263,7 +264,7 @@ function BidsOffersContent({owner,role,authenticated}) {
         description="Manage all bid submissions and counter offers across Trukkas."
       />
 
-      {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
       {directoryQuery.error && <Banner tone="danger" title={getApiErrorMessage(directoryQuery.error)} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
       {data?.errors.length > 0 && <Banner tone="warning" title={"Unable to load: " + data.errors.join(", ") + "."} action={<Button size="sm" variant="outline" onClick={directoryQuery.refetch}>Retry</Button>} />}
       {analyticsQuery.error && <Banner tone="warning" title="Bid stats are temporarily unavailable." action={<Button size="sm" variant="outline" onClick={analyticsQuery.refetch}>Retry stats</Button>} />}

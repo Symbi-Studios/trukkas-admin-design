@@ -5,6 +5,7 @@ import { Badge } from '../core/Badge.jsx';
 import { Button } from '../core/Button.jsx';
 import { IconButton } from '../core/IconButton.jsx';
 import { Skeleton } from '../feedback/Skeleton.jsx';
+import { InlineAlerts } from '../feedback/AlertSlot.jsx';
 import { NotAvailable, isMissing } from '../core/NotAvailable.jsx';
 
 const STATUS_TONE = { Approved: 'success', Rejected: 'danger', Pending: 'warning', 'Pending Review': 'warning', 'Re-upload requested': 'danger' };
@@ -52,6 +53,7 @@ export function DocumentPreview({ open, onClose, title, subtitle, documents = []
   const reviewable = doc && canReview(doc);
   const isImage = doc && (IMAGE_EXT.test(doc.name || '') || /^image\//.test(doc.mimeType || ''));
   return (
+    <InlineAlerts>
     <div className={'tk-preview-scrim' + (variant === 'drawer' ? ' drawer' : '')} role="presentation" onClick={onClose}>
       <div className={'tk-preview' + (variant === 'drawer' ? ' drawer' : '')} role="dialog" aria-modal="true" aria-label={title || 'Document preview'} onClick={(e) => e.stopPropagation()}>
         <header className="tk-preview-titlebar">
@@ -120,5 +122,6 @@ export function DocumentPreview({ open, onClose, title, subtitle, documents = []
         </footer>
       </div>
     </div>
+    </InlineAlerts>
   );
 }

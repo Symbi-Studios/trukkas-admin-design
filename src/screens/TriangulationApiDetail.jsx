@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
@@ -113,7 +114,7 @@ export function TriangulationApiDetail() {
       actions={<>
         <Button variant="outline" icon="arrow-left" onClick={() => navigate('/triangulation')}>Back to Opportunities</Button>
       </>} />
-    {notice && <Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner>}
+    {notice && <ToastRelay message={notice.message} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner></ToastRelay>}
     {isFetching && <Banner tone="info">Refreshing opportunity…</Banner>}
 
     <EntityHeaderCard name={opportunity.jobNumber || opportunity.id}

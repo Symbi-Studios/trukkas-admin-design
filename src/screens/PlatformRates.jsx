@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useState } from "react";
 import { useSelector } from "react-redux";
 import { usePageSearchState, matchesPageSearch } from "../components/PageSearch.jsx";
@@ -68,7 +69,7 @@ export function PlatformRates() {
         description="The fees, rates and payment terms applied across Trukkas. New values apply to new jobs and charges; existing ones keep the rate they started with."
       />
 
-      {notice && <Banner tone="success" action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice}</Banner>}
+      {notice && <ToastRelay message={notice} tone={"success"} onShown={() => setNotice(null)}><Banner tone="success" action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice}</Banner></ToastRelay>}
       {configQuery.error && <Banner tone="danger" title="Unable to load platform rates" action={<Button variant="outline" onClick={configQuery.refetch}>Retry</Button>}>{pricingError(configQuery.error)}</Banner>}
       {!canEdit && <Banner tone="info">Only Super Admins can change platform rates.</Banner>}
       {configQuery.isFetching && config && <DriverLoadingNotice>Refreshing platform rates…</DriverLoadingNotice>}

@@ -1,4 +1,5 @@
 'use client';
+import { showToast } from '../components/ActionToast.jsx';
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
@@ -137,7 +138,7 @@ export function NotificationCenter() {
       const updated = await updateSettings({ [SETTING_API_FIELD[key]]: next[key] }).unwrap();
       setSettings(updated);
       setSettingsDraft(updated);
-      notify('Notification settings updated');
+      showToast('Notification settings updated');
     } catch (requestError) {
       setSettings(settings);
       setSettingsDraft(settings);
@@ -160,7 +161,7 @@ export function NotificationCenter() {
       setSettings(updated);
       setSettingsDraft(updated);
       setSettingsOpen(false);
-      notify('Notification settings saved');
+      showToast('Notification settings saved');
     } catch (requestError) {
       notify(errorMessage(requestError, 'Could not save notification settings. Please try again.'));
     }
@@ -173,7 +174,7 @@ export function NotificationCenter() {
     if (row.read || markingRead) return;
     try {
       await markRead([row.id]).unwrap();
-      notify('Notification marked as read');
+      showToast('Notification marked as read');
     } catch (requestError) { notify(errorMessage(requestError, 'Could not mark the notification as read. Refresh and check before trying again.')); }
   }
   function open(row) {
@@ -185,7 +186,7 @@ export function NotificationCenter() {
     if (markingAll) return;
     try {
       await markAllRead().unwrap();
-      notify('All notifications marked as read');
+      showToast('All notifications marked as read');
     } catch (requestError) { notify(errorMessage(requestError, 'Could not mark notifications as read. Refresh and check before trying again.')); }
   }
   const hasUnreadNotifications = Number(data?.summary?.allUnread) > 0 || Number(data?.unreadCount) > 0;

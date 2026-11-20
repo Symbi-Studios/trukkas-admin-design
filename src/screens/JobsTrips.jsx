@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { DateRangeFilter, EMPTY_RANGE, isRangeSet, rangeParams } from '../components/DateRangeFilter.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
@@ -780,7 +781,7 @@ export function JobsTrips() {
         title="Jobs"
         description="View, manage and monitor all logistics jobs across Trukkas."
       />
-      {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
       {jobsFetching && jobsResponse && (
         <div className={styles.loadingNotice} role="status" aria-live="polite">
           <span className={styles.loadingNoticeDot} aria-hidden="true" />
@@ -788,12 +789,7 @@ export function JobsTrips() {
         </div>
       )}
       {jobsError && (
-        <div className={styles.loadError}>
-          <Banner tone="danger" title="Unable to load jobs." />
-          <Button variant="outline" icon="rotate-ccw" onClick={refetchJobs}>
-            Retry
-          </Button>
-        </div>
+        <Banner tone="danger" title="Unable to load jobs." action={<Button variant="outline" size="sm" icon="rotate-ccw" onClick={refetchJobs}>Retry</Button>} />
       )}
       {statsError && <Banner tone="warning" title="Unable to load job totals." action={<Button variant="outline" size="sm" onClick={refetchStats}>Retry</Button>} />}
       {containerTypesError && <Banner tone="warning" title="Unable to load cargo filter options." action={<Button variant="outline" size="sm" onClick={refetchContainerTypes}>Retry</Button>} />}

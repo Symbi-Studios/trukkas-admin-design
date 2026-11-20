@@ -1,5 +1,7 @@
+'use client';
 import React from 'react';
 import { IconButton } from '../core/IconButton.jsx';
+import { InlineAlerts } from '../feedback/AlertSlot.jsx';
 
 /**
  * Right-hand detail drawer that slides in below the top bar, over a light scrim.
@@ -15,7 +17,7 @@ export function SideDrawer({ label, eyebrow, title, meta, headerActions, footer,
     return () => window.removeEventListener('keydown', close);
   }, [onClose]);
   return (
-    <>
+    <InlineAlerts>
       <button type="button" className="tk-drawer-scrim" aria-label={'Close ' + (label || 'details')} onClick={onClose} />
       <aside className="tk-drawer" role="dialog" aria-modal="true" aria-label={label} style={{ width: `min(${width}px, calc(100vw - 24px))` }}>
         <header className="tk-drawer-header">
@@ -32,7 +34,7 @@ export function SideDrawer({ label, eyebrow, title, meta, headerActions, footer,
         <div className="tk-drawer-body tk-scroll">{children}</div>
         {footer && <footer className="tk-drawer-footer">{footer}</footer>}
       </aside>
-    </>
+    </InlineAlerts>
   );
 }
 

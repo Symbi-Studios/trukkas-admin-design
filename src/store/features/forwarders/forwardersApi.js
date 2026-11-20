@@ -379,24 +379,10 @@ export const forwardersApi = baseApi.injectEndpoints({
         if (result.error) return result;
         const dto = unwrapApiResponseData(result.data) || {};
         if (!validPage(dto, 'jobs', page)) return failure('The job history could not be loaded completely. Please refresh.');
-        const rows = dto.jobs.map((job) => ({ id: text(job.jobId) || '—', detailId: text(job.id), cargo: '—', route: text(job.route) || '—', status: label(job.status), date: forwarderDate(job.createdAt), amount: job.currency === 'NGN' ? number(job.value) : null }));
-        // User job history supplies the real detail ID and amount. The jobs
-        // directory is needed only for its documented cargo type fields.
-        if (!(tab === 'completed' && limit === 1)) for (let start = 0; start < rows.length; start += 4) {
-          if (_api.signal.aborted) return failure('The forwarder jobs request was cancelled.');
-          const enriched = await Promise.all(rows.slice(start, start + 4).map(async (row) => {
-            if (row.id === '—') return { ...row, detailUnavailable: true };
-            const matches = await readAllPages(baseQuery, '/admin/jobs', 'jobs', { search: row.id }, _api.signal);
-            if (matches.error) return { ...row, detailUnavailable: true, detailErrorStatus: matches.error.status };
-            const exact = matches.data.filter((job) => job.id === row.detailId && job.company?.id === id);
-            if (exact.length !== 1) return { ...row, detailUnavailable: true };
-            const cargoTypes = exact[0].cargo?.containerTypes;
-            const cargo = Array.isArray(cargoTypes) && cargoTypes.length && cargoTypes.every(type => text(type)) ? cargoTypes.join(', ') : '—';
-            return { ...row, cargo };
-          }));
-          if (enriched.some((row) => row.detailErrorStatus === 401)) return { error: { status: 401 } };
-          rows.splice(start, enriched.length, ...enriched);
-        }
+        const rows = dto.jobs.map((job) => {
+          const route = text(job.route), [origin, destination] = route ? route.split(/\s*(?:→|->)\s*/, 2) : [];
+          return { id: text(job.jobId) || '—', detailId: text(job.id), route: route || '—', origin: text(origin), destination: text(destination), status: label(job.status), date: forwarderDate(job.createdAt), amount: job.currency === 'NGN' ? number(job.value) : null };
+        });
         return { data: { rows, pagination: dto.pagination } };
       }, providesTags: ['AdminForwarders', 'AdminJobs'],
     }),

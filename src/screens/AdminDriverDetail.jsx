@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate, useParams } from '../router.js';
@@ -135,7 +136,7 @@ export function AdminDriverDetail() {
         </>}
       </>}
     />
-    {notice && <Banner tone="success" title="Done">{notice}</Banner>}
+    {notice && <ToastRelay message={notice} tone={"success"} onShown={() => setNotice('')}><Banner tone="success" title="Done">{notice}</Banner></ToastRelay>}
     {profileQuery.error && <Banner tone="danger" title="Unable to load driver profile">{adminDriverError(profileQuery.error)}</Banner>}
     {licenseQuery.error && <Banner tone="warning" title="License data unavailable">{adminDriverError(licenseQuery.error)}</Banner>}
     {!profileQuery.error && profile && <>

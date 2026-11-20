@@ -1,5 +1,6 @@
 "use client";
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
@@ -253,12 +254,14 @@ export function Documents() {
       />
 
       {notice && (
-        <Banner tone={notice.tone} onClose={() => setNotice(null)}>
-          {notice.title}
-        </Banner>
+        <ToastRelay message={notice.title} tone={notice.tone} onShown={() => setNotice(null)}>
+          <Banner tone={notice.tone} onClose={() => setNotice(null)}>
+            {notice.title}
+          </Banner>
+        </ToastRelay>
       )}
-      {queueError && <div className="documents-error"><Banner tone="danger" title={queueError.status === 403 ? "Access denied to the document queue." : "Unable to load the document queue."} /><Button variant="outline" onClick={refetchQueue}>Retry</Button></div>}
-      {statsError && <div className="documents-error"><Banner tone="warning" title="Document review stats are unavailable." /><Button variant="outline" onClick={refetchStats}>Retry stats</Button></div>}
+      {queueError && <Banner tone="danger" title={queueError.status === 403 ? "Access denied to the document queue." : "Unable to load the document queue."} action={<Button variant="outline" size="sm" onClick={refetchQueue}>Retry</Button>} />}
+      {statsError && <Banner tone="warning" title="Document review stats are unavailable." action={<Button variant="outline" size="sm" onClick={refetchStats}>Retry stats</Button>} />}
       <StatsPanel fixedLabel="Current" fixedHint="Live counts of documents by review status.">
 
         <StatCard
@@ -630,7 +633,7 @@ function ExpandedJob({ row, selected, setSelected, navigate, onAction }) {
         </Banner>
       )}
       {(isLoading || isFetching) && <div className="documents-expanded-loading" role="status" aria-label="Loading job documents"><Skeleton height={210} /></div>}
-      {error && <div className="documents-error"><Banner tone="danger" title={error.status === 403 ? "Access denied to these job documents." : "Unable to load job documents."} /><Button variant="outline" onClick={refetch}>Retry</Button></div>}
+      {error && <Banner tone="danger" title={error.status === 403 ? "Access denied to these job documents." : "Unable to load job documents."} action={<Button variant="outline" size="sm" onClick={refetch}>Retry</Button>} />}
       {!error && !isLoading && !isFetching && shownDocuments.length === 0 && <EmptyState icon="file-text" title="No documents available" description="No documents are available for this job." />}
       {!error && !isLoading && !isFetching && shownDocuments.length > 0 && <DataTable
         columns={documentColumns}
