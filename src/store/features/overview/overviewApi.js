@@ -211,7 +211,7 @@ function mapAdminOverviewResponse(response) {
 export const overviewApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getAdminOverview: builder.query({
-      query: (range) => ({ url: '/admin/overview', method: 'GET', params: { topRoutesLimit: 10, ...(range?.from && range?.to ? { from: range.from, to: range.to } : {}) } }),
+      query: (range) => ({ url: '/admin/overview', method: 'GET', params: { topRoutesLimit: 5, ...(range?.from && range?.to ? { from: range.from, to: range.to } : {}) } }),
       transformResponse: (response, _meta, range) => {
         const mapped = mapAdminOverviewResponse(response);
         if (range?.from && range?.to && (mapped.range?.from !== range.from || mapped.range?.to !== range.to)) {
