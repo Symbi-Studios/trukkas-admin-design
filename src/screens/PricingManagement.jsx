@@ -12,7 +12,9 @@ import {
 import { usePublishPricing } from "../store/features/pricing/usePublishPricing.js";
 import { FilterChip } from "../components/FilterChip.jsx";
 import { MiddleId, Money, FinanceFacts, cleanSteps } from "../components/finance/FinanceCells.jsx";
-import { PricingSettingModal } from "./PricingSettings.jsx";
+import { RateEditDialog } from "./RateEditDialog.jsx";
+import { ZoneEditor } from "./ZoneEditor.jsx";
+import { useGetAdminPricingZoneQuery } from "../store/features/pricing/zonePricingApi.js";
 import { PricingServiceForm } from "./PricingServiceForm.jsx";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import "../components/finance/finance.css";
@@ -37,6 +39,41 @@ function Table({ rows, columns, loading, empty, onOpen, rowKey = (row) => row.id
   </>;
 }
 
+function ZoneDetail({ id, row }) {
+  const query = useGetAdminPricingZoneQuery(id);
+  const zone = query.error ? null : query.currentData;
+  return <>
+    <DrawerSection title="Zone">
+      <FinanceFacts items={[{ label: "Region", value: row.region }, { label: "From port", value: row.route === "—" ? "Any port" : row.route }, { label: "From state", value: zone?.originState || "Any state" }, { label: "Last updated", value: row.lastUpdated }]} />
+      <p className="fin-note">Zone prices apply to any truck no rate card covers, priced by destination state.</p>
+    </DrawerSection>
+    <DrawerSection title="State rates">
+      {query.isFetching && !zone ? <DriverTableLoading columns={3} label="Loading rates" /> : zone?.rates.length ? <ul className="fin-breakdown">
+        {zone.rates.map((rate) => <li key={rate.id}>
+          <span><strong>{rate.destinationState}</strong><small>{[rate.cargoType === "BULK_BREAK" ? "Bulk" : rate.cargoType === "CONTAINER" ? "Container" : "Any cargo", rate.containerSize || rate.truckType, rate.minimumCharge != null ? `min ₦${rate.minimumCharge.toLocaleString("en-NG")}` : null].filter(Boolean).join(" · ")}</small></span>
+          <span className="fin-date" style={{ justifyItems: "end" }}><Money value={rate.price} /><small>{rate.unitLabel}</small></span>
+        </li>)}
+      </ul> : <p className="fin-note">No state rates yet.</p>}
+    </DrawerSection>
+  </>;
+}
+
+function TerminalDrawer({ terminal, onClose, onEdit }) {
+  const km = terminal.rows.baseFeePerKm, handling = terminal.rows.handlingFee;
+  return <SideDrawer label="Terminal rates" eyebrow="Per-km & terminal rates" title={terminal.name} onClose={onClose} width={480}
+    meta={terminal.status && terminal.status !== "—" && <Badge tone={STATUS_TONE[terminal.status] || "neutral"} dot>{terminal.status.replace(" Terminal", "").replace(" / Port", "")}</Badge>}>
+    <DrawerSection title="Rates">
+      <ul className="fin-breakdown">
+        {[[km, "Fare per km", "Distance × this rate when no rate card or zone covers a trip from here"], [handling, "Terminal handling fee", "Flat fee collected for the terminal on each job from here"]].map(([rate, title, hint]) => rate && <li key={rate.id}>
+          <span><strong>{title}</strong><small>{hint}</small></span>
+          <span style={{ display: "flex", alignItems: "center", gap: 10 }}><Money value={rate.value} /><Button size="sm" variant="outline" icon="pencil" disabled={!rate.editable} onClick={() => onEdit(rate)}>Edit</Button></span>
+        </li>)}
+      </ul>
+      <FinanceFacts items={[{ label: "Fare per km since", value: km?.effectiveFrom }, { label: "Handling fee since", value: handling?.effectiveFrom }]} />
+    </DrawerSection>
+  </SideDrawer>;
+}
+
 function RecordDrawer({ row, kind, onClose, onEdit, notify }) {
   const publisher = usePublishPricing();
   const [updateSurcharge, surchargeState] = useUpdateAdminPricingSurchargeMutation();
@@ -59,6 +96,7 @@ function RecordDrawer({ row, kind, onClose, onEdit, notify }) {
     {row.statusCode === "ACTIVE" && <Button variant="danger" disabled={busy || !publisher.canActivate} style={{ marginRight: "auto" }} onClick={() => act(() => publisher.deactivate(row), `${row.name || row.service} taken out of use.`)}>Deactivate</Button>}
     {unpublished && <Button variant="outline" disabled={busy || (row.statusCode === "PENDING_APPROVAL" && !publisher.canActivate)} onClick={() => act(() => publisher.publish(row), "Published.")}>Publish</Button>}
     {kind === "service" && <Button icon="pencil" disabled={busy} onClick={() => onEdit(row)}>Edit rate</Button>}
+    {kind === "zone" && <Button icon="pencil" disabled={busy} onClick={() => onEdit(row)}>Edit zone</Button>}
     {kind === "surcharge" && <Button disabled={busy || value.trim() === "" || !(Number(value) >= 0)} onClick={saveSurcharge}>{busy ? "Saving…" : publisher.canActivate ? "Save & publish" : "Save & submit"}</Button>}
   </div>;
   return <SideDrawer label="Pricing details" eyebrow={kind === "service" ? "Rate card" : kind === "zone" ? "Zone pricing" : "Surcharge"} onClose={onClose} footer={footer} width={520}
@@ -79,10 +117,7 @@ function RecordDrawer({ row, kind, onClose, onEdit, notify }) {
         <FinanceFacts items={[{ label: "Route", value: row.route, wide: true }, { label: "Coverage", value: row.coverage }, { label: "Equipment", value: row.truckType }, { label: "Last updated", value: row.updated, sub: row.updatedTime }]} />
       </DrawerSection>
     </>}
-    {kind === "zone" && <DrawerSection title="Zone">
-      <FinanceFacts items={[{ label: "Region", value: row.region }, { label: "Origin port", value: row.route }, { label: "State rates", value: row.services == null ? null : String(row.services) }, { label: "Last updated", value: row.lastUpdated }]} />
-      <p className="fin-note">Zone prices apply to any truck no rate card covers, priced by destination state.</p>
-    </DrawerSection>}
+    {kind === "zone" && <ZoneDetail id={row.id} row={row} />}
     {kind === "surcharge" && <DrawerSection title="Surcharge">
       <FinanceFacts items={[{ label: "Applies to", value: row.appliesTo, wide: true }, { label: "Current rate", value: row.rate }, { label: "Effective from", value: row.effectiveFrom }]} />
       <TextField label={`New rate (${row.unit})`} type="number" min={0} step="any" money={String(row.unit).startsWith("NGN")} value={value} disabled={busy} onChange={(event) => setValue(event.target.value)} />
@@ -98,6 +133,8 @@ export function PricingManagement() {
   const [open, setOpen] = useState(null);
   const [form, setForm] = useState(null);
   const [terminal, setTerminal] = useState(null);
+  const [terminalRow, setTerminalRow] = useState(null);
+  const [zoneForm, setZoneForm] = useState(null);
   const [notice, setNotice] = useState(null);
   const summaryQuery = useGetAdminPricingSummaryQuery();
   const servicesQuery = useGetAdminPricingServicesQuery(undefined, { skip: tab !== TABS[0] });
@@ -142,9 +179,10 @@ export function PricingManagement() {
     ],
     [TABS[2]]: [
       { key: "name", header: "Port / Terminal", render: (r) => <span className="tk-cell-strong">{r.name}</span> },
-      { key: "km", header: "Fare per km", align: "right", render: (r) => <Button variant="ghost" size="sm" disabled={!r.rows.baseFeePerKm?.editable} onClick={(event) => { event.stopPropagation(); setTerminal(r.rows.baseFeePerKm); }}><Money value={r.rows.baseFeePerKm?.value} /></Button> },
-      { key: "handling", header: "Handling Fee", align: "right", render: (r) => <Button variant="ghost" size="sm" disabled={!r.rows.handlingFee?.editable} onClick={(event) => { event.stopPropagation(); setTerminal(r.rows.handlingFee); }}><Money value={r.rows.handlingFee?.value} /></Button> },
+      { key: "km", header: "Fare per km", align: "right", render: (r) => <Money value={r.rows.baseFeePerKm?.value} /> },
+      { key: "handling", header: "Handling Fee", align: "right", render: (r) => <Money value={r.rows.handlingFee?.value} /> },
       { key: "status", header: "Status", render: (r) => isMissing(r.status) ? <NotAvailable /> : <Badge tone={STATUS_TONE[r.status] || "neutral"} dot>{r.status.replace(" Terminal", "").replace(" / Port", "")}</Badge> },
+      { key: "edit", header: "", width: 80, render: (r) => <Button size="sm" variant="outline" icon="pencil" onClick={(event) => { event.stopPropagation(); setTerminalRow(r); }}>Edit</Button> },
     ],
     [TABS[3]]: [
       { key: "name", header: "Surcharge", render: (r) => <span className="fin-date"><span>{r.name}</span><small>{r.description}</small></span> },
@@ -155,12 +193,15 @@ export function PricingManagement() {
     ],
   }[tab];
   const kind = { [TABS[0]]: "service", [TABS[1]]: "zone", [TABS[3]]: "surcharge" }[tab];
+  const openRow = kind ? (row) => setOpen({ row, kind }) : (row) => setTerminalRow(row);
 
   return (
     <>
       <PageHeader crumbs={["Finance", "Pricing"]} title="Pricing"
         description="What a trip costs: lane rate cards, zone prices by state, per-km fares and terminal fees, and surcharges. Platform fees are on Platform Rates."
-        actions={<Button icon="plus" onClick={() => setForm({ id: null })}>New rate card</Button>} />
+        actions={tab === TABS[1]
+          ? <Button icon="plus" onClick={() => setZoneForm({ id: null })}>New zone</Button>
+          : <Button icon="plus" onClick={() => setForm({ id: null })}>New rate card</Button>} />
       {notice && <Banner tone="success" title={notice} />}
       <StatsPanel fixedLabel="Current setup" fixedHint="Counts reflect the pricing in use now; average change compares the last 30 days with the 30 before.">
         <StatCard icon="tag" tint="blue" label="Rate Cards" value={summary?.totalServices ?? "—"} caption="lane prices" />
@@ -176,14 +217,16 @@ export function PricingManagement() {
           onClear={status !== "All Statuses" || q.trim() ? () => { setStatus("All Statuses"); setQ(""); } : undefined}
         />
         {query.error && <Banner tone="danger" title="Unable to load pricing" action={<Button variant="outline" size="sm" onClick={query.refetch}>Retry</Button>} style={{ margin: "0 var(--tk-card-pad) 12px" }}>{pricingError(query.error)}</Banner>}
-        {tab === TABS[2] && <p className="fin-note" style={{ padding: "0 var(--tk-card-pad) 10px" }}>The fare per km is used when no rate card or zone covers a trip. Click a value to change it; it applies immediately.</p>}
+        {tab === TABS[2] && <p className="fin-note" style={{ padding: "0 var(--tk-card-pad) 10px" }}>The fare per km is used when no rate card or zone covers a trip. Changes apply to new quotes straight away.</p>}
         <Table key={tab} rows={rows} columns={columns} loading={query.isFetching && !query.currentData}
           empty={{ title: `No ${tab.toLowerCase()} found`, description: q.trim() || status !== "All Statuses" ? "Try adjusting your filters or search." : tab === TABS[0] ? "Create a rate card to price a specific lane." : "Nothing is set up here yet." }}
-          onOpen={kind ? (row) => setOpen({ row, kind }) : undefined} />
+          onOpen={openRow} />
       </SectionCard>
-      {open && <RecordDrawer key={open.row.id} row={open.row} kind={open.kind} onClose={() => setOpen(null)} notify={notify} onEdit={(row) => { setOpen(null); setForm({ id: row.id }); }} />}
+      {open && <RecordDrawer key={open.row.id} row={open.row} kind={open.kind} onClose={() => setOpen(null)} notify={notify} onEdit={(row) => { setOpen(null); if (open.kind === "zone") setZoneForm({ id: row.id }); else setForm({ id: row.id }); }} />}
+      {zoneForm && <ZoneEditor id={zoneForm.id} onClose={() => setZoneForm(null)} onDone={(saved) => { setZoneForm(null); notify(saved?.statusCode === "ACTIVE" ? "Zone is live." : "Zone saved and waiting for activation."); }} />}
+      {terminalRow && <TerminalDrawer terminal={terminals.find((t) => t.id === terminalRow.id) || terminalRow} onClose={() => setTerminalRow(null)} onEdit={setTerminal} />}
       {form && <PricingServiceForm id={form.id} onClose={() => setForm(null)} onDone={(saved) => { setForm(null); notify(saved?.statusCode === "ACTIVE" ? "Rate card is live." : "Rate card saved and waiting for activation."); }} />}
-      {terminal && <PricingSettingModal key={terminal.id} row={terminal} onClose={() => setTerminal(null)} onDone={notify} />}
+      {terminal && <RateEditDialog key={terminal.id} row={terminal} onClose={() => setTerminal(null)} onDone={notify} />}
     </>
   );
 }

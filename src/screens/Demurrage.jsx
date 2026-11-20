@@ -72,7 +72,10 @@ function DemurrageScreen() {
     const deductions = (deductionsQuery.error ? EMPTY_ROWS : deductionsQuery.currentData?.rows || EMPTY_ROWS).map((r) => ({
       ...r, kind: "Driver Delay", key: "deduction:" + r.id, jobId: r.job, customer: null, trucker: r.user, daysOver: null, when: r.createdAtIso, date: r.createdAt,
     }));
-    return [...charges, ...deductions].sort((a, b) => (Date.parse(b.when || "") || 0) - (Date.parse(a.when || "") || 0));
+    // Only lateness that actually cost something: every job gets an automatic charge record, but most
+    // offload within the free window (₦0, 0 days over). Active and disputed charges always show.
+    const incurred = (r) => (r.amount ?? 0) > 0 || (r.daysOver ?? 0) > 0 || ["Active", "Dispute"].includes(r.status);
+    return [...charges, ...deductions].filter(incurred).sort((a, b) => (Date.parse(b.when || "") || 0) - (Date.parse(a.when || "") || 0));
   }, [directory, deductionsQuery.currentData, deductionsQuery.error]);
   const statusOptions = useMemo(() => ["All Statuses", ...new Set(rows.filter((r) => type === "All Types" || r.kind === type).map((r) => r.status).filter((value) => value && value !== "—"))], [rows, type]);
   const filtered = useMemo(() => {

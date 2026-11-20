@@ -67,7 +67,7 @@ export function adaptAdminPricingService(value) {
     submitted: dateParts(dto.submittedAt).updated, standardPrice: number(dto.currentPrice), exceptionPrice: number(dto.basePrice),
   };
 }
-function adaptPriceList(value) {
+export function adaptPriceList(value) {
   const dto = record(value), submittedBy = submitter(dto.submittedBy);
   return { id: text(dto.id), entity: 'price-lists', updatedAt: text(dto.updatedAt), name: text(dto.name) || '—', service: text(dto.name) || '—', region: text(dto.region) || '—', route: text(record(dto.originPort).name) || '—',
     services: count(dto.servicesCount) ?? count(dto.rateCount), currency: text(dto.currency) || '—', lastUpdated: dateParts(dto.updatedAt).updated,
@@ -153,7 +153,7 @@ export function canChangePricing(row, action, admin) {
   if (action === 'reject') return row.entity === 'exceptions' ? row.statusCode === 'PENDING' && row.requesterId && row.requesterId !== admin.id : row.statusCode === 'PENDING_APPROVAL';
   return action === 'approve' && row.entity === 'exceptions' && row.statusCode === 'PENDING' && row.requesterId && row.requesterId !== admin.id;
 }
-function pricingRecord(response, entity) {
+export function pricingRecord(response, entity) {
   const dto = record(unwrapApiResponseData(response));
   return text(dto.id) ? dto : record(dto[({ services: 'service', 'price-lists': 'priceList', surcharges: 'surcharge', exceptions: 'exception' })[entity]]);
 }
@@ -354,7 +354,7 @@ async function savePricingSetting(source, args, api, baseQuery) {
     return { data: { value } };
   } catch (error) { return failed(error.message); }
 }
-const pricingConfigTags = ['AdminPricingConfig', 'AdminPricing', 'AdminSettings', 'AdminSettingsStatus'];
+const pricingConfigTags = ['AdminPricingConfig', 'AdminPricing', 'AdminSettings', 'AdminSettingsStatus', 'AdminFeeRules'];
 export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing', 'AdminSettings', 'AdminSettingsStatus'] }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({

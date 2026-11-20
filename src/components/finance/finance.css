@@ -80,3 +80,29 @@
   .fin-cal-second { display: none; }
 }
 .fin-id-stack { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------- Rate editor: current → new ---------- */
+.fin-rate-compare { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--tk-line); border-radius: 12px; background: var(--tk-surface-sunk); color: var(--tk-ink-400); }
+.fin-rate-compare > div { display: grid; gap: 3px; min-width: 0; }
+.fin-rate-compare span { font: 500 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.fin-rate-compare strong { font: 700 18px/24px var(--tk-font-sans); color: var(--tk-ink-900); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.fin-rate-compare .next strong { color: var(--tk-blue); }
+.fin-rate-compare small { font: 500 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.fin-rate-compare small.up { color: var(--tk-success); }
+.fin-rate-compare small.down { color: var(--tk-danger); }
+
+/* ---------- Platform Rates sections ---------- */
+.fin-rates-card .tk-data-table, .fin-rates-card table { margin-top: 4px; }
+.fin-rate-row-off { opacity: 0.55; }
+
+/* ---------- Zone editor ---------- */
+.fin-zone-header { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fin-zone-rates { display: grid; gap: 8px; }
+.fin-zone-row { display: grid; grid-template-columns: 1.5fr 1fr 1.1fr 1.1fr 1fr 1fr 36px; gap: 8px; align-items: center; }
+.fin-zone-row.duplicate { box-shadow: inset 3px 0 0 var(--tk-warning); padding-left: 6px; }
+.fin-zone-head span { font: 600 11px/16px var(--tk-font-sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tk-ink-400); }
+@media (max-width: 900px) {
+  .fin-zone-header { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-zone-row { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-bottom: 10px; border-bottom: 1px solid var(--tk-line); }
+  .fin-zone-head { display: none; }
+}
