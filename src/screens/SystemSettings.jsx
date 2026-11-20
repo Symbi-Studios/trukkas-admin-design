@@ -8,6 +8,7 @@ import { SettingsGeneral } from './SettingsGeneral.jsx';
 import { SettingsFieldsRegistration } from './SettingsFieldsRegistration.jsx';
 import { SettingsOperations } from './SettingsOperations.jsx';
 import { SettingsFleet } from './SettingsFleet.jsx';
+import { SettingsPorts } from './SettingsPorts.jsx';
 import { SettingsFinance } from './SettingsFinance.jsx';
 import { SettingsNotifications } from './SettingsNotifications.jsx';
 import { SettingsIntegrations } from './SettingsIntegrations.jsx';
@@ -20,6 +21,7 @@ import { SettingsDataProtection } from './SettingsDataProtection.jsx';
 const TAB_SECTIONS = {
   general: [SettingsGeneral],
   operations: [SettingsOperations, SettingsFleet],
+  ports: [SettingsPorts],
   finance: [SettingsFinance],
   notifications: [SettingsNotifications],
   onboarding: [SettingsFieldsRegistration],
