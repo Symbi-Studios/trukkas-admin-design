@@ -8,6 +8,7 @@ import "./Settings.css";
 export const SETTINGS_TABS = [
   { key: "general", label: "General" },
   { key: "operations", label: "Operations" },
+  { key: "ports", label: "Ports & Terminals" },
   { key: "finance", label: "Finance" },
   { key: "notifications", label: "Notifications" },
   { key: "onboarding", label: "Onboarding" },
