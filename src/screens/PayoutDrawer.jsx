@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useRef, useState } from "react";
 import { Badge, Banner, Button, CopyableId, DrawerFacts, DrawerSection, DropdownMenu, Modal, SideDrawer, Skeleton, Textarea, Timeline, isMissing } from "../ds.js";
 import { Link } from "../router.js";
@@ -92,7 +93,7 @@ export function PayoutDrawer({ target, row, onClose }) {
       </>}>
       {!r && query.isFetching && <><Skeleton height={88} /><Skeleton height={180} /><Skeleton height={140} /></>}
       {query.error && <Banner tone="warning" title={getApiErrorMessage(query.error)} action={<Button size="sm" variant="outline" onClick={query.refetch}>Retry</Button>} />}
-      {notice && <Banner tone={notice.tone} title={notice.text} />}
+      {notice && <ToastRelay message={notice.text} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} title={notice.text} /></ToastRelay>}
       {r && <>
         {r.eligibilityReasons?.length > 0 && r.canReject && <Banner tone="warning" title="Can't approve yet">{r.eligibilityReasons.join(" · ")}</Banner>}
 

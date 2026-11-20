@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from '../router.js';
 import {
@@ -197,7 +198,7 @@ export function TriangulationDetail() {
         }
       />
 
-      {toast && <Banner tone={toast.tone === 'danger' ? 'danger' : toast.tone} title={toast.title} />}
+      {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone === 'danger' ? 'danger' : toast.tone} title={toast.title} /></ToastRelay>}
 
       <EntityHeaderCard
         name={o.id}

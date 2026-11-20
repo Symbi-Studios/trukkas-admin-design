@@ -1,4 +1,5 @@
 "use client";
+import { showToast } from '../components/ActionToast.jsx';
 import { useMemo, useState } from "react";
 import { usePageSearchState } from "../components/PageSearch.jsx";
 import {
@@ -162,7 +163,7 @@ export function PricingManagement() {
   const query = { [TABS[0]]: servicesQuery, [TABS[1]]: zonesQuery, [TABS[2]]: terminalQuery, [TABS[3]]: surchargesQuery }[tab] || {};
   const keys = { [TABS[0]]: ["service", "code", "route", "coverage", "truckType"], [TABS[1]]: ["name", "region", "route"], [TABS[2]]: ["name"], [TABS[3]]: ["name", "appliesTo", "description"] }[tab] || [];
   const rows = current.filter((row) => (status === "All Statuses" || row.status === status) && matches(row, keys, q));
-  const notify = (text) => { setNotice(text); setTimeout(() => setNotice(null), 3200); };
+  const notify = (text) => showToast(text);
   const switchTab = (next) => { setTab(next); setStatus("All Statuses"); setQ(""); setOpen(null); };
 
   const columns = {

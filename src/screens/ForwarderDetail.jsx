@@ -1,44 +1,49 @@
 'use client';
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from '../router.js';
+import { useNavigate, useParams } from '../router.js';
 import { useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import {
-  Button, Badge, Tag, SectionCard, LabelValue, Card, PageHeader, DropdownMenu, DataTable, Tabs,
-  Timeline, QuickActionsCard, Icon, Avatar, EmptyState, Banner, Pagination,
+  Button, Badge, SectionCard, LabelValue, Card, PageHeader, DropdownMenu, DataTable, Tabs,
+  Timeline, Icon, Avatar, EmptyState, Banner, Pagination, StatCard, TableToolbar,
 } from '../ds.js';
 import './ForwarderDetail.css';
 
-import { forwarderMoney, forwarderError, forwarderVerification, useGetAdminForwarderProfileQuery, useGetAdminForwarderDocumentsQuery, useGetAdminPendingExporterLicensesQuery, useGetAdminForwarderDestinationsQuery, useGetAdminForwarderJobsQuery, useGetAdminForwarderTransactionsQuery, useGetAdminForwarderActivityQuery } from '../store/features/forwarders/forwardersApi.js';
+import { forwarderMoney, forwarderError, forwarderVerification, useGetAdminForwarderProfileQuery, useGetAdminForwarderDestinationsQuery, useGetAdminForwarderDocumentsQuery, useGetAdminPendingExporterLicensesQuery, useGetAdminForwarderJobsQuery, useGetAdminForwarderTransactionsQuery, useGetAdminForwarderActivityQuery } from '../store/features/forwarders/forwardersApi.js';
 import { ForwarderDetailLoading } from './ForwardersLoading.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import { ForwarderActionModal, ForwarderAnnouncementModal, downloadForwarderCsv } from './ForwarderActions.jsx';
 import { ForwarderProfileModal, ForwarderNoteModal, ForwarderVerificationRequestModal } from './ForwarderForms.jsx';
-import { ForwarderJobModal } from './ForwarderJobModal.jsx';
 import { ForwarderNotes } from './ForwarderNotes.jsx';
+import { FORWARDER_STATUS_TONE, VERIFICATION_TONE, ForwarderActivity, ForwarderJobsTable, ForwarderJobDrawer, JobStatusFilter, NotSubmitted } from './ForwarderShared.jsx';
 
 function QueryError({ query, title = 'Unable to load data' }) {
   return <Banner tone="danger" title={title} action={<Button variant="outline" onClick={query.refetch}>Retry</Button>}>{forwarderError(query.error)}</Banner>;
 }
-const DOC_TONE = { Verified: 'success', Pending: 'warning', Rejected: 'danger' };
 
-const JOB_TONE = { 'In Transit': 'info', Delivered: 'success', Completed: 'success' };
-const TAB_ITEMS = ['Overview', 'Personal Information', 'Verification', 'Banking & Financial', 'Performance', 'Jobs & Shipments', 'Documents', 'Activity Log', 'Notes'];
+const TAB_ITEMS = ['Overview', 'KYC', 'Jobs', 'Saved Addresses', 'Financial', 'Activity Log'];
 const naira = forwarderMoney;
+const KYC_ICON = { Verified: ['badge-check', 'var(--tk-success)'], Pending: ['hourglass', 'var(--tk-warning)'], Rejected: ['circle-x', 'var(--tk-danger-solid)'] };
+const present = (value) => value != null && value !== '—' && value !== '';
 
-function JobsTable({ rows }) {
-  if (!rows.length) return <EmptyState title="No jobs found" description="Jobs for this forwarder will appear here." />;
+function KycRow({ icon, title, optional, detail, status, url, action, onRequest }) {
+  const [statusIcon, statusColor] = KYC_ICON[status] || [icon, 'var(--tk-ink-400)'];
   return (
-    <>{rows.some((row) => row.detailUnavailable) && <Banner>Some job details are unavailable. Cargo, amounts, and detail links are shown only for matching jobs.</Banner>}<DataTable rows={rows} rowKey={(r) => r.detailId}
-      columns={[
-        { key: 'id', header: 'Job ID', render: (r) => r.detailId ? <Link to={`/jobs/detail?id=${encodeURIComponent(r.detailId)}`}>{r.id}</Link> : <strong>{r.id || '—'}</strong> },
-        { key: 'cargo', header: 'Cargo Type' },
-        { key: 'route', header: 'Origin → Destination' },
-        { key: 'status', header: 'Status', render: (r) => <Badge tone={JOB_TONE[r.status]}>{r.status}</Badge> },
-        { key: 'date', header: 'Job Date' },
-        { key: 'amount', header: 'Amount (₦)', render: (r) => <strong style={{ color: 'var(--tk-ink-900)' }}>{naira(r.amount)}</strong> },
-      ]} /></>
+    <div className="fd-kyc-row">
+      <span className="fd-kyc-icon" style={{ color: statusColor }}><Icon name={statusIcon} size={18} /></span>
+      <span className="fd-kyc-text">
+        <strong>{title}{optional && <span className="tk-meta"> · Optional</span>}</strong>
+        <span className="tk-meta">{detail}</span>
+      </span>
+      <span className="fd-kyc-actions">
+        {url && <a href={url} target="_blank" rel="noopener noreferrer">View ↗</a>}
+        {action}
+        {onRequest && <Button size="sm" variant="ghost" icon="rotate-ccw" onClick={onRequest}>Request</Button>}
+        {status === 'Not submitted' ? <NotSubmitted /> : <Badge tone={VERIFICATION_TONE[status] || 'neutral'}>{status}</Badge>}
+      </span>
+    </div>
   );
 }
 
@@ -51,56 +56,63 @@ export function ForwarderDetail() {
   const canViewActivity = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
   const [tab, setTab] = useState('Overview');
   const [moreOpen, setMoreOpen] = useState(false);
-  const [editingForwarder, setEditingForwarder] = useState(null), [noteOpen, setNoteOpen] = useState(false), [verificationOpen, setVerificationOpen] = useState(false), [jobOpen, setJobOpen] = useState(false);
+  const [editingForwarder, setEditingForwarder] = useState(null), [openJob, setOpenJob] = useState(null), [noteOpen, setNoteOpen] = useState(false), [verificationOpen, setVerificationOpen] = useState(null);
 
   const [page, setPage] = useState(1), [jobTab, setJobTab] = useState('all'), [action, setAction] = useState(null), [announcement, setAnnouncement] = useState(false), [notice, setNotice] = useState(null);
-  useEffect(() => { setTab(({ verification: 'Verification', documents: 'Documents', jobs: 'Jobs & Shipments' })[requestedTab] || 'Overview'); setPage(1); setJobTab('all'); setAction(null); setAnnouncement(false); setNotice(null); setMoreOpen(false); setEditingForwarder(null); setNoteOpen(false); setVerificationOpen(false); setJobOpen(false); }, [id, requestedTab]);
+  useEffect(() => { setTab(({ verification: 'KYC', documents: 'KYC', kyc: 'KYC', jobs: 'Jobs', addresses: 'Saved Addresses' })[requestedTab] || 'Overview'); setPage(1); setJobTab('all'); setAction(null); setAnnouncement(false); setNotice(null); setMoreOpen(false); setEditingForwarder(null); setNoteOpen(false); setVerificationOpen(null); setOpenJob(null); }, [id, requestedTab]);
   const profileQuery = useGetAdminForwarderProfileQuery({ id, owner }, { skip: !authenticated || !id, refetchOnMountOrArgChange: true });
   const FORWARDER = profileQuery.error ? null : profileQuery.currentData;
   const valid = FORWARDER?.role === 'FORWARDER';
-  const destinationsQuery = useGetAdminForwarderDestinationsQuery({ id, owner }, { skip: !authenticated || !valid || tab !== 'Overview' });
-  const pendingQuery = useGetAdminPendingExporterLicensesQuery(owner, { skip: !authenticated || !valid || !['Verification', 'Documents'].includes(tab) });
-  const documentsQuery = useGetAdminForwarderDocumentsQuery({ id, owner }, { skip: !authenticated || !valid || tab !== 'Documents' });
+  const pendingQuery = useGetAdminPendingExporterLicensesQuery(owner, { skip: !authenticated || !valid || tab !== 'KYC' });
+  const documentsQuery = useGetAdminForwarderDocumentsQuery({ id, owner }, { skip: !authenticated || !valid || tab !== 'KYC' });
   const pendingLicense = !pendingQuery.error ? pendingQuery.currentData?.rows.find((row) => row.id === id) : null;
   const licenseStatus = pendingLicense?.status || FORWARDER?.exporterLicenseStatus || (FORWARDER?.isExporter ? 'VERIFIED' : null);
   const licenseUrl = pendingLicense?.url || FORWARDER?.exporterLicenseUrl;
-  const jobsQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: tab === 'Jobs & Shipments' ? jobTab : 'all', page: tab === 'Jobs & Shipments' ? page : 1, limit: tab === 'Jobs & Shipments' ? 10 : 5 }, { skip: !authenticated || !valid || !['Overview', 'Jobs & Shipments'].includes(tab) });
-  const completedQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: 'completed', page: 1, limit: 1 }, { skip: !authenticated || !valid || tab !== 'Performance' });
-  const transactionsQuery = useGetAdminForwarderTransactionsQuery({ id, owner, page, limit: 10 }, { skip: !authenticated || !valid || tab !== 'Banking & Financial' });
+  const onJobs = tab === 'Jobs';
+  const jobsQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: onJobs ? jobTab : 'all', page: onJobs ? page : 1, limit: onJobs ? 10 : 6 }, { skip: !authenticated || !valid || !['Overview', 'Jobs'].includes(tab) });
+  const completedQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: 'completed', page: 1, limit: 1 }, { skip: !authenticated || !valid });
+  const transactionsQuery = useGetAdminForwarderTransactionsQuery({ id, owner, page, limit: 10 }, { skip: !authenticated || !valid || tab !== 'Financial' });
+  const destinationsQuery = useGetAdminForwarderDestinationsQuery({ id, owner }, { skip: !authenticated || !valid || tab !== 'Saved Addresses' });
   const activityQuery = useGetAdminForwarderActivityQuery({ id, owner }, { skip: !authenticated || !valid || !canViewActivity || tab !== 'Activity Log' });
-  const savedDestinations = destinationsQuery.error ? [] : destinationsQuery.currentData || [], JOBS = jobsQuery.error ? [] : jobsQuery.currentData?.rows || [];
-  const DOCUMENTS = [['National ID Card', null], ['Passport Photograph', 'passport'], ['Freight Forwarding License', null], ['Export License', 'exportLicense'], ['Proof of Address', 'address']].map(([name, slot]) => {
-    const document = !documentsQuery.error ? documentsQuery.currentData?.[slot] : null;
-    return { id: name, name, validity: document?.validity || '—', status: document?.status || (slot === 'exportLicense' ? forwarderVerification(licenseStatus) : '—'), url: document?.url || (slot === 'exportLicense' ? licenseUrl : null) };
-  });
-  const VERIFICATION_CHECKS = ['National ID Verification', 'Freight Forwarding License', 'Export License', 'Bank Account Verification', 'Address Verification', 'Background Check'].map((label, index) => {
-    const key = ['nationalId', 'forwardingLicense', 'exportLicense', 'bankAccount', 'address', 'backgroundCheck'][index];
-    const status = FORWARDER?.verificationChecks?.[key];
-    return { label, status: status && status !== '—' ? status : index === 2 ? forwarderVerification(licenseStatus) : '—' };
-  });
+  const JOBS = jobsQuery.error ? [] : jobsQuery.currentData?.rows || [];
+  const docs = documentsQuery.error ? {} : documentsQuery.currentData || {};
+  const checks = FORWARDER?.verificationChecks || {};
+  const checkStatus = (key) => present(checks[key]) ? checks[key] : null;
+
   const PERFORMANCE = [
-    { icon: 'route', label: 'Total Jobs', value: FORWARDER?.jobs ?? '—', caption: '' },
-    { icon: 'circle-check', label: 'Completed Jobs', value: completedQuery.error ? '—' : completedQuery.currentData?.pagination?.total ?? '—', caption: '' },
-    { icon: 'timer', label: 'On-Time Delivery', value: FORWARDER?.onTimeDelivery == null ? '—' : FORWARDER.onTimeDelivery + '%', caption: '' },
-    { icon: 'wallet', label: 'Total Spend', value: naira(FORWARDER?.spend), caption: '' },
-    { icon: 'shield-check', label: 'Payment Reliability', value: FORWARDER?.paymentReliability == null ? '—' : FORWARDER.paymentReliability + '%', caption: '' },
-    { icon: 'star', label: 'Partner Rating', value: FORWARDER?.partnerRating ? FORWARDER.partnerRating.average + ' / ' + FORWARDER.partnerRating.scale : '—', caption: FORWARDER?.partnerRating?.count == null ? '' : FORWARDER.partnerRating.count + ' ratings' },
+    { icon: 'route', label: 'Total Jobs', value: FORWARDER?.jobs ?? '—' },
+    { icon: 'circle-check', label: 'Completed Jobs', value: completedQuery.error ? '—' : completedQuery.currentData?.pagination?.total ?? '—' },
+    { icon: 'timer', label: 'On-Time Delivery', value: FORWARDER?.onTimeDelivery == null ? '—' : FORWARDER.onTimeDelivery + '%' },
+    { icon: 'wallet', label: 'Total Spend', value: naira(FORWARDER?.spend) },
+    { icon: 'shield-check', label: 'Payment Reliability', value: FORWARDER?.paymentReliability == null ? '—' : FORWARDER.paymentReliability + '%' },
+    { icon: 'star', label: 'Partner Rating', value: FORWARDER?.partnerRating ? FORWARDER.partnerRating.average + ' / ' + FORWARDER.partnerRating.scale : '—', caption: FORWARDER?.partnerRating?.count == null ? null : FORWARDER.partnerRating.count + ' ratings' },
   ];
   function changeTab(next) { setTab(next); setPage(1); }
-  function exportProfile() { downloadForwarderCsv('forwarder-profile.csv', [['Field', 'Value'], ['ID', id], ['Name', FORWARDER.name], ['Email', FORWARDER.email], ['Phone', FORWARDER.phone], ['Status', FORWARDER.status], ['Account Type', FORWARDER.isExporter == null ? '—' : FORWARDER.isExporter ? 'Exporter' : 'Forwarder'], ['Verification', FORWARDER.verification], ['Total Jobs', FORWARDER.jobs], ['Wallet Balance (NGN)', FORWARDER.balance], ['Joined', FORWARDER.memberSince], ['Last Login', FORWARDER.lastActivity]]); }
+  function exportProfile() { downloadForwarderCsv('forwarder-profile.csv', [['Field', 'Value'], ['ID', id], ['Name', FORWARDER.name], ['Email', FORWARDER.email], ['Phone', FORWARDER.phone], ['Status', FORWARDER.status], ['KYC', FORWARDER.verification], ['Total Jobs', FORWARDER.jobs], ['Wallet Balance (NGN)', FORWARDER.balance], ['Joined', FORWARDER.memberSince], ['Last Login', FORWARDER.lastActivity]]); }
   const success = (text, tone = 'success') => setNotice({ tone, text });
   if (profileQuery.isFetching && !FORWARDER) return <ForwarderDetailLoading />;
   if (!id || profileQuery.error || !valid) return <SectionCard title="Forwarder Details">{profileQuery.error ? <QueryError query={profileQuery} title="Unable to load forwarder" /> : <EmptyState title={!id ? 'Select a forwarder' : 'Forwarder not found'} description="Choose a forwarder from the directory." />}<Button variant="outline" onClick={() => navigate('/forwarders')}>Back to Forwarders</Button></SectionCard>;
+
+  const suspended = FORWARDER.statusCode === 'SUSPENDED';
+  const licenseSubmitted = present(FORWARDER.license) || Boolean(licenseUrl) || present(docs.exportLicense?.status);
+  const licenseState = docs.exportLicense?.status && docs.exportLicense.status !== '—' ? docs.exportLicense.status : licenseStatus ? forwarderVerification(licenseStatus) : checkStatus('forwardingLicense') || (licenseSubmitted ? '—' : 'Not submitted');
+  const KYC_ITEMS = [
+    { key: 'nin', icon: 'id-card', title: 'National ID (NIN)', detail: present(FORWARDER.nin) ? FORWARDER.nin : 'No NIN on file', status: checkStatus('nationalId') || (present(FORWARDER.nin) ? '—' : 'Not submitted') },
+    { key: 'passport', icon: 'image', title: 'Passport Photograph', detail: docs.passport ? `Expires ${docs.passport.validity}` : 'Photo of the account holder', status: docs.passport?.status && docs.passport.status !== '—' ? docs.passport.status : documentsQuery.currentData ? 'Not submitted' : '—', url: docs.passport?.url },
+    { key: 'address', icon: 'map-pin', title: 'Proof of Address', detail: present(FORWARDER.address) ? FORWARDER.address : 'Utility bill or bank statement', status: docs.address?.status && docs.address.status !== '—' ? docs.address.status : checkStatus('address') || (documentsQuery.currentData ? 'Not submitted' : '—'), url: docs.address?.url },
+    { key: 'bank', icon: 'landmark', title: 'Bank Account', detail: 'Payout account verification', status: checkStatus('bankAccount') || '—' },
+    { key: 'license', icon: 'file-badge', title: 'Forwarding License', optional: true, detail: present(FORWARDER.license) ? `License no. ${FORWARDER.license}` : 'Not required to use Trukkas', status: licenseState, url: docs.exportLicense?.url || licenseUrl, action: pendingLicense && <Button size="sm" variant="outline" disabled={pendingQuery.isFetching} onClick={() => setAction({ kind: 'review', forwarder: { ...pendingLicense, name: FORWARDER.name } })}>Review</Button> },
+  ];
 
   return (
     <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
       <PageHeader
         crumbs={[
-          { label: 'Forwarders / Exporters', onClick: () => navigate('/forwarders') },
+          { label: 'Forwarders', onClick: () => navigate('/forwarders') },
           FORWARDER.name,
         ]}
         title="Forwarder Details"
-        description="Review the forwarder profile, verification, jobs, financial standing and activity."
+        description="Review the forwarder's profile, KYC, jobs and financial standing."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/forwarders')}>Back to Forwarders</Button>
           <Button icon="pencil" onClick={() => setEditingForwarder(FORWARDER)}>Edit Forwarder</Button>
@@ -108,12 +120,14 @@ export function ForwarderDetail() {
             <Button variant="outline" iconRight="chevron-down" onClick={() => setMoreOpen((o) => !o)}>More Actions</Button>
             {moreOpen && (
               <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
-                <DropdownMenu width={220} items={[
+                <DropdownMenu width={230} items={[
+                  { label: 'Request Verification', icon: 'shield-check', onClick: () => { setMoreOpen(false); changeTab('KYC'); setVerificationOpen({}); } },
+                  { label: 'Send Message', icon: 'megaphone', onClick: () => { setMoreOpen(false); setAnnouncement(true); } },
+                  { divider: true },
                   { label: 'Export Forwarder Report', icon: 'download', onClick: () => { setMoreOpen(false); exportProfile(); } },
                   { label: 'Print Profile', icon: 'file-text', onClick: () => { setMoreOpen(false); window.print(); } },
-                  { label: 'View Audit Log', icon: 'scroll-text', onClick: () => { setMoreOpen(false); changeTab('Activity Log'); } },
                   { divider: true },
-                  { label: FORWARDER.statusCode === 'SUSPENDED' ? 'Reactivate Forwarder' : 'Suspend Forwarder', icon: 'circle-alert', tone: 'danger', onClick: () => { setMoreOpen(false); setAction({ kind: FORWARDER.statusCode === 'SUSPENDED' ? 'activate' : 'suspend', forwarder: FORWARDER }); } },
+                  { label: suspended ? 'Reactivate Forwarder' : 'Suspend Forwarder', icon: 'circle-alert', tone: suspended ? undefined : 'danger', onClick: () => { setMoreOpen(false); setAction({ kind: suspended ? 'activate' : 'suspend', forwarder: FORWARDER }); } },
                 ]} />
               </span>
             )}
@@ -121,38 +135,39 @@ export function ForwarderDetail() {
         </>}
       />
 
-      {notice && <Banner tone={notice.tone} action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice.text}</Banner>}
+      {notice && <ToastRelay message={notice.text} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice.text}</Banner></ToastRelay>}
       {profileQuery.isFetching && <DriverLoadingNotice>Refreshing forwarder details…</DriverLoadingNotice>}
       <Card>
         <div className="fd-identity">
           <Avatar name={FORWARDER.name} size={56} />
-          <div style={{ flex: 1, minWidth: 240, display: 'grid', gap: 4 }}>
+          <div style={{ flex: 1, minWidth: 240, display: 'grid', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <h2 className="tk-title">{FORWARDER.name}</h2>
-              <Badge tone={FORWARDER.statusCode === 'ACTIVE' ? 'success' : FORWARDER.statusCode === 'SUSPENDED' ? 'danger' : 'neutral'}>{FORWARDER.status}</Badge>
+              <Badge tone={FORWARDER_STATUS_TONE[FORWARDER.status] || 'neutral'} dot>{FORWARDER.status}</Badge>
+              <Badge tone={VERIFICATION_TONE[FORWARDER.verification] || 'neutral'}>KYC {FORWARDER.verification}</Badge>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <Tag>Forwarder</Tag>
-              {FORWARDER.isExporter && <Tag tone="teal" icon={<Icon name="ship" size={11} />}>Exporter</Tag>}
-              <span className="tk-meta">Email: {FORWARDER.email}</span>
+            <div className="fd-identity-meta">
+              <span><Icon name="mail" size={13} />{FORWARDER.email}</span>
+              <span><Icon name="phone" size={13} />{FORWARDER.phone}</span>
+              <span><Icon name="calendar" size={13} />Joined {FORWARDER.memberSince}</span>
+              <span><Icon name="log-in" size={13} />Last login {FORWARDER.lastActivity}</span>
             </div>
           </div>
+          <div className="fd-balance">
+            <span className="tk-meta">Wallet balance</span>
+            <strong>{naira(FORWARDER.balance)}</strong>
+          </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', rowGap: 16, borderTop: '1px solid var(--tk-line)', marginTop: 18, paddingTop: 16 }}>
-          {[
-            { label: 'Status', value: <Badge tone={FORWARDER.statusCode === 'ACTIVE' ? 'success' : FORWARDER.statusCode === 'SUSPENDED' ? 'danger' : 'neutral'}>{FORWARDER.status}</Badge> },
-            { label: 'Verification Status', value: <Badge tone={DOC_TONE[FORWARDER.verification] || 'neutral'}>{FORWARDER.verification}</Badge> },
-            { label: 'Total Jobs', value: FORWARDER.jobs ?? '—' },
-            { label: 'Total Spend (₦)', value: naira(FORWARDER.spend) },
-            { label: 'Current Balance (₦)', value: naira(FORWARDER.balance), hint: 'Wallet balance' },
-            { label: 'Member Since', value: FORWARDER.memberSince },
-            { label: 'Last Login', value: FORWARDER.lastActivity },
-          ].map((f, i) => (
-            <div key={f.label} style={{ minWidth: 0, padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
-              <div className="tk-meta" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                {f.label}{f.hint && <Icon name="info" size={12} color="var(--tk-ink-300)" />}
-              </div>
-              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{f.value}</div>
+        {completedQuery.error && <div style={{ marginTop: 14 }}><QueryError query={completedQuery} title="Unable to load completed job count" /></div>}
+        <div className="fd-perf">
+          {PERFORMANCE.map((p) => (
+            <div key={p.label} className="fd-perf-item">
+              <span className="fd-perf-icon"><Icon name={p.icon} size={16} /></span>
+              <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
+                <span className="tk-meta">{p.label}</span>
+                <strong>{p.value}</strong>
+                {p.caption && <span className="tk-meta" style={{ fontSize: 11 }}>{p.caption}</span>}
+              </span>
             </div>
           ))}
         </div>
@@ -162,211 +177,83 @@ export function ForwarderDetail() {
 
       {tab === 'Overview' && (
         <>
-          <div className="fd-main">
-            <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-              <SectionCard title="Personal Information" icon="user">
-                <div className="fd-info-grid">
-                  <LabelValue layout="stack" label="Full Name" value={FORWARDER.name} />
-                  <LabelValue layout="stack" label="Date of Birth" value={FORWARDER.dob} />
-                  <LabelValue layout="stack" label="Gender" value={FORWARDER.gender} />
-                  <LabelValue layout="stack" label="Nationality" value={FORWARDER.nationality} />
-                  <LabelValue layout="stack" label="National ID (NIN)" value={FORWARDER.nin} />
-                  <LabelValue layout="stack" label="Language(s)" value={FORWARDER.languages} />
-                  <LabelValue layout="stack" label="Phone" value={FORWARDER.phone} />
-                  <LabelValue layout="stack" label="Alt Phone" value={FORWARDER.altPhone} />
-                  <LabelValue layout="stack" label="Email" value={FORWARDER.email} />
-                  <LabelValue layout="stack" label="Years of Experience" value={FORWARDER.yearsExperience} />
-                  <LabelValue layout="stack" label="Forwarding License No." value={FORWARDER.license} />
-                  <LabelValue layout="stack" label="License Expiry" value={FORWARDER.licenseExpiry} />
-                  {FORWARDER.isExporter && (
-                    <>
-                      <LabelValue layout="stack" label="Export License No." value={FORWARDER.exportLicense} />
-                      <LabelValue layout="stack" label="Export License Expiry" value={FORWARDER.exportLicenseExpiry} />
-                    </>
-                  )}
-                  <LabelValue layout="stack" label="Home Address" value={FORWARDER.address} style={{ gridColumn: '1 / -1' }} />
-                </div>
-              </SectionCard>
-
-              <SectionCard title="Business & Service Details" icon="briefcase-business">
-                <div style={{ display: 'grid', gap: 14 }}>
-                  <div>
-                    <span className="tk-meta" style={{ display: 'block', marginBottom: 6 }}>Services Offered</span>
-                    <div className="fd-tag-row">
-                      {!FORWARDER.services.length && <span className="tk-meta">—</span>}{FORWARDER.services.map((s) => <Tag key={s} tone="blue">{s}</Tag>)}
-                    </div>
-                  </div>
-                  <LabelValue label="Coverage Area" value={FORWARDER.coverage} />
-                  <LabelValue label="Preferred Cargo Types" value={FORWARDER.cargoTypes} />
-                  <LabelValue label="Preferred Routes" value={FORWARDER.routes} />
-                  <LabelValue label="Partner Network" value={FORWARDER.network} />
-                  <div>
-                    <span className="tk-meta" style={{ display: 'block', marginBottom: 4 }}>Other Information</span>
-                    <p style={{ margin: 0, font: '400 13px/19px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{FORWARDER.other}</p>
-                  </div>
-                </div>
-              </SectionCard>
-            </div>
-
-            <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-              <SectionCard title="Emergency Contact" icon="user">
-                <LabelValue label="Name" value={FORWARDER.emergencyContact} />
-                <LabelValue label="Phone" value={FORWARDER.emergencyPhone} />
-              </SectionCard>
-
-              <SectionCard title="Account Summary" icon="wallet">
-                <LabelValue label="Current Balance" value={naira(FORWARDER.balance)} />
-                <LabelValue label="Credit Limit" value={naira(FORWARDER.creditLimit)} />
-                <LabelValue label="Available Credit" value={naira(FORWARDER.availableCredit)} />
-                <LabelValue label="Payment Terms" value={FORWARDER.paymentTerms} />
-                <LabelValue label="Last Payment" value={`${FORWARDER.lastPaymentDate} · ${naira(FORWARDER.lastPaymentAmount)}`} />
-                <LabelValue label="Outstanding Invoices" value={`${FORWARDER.outstandingCount} · ${naira(FORWARDER.outstandingAmount)}`} />
-                <Button variant="outline" icon="chart-column" fullWidth style={{ marginTop: 10 }} onClick={() => changeTab('Banking & Financial')}>
-                  View Financial Overview →
-                </Button>
-              </SectionCard>
-            </div>
-
-            <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
-              <SectionCard title="Address & Service Areas" icon="map-pin">
-                <span className="tk-meta" style={{ display: 'block', marginBottom: 4 }}>Base Address</span>
-                <p style={{ margin: '0 0 8px', font: '400 13px/19px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{FORWARDER.address}</p>
-                <span className="tk-meta">{FORWARDER.coverage}</span>
-                <div style={{ marginTop: 14, borderTop: '1px solid var(--tk-line)', paddingTop: 10 }}>
-                  <span className="tk-meta" style={{ display: 'block', marginBottom: 6 }}>Saved Destinations ({destinationsQuery.currentData && !destinationsQuery.error ? savedDestinations.length : '—'})</span>
-                  {destinationsQuery.isFetching ? <DriverTableLoading columns={2} label="Loading saved destinations" /> : destinationsQuery.error ? <QueryError query={destinationsQuery} title="Unable to load saved destinations" /> : !savedDestinations.length ? <span className="tk-meta">No saved destinations.</span> : savedDestinations.map((b, i) => (
-                    <div key={b.id} className="fd-row" style={{ borderTop: i ? '1px solid var(--tk-line)' : 'none' }}>
-                      <Icon name="map-pin" size={15} color="var(--tk-blue)" />
-                      <span style={{ flex: 1, display: 'grid', gap: 1 }}>
-                        <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{b.name}</span>
-                        <span className="tk-meta">{b.address}</span>
-                      </span>
-                      {b.mapUrl && <a href={b.mapUrl} target="_blank" rel="noopener noreferrer">Map ↗</a>}
-                    </div>
-                  ))}
-                </div>
-              </SectionCard>
-
-              <QuickActionsCard items={[
-                { icon: 'plus', label: 'Create Job for this Forwarder', onClick: () => { if (FORWARDER.statusCode === 'ACTIVE') setJobOpen(true); else setNotice({ tone: 'info', text: 'Jobs can only be created for an active forwarder.' }); } },
-                { icon: 'shield-check', label: 'Add Verification Request', onClick: () => setVerificationOpen(true) },
-                { icon: 'megaphone', label: 'Send Announcement', onClick: () => setAnnouncement(true) },
-                { icon: 'file-text', label: 'Add Note', onClick: () => { changeTab('Notes'); setNoteOpen(true); } },
-                { icon: 'download', label: 'Download Forwarder Profile', onClick: exportProfile },
-              ]} />
-            </div>
-          </div>
-
-          <div className="fd-bottom">
-            <SectionCard title="Recent Jobs" pad="none" action={<a onClick={() => changeTab('Jobs & Shipments')} style={{ cursor: 'pointer' }}>View all jobs →</a>}>
-              {jobsQuery.isFetching ? <DriverTableLoading columns={6} label="Loading recent jobs" /> : jobsQuery.error ? <QueryError query={jobsQuery} title="Unable to load jobs" /> : <JobsTable rows={JOBS} />}
+          <div className="fd-bottom fd-overview">
+            <SectionCard title="Personal Information" icon="user">
+              <div className="fd-info-grid">
+                <LabelValue layout="stack" label="Full Name" value={FORWARDER.name} />
+                <LabelValue layout="stack" label="Date of Birth" value={FORWARDER.dob} />
+                <LabelValue layout="stack" label="Nationality" value={FORWARDER.nationality} />
+                <LabelValue layout="stack" label="National ID (NIN)" value={FORWARDER.nin} />
+                <LabelValue layout="stack" label="Phone" value={FORWARDER.phone} />
+                <LabelValue layout="stack" label="Email" value={FORWARDER.email} />
+                <LabelValue layout="stack" label="Language(s)" value={FORWARDER.languages} />
+                <LabelValue layout="stack" label="Forwarding License No." value={present(FORWARDER.license) ? FORWARDER.license : <NotSubmitted />} />
+                <LabelValue layout="stack" label="Home Address" value={FORWARDER.address} style={{ gridColumn: '1 / -1' }} />
+              </div>
             </SectionCard>
 
-            <SectionCard title="Notes" action={<a onClick={() => changeTab('Notes')} style={{ cursor: 'pointer' }}>View all notes →</a>}>
-              <ForwarderNotes key={id} id={id} owner={owner} preview />
-
+            <SectionCard title="Recent Activity" icon="activity" action={<a onClick={() => changeTab('Jobs')} style={{ cursor: 'pointer' }}>All jobs →</a>}>
+              {jobsQuery.isFetching && !jobsQuery.currentData ? <DriverTableLoading columns={2} label="Loading recent activity" /> : jobsQuery.error ? <QueryError query={jobsQuery} title="Unable to load recent activity" /> : <ForwarderActivity jobs={JOBS} />}
             </SectionCard>
           </div>
+
+          <SectionCard title="Notes" icon="notebook-pen" action={<Button size="sm" variant="outline" icon="plus" onClick={() => setNoteOpen(true)}>Add Note</Button>}>
+            <ForwarderNotes key={id} id={id} owner={owner} />
+          </SectionCard>
         </>
       )}
 
-      {tab === 'Personal Information' && (
-        <div className="fd-bottom">
-          <SectionCard title="Personal Information" icon="user">
-            <div className="fd-info-grid">
-              <LabelValue layout="stack" label="Full Name" value={FORWARDER.name} />
-              <LabelValue layout="stack" label="Date of Birth" value={FORWARDER.dob} />
-              <LabelValue layout="stack" label="Gender" value={FORWARDER.gender} />
-              <LabelValue layout="stack" label="Nationality" value={FORWARDER.nationality} />
-              <LabelValue layout="stack" label="National ID (NIN)" value={FORWARDER.nin} />
-              <LabelValue layout="stack" label="Years of Experience" value={FORWARDER.yearsExperience} />
-            </div>
-          </SectionCard>
-          <SectionCard title="Contact Details" icon="phone" className="fd-contact">
-            <LabelValue label="Phone" value={FORWARDER.phone} />
-            <LabelValue label="Alt Phone" value={FORWARDER.altPhone} />
-            <LabelValue label="Email" value={FORWARDER.email} />
-            <LabelValue label="Address" value={FORWARDER.address} />
-            <LabelValue label="Emergency Contact" value={`${FORWARDER.emergencyContact} · ${FORWARDER.emergencyPhone}`} />
-          </SectionCard>
-        </div>
-      )}
-
-      {tab === 'Verification' && (
-        <SectionCard title="Verification Checklist">
-          {pendingQuery.isFetching && <DriverLoadingNotice>Loading exporter license review…</DriverLoadingNotice>}
-          {pendingQuery.error && <QueryError query={pendingQuery} title="Unable to load exporter license requests" />}
-          <LabelValue label="Account Verification" value={FORWARDER.verification} />
-          {VERIFICATION_CHECKS.map((c) => (
-            <div key={c.label} className="fd-row">
-              <Icon name={c.status === 'Verified' ? 'badge-check' : c.status === 'Pending' ? 'hourglass' : 'info'} size={17}
-                color={c.status === 'Verified' ? 'var(--tk-success)' : c.status === 'Pending' ? 'var(--tk-warning)' : 'var(--tk-ink-400)'} />
-              <span style={{ flex: 1, font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{c.label}</span>
-              <Badge tone={DOC_TONE[c.status] || 'neutral'}>{c.status}</Badge>
-            </div>
-          ))}
-          {licenseUrl && <a href={licenseUrl} target="_blank" rel="noopener noreferrer">Open exporter license ↗</a>}
-          {pendingLicense && <Button variant="outline" disabled={pendingQuery.isFetching} onClick={() => setAction({ kind: 'review', forwarder: { ...pendingLicense, name: FORWARDER.name } })}>Review Exporter License</Button>}
-        </SectionCard>
-      )}
-
-      {tab === 'Banking & Financial' && (
-        <><SectionCard title="Account Summary" icon="wallet">
-          <div className="fd-info-grid">
-            <LabelValue layout="stack" label="Current Balance" value={naira(FORWARDER.balance)} />
-            <LabelValue layout="stack" label="Credit Limit" value={naira(FORWARDER.creditLimit)} />
-            <LabelValue layout="stack" label="Available Credit" value={naira(FORWARDER.availableCredit)} />
-            <LabelValue layout="stack" label="Payment Terms" value={FORWARDER.paymentTerms} />
-            <LabelValue layout="stack" label="Last Payment" value={`${FORWARDER.lastPaymentDate} · ${naira(FORWARDER.lastPaymentAmount)}`} />
-            <LabelValue layout="stack" label="Outstanding Invoices" value={`${FORWARDER.outstandingCount} · ${naira(FORWARDER.outstandingAmount)}`} />
+      {tab === 'KYC' && (
+        <SectionCard title="KYC" icon="shield-check" action={<Button size="sm" variant="outline" icon="shield-check" onClick={() => setVerificationOpen({})}>Request Verification</Button>}>
+          {(pendingQuery.isFetching || documentsQuery.isFetching) && <DriverLoadingNotice>Loading KYC records…</DriverLoadingNotice>}
+          {pendingQuery.error && <QueryError query={pendingQuery} title="Unable to load license review requests" />}
+          {documentsQuery.error && <QueryError query={documentsQuery} title="Unable to load documents" />}
+          <div className="fd-kyc-summary">
+            <span className="tk-meta">Overall KYC status</span>
+            <Badge tone={VERIFICATION_TONE[FORWARDER.verification] || 'neutral'}>{FORWARDER.verification}</Badge>
           </div>
+          {KYC_ITEMS.map(({ key, ...item }) => <KycRow key={key} {...item} onRequest={['nin', 'address', 'license'].includes(key) ? () => setVerificationOpen({ key }) : undefined} />)}
         </SectionCard>
+      )}
+
+      {tab === 'Financial' && (
+        <><div className="fd-fin-stats">
+          <StatCard icon="wallet" tint="blue" label="Current Balance" value={naira(FORWARDER.balance)} caption="Wallet balance" />
+          <StatCard icon="credit-card" tint="purple" label="Credit Limit" value={naira(FORWARDER.creditLimit)} caption={present(FORWARDER.paymentTerms) ? `Terms: ${FORWARDER.paymentTerms}` : 'Payment terms —'} />
+          <StatCard icon="circle-check" tint="green" label="Available Credit" value={naira(FORWARDER.availableCredit)} />
+          <StatCard icon="receipt" tint="teal" label="Last Payment" value={naira(FORWARDER.lastPaymentAmount)} caption={FORWARDER.lastPaymentDate} />
+          <StatCard icon="file-warning" tint="amber" label="Outstanding Invoices" value={naira(FORWARDER.outstandingAmount)} caption={FORWARDER.outstandingCount == null || FORWARDER.outstandingCount === '—' ? '—' : `${FORWARDER.outstandingCount} invoice${FORWARDER.outstandingCount === 1 ? '' : 's'}`} direction="down" />
+        </div>
         <SectionCard title="Wallet Transactions" pad="none">
-          {transactionsQuery.isFetching ? <DriverTableLoading columns={5} label="Loading transactions" /> : transactionsQuery.error ? <QueryError query={transactionsQuery} title="Unable to load transactions" /> : !transactionsQuery.currentData?.rows.length ? <EmptyState title="No wallet transactions" description="Wallet transactions for this forwarder will appear here." /> : <><DataTable rows={transactionsQuery.currentData.rows} rowKey={(row) => row.id} columns={[{ key: 'label', header: 'Transaction' }, { key: 'type', header: 'Type' }, { key: 'amount', header: 'Amount (₦)', render: (row) => naira(row.amount) }, { key: 'status', header: 'Status' }, { key: 'date', header: 'Date' }]} /><Pagination page={page} pageSize={10} pageCount={Math.max(1, transactionsQuery.currentData?.pagination?.totalPages || 1)} total={transactionsQuery.currentData?.pagination?.total} onPage={(next) => setPage(Math.max(1, Math.min(transactionsQuery.currentData?.pagination?.totalPages || 1, next)))} /></>}
+          <div className="fd-table-gap">
+          {transactionsQuery.isFetching ? <DriverTableLoading columns={5} label="Loading transactions" /> : transactionsQuery.error ? <QueryError query={transactionsQuery} title="Unable to load transactions" /> : !transactionsQuery.currentData?.rows.length ? <EmptyState title="No wallet transactions" description="Wallet transactions for this forwarder will appear here." /> : <><DataTable rows={transactionsQuery.currentData.rows} rowKey={(row) => row.id} columns={[{ key: 'label', header: 'Transaction' }, { key: 'type', header: 'Type' }, { key: 'amount', header: 'Amount (₦)', render: (row) => naira(row.amount) }, { key: 'status', header: 'Status' }, { key: 'date', header: 'Date' }]} /><Pagination page={page} pageSize={10} pageCount={Math.max(1, transactionsQuery.currentData?.pagination?.totalPages || 1)} total={transactionsQuery.currentData?.pagination?.total} onPage={(next) => setPage(Math.max(1, Math.min(transactionsQuery.currentData?.pagination?.totalPages || 1, next)))} /></>}</div>
         </SectionCard></>
       )}
 
-      {tab === 'Performance' && (
-        <>{completedQuery.isFetching && <DriverLoadingNotice>Loading completed jobs…</DriverLoadingNotice>}{completedQuery.error && <QueryError query={completedQuery} title="Unable to load completed job count" />}<div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
-          {PERFORMANCE.map((p) => (
-            <Card key={p.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{ width: 38, height: 38, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-success-soft)',
-                             color: 'var(--tk-success)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                <Icon name={p.icon} size={18} />
-              </span>
-              <div style={{ display: 'grid', gap: 1 }}>
-                <span className="tk-meta">{p.label}</span>
-                <strong style={{ font: '700 20px/26px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{p.value}</strong>
-                <span style={{ font: '500 11px/15px var(--tk-font-sans)', color: p.delta ? 'var(--tk-success)' : 'var(--tk-ink-400)' }}>
-                  {p.delta ? `↑ ${p.delta} ${p.caption}` : p.caption}
-                </span>
-              </div>
-            </Card>
-          ))}
-        </div></>
-      )}
-
-      {tab === 'Jobs & Shipments' && (
-        <SectionCard title="Jobs & Shipments" pad="none" count={!jobsQuery.error ? jobsQuery.currentData?.pagination?.total : undefined}>
-          <Tabs items={['all', 'active', 'completed', 'cancelled']} value={jobTab} onChange={(next) => { setJobTab(next); setPage(1); }} style={{ paddingInline: 'var(--tk-card-pad)' }} />
-          {jobsQuery.isFetching ? <DriverTableLoading columns={6} label="Loading jobs" /> : jobsQuery.error ? <QueryError query={jobsQuery} title="Unable to load jobs" /> : <><JobsTable rows={JOBS} /><Pagination page={page} pageSize={10} pageCount={Math.max(1, jobsQuery.currentData?.pagination?.totalPages || 1)} total={jobsQuery.currentData?.pagination?.total} onPage={(next) => setPage(Math.max(1, Math.min(jobsQuery.currentData?.pagination?.totalPages || 1, next)))} /></>}
+      {tab === 'Jobs' && (
+        <SectionCard title="Jobs" pad="none" count={!jobsQuery.error ? jobsQuery.currentData?.pagination?.total : undefined}>
+          <TableToolbar filters={<JobStatusFilter value={jobTab} onChange={(next) => { setJobTab(next); setPage(1); }} />} />
+          {jobsQuery.isFetching ? <DriverTableLoading columns={4} label="Loading jobs" /> : jobsQuery.error ? <QueryError query={jobsQuery} title="Unable to load jobs" /> : <><ForwarderJobsTable rows={JOBS} onRowClick={setOpenJob} /><Pagination page={page} pageSize={10} pageCount={Math.max(1, jobsQuery.currentData?.pagination?.totalPages || 1)} total={jobsQuery.currentData?.pagination?.total} onPage={(next) => setPage(Math.max(1, Math.min(jobsQuery.currentData?.pagination?.totalPages || 1, next)))} /></>}
         </SectionCard>
       )}
 
-      {tab === 'Documents' && (
-        <SectionCard title="Documents">
-          {(pendingQuery.isFetching || documentsQuery.isFetching) && <DriverLoadingNotice>Loading documents…</DriverLoadingNotice>}
-          {pendingQuery.error && <QueryError query={pendingQuery} title="Unable to load exporter license requests" />}
-          {documentsQuery.error && <QueryError query={documentsQuery} title="Unable to load documents" />}
-          {DOCUMENTS.map((d) => (
-            <div key={d.id} className="fd-row">
-              <Icon name="file-text" size={17} color="var(--tk-blue)" />
-              <span style={{ flex: 1, font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{d.name}</span>
-              <span className="tk-meta">{d.validity}</span>
-              <Badge tone={DOC_TONE[d.status] || 'neutral'}>{d.status}</Badge>
-              {d.url && <a href={d.url} target="_blank" rel="noopener noreferrer">Open ↗</a>}
-            </div>
-          ))}
+      {tab === 'Saved Addresses' && (
+        <SectionCard title="Saved Addresses" icon="map-pin" description="Delivery and pickup locations this forwarder has saved in the app." count={destinationsQuery.currentData && !destinationsQuery.error ? destinationsQuery.currentData.length : undefined}>
+          {destinationsQuery.isFetching ? <DriverTableLoading columns={2} label="Loading saved addresses" />
+            : destinationsQuery.error ? <QueryError query={destinationsQuery} title="Unable to load saved addresses" />
+            : !destinationsQuery.currentData?.length ? <EmptyState icon="map-pin" title="No saved addresses" description="Addresses this forwarder saves when creating jobs will appear here." />
+            : <div className="fd-addresses">
+              {destinationsQuery.currentData.map((place) => (
+                <div key={place.id} className="fd-address">
+                  <span className="fd-address-icon"><Icon name="map-pin" size={16} /></span>
+                  <span className="fd-address-text">
+                    <strong>{place.name}</strong>
+                    <span>{place.address}</span>
+                  </span>
+                  {place.mapUrl && <a className="fd-address-map" href={place.mapUrl} target="_blank" rel="noopener noreferrer"><Icon name="map" size={14} />View on map</a>}
+                </div>
+              ))}
+            </div>}
         </SectionCard>
       )}
 
@@ -376,11 +263,10 @@ export function ForwarderDetail() {
         </SectionCard>
       )}
 
-      {tab === 'Notes' && <SectionCard title="Notes"><ForwarderNotes key={id} id={id} owner={owner} /></SectionCard>}
       {editingForwarder && <ForwarderProfileModal key={id} forwarder={editingForwarder} onClose={() => setEditingForwarder(null)} onDone={success} />}
       {noteOpen && <ForwarderNoteModal key={id} forwarder={FORWARDER} onClose={() => setNoteOpen(false)} onDone={success} />}
-      {verificationOpen && <ForwarderVerificationRequestModal key={id} forwarder={FORWARDER} onClose={() => setVerificationOpen(false)} onDone={success} />}
-      {jobOpen && <ForwarderJobModal key={id} forwarder={FORWARDER} owner={owner} onClose={() => setJobOpen(false)} onDone={success} />}
+      {verificationOpen && <ForwarderVerificationRequestModal key={id} forwarder={FORWARDER} statuses={Object.fromEntries(KYC_ITEMS.map((item) => [item.key, item.status]))} initialKey={verificationOpen.key} onClose={() => setVerificationOpen(null)} onDone={success} />}
+      {openJob && <ForwarderJobDrawer key={openJob.detailId || openJob.id} job={openJob} onClose={() => setOpenJob(null)} onOpen={() => openJob.detailId && navigate(`/jobs/detail?id=${encodeURIComponent(openJob.detailId)}`)} />}
       {action && <ForwarderActionModal key={`${action.kind}:${id}`} action={action} onClose={() => setAction(null)} onDone={success} />}
       {announcement && <ForwarderAnnouncementModal forwarder={FORWARDER} onClose={() => setAnnouncement(false)} onDone={success} />}
     </div>

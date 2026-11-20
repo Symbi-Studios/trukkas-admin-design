@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useSearchParams } from 'next/navigation';
@@ -80,7 +81,7 @@ export function DocumentDetail() {
           <Button variant="outline" icon="download" disabled={!document.url} onClick={() => window.open(document.url, '_blank', 'noopener,noreferrer')}>Open file</Button>
         </>}
       />
-      {notice && <Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.title}</Banner>}
+      {notice && <ToastRelay message={notice.title} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.title}</Banner></ToastRelay>}
       {isFetching && <Banner tone="info" title="Refreshing document details…" />}
       <div className="job-document-detail-grid">
         <div className="document-detail-main">

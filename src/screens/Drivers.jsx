@@ -1,4 +1,5 @@
 'use client';
+import { showToast } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
 import { ViewToggle } from '../ds.js';
@@ -248,7 +249,7 @@ export function Drivers() {
       if (action.kind === 'approve-license' || action.kind === 'reject-license') await verifyLicense({ id: action.id, decision: action.kind === 'approve-license' ? 'approve' : 'reject', reason }).unwrap();
       if (action.kind === 'suspend') await suspendDriver({ id: action.id, reason: reason.trim() }).unwrap();
       if (action.kind === 'activate') await activateDriver(action.id).unwrap();
-      setToast(`${action.name} ${actionSuccess[action.kind]}.`);
+      showToast(`${action.name} ${actionSuccess[action.kind]}.`);
       setAction(null);
       setReason('');
     } catch (error) {
@@ -303,7 +304,7 @@ export function Drivers() {
     try {
       const created = await createDriver(driverForm).unwrap();
       setAddOpen(false); setDriverForm(EMPTY_DRIVER_FORM);
-      setToast(created.invite.sms === true || created.invite.email === true ? 'Driver created and password invite sent.'
+      showToast(created.invite.sms === true || created.invite.email === true ? 'Driver created and password invite sent.'
         : created.invite.sms === false && created.invite.email === false ? 'Driver created, but both invite delivery channels failed.' : 'Driver created. Invite delivery status was not returned.');
     } catch (error) { setCreateError(adminDriverError(error)); }
     finally { createLock.current = false; }

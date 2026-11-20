@@ -16,6 +16,7 @@ import { useGetAdminNotificationsQuery } from "./store/features/notifications/no
 import { clearSession } from "./store/features/auth/authSlice.js";
 import { baseApi } from "./store/api/baseApi.js";
 import { AppLoadingScreen } from "./components/AppLoadingScreen.jsx";
+import { ToastHost } from './components/ActionToast.jsx';
 import { PageSearchProvider, usePageSearch } from './components/PageSearch.jsx';
 import { useGetAdminWorkspaceSearchQuery } from './store/features/search/workspaceSearchApi.js';
 import "./mock/api.js";
@@ -167,6 +168,7 @@ function AdminShellContent({ children }) {
       }
     >
       {children}
+      <ToastHost />
     </AppShell>
   );
 }

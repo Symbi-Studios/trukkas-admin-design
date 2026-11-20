@@ -1,5 +1,6 @@
 "use client";
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useSelector } from "react-redux";
@@ -451,10 +452,12 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
       />
 
       {toast && (
-        <Banner
-          tone={toast.tone === "danger" ? "danger" : toast.tone}
-          title={toast.title}
-        />
+        <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}>
+          <Banner
+            tone={toast.tone === "danger" ? "danger" : toast.tone}
+            title={toast.title}
+          />
+        </ToastRelay>
       )}
       {terminal && (
         <Banner

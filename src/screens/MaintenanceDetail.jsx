@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "../router.js";
 import {
@@ -301,7 +302,7 @@ export function MaintenanceDetail() {
         }
       />
 
-      {toast && <Banner tone={toast.tone} title={toast.title} />}
+      {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
 
       <Card pad="none">
         <div className="mdet-hero">

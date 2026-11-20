@@ -30,6 +30,7 @@ export { StatCard } from './ds/components/data/StatCard.jsx';
 export { TableToolbar } from './ds/components/data/TableToolbar.jsx';
 
 export { Banner } from './ds/components/feedback/Banner.jsx';
+export { InlineAlerts } from './ds/components/feedback/AlertSlot.jsx';
 export { CountBadge } from './ds/components/feedback/CountBadge.jsx';
 export { DropdownMenu } from './ds/components/feedback/DropdownMenu.jsx';
 export { EmptyState } from './ds/components/feedback/EmptyState.jsx';

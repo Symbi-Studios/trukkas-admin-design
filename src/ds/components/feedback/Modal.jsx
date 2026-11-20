@@ -1,5 +1,7 @@
+'use client';
 import React from 'react';
 import { Icon } from '../../assets/icons/Icon.jsx';
+import { InlineAlerts } from './AlertSlot.jsx';
 
 /** Centered dialog over a scrim. Controlled — mount only what's `open`.
  *  Closes on scrim click, the × button, and Escape. */
@@ -13,6 +15,7 @@ export function Modal({ open, onClose, title, description, width = 480, footer, 
 
   if (!open) return null;
   return (
+    <InlineAlerts>
     <div className="tk-modal-scrim" role="presentation" onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'var(--tk-scrim)', zIndex: 100,
                display: 'grid', placeItems: 'center', padding: 24,
@@ -46,5 +49,6 @@ export function Modal({ open, onClose, title, description, width = 480, footer, 
         )}
       </div>
     </div>
+    </InlineAlerts>
   );
 }

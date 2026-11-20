@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
 import { DateRangeFilter, EMPTY_RANGE, inRange, isRangeSet } from '../components/DateRangeFilter.jsx';
@@ -117,7 +118,7 @@ export function ContainerTriangulation() {
       description="Optimize empty capacity by matching trucks, containers and upcoming loads across the Trukkas network."
       actions={<>
       </>} />
-    {notice && <Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner>}
+    {notice && <ToastRelay message={notice.message} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} onClose={() => setNotice(null)}>{notice.message}</Banner></ToastRelay>}
     {isFetching && !isLoading && <Banner tone="info">Refreshing opportunities…</Banner>}
 
     <div className="triangulation-stats">

@@ -1,4 +1,5 @@
 "use client";
+import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { Badge, Banner, Button, CopyableId, DrawerFacts, DrawerSection, DropdownMenu, Modal, Select, SideDrawer, Skeleton, Textarea, Timeline, isMissing } from "../ds.js";
@@ -107,7 +108,7 @@ function ChargeDrawer({ id, onClose }) {
       meta={r && <><Badge tone={DEMURRAGE_STATUS_TONE[r.status] || "neutral"} dot>{r.status}</Badge><Badge tone="info">Late Offloading</Badge>{r.source && <Badge tone="neutral">{r.source === "MANUAL" ? "Manual" : "Automatic"}</Badge>}</>}>
       {!r && detailQuery.isFetching && <><Skeleton height={88} /><Skeleton height={200} /></>}
       {detailQuery.error && <Banner tone="warning" title={getApiErrorMessage(detailQuery.error)} action={<Button size="sm" variant="outline" onClick={detailQuery.refetch}>Retry</Button>} />}
-      {notice && <Banner tone={notice.tone} title={notice.text} />}
+      {notice && <ToastRelay message={notice.text} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} title={notice.text} /></ToastRelay>}
       {r && <>
         <DrawerSection title="Charge">
           <div className="fin-hero"><span>{r.outstanding > 0 ? "Outstanding" : "Charge"}</span><strong>{formatNaira(r.outstanding > 0 ? r.outstanding : r.charge) ?? "Not available"}</strong></div>
