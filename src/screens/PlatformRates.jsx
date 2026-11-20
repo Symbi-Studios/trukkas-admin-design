@@ -50,7 +50,7 @@ export function PlatformRates() {
       {!canEdit && <Banner tone="info">Only Super Admins can change platform rates.</Banner>}
       {config && (config.updatedBy || config.updatedAt.updated !== "—") && (
         <p className="tk-meta" style={{ margin: 0 }}>
-          Last changed {config.updatedAt.updated}{config.updatedAt.time !== "—" ? ` at ${config.updatedAt.time}` : ""}{config.updatedBy ? ` by ${config.updatedBy}` : ""}. Every change is recorded in <Link to="/fees?tab=Audit%20Log">Fees & Commission › Audit Log</Link>.
+          Last changed {config.updatedAt.updated}{config.updatedAt.time !== "—" ? ` at ${config.updatedAt.time}` : ""}{config.updatedBy ? ` by ${config.updatedBy}` : ""}. Every change is recorded in <Link to="/audit">Audit Logs</Link>.
         </p>
       )}
       {configQuery.isFetching && config && <DriverLoadingNotice>Refreshing platform rates…</DriverLoadingNotice>}

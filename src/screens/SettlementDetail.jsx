@@ -1,147 +1,26 @@
 'use client';
+import { useEffect } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
-import { useState } from 'react';
-import { useSelector } from 'react-redux';
-import { useSearchParams } from 'next/navigation';
-import { useNavigate, useParams } from '../router.js';
-import {
-  PageHeader, Button, Badge, Card, SectionCard, LabelValue, DropdownMenu, Icon, Timeline, Skeleton,
-} from '../ds.js';
-import {
-  useGetAdminSettlementQuery, canApproveSettlement, canRetrySettlement,
-  settlementMoney as formatNaira,
-} from '../store/features/settlements/settlementsApi.js';
-
-import { useSettlementOperations } from '../store/features/settlements/useSettlementOperations.js';
-import { transactionDetailUrl } from '../store/features/transactions/transactionsApi.js';
-import { FinanceRelatedLinks } from './FinanceRelatedLinks.jsx';
-import { withParams } from '../domain/urlState.js';
-
-const STATUS_TONE = { Completed: 'success', Pending: 'warning', 'On Hold': 'info', Failed: 'danger' };
-
+// Settlements are no longer a page: a settlement is how one job payment was split, shown in the
+// escrow drawer. Old links forward there. Escrow tranches are "mob_<escrowId>" / "fin_<escrowId>";
+// adjustments and bank payouts are "txn_<transactionId>" and open the transaction instead.
+export function settlementTarget(id) {
+  const value = String(id || '');
+  if (/^(mob|fin)_/.test(value)) return '/wallets?id=' + encodeURIComponent(value.slice(4));
+  if (value.startsWith('txn_')) return '/transactions?id=' + encodeURIComponent(value.slice(4));
+  return '/wallets';
+}
 
 export function SettlementDetail() {
-  const { settlementId } = useParams(), search = useSearchParams();
-  const id = search.get('id') || settlementId || '';
-  const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
-  return <SettlementDetailScreen key={id+':'+String(owner)+':'+String(role)+':'+authenticated} />;
+  const router = useRouter(), search = useSearchParams(), params = useParams();
+  useEffect(() => { router.replace(settlementTarget(search.get('id') || params?.settlementId)); }, [router, search, params]);
+  return null;
 }
-function SettlementDetailScreen() {
-  const { settlementId } = useParams();
-  const search = useSearchParams();
-  const id = search.get('id') || settlementId || '';
-  const navigate = useNavigate();
-  const operations = useSettlementOperations();
-  const query = useGetAdminSettlementQuery({ id, owner: operations.owner, role: operations.role }, { skip: !operations.authenticated || !id });
-  const row = operations.authenticated && !query.error ? query.currentData : null;
-  const loading = query.isLoading || (query.isFetching && !row);
-  const r = row || { id:'—', payer:'—', payee:'—', payerType:'—', payeeType:'—', route:'—', relatedTo:'—', amount:null, type:'—', method:'—', status:'—', settledOn:'—', settledTime:'—' };
-  const [menu, setMenu] = useState(false);
-  const value = (content) => loading ? <Skeleton as="span" width={100} height={16} /> : content;
-  const settledOn = r.settledOn === '—' ? '—' : r.settledOn + ' ' + r.settledTime;
 
-  if (!loading && query.error?.status === 404) {
-    return (
-      <Card>
-        <span className="tk-body">No settlement found with ID {id || '—'}.</span>
-        <div style={{ marginTop: 12 }}>
-          <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back to Settlements</Button>
-        </div>
-      </Card>
-    );
-  }
-
-  const timeline = r.timeline || [
-    { title:'Job delivered & confirmed', description:'—', time:'—', state:'pending', icon:'check' },
-    { title:'Settlement initiated', description:'—', time:'—', state:'pending', icon:'coins' },
-    { title:'—', description:'—', time:'—', state:'pending', icon:'lock-open' },
-  ];
-
-  return (
-    <>
-      <PageHeader crumbs={['Finance', 'Settlements', r.id]} title={<span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{r.id}</span>}
-        description="Detailed view of this settlement."
-        actions={<>
-          <Button variant="outline" icon="arrow-left" onClick={() => navigate('/settlements')}>Back</Button>
-          {(r.status === 'Failed' || r.status === 'Pending' || r.status === 'On Hold') && (
-            <Button icon={r.status === 'Failed' ? 'rotate-ccw' : 'circle-check'} disabled={operations.busy || query.isFetching || !operations.canManage || !(r.status === 'Failed' ? canRetrySettlement(r) : canApproveSettlement(r))} onClick={() => void operations.settle(r, r.status === 'Failed' ? 'retry' : 'approve')}>
-              {r.status === 'Failed' ? 'Retry Settlement' : 'Approve & Settle'}
-            </Button>
-          )}
-          <span style={{ position: 'relative' }}>
-            <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
-            {menu && (
-              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
-                <DropdownMenu width={220} items={[
-                  { label: 'Download Receipt', icon: 'file-text', onClick: () => { if (row) void operations.download(row); setMenu(false); } },
-                  { label: 'View Related Job', icon: 'package', onClick: () => { if (row?.jobUrl) navigate(row.jobUrl); setMenu(false); } },
-                ]} />
-              </span>
-            )}
-          </span>
-        </>} />
-
-      <Card style={{ display: 'grid', gap: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-          <span style={{ width: 56, height: 56, borderRadius: 'var(--tk-r-lg)', background: 'var(--tk-blue-soft)',
-                         color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-            <Icon name="coins" size={26} />
-          </span>
-          <div style={{ flex: 1, minWidth: 200, display: 'grid', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 className="tk-title" style={{ fontSize: 22 }}>{value(`${r.payer} → ${r.payee}`)}</h2>
-              <Badge tone={STATUS_TONE[r.status] || 'neutral'}>{r.status}</Badge>
-            </div>
-            <span className="tk-meta">{value(`${r.route} · ${r.relatedTo}`)}</span>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div className="tk-meta">Amount</div>
-            <div style={{ font: '700 24px/30px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(formatNaira(r.amount))}</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: '1px solid var(--tk-line)', paddingTop: 16 }}>
-          {[
-            { label: 'Settlement ID', value: r.id },
-            { label: 'Related To', value: r.relatedTo },
-            { label: 'Settlement Type', value: r.type },
-            { label: 'Method', value: r.method },
-          ].map((f, i) => (
-            <div key={f.label} style={{ flex: '1 1 150px', padding: '0 18px', borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
-              <div className="tk-meta" style={{ marginBottom: 4 }}>{f.label}</div>
-              <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value(f.value)}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <SectionCard title="Settlement Details">
-          <LabelValue label="Route" value={value(r.route)} />
-          <LabelValue label="Payer" value={value(r.payer)} />
-          <LabelValue label="Payer Type" value={value(r.payerType)} />
-          <LabelValue label="Payee" value={value(r.payee)} />
-          <LabelValue label="Payee Type" value={value(r.payeeType)} />
-          <LabelValue label="Amount" value={value(formatNaira(r.amount))} />
-          <LabelValue label="Method" value={value(r.method)} />
-          <LabelValue label="Status" value={<Badge tone={STATUS_TONE[r.status] || 'neutral'}>{r.status}</Badge>} />
-          <LabelValue label="Settled On" value={value(settledOn)} />
-        </SectionCard>
-
-        <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
-          <SectionCard title="Settlement Timeline">
-            <Timeline items={timeline.map((item) => ({ ...item, title: value(item.title), description: value(item.description), time: value(item.time) }))} />
-          </SectionCard>
-          {row && (
-            <FinanceRelatedLinks items={[
-              row.jobUrl && { icon: 'package', label: `Job ${r.relatedTo}`, description: r.route, to: row.jobUrl },
-              row.escrowId && { icon: 'lock', label: 'Escrow hold', description: 'The escrow this money was released from', to: '/escrow/detail?id=' + encodeURIComponent(row.escrowId) },
-              ...row.transactionIds.map((id, index) => ({ icon: 'receipt', label: row.transactionReferences[index] || id, description: 'Ledger transaction', to: transactionDetailUrl(id) })),
-              row.isBankPayout && row.transactionReferences[0] && { icon: 'banknote', label: 'Withdrawal request', description: 'Review on Payouts', to: withParams('/payouts', { q: row.transactionReferences[0] }) },
-            ]} />
-          )}
-        </div>
-      </div>
-    </>
-  );
+/** /settlements itself forwards to Escrow, where releases now live. */
+export function SettlementsRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/wallets?type=Releases'); }, [router]);
+  return null;
 }

@@ -20,10 +20,10 @@ const apiError = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message
 
 export const payoutMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const payoutNumber = (value) => number(value) == null ? '—' : number(value).toLocaleString('en-NG');
-export const payoutDetailUrl = (payout) => `/payouts/detail?id=${encodeURIComponent(payout.id)}${payout.source ? `&source=${encodeURIComponent(payout.source)}` : ''}`;
+export const payoutDetailUrl = (payout) => `/payouts?id=${encodeURIComponent(payout.id)}${payout.source ? `&source=${encodeURIComponent(payout.source)}` : ''}`;
 export const payoutCompanyUrl = (id) => `/companies/detail?id=${encodeURIComponent(id)}&tab=payouts`;
 export const payoutJobUrl = (id) => `/jobs/detail?id=${encodeURIComponent(id)}`;
-export const payoutTransactionUrl = (id) => `/transactions/detail?id=${encodeURIComponent(id)}`;
+export const payoutTransactionUrl = (id) => `/transactions?id=${encodeURIComponent(id)}`;
 
 function payoutTimestamp(value) {
   if (!text(value) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
@@ -68,6 +68,8 @@ function requestFields(value) {
   const validAmounts = ngn && gross != null && gross > 0 && net != null && net >= 0 && net <= gross;
   const isPending = dto.source === 'user_withdrawal' && dto.reviewStatus === 'PENDING_REVIEW' && dto.payoutStatus === 'AWAITING_APPROVAL';
   return { ...dto, id: dto.source === 'admin_payout' ? text(dto.payoutLogId) || text(dto.id) : text(dto.id),
+    deductionLines: ngn ? records(dto.deductions).map((entry) => ({ key: text(entry.key) || text(entry.label), label: text(entry.label) || '—', amount: number(entry.amount) })) : [],
+    jobNumbers: Array.isArray(dto.jobNumbers) ? dto.jobNumbers.filter((value) => text(value)) : [],
     party: { ...beneficiary, role: beneficiary.type, truckerType: beneficiary.classification },
     requester: { ...beneficiary, role: beneficiary.type },
     requestedBy: text(requestedBy.name), requestedByRole: label(requestedBy.role),
@@ -116,6 +118,9 @@ export function adaptAdminPayout(dto) {
   return {
     id: text(dto.id), key: identity(dto), source: text(dto.source), reference: text(dto.reference) || '—',
     party: partyName, partyId: partyId || '—', partyType, companyId,
+    partyRole: party.truckerType === 'COMPANY' ? 'COMPANY' : text(party.role),
+    jobNumbers: Array.isArray(dto.jobNumbers) ? dto.jobNumbers : [], deductionLines: Array.isArray(dto.deductionLines) ? dto.deductionLines : [],
+    totalDeductions: number(dto.totalDeductions), transferReference: text(dto.transferReference),
     companyName: companyId ? partyName : null,
     type: partyType === 'driver' ? 'Driver Payout' : partyType === 'company' ? 'Company Payout' : '—',
     dateRequested: datePart(dto.createdAt), dateRequestedTime: datePart(dto.createdAt, true),
@@ -138,7 +143,7 @@ export function adaptAdminPayout(dto) {
     tripIds: allocationContext.tripIds, truckTripCount: allocationContext.truckTripCount,
     route: text(dto.route) || text(job.route) || '—',
     job: Object.fromEntries(['jobId', 'tripId', 'route', 'truck', 'customer', 'cargoType', 'tripDates', 'status'].map((field) => [field, text(job[field]) || (field === 'jobId' ? jobId : null) || '—'])),
-    allocations: allocationContext.allocations?.map(entry => ({ key: entry.key, jobId: entry.jobId,
+    allocations: allocationContext.allocations?.map(entry => ({ key: entry.key, jobId: entry.jobId, jobNumber: entry.jobNumber,
       tripId: entry.tripIds?.length === 1 ? entry.tripIds[0] : null, tripLabel: entry.tripIds?.length ? entry.tripIds.join(', ') : null, amount: entry.amount,
       trip: allocationTripDetails(dto, entry),
     })) ?? null,

@@ -1,20 +1,13 @@
-// Read deep-link state (?tab=, ?q=, filters) once when a screen mounts, so finance pages
-// can link to each other pre-filtered. Screens render client-side only (App waits for
-// `mounted`), so reading window.location in a useState initializer is safe.
+import { useSearchParams } from "next/navigation";
 
-export function urlParam(key) {
-  if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get(key);
-  return value && value.trim() ? value.trim() : null;
-}
-
-export function initialTab(tabs, fallback) {
-  const requested = urlParam("tab");
-  return requested && tabs.includes(requested) ? requested : fallback;
-}
-
-export function initialSearch() {
-  return urlParam("q") || "";
+// Deep-link state (?id=, ?tab=, ?q=, filters) so finance pages can link to each other
+// pre-filtered or with a drawer open. Use the hook: during client-side navigation the screen
+// renders before window.location changes, so only Next's search params are current.
+// Screens are wrapped in Suspense by ScreenRouter, which useSearchParams needs for static export.
+export function useUrlParams() {
+  const params = useSearchParams();
+  const get = (key) => { const value = params?.get(key); return value && value.trim() ? value.trim() : null; };
+  return { get, search: () => get("q") || "", tab: (tabs, fallback) => (tabs.includes(get("tab")) ? get("tab") : fallback) };
 }
 
 /** `/transactions?q=…` style links; skips empty values. */

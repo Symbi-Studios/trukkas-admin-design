@@ -39,7 +39,7 @@ function timestamp(value) {
 }
 export const demurrageMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const demurrageDays = (value) => number(value) == null ? '—' : `${number(value)} days`;
-export const demurrageDetailUrl = (row) => `/demurrage/detail?id=${encodeURIComponent(row.chargeApiId)}`;
+export const demurrageDetailUrl = (row) => `/demurrage?id=${encodeURIComponent(row.chargeApiId)}`;
 export const demurrageJobUrl = (id) => `/jobs/detail?id=${encodeURIComponent(id)}`;
 export const demurrageRequestKey = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) => value.toString(16).padStart(2, '0')).join('');
 function date(value, withTime = false) {

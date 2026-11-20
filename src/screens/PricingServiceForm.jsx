@@ -6,6 +6,7 @@ import { Banner, Button, Modal, Select, TextField } from '../ds.js';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import { pricingError, useGetAdminPricingServiceQuery, useGetAdminPricingServiceFormOptionsQuery, useSaveAdminPricingServiceMutation } from '../store/features/pricing/pricingApi.js';
 import { SERVICE_MOVEMENTS, SERVICE_CRITERIA, serviceFormFields, pricingServiceRoles } from '../store/features/pricing/pricingServiceContracts.js';
+import { usePublishPricing } from '../store/features/pricing/usePublishPricing.js';
 
 export function PricingServiceForm({ id, onClose, onDone }) {
   const admin = useSelector(state => state.auth.admin), authenticated = useSelector(state => Boolean(state.auth.accessToken));
@@ -17,6 +18,7 @@ function PricingServiceEditor({ id, admin, authenticated, onClose, onDone }) {
   const detail = useGetAdminPricingServiceQuery(id, { skip: !editing || !authenticated, refetchOnMountOrArgChange: true });
   const catalogue = useGetAdminPricingServiceFormOptionsQuery({ owner, role }, { skip: !authenticated || !owner, refetchOnMountOrArgChange: true });
   const [saveService, saving] = useSaveAdminPricingServiceMutation();
+  const publisher = usePublishPricing();
   const [draft, setDraft] = useState({ name: '', unit: '', basePrice: '', ...Object.fromEntries(SERVICE_CRITERIA.map(key => [key, key === 'cargoType' && !editing ? 'CONTAINER' : ''])) });
   const [error, setError] = useState(null), initialized = useRef(false), baseline = useRef(null), pending = useRef(false), active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
@@ -30,11 +32,11 @@ function PricingServiceEditor({ id, admin, authenticated, onClose, onDone }) {
   }, [editing, model]);
   const loading = catalogue.isFetching || editing && (detail.isFetching || model && !initialized.current);
   const readError = catalogue.error || editing && detail.error;
-  const ready = authenticated && pricingServiceRoles.has(role) && Boolean(catalogue.currentData) && !readError && !loading && (!editing || initialized.current && model?.statusCode === 'DRAFT');
-  const busy = saving.isLoading;
+  const ready = authenticated && pricingServiceRoles.has(role) && Boolean(catalogue.currentData) && !readError && !loading && (!editing || initialized.current && Boolean(model));
+  const busy = saving.isLoading || publisher.busy;
   const valid = ready && draft.name.trim() && draft.name.trim().length <= 120 && catalogue.currentData.units.some(option => option.value === draft.unit) && catalogue.currentData.cargoTypes.some(option => option.value === draft.cargoType) && draft.basePrice.trim() !== '' && Number.isFinite(Number(draft.basePrice)) && Number(draft.basePrice) >= 0;
   const fields = () => serviceFormFields(draft, editing ? baseline.current?.core : null);
-  const changed = !editing || Object.keys(fields()).length > 0;
+  const changed = !editing || Object.keys(fields()).length > 0 || model?.statusCode !== 'ACTIVE';
   const change = key => event => setDraft(current => ({ ...current, [key]: event.target.value }));
   function selector(key, label, options = [], required = false) {
     const value = draft[key];
@@ -47,19 +49,25 @@ function PricingServiceEditor({ id, admin, authenticated, onClose, onDone }) {
     if (!valid || !changed || pending.current) return;
     pending.current = true; setError(null);
     try {
-      const saved = await saveService({ id, fields: fields(), owner, role, expectedUpdatedAt: baseline.current?.updatedAt }).unwrap();
-      if (active.current) onDone(saved);
+      // Live rates can't change in place: copy into a draft, apply the edits, then publish it.
+      const draft = editing ? await publisher.draftFor(model) : null;
+      const edits = fields();
+      const saved = !editing || Object.keys(edits).length
+        ? await saveService({ id: draft?.id, fields: edits, owner, role, expectedUpdatedAt: draft?.updatedAt }).unwrap()
+        : draft;
+      const published = await publisher.publish(saved);
+      if (active.current) onDone(published);
     } catch (requestError) { if (active.current) setError(pricingError(requestError)); }
     finally { pending.current = false; }
   }
   const options = catalogue.currentData || {};
-  return <Modal open width={680} title={editing ? 'Edit Pricing' : 'Add Pricing'}
-    description={editing ? 'Update this draft. Choose Any to clear an optional criterion. Changing cargo type clears incompatible equipment criteria.' : 'Create a draft service rate. Any optional criterion left blank matches all values.'}
+  return <Modal open width={680} title={editing ? 'Edit rate card' : 'New rate card'}
+    description={editing ? 'Changes go live as soon as you save; the current rate is replaced. Choose Any to clear an optional criterion.' : 'Set what a lane costs. Leave a criterion as Any to match everything; the most specific rate wins.'}
     onClose={() => { if (!pending.current) onClose(); }}
-    footer={<><Button variant="outline" disabled={busy} onClick={() => { if (!pending.current) onClose(); }}>Cancel</Button><Button disabled={!valid || !changed || busy} onClick={save}>{busy ? 'Saving…' : editing ? 'Save Changes' : 'Save Draft'}</Button></>}>
+    footer={<><Button variant="outline" disabled={busy} onClick={() => { if (!pending.current) onClose(); }}>Cancel</Button><Button disabled={!valid || !changed || busy} onClick={save}>{busy ? 'Saving…' : publisher.canActivate ? 'Save & publish' : 'Save & submit'}</Button></>}>
     <div style={{ display: 'grid', gap: 14 }}>
       {(readError || error) && <Banner tone="danger" title="Unable to save pricing">{error || pricingError(readError)}</Banner>}
-      {editing && model && model.statusCode !== 'DRAFT' && <Banner tone="warning">Only drafts can be edited. Duplicate a live rate to create a new draft.</Banner>}
+      {!publisher.canActivate && <Banner tone="info">Your changes will wait for a Super Admin or Finance Admin to activate them.</Banner>}
       {loading ? <><DriverLoadingNotice>Loading pricing fields…</DriverLoadingNotice><DriverTableLoading columns={2} label="Loading pricing fields" /></> : <>
         <TextField label="Service" required maxLength={120} placeholder={editing && model?.core.name == null ? '—' : 'e.g. Apapa to Ogun 40ft'} value={draft.name} disabled={!ready || busy} onChange={change('name')} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>

@@ -6,8 +6,7 @@ import { ViewToggle } from '../ds.js';
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "../router.js";
+import { useEffect, useMemo, useState } from "react";
 import {
   PageHeader,
   Button,
@@ -18,54 +17,30 @@ import {
   DataTable,
   Pagination,
   Badge,
-  Avatar,
-  IconButton,
-  DropdownMenu,
+  NotAvailable,
+  isMissing,
   EmptyState,
   Skeleton,
   StatsPanel,
 } from "../ds.js";
 import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
-  useGetAdminPayoutDirectoryQuery, useGetAdminPayoutSummaryQuery, useLazyGetAdminPayoutDocumentsQuery, useLazyGetAdminPayoutDocumentQuery, downloadPayoutFile, payoutMatchesStatus,
-  payoutSummary, payoutMoney as formatNaira, payoutDetailUrl, payoutCompanyUrl, payoutJobUrl,
+  useGetAdminPayoutDirectoryQuery, useGetAdminPayoutSummaryQuery, payoutMatchesStatus,
+  payoutSummary, payoutMoney as formatNaira,
 } from "../store/features/payouts/payoutsApi.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
-import { DATE_PRESETS, FilterChip, datePresetRange } from "../components/FilterChip.jsx";
+import { FilterChip } from "../components/FilterChip.jsx";
+import { DateRangeFilter, EMPTY_RANGE, inRange } from "../components/finance/DateRangeFilter.jsx";
+import { DateCell, MiddleId, Money, PartyCell, formatNaira as naira, partyRole } from "../components/finance/FinanceCells.jsx";
+import { PayoutDrawer, PAYOUT_STATUS_TONE } from "./PayoutDrawer.jsx";
+import { useUrlParams } from "../domain/urlState.js";
 import "./RequestedPayouts.css";
 
 const PAGE_SIZE = 10;
 const EMPTY_ROWS = [];
 
-const STATUS_TONE = {
-  "Pending Review": "warning",
-  Approved: "success",
-  Rejected: "danger",
-  Processing: "info",
-  Completed: "success",
-};
-const TYPE_TONE = { "Driver Payout": "blue", "Company Payout": "purple" };
 
-
-function RowMenu({ items, id, menuFor, setMenuFor }) {
-  return (
-    <span style={{ position: "relative" }}>
-      <IconButton
-        icon="ellipsis-vertical"
-        onClick={() => setMenuFor(menuFor === id ? null : id)}
-      />
-      {menuFor === id && (
-        <span
-          style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }}
-          onMouseLeave={() => setMenuFor(null)}
-        >
-          <DropdownMenu width={190} items={items} />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function exportPayouts(rows) {
   const headers = ["Payout ID", "Company / Driver", "Type", "Job IDs", "Trip IDs", "Gross", "Deductions", "Net", "Status", "Eligibility"];
@@ -83,34 +58,32 @@ function exportPayouts(rows) {
   URL.revokeObjectURL(url);
 }
 
-function inDateRange(timestamp, preset) {
-  if (preset === "All Dates") return true;
-  const { from, to } = datePresetRange(preset);
-  return Number.isFinite(timestamp) && timestamp >= Date.parse(`${from}T00:00:00+01:00`) && timestamp <= Date.parse(`${to}T23:59:59.999+01:00`);
-}
-
 export function RequestedPayouts() {
   const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
-  const navigate = useNavigate();
   const directoryQuery = useGetAdminPayoutDirectoryQuery();
   const statsQuery = useGetAdminPayoutSummaryQuery();
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const periodStatsQuery = useGetAdminPayoutSummaryQuery(statsRange);
-  const [readDocuments, documentsState] = useLazyGetAdminPayoutDocumentsQuery();
-  const [readDocument, documentState] = useLazyGetAdminPayoutDocumentQuery();
-  const downloading = useRef(false);
   const directory = directoryQuery.error ? null : directoryQuery.currentData;
   const all = directory?.rows || EMPTY_ROWS;
 
   const [q, setQ] = usePageSearchState("", () => setPage(1));
-  const [type, setType] = useState("All Payout Types");
   const [status, setStatus] = useState("All Statuses");
   const [party, setParty] = useState("All Parties");
-  const [date, setDate] = useState("All Dates");
+  const [dates, setDates] = useState(EMPTY_RANGE);
   const [page, setPage] = useState(1);
-  const [menuFor, setMenuFor] = useState(null);
+  const url = useUrlParams();
+  const linkedId = url.get("id"), linkedSource = url.get("source");
+  const [selected, setSelected] = useState(null);
+  useEffect(() => { if (linkedId) setSelected({ id: linkedId, source: linkedSource }); }, [linkedId, linkedSource]);
+  const open = (row) => setSelected({ id: row.id, source: row.source });
+  const close = () => setSelected(null);
+  const roleLabel = (row) => partyRole(row.partyRole)?.label;
+  const partyOptions = useMemo(() => [...new Set(all.map(roleLabel).filter(Boolean))].sort(), [all]);
+  const filtersActive = status !== "All Statuses" || party !== "All Parties" || Boolean(dates.from) || Boolean(q.trim());
+  function resetFilters() { setStatus("All Statuses"); setParty("All Parties"); setDates(EMPTY_RANGE); setQ(""); setPage(1); }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -118,11 +91,8 @@ export function RequestedPayouts() {
     const job = params.get("jobId");
     const trip = params.get("tripId");
     const requestedStatus = params.get("status");
-    if (company) {
-      setType("Company Payout");
-      setParty("company");
-      setQ(company);
-    } else if (job || trip || params.get("q")) setQ(job || trip || params.get("q"));
+    if (company) setQ(company);
+    else if (job || trip || params.get("q")) setQ(job || trip || params.get("q"));
     if (requestedStatus) setStatus(requestedStatus);
   }, []);
 
@@ -133,28 +103,16 @@ export function RequestedPayouts() {
     () =>
       all.filter(
         (p) =>
-          (type === "All Payout Types" || p.type === type) &&
           (status === "All Statuses" || payoutMatchesStatus(p, status)) &&
-          (party === "All Parties" || p.partyType === party) &&
-          inDateRange(p.timestamp, date) &&
+          (party === "All Parties" || roleLabel(p) === party) &&
+          inRange(p.timestamp, dates) &&
           (!q ||
-            [p.id, p.reference, p.jobId, ...(p.jobIds || []), ...(p.tripIds || []), p.party, p.partyId, p.companyId, p.payment?.bank].some(
+            [p.id, p.reference, p.jobId, ...(p.jobIds || []), ...p.jobNumbers, ...(p.tripIds || []), p.party, p.partyId, p.companyId, p.payment?.bank].some(
               (v) => v && v.toLowerCase().includes(q.toLowerCase()),
             )),
       ),
-    [all, type, status, party, date, q],
+    [all, status, party, dates, q],
   );
-
-  async function downloadDocuments(row) {
-    if (downloading.current || documentsState.isFetching || documentState.isFetching) return;
-    setMenuFor(null); downloading.current = true;
-    try {
-      const docs = await readDocuments({ id: row.id, source: row.source }, false).unwrap();
-      if (!docs.length) { window.alert('No payout documents are available.'); return; }
-      for (const doc of docs) downloadPayoutFile(await readDocument({ id: row.id, source: row.source, url: doc.url }, false).unwrap());
-    } catch (error) { window.alert(getApiErrorMessage(error)); }
-    finally { downloading.current = false; }
-  }
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -205,176 +163,45 @@ export function RequestedPayouts() {
         />
       </StatsPanel>
 
-      <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
-
-
+      <SectionCard title="" pad="none" className="fin-table">
         <TableToolbar
           search={<SearchField placeholder="Search by payout ID, reference, party, job or bank…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
-            <FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={["All Statuses", "Pending Review", "Approved", "Rejected", "Processing", "Completed"]} onChange={(v) => { setStatus(v); setPage(1); }} />
-            <FilterChip name="Type" icon="banknote" value={type} allValue="All Payout Types" options={["All Payout Types", "Company Payout", "Driver Payout"]} onChange={(v) => { setType(v); setPage(1); }} />
-            <FilterChip name="Party" icon="user" value={party} allValue="All Parties" options={[{ value: "All Parties", label: "All Parties" }, { value: "company", label: "Company" }, { value: "driver", label: "Driver" }]} onChange={(v) => { setParty(v); setPage(1); }} />
-            <FilterChip name="Requested" icon="calendar" value={date} allValue="All Dates" options={DATE_PRESETS} onChange={(v) => { setDate(v); setPage(1); }} />
+            <FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={["All Statuses", "Pending Review", "Approved", "Processing", "Completed", "Rejected"]} onChange={(v) => { setStatus(v); setPage(1); }} />
+            <FilterChip name="Party" icon="user" value={party} allValue="All Parties" options={["All Parties", ...partyOptions]} onChange={(v) => { setParty(v); setPage(1); }} />
+            <DateRangeFilter name="Requested" value={dates} onChange={(next) => { setDates(next); setPage(1); }} />
           </>}
-          onClear={status !== "All Statuses" || type !== "All Payout Types" || party !== "All Parties" || date !== "All Dates" || q.trim()
-            ? () => { setStatus("All Statuses"); setType("All Payout Types"); setParty("All Parties"); setDate("All Dates"); setQ(""); setPage(1); }
-            : undefined}
+          onClear={filtersActive ? resetFilters : undefined}
           viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           trailing={<Button variant="outline" icon="download" disabled={!directory || directoryQuery.isFetching} onClick={() => exportPayouts(filtered)}>Export</Button>}
         />
 
-        {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={10} label="Loading payout requests" /> : filtered.length === 0 && tableView !== 'board' ? (
-          <EmptyState
-            icon="banknote"
-            title="No payout requests found"
-            description={directoryQuery.error ? getApiErrorMessage(directoryQuery.error) : "Try adjusting your filters or search."}
-          />
+        {!directory && directoryQuery.isFetching ? <DriverTableLoading columns={8} label="Loading payout requests" /> : filtered.length === 0 && tableView !== "board" ? (
+          <EmptyState icon="banknote" title="No payouts found" description={directoryQuery.error ? getApiErrorMessage(directoryQuery.error) : "Try adjusting your filters or search."} />
         ) : (
           <>
-            <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.payouts} view={tableView} boardGroupBy={(row) => row.status}
+            <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.payouts} view={tableView} boardGroupBy={(row) => row.status} boardOnRowClick={open}
               rows={paged}
               rowKey={(r) => r.key}
-              onRowClick={(r) => navigate(payoutDetailUrl(r))}
+              onRowClick={open}
               columns={[
-                {
-                  key: "id",
-                  header: "Payout ID",
-                  width: 170,
-                  render: (r) => (
-                    <span className="payout-id-cell">
-                      <span className="tk-mono">{r.id}</span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "date",
-                  header: "Date Requested",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span>{r.dateRequested}</span>
-                      <span className="tk-meta">{r.dateRequestedTime}</span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "party",
-                  header: "Party",
-                  width: 240,
-                  render: (r) => (
-                    <span className="payout-party-cell">
-                      <Avatar name={r.party} size={28} />
-                      <span className="payout-party-text">
-                        {r.companyId ? (
-                          <Link to={payoutCompanyUrl(r.companyId)} onClick={(e) => e.stopPropagation()}>{r.party}</Link>
-                        ) : <span className="tk-label">{r.party}</span>}
-                      </span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "type",
-                  header: "Type",
-                  render: (r) => (
-                    <Badge tone={TYPE_TONE[r.type] || "neutral"}>
-                      {r.type}
-                    </Badge>
-                  ),
-                },
-                {
-                  key: "job",
-                  header: "Job / Trips",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      {r.jobId ? <Link
-                        to={payoutJobUrl(r.jobId)}
-                        className="tk-mono"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {r.jobId}
-                      </Link> : <span className="tk-mono">—</span>}
-                      <span className="tk-meta">{r.route}</span>
-                      <span className="tk-meta">{r.truckTripCount ?? "—"} trip{r.truckTripCount === 1 ? "" : "s"}</span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "amount",
-                  header: "Gross / Net",
-                  align: "right",
-                  render: (r) => <span className="payout-amount-cell"><span className="tk-meta">{formatNaira(r.grossAmount)}</span><b>{formatNaira(r.netAmount)}</b></span>,
-                },
-                {
-                  key: "eligibility",
-                  header: "Eligibility",
-                  render: (r) => r.partyType === "company" ? (
-                    <span style={{ display: "grid", gap: 3 }}>
-                      <Badge tone={r.approvalReady ? "success" : r.eligibility === "Needs Review" ? "warning" : "danger"}>{r.eligibility}</Badge>
-                      <span className="tk-meta">{r.reconciliation?.ok == null ? "—" : r.reconciliation.ok ? "Reconciled" : "Needs reconciliation"}</span>
-                    </span>
-                  ) : <span className="tk-meta">{r.partyType === "driver" ? "Driver payout" : "—"}</span>,
-                },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (r) => (
-                    <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
-                  ),
-                },
-                {
-                  key: "requestedBy",
-                  header: "Requested By",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span>{r.requestedBy}</span>
-                      <span className="tk-meta">{r.requestedByRole}</span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "x",
-                  header: "Actions",
-                  width: 44,
-                  render: (r) => (
-                    <RowMenu
-                      id={r.key}
-                      menuFor={menuFor}
-                      setMenuFor={setMenuFor}
-                      items={[
-                        {
-                          label: "View Details",
-                          icon: "eye",
-                          onClick: () => {
-                            setMenuFor(null);
-                            navigate(payoutDetailUrl(r));
-                          },
-                        },
-                        {
-                          label: "Copy Payout ID",
-                          icon: "copy",
-                          onClick: () => {
-                            navigator.clipboard?.writeText(r.id);
-                            setMenuFor(null);
-                          },
-                        },
-                        { divider: true },
-                        { label: "Download Documents", icon: "file-text", onClick: () => downloadDocuments(r) },
-                      ]}
-                    />
-                  ),
-                },
+                { key: "id", header: "Payout ID", render: (r) => <MiddleId value={r.id} label="payout ID" onOpen={() => open(r)} /> },
+                { key: "job", header: "Job ID", render: (r) => r.jobNumbers.length
+                  ? <span className="fin-id-stack"><MiddleId value={r.jobNumbers[0]} head={7} tail={6} label="job ID" />{r.jobNumbers.length > 1 && <Badge tone="neutral">+{r.jobNumbers.length - 1}</Badge>}</span>
+                  : <NotAvailable label="Not applicable" /> },
+                { key: "party", header: "Party", render: (r) => <PartyCell name={r.party} role={r.partyRole} /> },
+                { key: "requested", header: "Requested", render: (r) => <DateCell date={r.dateRequested} time={r.dateRequestedTime} /> },
+                { key: "gross", header: "Requested Amount", align: "right", render: (r) => <Money value={r.grossAmount} /> },
+                { key: "net", header: "Net Payout", align: "right", render: (r) => <span className="fin-date" style={{ justifyItems: "end" }}><Money value={r.netAmount} />{r.totalDeductions != null && <small>{naira(r.totalDeductions)} fees</small>}</span> },
+                { key: "bank", header: "Bank", render: (r) => isMissing(r.payment.bank) ? <NotAvailable /> : <span className="fin-date"><span>{r.payment.bank}</span><small>{r.payment.accountNumber}</small></span> },
+                { key: "status", header: "Status", render: (r) => <Badge tone={PAYOUT_STATUS_TONE[r.status] || "neutral"} dot>{r.status}</Badge> },
               ]}
             />
-            <Pagination
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={filtered.length}
-              pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-              onPage={setPage}
-              onPageSize={() => {}}
-            />
+            <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))} onPage={setPage} onPageSize={() => {}} />
           </>
         )}
       </SectionCard>
+      {selected && <PayoutDrawer target={selected} row={all.find((row) => row.id === selected.id && (!selected.source || row.source === selected.source))} onClose={close} />}
     </>
   );
 }

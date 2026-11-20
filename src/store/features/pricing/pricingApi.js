@@ -69,7 +69,7 @@ export function adaptAdminPricingService(value) {
 }
 function adaptPriceList(value) {
   const dto = record(value), submittedBy = submitter(dto.submittedBy);
-  return { id: text(dto.id), entity: 'price-lists', name: text(dto.name) || '—', service: text(dto.name) || '—', region: text(dto.region) || '—', route: text(record(dto.originPort).name) || '—',
+  return { id: text(dto.id), entity: 'price-lists', updatedAt: text(dto.updatedAt), name: text(dto.name) || '—', service: text(dto.name) || '—', region: text(dto.region) || '—', route: text(record(dto.originPort).name) || '—',
     services: count(dto.servicesCount) ?? count(dto.rateCount), currency: text(dto.currency) || '—', lastUpdated: dateParts(dto.updatedAt).updated,
     statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), requestedBy: submittedBy.name,
     requesterId: submittedBy.id, standardPrice: null, exceptionPrice: null, submitted: dateParts(dto.submittedAt).updated };
@@ -80,7 +80,7 @@ function adaptSurcharge(value) {
   const legacyScope = [text(record(dto.service).name), text(record(dto.priceList).name), text(record(dto.originPort).name), text(dto.destinationState), text(dto.cargoType) ? label(dto.cargoType) : null].filter(Boolean);
   const scopeLabels = Array.isArray(dto.scopeLabels) ? dto.scopeLabels.map(text).filter(Boolean) : [];
   const scope = scopeLabels.length ? scopeLabels.join(' / ') : legacyScope.join(' / ');
-  return { id: text(dto.id), entity: 'surcharges', source: 'surcharge', name: text(dto.name) || '—', service: text(dto.name) || '—',
+  return { id: text(dto.id), entity: 'surcharges', updatedAt: text(dto.updatedAt), source: 'surcharge', name: text(dto.name) || '—', service: text(dto.name) || '—',
     description: text(dto.description) || label(dto.kind), appliesTo: scope || '—', rate: unit ? format(parsed, unit) : '—',
     unit: unit || '—', calc: text(dto.calc), value: parsed, min: 0, effectiveFrom: dateParts(dto.effectiveFrom).updated,
     statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), editable: dto.status === 'DRAFT' && parsed != null && unit != null,
@@ -146,7 +146,7 @@ export function canChangePricing(row, action, admin) {
   const rates = row.entity === 'services' ? [row.basePrice] : row.entity === 'surcharges' ? [row.value] : row.entity === 'exceptions' ? [row.standardPrice, row.exceptionPrice] : [];
   if (!rates.every((value) => Number.isFinite(value) && value >= 0)) return false;
   if (action === 'duplicate') return row.entity !== 'exceptions' && ['DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'INACTIVE'].includes(row.statusCode);
-  if (action === 'submit') return row.entity === 'services' && row.statusCode === 'DRAFT' && pricingServiceRoles.has(admin.role);
+  if (action === 'submit') return row.entity !== 'exceptions' && row.statusCode === 'DRAFT' && pricingServiceRoles.has(admin.role);
   if (!pricingReviewerRoles.has(admin.role)) return false;
   if (action === 'deactivate') return row.entity !== 'exceptions' && row.statusCode === 'ACTIVE';
   if (action === 'activate') return row.entity !== 'exceptions' && row.statusCode === 'PENDING_APPROVAL';

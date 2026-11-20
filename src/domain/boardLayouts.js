@@ -53,12 +53,17 @@ export const BOARD_LAYOUTS = {
   settlements: layout([
     ['Pending', 'warning'], ['On Hold', 'info'], ['Completed', 'success'], ['Failed', 'danger'],
   ], { title: 'id', value: 'amount', subtitle: 'payee', body: ['relatedTo'], footer: ['type', 'settledOn'] }, 'No settlements'),
+  escrow: layout([
+    ['Locked', 'warning'], ['Mobilization Released', 'info'], ['Held', 'warning'], ['Disputed', 'danger'], ['Completed', 'success'], ['Refunded', 'orange'], ['Cancelled', 'neutral'],
+  ], { title: 'jobId', value: (row) => { const amount = row.kind === 'Hold' ? row.total : row.amount; return amount == null ? '—' : '₦' + amount.toLocaleString('en-NG', { minimumFractionDigits: 2 }); },
+    subtitle: (row) => row.kind === 'Hold' ? row.customer : row.releasedTo, body: [(row) => row.kind === 'Hold' ? 'Hold' : row.releaseType], footer: [(row) => row.kind === 'Hold' ? row.heldOn : row.releasedOn] }, 'No escrow records'),
   transactions: layout([
     ['Pending', 'warning'], ['Completed', 'success'], ['Failed', 'danger'], ['Reversed', 'orange'],
   ], { title: 'id', value: 'amount', subtitle: 'party', body: ['description'], footer: ['type', 'date'] }, 'No transactions'),
   demurrage: layout([
-    ['Active', 'danger'], ['Upcoming', 'warning'], ['Resolved', 'success'], ['Dispute', 'purple'],
-  ], { title: 'jobId', value: 'charge', subtitle: 'customer', body: ['container', 'assignedTo'], footer: ['daysUsed', 'daysOver'] }, 'No demurrage'),
+    ['Active', 'danger'], ['Upcoming', 'warning'], ['Resolved', 'success'], ['Dispute', 'purple'], ['Waived', 'neutral'], ['Assessed', 'warning'], ['Applied', 'success'],
+  ], { title: 'jobId', value: (row) => row.amount == null ? '—' : '₦' + row.amount.toLocaleString('en-NG', { minimumFractionDigits: 2 }),
+    subtitle: (row) => row.customer || row.trucker, body: ['kind'], footer: ['date', (row) => row.daysOver == null ? '' : row.daysOver + ' days over'] }, 'No demurrage'),
   verification: layout([
     ['Pending', 'warning'], ['In Review', 'info'], ['Verified', 'success'], ['Rejected', 'danger'],
   ], { title: 'id', subtitle: 'entity', body: ['type'], footer: ['entityType', 'riskLevel'] }, 'No verifications'),

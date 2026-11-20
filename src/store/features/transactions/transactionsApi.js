@@ -37,7 +37,7 @@ export const transactionNumber = (value) => number(value) == null ? '—' : numb
 export const transactionMoney = (value) => number(value) == null ? '—' : `₦${number(value).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const transactionAmount = (row, currency = false) => row.amount == null ? '—'
   : `${row.pos == null ? '' : row.pos ? '+' : '-'}${currency ? transactionMoney(row.amount) : number(row.amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-export const transactionDetailUrl = (id) => `/transactions/detail?id=${encodeURIComponent(id)}`;
+export const transactionDetailUrl = (id) => `/transactions?id=${encodeURIComponent(id)}`;
 export const transactionJobUrl = (id) => `/jobs/detail?id=${encodeURIComponent(id)}`;
 
 const ESCROW_TYPES = new Set(['ESCROW_LOCK', 'ESCROW_RELEASE', 'ESCROW_HOLD', 'MOBILIZATION', 'FINAL_PAYMENT']);
@@ -65,6 +65,7 @@ export function adaptAdminTransaction(dto) {
     relatedTo: text(related.label) || text(related.id) || text(dto.relatedTo) || '—',
     relatedKind: dto.relatedKind === 'JOB' ? 'Job' : dto.relatedKind === 'REVERSAL' ? 'Transaction' : label(dto.relatedKind),
     party: text(party.name) || text(dto.party) || '—',
+    partyRole: text(party.role),
     amount: money(rawAmount),
     pos: direction === 'inflow' ? true : direction === 'outflow' ? false : null,
     statusCode: text(dto.status), status: label(dto.status), balanceAfter: number(dto.balanceAfter),

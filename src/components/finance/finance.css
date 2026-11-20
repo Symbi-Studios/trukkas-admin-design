@@ -1,0 +1,82 @@
+/* Finance tables: shared cells, drawer breakdown and the date-range picker. */
+
+/* ---------- IDs: middle-truncated, monospace, with copy ---------- */
+.fin-id { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
+.fin-id-text { font: 600 13px/18px var(--tk-font-mono); color: var(--tk-ink-900); letter-spacing: -0.2px; }
+.fin-id-link { padding: 0; border: 0; background: none; color: var(--tk-blue); cursor: pointer; }
+.fin-id-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.fin-id-copy { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--tk-ink-300); cursor: pointer; transition: background 120ms ease, color 120ms ease; }
+.fin-id-copy:hover { background: var(--tk-surface-sunk); color: var(--tk-ink-700); }
+.fin-id-copy.done { color: var(--tk-success); }
+
+/* ---------- Parties: avatar, name, role badge ---------- */
+.fin-party { display: flex; align-items: center; gap: 10px; min-width: 0; max-width: 240px; }
+.fin-party-text { display: grid; gap: 3px; min-width: 0; justify-items: start; }
+.fin-party-text strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 13px/18px var(--tk-font-sans); color: var(--tk-ink-900); }
+.fin-party-text .tk-badge, .fin-party-text > span:last-child { transform-origin: left center; }
+
+/* ---------- Money and dates ---------- */
+.fin-money { font: 500 13px/18px var(--tk-font-sans); font-variant-numeric: tabular-nums; color: var(--tk-ink-700); white-space: nowrap; }
+.fin-money.strong { font-weight: 600; color: var(--tk-ink-900); }
+.fin-money.in { color: var(--tk-success); }
+.fin-money.out { color: var(--tk-danger); }
+.fin-date { display: grid; gap: 2px; white-space: nowrap; }
+.fin-date > span { font: 500 13px/18px var(--tk-font-sans); color: var(--tk-ink-900); }
+.fin-date > small { font: 400 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.fin-sub { display: block; font: 400 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); white-space: nowrap; }
+
+/* ---------- Table rhythm: roomier rows, clickable ---------- */
+.fin-table .tk-table td, .fin-table table td { padding-top: 14px; padding-bottom: 14px; vertical-align: middle; }
+.fin-table .tk-table th, .fin-table table th { white-space: nowrap; }
+.fin-table tbody tr { cursor: pointer; }
+.fin-empty { padding: 40px 20px; text-align: center; font: 500 13px/18px var(--tk-font-sans); color: var(--tk-ink-400); }
+
+/* ---------- Drawer: money breakdown ---------- */
+.fin-hero { display: grid; gap: 4px; padding: 16px; border: 1px solid var(--tk-line); border-radius: 12px; background: var(--tk-surface-sunk); }
+.fin-hero span { font: 500 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.fin-hero strong { font: 700 26px/32px var(--tk-font-sans); color: var(--tk-ink-900); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.fin-breakdown { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--tk-line); border-radius: 12px; overflow: hidden; }
+.fin-breakdown li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--tk-surface); }
+.fin-breakdown li + li { border-top: 1px solid var(--tk-line); }
+.fin-breakdown li > span:first-child { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.fin-breakdown li strong { font: 500 13px/18px var(--tk-font-sans); color: var(--tk-ink-900); }
+.fin-breakdown li small { font: 400 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.fin-breakdown li.total { background: var(--tk-surface-sunk); }
+.fin-breakdown li.total strong { font-weight: 700; }
+.fin-breakdown li.sub { padding-left: 28px; }
+.fin-note { margin: 0; font: 400 12px/17px var(--tk-font-sans); color: var(--tk-ink-400); }
+.fin-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; width: 100%; }
+
+/* ---------- Date-range picker ---------- */
+.fin-range { position: relative; display: inline-flex; min-width: 0; }
+.fin-cal { position: absolute; top: calc(100% + 8px); left: 0; z-index: 60; display: flex; border: 1px solid var(--tk-line); border-radius: 14px; background: var(--tk-surface); box-shadow: var(--tk-shadow-menu, 0 12px 32px rgba(0, 8, 36, 0.14)); overflow: hidden; }
+.fin-cal.right { left: auto; right: 0; }
+.fin-cal-shortcuts { display: grid; align-content: start; gap: 2px; min-width: 132px; padding: 12px 8px; border-right: 1px solid var(--tk-line); background: var(--tk-surface-sunk); }
+.fin-cal-shortcuts button { height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--tk-ink-700); font: 500 13px/1 var(--tk-font-sans); text-align: left; cursor: pointer; white-space: nowrap; }
+.fin-cal-shortcuts button:hover { background: var(--tk-surface); color: var(--tk-ink-900); }
+.fin-cal-shortcuts button.active { background: var(--tk-blue-soft); color: var(--tk-blue); }
+.fin-cal-main { display: grid; gap: 10px; padding: 14px 16px 12px; }
+.fin-cal-head { display: grid; grid-template-columns: 32px 1fr 1fr 32px; align-items: center; gap: 8px; }
+.fin-cal-head strong { text-align: center; font: 600 13px/18px var(--tk-font-sans); color: var(--tk-ink-900); }
+.fin-cal-head button { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--tk-line); border-radius: 8px; background: var(--tk-surface); color: var(--tk-ink-700); cursor: pointer; }
+.fin-cal-head button:hover { background: var(--tk-surface-sunk); }
+.fin-cal-months { display: grid; grid-template-columns: repeat(2, 252px); gap: 20px; }
+.fin-cal-weekdays, .fin-cal-grid { display: grid; grid-template-columns: repeat(7, 36px); }
+.fin-cal-weekdays span { height: 28px; display: grid; place-items: center; font: 600 11px/1 var(--tk-font-sans); color: var(--tk-ink-400); }
+.fin-cal-day { height: 36px; border: 0; background: transparent; color: var(--tk-ink-900); font: 500 13px/1 var(--tk-font-sans); font-variant-numeric: tabular-nums; cursor: pointer; border-radius: 8px; }
+.fin-cal-day:hover { background: var(--tk-surface-sunk); }
+.fin-cal-day.today { box-shadow: inset 0 0 0 1px var(--tk-blue); }
+.fin-cal-day.within { border-radius: 0; background: var(--tk-blue-soft); color: var(--tk-blue); }
+.fin-cal-day.edge { background: var(--tk-blue); color: #fff; }
+.fin-cal-day.start { border-radius: 8px 0 0 8px; }
+.fin-cal-day.end { border-radius: 0 8px 8px 0; }
+.fin-cal-hint { margin: 0; font: 400 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+
+@media (max-width: 760px) {
+  .fin-cal { flex-direction: column; left: 0; right: auto; max-width: calc(100vw - 32px); }
+  .fin-cal-shortcuts { grid-auto-flow: column; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--tk-line); }
+  .fin-cal-months { grid-template-columns: 252px; }
+  .fin-cal-head { grid-template-columns: 32px 1fr 32px; }
+  .fin-cal-second { display: none; }
+}
+.fin-id-stack { display: inline-flex; align-items: center; gap: 6px; }
