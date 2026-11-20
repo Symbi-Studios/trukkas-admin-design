@@ -18,9 +18,10 @@ import { Forwarders } from './screens/Forwarders.jsx';
 import { CargoManagement } from './screens/CargoManagement.jsx';
 import { CargoTypes } from './screens/CargoTypes.jsx';
 import { TruckCalculator } from './screens/TruckCalculator.jsx';
-import { FeesCommission } from './screens/FeesCommission.jsx';
+import { PlatformRevenue } from './screens/PlatformRevenue.jsx';
+import { FeesRedirect } from './screens/FeeRuleDetail.jsx';
 import { PricingManagement } from './screens/PricingManagement.jsx';
-import { Settlements } from './screens/Settlements.jsx';
+import { SettlementsRedirect } from './screens/SettlementDetail.jsx';
 import { Transactions } from './screens/Transactions.jsx';
 import { RequestedPayouts } from './screens/RequestedPayouts.jsx';
 import { ReportsAnalytics } from './screens/ReportsAnalytics.jsx';
@@ -47,11 +48,12 @@ const screens = {
   verification: Verification,
   wallets: Wallets,
   pricing: PricingManagement,
-  settlements: Settlements,
+  settlements: SettlementsRedirect,
   transactions: Transactions,
   payouts: RequestedPayouts,
   reports: ReportsAnalytics,
-  fees: FeesCommission,
+  fees: FeesRedirect,
+  revenue: PlatformRevenue,
   rates: PlatformRates,
   announcements: Announcements,
   jobs: JobsTrips,
@@ -84,8 +86,8 @@ const screens = {
 
 export function ScreenRouter({ screen }) {
   const Screen = screens[screen];
-  if (Screen) return screen === 'tickets' || screen === 'feedback'
-    ? <Suspense fallback={null}><Screen /></Suspense> : <Screen />;
+  // Every screen can read search params (deep links), which needs a Suspense boundary.
+  if (Screen) return <Suspense fallback={null}><Screen /></Suspense>;
   const item = NAV.flatMap((group) => group.items).find((entry) => entry.id === screen);
   return <ScreenPlaceholder label={item?.label || screen} />;
 }

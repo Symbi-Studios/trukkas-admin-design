@@ -136,7 +136,7 @@ export function adaptEscrowHold(value) {
   if (!holdId) return null;
   return {
     holdId, jobApiId: text(dto.jobId), jobId: display(dto.jobNumber),
-    detailUrl: '/escrow/detail?id=' + encodeURIComponent(holdId),
+    detailUrl: '/wallets?id=' + encodeURIComponent(holdId),
     customer: partyName(dto.customer) ?? '—', route: routeLabel(dto.route),
     // Held Amount is the unpaid balance, rather than the original job price.
     amount: naira(dto.currentHeldAmount, dto.currency),
@@ -144,6 +144,22 @@ export function adaptEscrowHold(value) {
     heldAt: text(dto.heldAt), statusCode: text(dto.status), status: status(dto.status),
     canRelease: ['LOCKED', 'MOBILIZATION_RELEASED'].includes(dto.status) && dto.freeze === null && number(dto.currentHeldAmount) > 0 && Boolean(text(dto.trucker?.id)),
     canOpenDispute: ['LOCKED', 'MOBILIZATION_RELEASED', 'HELD'].includes(dto.status) && Boolean(text(dto.trucker?.id)),
+    // Fields for the escrow table and the hold drawer's settlement breakdown.
+    kind: 'Hold', key: 'hold:' + holdId, timestamp: Date.parse(text(dto.heldAt) || '') || null,
+    total: naira(dto.amount, dto.currency), heldAmount: naira(dto.currentHeldAmount, dto.currency),
+    customerRole: text(record(dto.customer).role) || 'FORWARDER', trucker: partyName(dto.trucker) ?? '—', truckerRole: text(record(dto.trucker).role) || 'TRUCKER',
+    jobStatus: status(dto.jobStatus), frozen: dto.freeze != null, completedAt: datePart(dto.completedAt),
+    nextRelease: dto.nextRelease && typeof dto.nextRelease === 'object' ? { tranche: status(dto.nextRelease.tranche), amount: naira(dto.nextRelease.amount, dto.currency), trigger: text(dto.nextRelease.trigger), dueBy: datePart(dto.nextRelease.dueBy) } : null,
+    breakdown: dto.breakdown && typeof dto.breakdown === 'object' ? {
+      total: naira(dto.breakdown.totalAmount, dto.currency),
+      mobilization: naira(dto.breakdown.mobilizationAmount, dto.currency), mobilizationPaidAt: datePart(dto.breakdown.mobilizationPaidAt),
+      final: naira(dto.breakdown.finalAmount, dto.currency), finalPaidAt: datePart(dto.breakdown.finalPaidAt),
+      driverDelay: naira(dto.breakdown.driverDemurrageDeducted, dto.currency),
+    } : null,
+    disputes: Array.isArray(dto.disputes) ? dto.disputes.filter((entry) => entry && typeof entry === 'object' && text(entry.id)).map((entry) => ({
+      id: text(entry.id), jobId: display(dto.jobNumber), jobApiId: text(dto.jobId), escrowApiId: holdId,
+      status: status(entry.status), canResolve: ['OPEN', 'UNDER_REVIEW'].includes(entry.status), reason: display(entry.reason), opened: datePart(entry.createdAt),
+    })) : [],
   };
 }
 export function adaptEscrowRelease(value) {
@@ -155,6 +171,10 @@ export function adaptEscrowRelease(value) {
     releasedBy: actor.type === 'SYSTEM' ? 'System' : actor.type === 'ADMIN' ? partyName(actor.admin) ?? '—' : '—',
     reference: display(dto.reference), settlementReference: display(dto.settlementReference),
     statusCode: text(dto.status), status: status(dto.status), createdAt: text(dto.createdAt),
+    kind: 'Release', key: 'release:' + text(dto.id), timestamp: Date.parse(text(dto.releasedAt) || text(dto.createdAt) || '') || null,
+    releaseType: ({ mobilization: 'Mobilisation', final_payment: 'Final payment', dispute_settlement: 'Dispute settlement', dispute_refund: 'Refund' })[dto.releaseType] || status(dto.releaseType),
+    label: text(dto.label), recipientRole: text(record(dto.recipient).role), jobApiId: text(dto.jobId),
+    reason: text(record(dto.releasedBy).reason), trigger: status(record(dto.releasedBy).trigger),
   };
 }
 function adaptActivity(value) {
@@ -197,7 +217,8 @@ export const walletsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminEscrowO
       serializeQueryArgs: serializeWalletQuery,
       async queryFn(args, api, _options, baseQuery) {
         baseQuery = scopedWalletQuery(baseQuery, api, args);
-        const result = await readAll(baseQuery, api, '/admin/escrow/holds', 'holds', { status: 'ACTIVE' });
+        // Every escrow, not just unpaid ones: the table filters by status itself.
+        const result = await readAll(baseQuery, api, '/admin/escrow/holds', 'holds');
         return result.error ? result : { data: result.data.map(adaptEscrowHold) };
       }, providesTags: ['AdminEscrowHolds'],
     }),

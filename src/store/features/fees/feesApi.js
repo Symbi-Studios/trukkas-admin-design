@@ -31,7 +31,7 @@ export function feeMoney(value) {
 export function feeMillions(value) {
   return feeMoney(value);
 }
-export const feeDetailUrl = (rule) => '/fees/detail?id=' + encodeURIComponent(rule.id);
+export const feeDetailUrl = () => '/rates';
 function date(value, includeTime = false) {
   if (!text(value) || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(value) || includeTime && value.length === 10) return '—';
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);
@@ -99,6 +99,10 @@ export function adaptFeeSummary(response) {
       avgEffectiveRateDelta: currentRate != null && previousRate > 0 ? delta((currentRate - previousRate) / previousRate * 100) : '—',
       totalFeesCollected: amount('feesCollected'), totalCommissionsPaid: amount('commissionsPaid'),
       totalDeductionsCollected: amount('deductions'), netPlatformRevenue: amount('netPlatformRevenue'),
+      totalFeesCollectedDelta: delta(record(dto.feesCollected).deltaPercent), netPlatformRevenueDelta: delta(record(dto.netPlatformRevenue).deltaPercent),
+      serviceFees: amount('serviceFees'), serviceFeesDelta: delta(record(dto.serviceFees).deltaPercent),
+      processingFees: amount('processingFees'), processingFeesDelta: delta(record(dto.processingFees).deltaPercent),
+      otherFees: amount('otherFees'), otherFeesDelta: delta(record(dto.otherFees).deltaPercent),
     },
     distribution: unavailableFeeDistribution.map((slot, index) => {
       const matches = distribution.filter((entry) => record(entry).key === keys[index]);

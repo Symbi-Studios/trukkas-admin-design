@@ -67,9 +67,9 @@ export function adaptAdminPricingService(value) {
     submitted: dateParts(dto.submittedAt).updated, standardPrice: number(dto.currentPrice), exceptionPrice: number(dto.basePrice),
   };
 }
-function adaptPriceList(value) {
+export function adaptPriceList(value) {
   const dto = record(value), submittedBy = submitter(dto.submittedBy);
-  return { id: text(dto.id), entity: 'price-lists', name: text(dto.name) || '—', service: text(dto.name) || '—', region: text(dto.region) || '—', route: text(record(dto.originPort).name) || '—',
+  return { id: text(dto.id), entity: 'price-lists', updatedAt: text(dto.updatedAt), name: text(dto.name) || '—', service: text(dto.name) || '—', region: text(dto.region) || '—', route: text(record(dto.originPort).name) || '—',
     services: count(dto.servicesCount) ?? count(dto.rateCount), currency: text(dto.currency) || '—', lastUpdated: dateParts(dto.updatedAt).updated,
     statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), requestedBy: submittedBy.name,
     requesterId: submittedBy.id, standardPrice: null, exceptionPrice: null, submitted: dateParts(dto.submittedAt).updated };
@@ -80,7 +80,7 @@ function adaptSurcharge(value) {
   const legacyScope = [text(record(dto.service).name), text(record(dto.priceList).name), text(record(dto.originPort).name), text(dto.destinationState), text(dto.cargoType) ? label(dto.cargoType) : null].filter(Boolean);
   const scopeLabels = Array.isArray(dto.scopeLabels) ? dto.scopeLabels.map(text).filter(Boolean) : [];
   const scope = scopeLabels.length ? scopeLabels.join(' / ') : legacyScope.join(' / ');
-  return { id: text(dto.id), entity: 'surcharges', source: 'surcharge', name: text(dto.name) || '—', service: text(dto.name) || '—',
+  return { id: text(dto.id), entity: 'surcharges', updatedAt: text(dto.updatedAt), source: 'surcharge', name: text(dto.name) || '—', service: text(dto.name) || '—',
     description: text(dto.description) || label(dto.kind), appliesTo: scope || '—', rate: unit ? format(parsed, unit) : '—',
     unit: unit || '—', calc: text(dto.calc), value: parsed, min: 0, effectiveFrom: dateParts(dto.effectiveFrom).updated,
     statusCode: text(dto.status), status: statusLabels[dto.status] || label(dto.status), editable: dto.status === 'DRAFT' && parsed != null && unit != null,
@@ -146,14 +146,14 @@ export function canChangePricing(row, action, admin) {
   const rates = row.entity === 'services' ? [row.basePrice] : row.entity === 'surcharges' ? [row.value] : row.entity === 'exceptions' ? [row.standardPrice, row.exceptionPrice] : [];
   if (!rates.every((value) => Number.isFinite(value) && value >= 0)) return false;
   if (action === 'duplicate') return row.entity !== 'exceptions' && ['DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'INACTIVE'].includes(row.statusCode);
-  if (action === 'submit') return row.entity === 'services' && row.statusCode === 'DRAFT' && pricingServiceRoles.has(admin.role);
+  if (action === 'submit') return row.entity !== 'exceptions' && row.statusCode === 'DRAFT' && pricingServiceRoles.has(admin.role);
   if (!pricingReviewerRoles.has(admin.role)) return false;
   if (action === 'deactivate') return row.entity !== 'exceptions' && row.statusCode === 'ACTIVE';
   if (action === 'activate') return row.entity !== 'exceptions' && row.statusCode === 'PENDING_APPROVAL';
   if (action === 'reject') return row.entity === 'exceptions' ? row.statusCode === 'PENDING' && row.requesterId && row.requesterId !== admin.id : row.statusCode === 'PENDING_APPROVAL';
   return action === 'approve' && row.entity === 'exceptions' && row.statusCode === 'PENDING' && row.requesterId && row.requesterId !== admin.id;
 }
-function pricingRecord(response, entity) {
+export function pricingRecord(response, entity) {
   const dto = record(unwrapApiResponseData(response));
   return text(dto.id) ? dto : record(dto[({ services: 'service', 'price-lists': 'priceList', surcharges: 'surcharge', exceptions: 'exception' })[entity]]);
 }
@@ -238,7 +238,7 @@ async function exportPricingServices({ ids }, _api, _extraOptions, baseQuery) {
 export const platformRateSections = [
   { key: 'job', title: 'Job Fees & Commission', description: 'Charged on every job the platform handles.' },
   { key: 'wallet', title: 'Wallet Fees', description: 'Flat fees on wallet top-ups and bank withdrawals. Bank charges are added on top.' },
-  { key: 'payment', title: 'Payment Terms', description: 'How escrowed job money is released to the trucker.' },
+  { key: 'payment', title: 'Payment Terms & Escrow', description: 'How escrowed job money is released to the trucker, and how long the forwarder has to confirm.' },
   { key: 'fare', title: 'Fare Limits', description: 'Bounds on job fees and bids, relative to the recommended fare.' },
   { key: 'offloading', title: 'Late Offloading Demurrage', description: 'Charged to the forwarder when offloading starts after the free window.' },
   { key: 'driver', title: 'Driver Delay Deductions', description: 'Deducted from the trucker’s final payment for delivery beyond the ETA and grace period.' },
@@ -250,6 +250,7 @@ const fields = [
   { key: 'vatPercent', path: ['pricing', 'vatPercent'], name: 'VAT', description: 'VAT percentage applied to total job cost', appliesTo: 'All jobs', unit: '%', min: 0, max: 100, section: 'job', icon: 'badge-percent' },
   { key: 'withdrawalFee', path: ['pricing', 'withdrawalFee'], name: 'Withdrawal Fee', description: 'Flat Trukkas fee on each wallet → bank withdrawal', appliesTo: 'Wallet withdrawals', unit: 'NGN', min: 0, section: 'wallet', icon: 'wallet' },
   { key: 'depositFee', path: ['pricing', 'depositFee'], name: 'Deposit Fee', description: 'Bank collection fee deducted from each wallet top-up', appliesTo: 'Wallet deposits', unit: 'NGN', min: 0, section: 'wallet', icon: 'wallet' },
+  { key: 'holdPeriodHours', path: ['jobs', 'containerReturnConfirmHours'], name: 'Confirmation Hold', description: 'How long the forwarder has to confirm container return before the final payment releases automatically', unit: 'hours', min: 1, section: 'payment', icon: 'clock' },
   { key: 'mobilizationPercent', path: ['escrow', 'mobilizationPercent'], name: 'Mobilization Payment', description: 'Share of the job value released to the trucker at pickup; the rest is the final payment. Existing jobs keep their split.', unit: '%', min: 0, max: 100, section: 'payment', icon: 'wallet' },
   { key: 'minFeePercent', path: ['pricing', 'minFeePercent'], name: 'Minimum Fare', description: 'Minimum job fee as a percentage of recommended fare', unit: '%', min: 1, max: 100, section: 'fare', icon: 'shield-check' },
   { key: 'maxFeePercent', path: ['pricing', 'maxFeePercent'], name: 'Maximum Fare', description: 'Maximum bid or counter-offer as a percentage of recommended fare', unit: '%', min: 100, max: 500, section: 'fare', icon: 'shield-check' },
@@ -276,18 +277,16 @@ export function adaptAdminPricingConfig(response) {
     const effectiveFrom = record(meta.effectiveFrom)[field.path.join('.')];
     return { ...field, id: `config:${field.key}`, source: 'config', value, rate: rateLabel(value, field.unit), iconTint: 'blue', status: value == null ? 'Unavailable' : 'Configured', effectiveFrom: effectiveFrom === null ? 'Platform default' : dateParts(effectiveFrom).updated, editable: value != null };
   });
-  const escrow = record(dto.escrow), hold = record(escrow.standardHoldDuration);
-  // Minutes are the documented live override and hours the production default: alternatives, not additive.
-  const holdMinutes = number(hold.minutes) != null ? number(hold.minutes) : number(hold.hours) != null ? number(hold.hours) * 60 : null;
+  const escrow = record(dto.escrow);
   const policy = (value) => typeof value === 'boolean' ? (value ? 'Always on' : 'Off') : '—';
   return {
     currency: text(dto.platform?.defaultCurrency), rows,
     escrowPolicy: [
-      { id: 'finalPercent', name: 'Final Payment', description: 'Released after delivery and the forwarder’s confirmation', rate: format(number(escrow.finalPercent), '%') },
-      { id: 'hold', name: 'Confirmation Hold', description: 'How long the final payment waits for the forwarder to confirm container return', rate: holdMinutes == null ? '—' : rateLabel(holdMinutes, 'minutes') },
-      { id: 'autoRelease', name: 'Auto-Release', description: 'Releases the final payment when the hold ends without a dispute', rate: policy(record(escrow.autoRelease).enabled) },
-      { id: 'disputeFreeze', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', rate: policy(record(escrow.disputeFreeze).enabled) },
+      { id: 'finalPercent', name: 'Final Payment', description: 'The rest of the job value, released after delivery and the forwarder’s confirmation. Set by the mobilization share.', rate: format(number(escrow.finalPercent), '%'), fixedBy: 'Follows mobilization' },
+      { id: 'autoRelease', fixedBy: 'Fixed by the platform', name: 'Auto-Release', description: 'Releases the final payment when the hold ends without a dispute', rate: policy(record(escrow.autoRelease).enabled) },
+      { id: 'disputeFreeze', fixedBy: 'Fixed by the platform', name: 'Dispute Freeze', description: 'Freezes release while a dispute is open', rate: policy(record(escrow.disputeFreeze).enabled) },
     ],
+    holdOverrideMinutes: number(record(dto.jobs).containerReturnConfirmMinutes),
     updatedAt: dateParts(meta.updatedAt), updatedBy: text(record(meta.updatedBy).name),
   };
 }
@@ -354,7 +353,7 @@ async function savePricingSetting(source, args, api, baseQuery) {
     return { data: { value } };
   } catch (error) { return failed(error.message); }
 }
-const pricingConfigTags = ['AdminPricingConfig', 'AdminPricing', 'AdminSettings', 'AdminSettingsStatus'];
+const pricingConfigTags = ['AdminPricingConfig', 'AdminPricing', 'AdminSettings', 'AdminSettingsStatus', 'AdminFeeRules'];
 export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing', 'AdminSettings', 'AdminSettingsStatus'] }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({

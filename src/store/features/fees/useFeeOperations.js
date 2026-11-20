@@ -26,8 +26,8 @@ export function useFeeOperations() {
     if (!canManage) { window.alert('Fee changes require Super Admin or Finance Admin access.'); return; }
     if (!editableFeeRule(rule) || !['ACTIVE', 'INACTIVE'].includes(rule.statusCode)) { unavailable('Changing this fee rule'); return; }
     pending.current = true;
-    try { await setStatus({ rule, status: rule.statusCode === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }).unwrap(); }
-    catch (error) { if (currentOwner.current === owner) window.alert(getApiErrorMessage(error)); }
+    try { await setStatus({ rule, status: rule.statusCode === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }).unwrap(); return true; }
+    catch (error) { if (currentOwner.current === owner) window.alert(getApiErrorMessage(error)); return false; }
     finally { pending.current = false; }
   }
   async function download(kind, format = 'csv', rule, filters) {

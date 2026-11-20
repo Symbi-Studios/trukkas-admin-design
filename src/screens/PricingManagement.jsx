@@ -1,806 +1,231 @@
 "use client";
-import { usePageSearchState } from '../components/PageSearch.jsx';
-
-
-import { useMemo, useRef, useState } from "react";
-import { useSelector } from 'react-redux';
-import { Link, useNavigate } from "../router.js";
+import { useMemo, useState } from "react";
+import { usePageSearchState } from "../components/PageSearch.jsx";
 import {
-  PageHeader,
-  Button,
-  StatCard,
-  Card,
-  SectionCard,
-  Tabs,
-  TableToolbar,
-  SearchField,
-  DataTable,
-  Pagination,
-  Badge,
-  IconButton,
-  DropdownMenu,
-  Icon,
-  Modal,
-  Textarea,
-  EmptyState,
-  Banner,
-  StatsPanel,
+  PageHeader, Button, StatCard, SectionCard, Tabs, TableToolbar, SearchField, DataTable, Pagination, Badge, Banner, EmptyState,
+  StatsPanel, SideDrawer, DrawerSection, DrawerFacts, TextField, NotAvailable, isMissing,
 } from "../ds.js";
-import { pricingError, pricingMoney as formatNaira, pricingNumber, pricingDetailUrl, downloadPricingCsv, canChangePricing, useChangeAdminPricingRecordMutation, useExportAdminPricingServicesMutation,
-  useGetAdminPricingTerminalRatesQuery, useGetAdminPricingSummaryQuery,
-  useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery, useGetAdminPricingSurchargesQuery,
-  useGetAdminPricingExceptionsQuery, useGetAdminPricingHistoryQuery,
-} from '../store/features/pricing/pricingApi.js';
-import { PricingLoading, PricingSettingModal } from './PricingSettings.jsx';
-import { FilterChip } from '../components/FilterChip.jsx';
-import { PricingServiceForm } from './PricingServiceForm.jsx';
-import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
-import './PricingManagement.css';
+import {
+  pricingError, useGetAdminPricingSummaryQuery, useGetAdminPricingServicesQuery, useGetAdminPricingPriceListsQuery,
+  useGetAdminPricingSurchargesQuery, useGetAdminPricingTerminalRatesQuery, useUpdateAdminPricingSurchargeMutation,
+} from "../store/features/pricing/pricingApi.js";
+import { usePublishPricing } from "../store/features/pricing/usePublishPricing.js";
+import { FilterChip } from "../components/FilterChip.jsx";
+import { MiddleId, Money, FinanceFacts, cleanSteps } from "../components/finance/FinanceCells.jsx";
+import { RateEditDialog } from "./RateEditDialog.jsx";
+import { ZoneEditor } from "./ZoneEditor.jsx";
+import { useGetAdminPricingZoneQuery } from "../store/features/pricing/zonePricingApi.js";
+import { PricingServiceForm } from "./PricingServiceForm.jsx";
+import { DriverTableLoading } from "./DriversLoading.jsx";
+import "../components/finance/finance.css";
 
-// Platform-wide fees and rules live on Finance › Platform Rates; this page only
-// manages what services cost. Price exceptions are reviewed and listed under Approvals.
-const TABS = [
-  "Service Pricing",
-  "Surcharges",
-  "Price Lists",
-  "Approvals",
-  "Price History",
-];
-const PAGE_SIZE = 8;
+// Pricing is what a trip costs: rate cards for specific lanes, zone prices by destination state
+// for everything else, the per-km fare and terminal handling fee at each terminal, and surcharges.
+// Platform-wide fees live on Platform Rates. Saving publishes straight away (see usePublishPricing).
+const TABS = ["Rate Cards", "Zone Pricing", "Per-km & Terminal Rates", "Surcharges"];
+// Rate cards are hidden for now (zones and per-km cover pricing); the code stays for when they return.
+const VISIBLE_TABS = TABS.slice(1);
+const STATUS_TONE = { Active: "success", Draft: "neutral", "Pending Approval": "warning", Inactive: "neutral", "Active Terminal": "success", "Inactive Terminal / Port": "neutral" };
+const PAGE_SIZE = 10;
+const statusOptions = (rows) => ["All Statuses", ...new Set(rows.map((row) => row.status).filter((value) => !isMissing(value)))];
+const matches = (row, keys, q) => !q.trim() || keys.some((key) => row[key] && String(row[key]).toLowerCase().includes(q.trim().toLowerCase()));
 
-
-function RowMenu({ items, id, menuFor, setMenuFor }) {
-  const enabledItems = items.filter((item) => !item.disabled);
-  return (
-    <span style={{ position: "relative" }}>
-      <IconButton
-        icon="ellipsis-vertical"
-        disabled={!enabledItems.length}
-        onClick={() => setMenuFor(menuFor === id ? null : id)}
-      />
-      {menuFor === id && enabledItems.length > 0 && (
-        <span
-          style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }}
-          onMouseLeave={() => setMenuFor(null)}
-        >
-          <DropdownMenu width={200} items={enabledItems} />
-        </span>
-      )}
-    </span>
-  );
+function Table({ rows, columns, loading, empty, onOpen, rowKey = (row) => row.id }) {
+  const [page, setPage] = useState(1);
+  const paged = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  if (loading) return <DriverTableLoading columns={columns.length} label="Loading pricing" />;
+  if (!rows.length) return <EmptyState icon="tag" title={empty.title} description={empty.description} />;
+  return <>
+    <DataTable rows={paged} rowKey={rowKey} columns={columns} onRowClick={onOpen} />
+    <Pagination page={page} pageSize={PAGE_SIZE} total={rows.length} pageCount={Math.max(1, Math.ceil(rows.length / PAGE_SIZE))} onPage={setPage} onPageSize={() => {}} />
+  </>;
 }
 
+function ZoneDetail({ id, row }) {
+  const query = useGetAdminPricingZoneQuery(id);
+  const zone = query.error ? null : query.currentData;
+  return <>
+    <DrawerSection title="Zone">
+      <FinanceFacts items={[{ label: "Region", value: row.region }, { label: "From port", value: row.route === "—" ? "Any port" : row.route }, { label: "From state", value: zone?.originState || "Any state" }, { label: "Last updated", value: row.lastUpdated }]} />
+      <p className="fin-note">Zone prices apply to any truck no rate card covers, priced by destination state.</p>
+    </DrawerSection>
+    <DrawerSection title="State rates">
+      {query.isFetching && !zone ? <DriverTableLoading columns={3} label="Loading rates" /> : zone?.rates.length ? <ul className="fin-breakdown">
+        {zone.rates.map((rate) => <li key={rate.id}>
+          <span><strong>{rate.destinationState}</strong><small>{[rate.cargoType === "BULK_BREAK" ? "Bulk" : rate.cargoType === "CONTAINER" ? "Container" : "Any cargo", rate.containerSize || rate.truckType, rate.minimumCharge != null ? `min ₦${rate.minimumCharge.toLocaleString("en-NG")}` : null].filter(Boolean).join(" · ")}</small></span>
+          <span className="fin-date" style={{ justifyItems: "end" }}><Money value={rate.price} /><small>{rate.unitLabel}</small></span>
+        </li>)}
+      </ul> : <p className="fin-note">No state rates yet.</p>}
+    </DrawerSection>
+  </>;
+}
 
+function TerminalDrawer({ terminal, onClose, onEdit }) {
+  const km = terminal.rows.baseFeePerKm, handling = terminal.rows.handlingFee;
+  return <SideDrawer label="Terminal rates" eyebrow="Per-km & terminal rates" title={terminal.name} onClose={onClose} width={480}
+    meta={terminal.status && terminal.status !== "—" && <Badge tone={STATUS_TONE[terminal.status] || "neutral"} dot>{terminal.status.replace(" Terminal", "").replace(" / Port", "")}</Badge>}>
+    <DrawerSection title="Rates">
+      <ul className="fin-breakdown">
+        {[[km, "Fare per km", "Distance × this rate when no rate card or zone covers a trip from here"], [handling, "Terminal handling fee", "Flat fee collected for the terminal on each job from here"]].map(([rate, title, hint]) => rate && <li key={rate.id}>
+          <span><strong>{title}</strong><small>{hint}</small></span>
+          <span style={{ display: "flex", alignItems: "center", gap: 10 }}><Money value={rate.value} /><Button size="sm" variant="outline" icon="pencil" disabled={!rate.editable} onClick={() => onEdit(rate)}>Edit</Button></span>
+        </li>)}
+      </ul>
+      <FinanceFacts items={[{ label: "Fare per km since", value: km?.effectiveFrom }, { label: "Handling fee since", value: handling?.effectiveFrom }]} />
+    </DrawerSection>
+  </SideDrawer>;
+}
+
+function RecordDrawer({ row, kind, onClose, onEdit, notify }) {
+  const publisher = usePublishPricing();
+  const [updateSurcharge, surchargeState] = useUpdateAdminPricingSurchargeMutation();
+  const [value, setValue] = useState(row.value == null ? "" : String(row.value));
+  const [error, setError] = useState(null);
+  const busy = publisher.busy || surchargeState.isLoading;
+  async function act(task, message) {
+    setError(null);
+    try { await task(); notify(message); onClose(); }
+    catch (failure) { setError(pricingError(failure)); }
+  }
+  const saveSurcharge = () => act(async () => {
+    const draft = await publisher.draftFor(row);
+    const next = Number(value);
+    if (next !== draft.value) await updateSurcharge({ id: draft.id, status: draft.statusCode, calc: draft.calc, value: next, expectedValue: draft.value }).unwrap();
+    await publisher.publish({ ...draft, value: next });
+  }, publisher.canActivate ? `${row.name} updated.` : `${row.name} submitted for activation.`);
+  const unpublished = ["DRAFT", "PENDING_APPROVAL"].includes(row.statusCode);
+  const footer = <div className="fin-actions">
+    {row.statusCode === "ACTIVE" && <Button variant="danger" disabled={busy || !publisher.canActivate} style={{ marginRight: "auto" }} onClick={() => act(() => publisher.deactivate(row), `${row.name || row.service} taken out of use.`)}>Deactivate</Button>}
+    {unpublished && <Button variant="outline" disabled={busy || (row.statusCode === "PENDING_APPROVAL" && !publisher.canActivate)} onClick={() => act(() => publisher.publish(row), "Published.")}>Publish</Button>}
+    {kind === "service" && <Button icon="pencil" disabled={busy} onClick={() => onEdit(row)}>Edit rate</Button>}
+    {kind === "zone" && <Button icon="pencil" disabled={busy} onClick={() => onEdit(row)}>Edit zone</Button>}
+    {kind === "surcharge" && <Button disabled={busy || value.trim() === "" || !(Number(value) >= 0)} onClick={saveSurcharge}>{busy ? "Saving…" : publisher.canActivate ? "Save & publish" : "Save & submit"}</Button>}
+  </div>;
+  return <SideDrawer label="Pricing details" eyebrow={kind === "service" ? "Rate card" : kind === "zone" ? "Zone pricing" : "Surcharge"} onClose={onClose} footer={footer} width={520}
+    title={row.service || row.name}
+    meta={<><Badge tone={STATUS_TONE[row.status] || "neutral"} dot>{row.status}</Badge>{row.code && <MiddleId value={row.code} label="code" />}</>}>
+    {error && <Banner tone="danger" title={error} />}
+    {unpublished && <Banner tone="warning" title={row.statusCode === "DRAFT" ? "This rate isn't live yet" : "Waiting for activation"}>{row.statusCode === "DRAFT" ? "Publish it to start using it." : "A Super Admin or Finance Admin can publish it."}</Banner>}
+    {kind === "service" && <>
+      <DrawerSection title="Price">
+        <div className="fin-hero"><span>Total {String(row.unit || "").toLowerCase()}</span><strong>{row.totalPrice != null ? `₦${row.totalPrice.toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : "Not available"}</strong></div>
+        <ul className="fin-breakdown">
+          <li><span><strong>Base rate</strong><small>{row.unit}</small></span><Money value={row.basePrice} /></li>
+          <li className="sub"><span><strong>Surcharges</strong><small>{row.surchargePct !== "—" ? row.surchargePct : "Active surcharges that apply"}</small></span><Money value={row.surcharge} strong={false} /></li>
+          <li className="total"><span><strong>Total</strong></span><Money value={row.totalPrice} /></li>
+        </ul>
+      </DrawerSection>
+      <DrawerSection title="Applies to">
+        <FinanceFacts items={[{ label: "Route", value: row.route, wide: true }, { label: "Coverage", value: row.coverage }, { label: "Equipment", value: row.truckType }, { label: "Last updated", value: row.updated, sub: row.updatedTime }]} />
+      </DrawerSection>
+    </>}
+    {kind === "zone" && <ZoneDetail id={row.id} row={row} />}
+    {kind === "surcharge" && <DrawerSection title="Surcharge">
+      <FinanceFacts items={[{ label: "Applies to", value: row.appliesTo, wide: true }, { label: "Current rate", value: row.rate }, { label: "Effective from", value: row.effectiveFrom }]} />
+      <TextField label={`New rate (${row.unit})`} type="number" min={0} step="any" money={String(row.unit).startsWith("NGN")} value={value} disabled={busy} onChange={(event) => setValue(event.target.value)} />
+      <p className="fin-note">Saving replaces the live surcharge from now on.</p>
+    </DrawerSection>}
+  </SideDrawer>;
+}
 
 export function PricingManagement() {
-  const navigate = useNavigate();
-  const [tab, setTab] = useState("Service Pricing");
-  const servicesQuery = useGetAdminPricingServicesQuery();
+  const [tab, setTab] = useState(VISIBLE_TABS[0]);
+  const [q, setQ] = usePageSearchState("");
+  const [status, setStatus] = useState("All Statuses");
+  const [open, setOpen] = useState(null);
+  const [form, setForm] = useState(null);
+  const [terminal, setTerminal] = useState(null);
+  const [terminalRow, setTerminalRow] = useState(null);
+  const [zoneForm, setZoneForm] = useState(null);
+  const [notice, setNotice] = useState(null);
   const summaryQuery = useGetAdminPricingSummaryQuery();
-  const listsQuery = useGetAdminPricingPriceListsQuery(undefined, { skip: !['Price Lists', 'Approvals'].includes(tab) });
-  const customSurchargesQuery = useGetAdminPricingSurchargesQuery(undefined, { skip: !['Surcharges', 'Approvals'].includes(tab) });
-  const exceptionsQuery = useGetAdminPricingExceptionsQuery(undefined, { skip: tab !== 'Approvals' });
-  const historyQuery = useGetAdminPricingHistoryQuery(undefined, { skip: tab !== 'Price History' });
-  const services = servicesQuery.error ? [] : servicesQuery.currentData?.rows || [];
-  const [setting, setSetting] = useState(null), [notice, setNotice] = useState(null), [actionError, setActionError] = useState(null);
-  const admin = useSelector((state) => state.auth.admin);
+  const servicesQuery = useGetAdminPricingServicesQuery(undefined, { skip: tab !== TABS[0] });
+  const zonesQuery = useGetAdminPricingPriceListsQuery(undefined, { skip: tab !== TABS[1] });
+  const terminalQuery = useGetAdminPricingTerminalRatesQuery(undefined, { skip: tab !== TABS[2] });
+  const surchargesQuery = useGetAdminPricingSurchargesQuery(undefined, { skip: tab !== TABS[3] });
   const summary = summaryQuery.error ? null : summaryQuery.currentData;
-  const pricingSummary = { activePriceLists: summary?.activePriceLists ?? '—', totalServices: summary?.totalServices ?? '—', avgPriceChange: summary?.avgPriceChange ?? '—', priceExceptions: summary?.priceExceptions ?? '—', surchargesActive: summary?.surchargesActive ?? '—' };
-  const priceLists = listsQuery.error ? [] : listsQuery.currentData?.rows || [];
-  const exceptions = exceptionsQuery.error ? [] : exceptionsQuery.currentData?.rows || [];
-  const history = historyQuery.error ? [] : historyQuery.currentData?.rows || [];
-  const pendingApprovals = [...services.filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...priceLists.filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || []).filter((row) => row.statusCode === 'PENDING_APPROVAL'), ...exceptions.filter((row) => row.statusCode === 'PENDING')];
-  const approvalsLoading = [servicesQuery, listsQuery, customSurchargesQuery, exceptionsQuery].some((query) => query.isFetching);
-  const resolvedExceptions = exceptions.filter((row) => row.statusCode !== 'PENDING');
-  const readQueries = [summaryQuery, servicesQuery, ...(tab === 'Price Lists' ? [listsQuery] : tab === 'Surcharges' ? [customSurchargesQuery] : tab === 'Approvals' ? [listsQuery, customSurchargesQuery, exceptionsQuery] : tab === 'Price History' ? [historyQuery] : [])];
-  const readError = readQueries.find((query) => query.error)?.error;
+  const pick = (query) => (query.error ? [] : query.currentData?.rows || []);
+  const terminalRows = pick(terminalQuery);
+  const terminals = useMemo(() => {
+    const byTerminal = new Map();
+    for (const row of terminalRows) {
+      const entry = byTerminal.get(row.terminalId) || { id: row.terminalId, name: row.description, status: row.status, rows: {} };
+      entry.rows[row.key] = row; byTerminal.set(row.terminalId, entry);
+    }
+    return [...byTerminal.values()];
+  }, [terminalRows]);
 
-  const terminalQuery = useGetAdminPricingTerminalRatesQuery(undefined, { skip: tab !== 'Surcharges' });
-  const terminalRates = terminalQuery.error ? [] : terminalQuery.currentData?.rows || [];
-  const surcharges = [...terminalRates, ...(customSurchargesQuery.error ? [] : customSurchargesQuery.currentData?.rows || [])];
-  const [q, setQ] = usePageSearchState("", () => setPage(1), tab === 'Service Pricing');
-  const [serviceType, setServiceType] = useState("All Services");
-  const [jobType, setJobType] = useState("All Job Types");
-  const [route, setRoute] = useState("All Routes");
-  const [location, setLocation] = useState("All Locations");
-  const [truckType, setTruckType] = useState("All Truck Types");
-  const [page, setPage] = useState(1);
-  const [view, setView] = useState("list");
-  const [menuFor, setMenuFor] = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [editServiceId, setEditServiceId] = useState(null);
-  const [rejectRow, setRejectRow] = useState(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [exportOpen, setExportOpen] = useState(false);
-  const [changeRecord, { isLoading: pricingChanging }] = useChangeAdminPricingRecordMutation();
-  const [exportPricingPdf] = useExportAdminPricingServicesMutation();
-  const changeLock = useRef(false);
-  const pdfExportLock = useRef(false);
+  const current = { [TABS[0]]: pick(servicesQuery), [TABS[1]]: pick(zonesQuery), [TABS[2]]: terminals, [TABS[3]]: pick(surchargesQuery) }[tab];
+  const query = { [TABS[0]]: servicesQuery, [TABS[1]]: zonesQuery, [TABS[2]]: terminalQuery, [TABS[3]]: surchargesQuery }[tab];
+  const keys = { [TABS[0]]: ["service", "code", "route", "coverage", "truckType"], [TABS[1]]: ["name", "region", "route"], [TABS[2]]: ["name"], [TABS[3]]: ["name", "appliesTo", "description"] }[tab];
+  const rows = current.filter((row) => (status === "All Statuses" || row.status === status) && matches(row, keys, q));
+  const notify = (text) => { setNotice(text); setTimeout(() => setNotice(null), 3200); };
+  const switchTab = (next) => { setTab(next); setStatus("All Statuses"); setQ(""); setOpen(null); };
 
-  const serviceOptions = useMemo(
-    () => ["All Services", ...new Set(services.map((s) => s.service).filter((value) => value !== '—'))],
-    [services],
-  );
-  const truckOptions = useMemo(
-    () => ["All Truck Types", ...new Set(services.map((s) => s.truckType).filter((value) => value !== '—'))],
-    [services],
-  );
-  const routeOptions = useMemo(
-    () => ["All Routes", ...new Set(services.map((s) => s.route).filter((value) => value !== '—'))],
-    [services],
-  );
-  const locationOptions = useMemo(
-    () => ["All Locations", ...new Set(services.map((s) => s.coverage).filter((value) => value !== '—'))],
-    [services],
-  );
+  const columns = {
+    [TABS[0]]: [
+      { key: "service", header: "Rate Card", render: (r) => <span className="fin-date"><span>{r.service}</span><small>{r.code || "Draft"}</small></span> },
+      { key: "route", header: "Route", render: (r) => isMissing(r.route) ? <NotAvailable label="Any route" /> : <span className="fin-date" style={{ whiteSpace: "normal", maxWidth: 240 }}><span>{r.route}</span>{!isMissing(r.coverage) && <small>{r.coverage}</small>}</span> },
+      { key: "equipment", header: "Equipment", render: (r) => isMissing(r.truckType) ? <NotAvailable label="Any equipment" /> : r.truckType },
+      { key: "unit", header: "Unit", render: (r) => <Badge tone="neutral">{r.unit}</Badge> },
+      { key: "base", header: "Base Rate", align: "right", render: (r) => <Money value={r.basePrice} /> },
+      { key: "total", header: "With Surcharges", align: "right", render: (r) => <Money value={r.totalPrice} /> },
+      { key: "status", header: "Status", render: (r) => <Badge tone={STATUS_TONE[r.status] || "neutral"} dot>{r.status}</Badge> },
+    ],
+    [TABS[1]]: [
+      { key: "name", header: "Zone", render: (r) => <span className="fin-date"><span>{r.name}</span><small>{r.region}</small></span> },
+      { key: "route", header: "Origin Port", render: (r) => isMissing(r.route) ? <NotAvailable label="Any port" /> : r.route },
+      { key: "rates", header: "State Rates", align: "right", render: (r) => r.services == null ? <NotAvailable /> : <span className="tk-cell-strong">{r.services}</span> },
+      { key: "updated", header: "Last Updated", render: (r) => isMissing(r.lastUpdated) ? <NotAvailable /> : r.lastUpdated },
+      { key: "status", header: "Status", render: (r) => <Badge tone={STATUS_TONE[r.status] || "neutral"} dot>{r.status}</Badge> },
+    ],
+    [TABS[2]]: [
+      { key: "name", header: "Port / Terminal", render: (r) => <span className="tk-cell-strong">{r.name}</span> },
+      { key: "km", header: "Fare per km", align: "right", render: (r) => <Money value={r.rows.baseFeePerKm?.value} /> },
+      { key: "handling", header: "Handling Fee", align: "right", render: (r) => <Money value={r.rows.handlingFee?.value} /> },
+      { key: "status", header: "Status", render: (r) => isMissing(r.status) ? <NotAvailable /> : <Badge tone={STATUS_TONE[r.status] || "neutral"} dot>{r.status.replace(" Terminal", "").replace(" / Port", "")}</Badge> },
+      { key: "edit", header: "", width: 80, render: (r) => <Button size="sm" variant="outline" icon="pencil" onClick={(event) => { event.stopPropagation(); setTerminalRow(r); }}>Edit</Button> },
+    ],
+    [TABS[3]]: [
+      { key: "name", header: "Surcharge", render: (r) => <span className="fin-date"><span>{r.name}</span><small>{r.description}</small></span> },
+      { key: "applies", header: "Applies To", render: (r) => isMissing(r.appliesTo) ? <NotAvailable label="All jobs" /> : <span style={{ whiteSpace: "normal" }}>{r.appliesTo}</span> },
+      { key: "rate", header: "Rate", align: "right", render: (r) => isMissing(r.rate) ? <NotAvailable /> : <span className="fin-money strong">{r.rate}</span> },
+      { key: "effective", header: "Effective From", render: (r) => isMissing(r.effectiveFrom) ? <NotAvailable /> : r.effectiveFrom },
+      { key: "status", header: "Status", render: (r) => <Badge tone={STATUS_TONE[r.status] || "neutral"} dot>{r.status}</Badge> },
+    ],
+  }[tab];
+  const kind = { [TABS[0]]: "service", [TABS[1]]: "zone", [TABS[3]]: "surcharge" }[tab];
+  const openRow = kind ? (row) => setOpen({ row, kind }) : (row) => setTerminalRow(row);
 
-  const filtered = useMemo(
-    () =>
-      services.filter(
-        (s) =>
-          (serviceType === "All Services" || s.service === serviceType) &&
-          (jobType === "All Job Types" || s.unit === jobType) &&
-          (route === "All Routes" || s.route === route) &&
-          (location === "All Locations" || s.coverage === location) &&
-          (truckType === "All Truck Types" || s.truckType === truckType) &&
-          (!q ||
-            [s.service, s.route, s.coverage, s.truckType].some(
-              (v) => v && v.toLowerCase().includes(q.toLowerCase()),
-            )),
-      ),
-    [services, serviceType, jobType, route, location, truckType, q],
-  );
-
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  function resetFilters() {
-    setServiceType("All Services");
-    setJobType("All Job Types");
-    setRoute("All Routes");
-    setLocation("All Locations");
-    setTruckType("All Truck Types");
-    setQ("");
-    setPage(1);
-  }
-
-  function unavailable(message) { setActionError({ error: message }); setMenuFor(null); setExportOpen(false); }
-  async function changePricing(row, action, reason) {
-    setMenuFor(null);
-    if (changeLock.current) return;
-    if (!canChangePricing(row, action, admin)) { unavailable('Your role or this pricing status does not allow this action.'); return; }
-    changeLock.current = true; setActionError(null);
-    try {
-      const saved = await changeRecord({ row, action, reason }).unwrap();
-      setNotice(action === 'reject' ? 'Pricing rejected.' : action === 'duplicate' ? 'Draft pricing version created.' : action === 'submit' ? 'Pricing submitted for approval.' : action === 'deactivate' ? 'Pricing deactivated.' : 'Pricing approved and activated.');
-      if (action === 'reject') { setRejectRow(null); setRejectReason(''); }
-      if (action === 'duplicate' && saved.entity === 'services') navigate(pricingDetailUrl(saved.id));
-    } catch (error) { setActionError(error); }
-    finally { changeLock.current = false; }
-  }
-  function exportServices() {
-    setExportOpen(false);
-    if (!servicesQuery.currentData || servicesQuery.error || servicesQuery.isFetching) { unavailable('Load the complete service pricing list before exporting.'); return; }
-    downloadPricingCsv('service-pricing.csv', ['Service', 'Route', 'Coverage', 'Truck Type / Container', 'Unit', 'Base Price', 'Surcharge', 'Total Price', 'Status', 'Last Updated'], filtered.map((row) => [row.service, row.route, row.coverage, row.truckType, row.unit, row.basePrice, row.surcharge, row.totalPrice, row.status, row.updated]));
-  }
-  async function exportServicesAsPdf() {
-    setExportOpen(false);
-    if (!servicesQuery.currentData || servicesQuery.error || servicesQuery.isFetching) { unavailable('Load the complete service pricing list before exporting.'); return; }
-    const ids = filtered.map((row) => row.id).filter(Boolean);
-    if (!ids.length) { unavailable('There are no service pricing records to export.'); return; }
-    if (pdfExportLock.current) return;
-    pdfExportLock.current = true; setActionError(null);
-    try { await exportPricingPdf({ ids }).unwrap(); }
-    catch (error) { setActionError(error); }
-    finally { pdfExportLock.current = false; }
-  }
-
-  if ([servicesQuery, summaryQuery].some((query) => !query.currentData && query.isFetching)) return <PricingLoading />;
   return (
     <>
-      <PageHeader
-        crumbs={["Finance", "Pricing"]}
-        title="Pricing"
-        description="Manage service rates, price lists and surcharges across Trukkas."
-        actions={
-          <>
-            <Button icon="plus" onClick={() => { setEditServiceId(null); setAddOpen(true); }}>
-              Add Pricing
-            </Button>
-          </>
-        }
-      />
-
-      {notice && <Banner tone="success" action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice}</Banner>}
-      {(readError || actionError) && <Banner tone="danger" title="Unable to load platform pricing" action={<Button variant="outline" onClick={() => { setActionError(null); readQueries.filter((query) => query.error).forEach((query) => query.refetch()); }}>Retry</Button>}>{pricingError(actionError || readError)}</Banner>}
-      {readQueries.some((query) => query.isFetching) && <DriverLoadingNotice>Refreshing pricing settings…</DriverLoadingNotice>}
-      <StatsPanel fixedLabel="Current settings" fixedHint="Counts reflect the current pricing setup; Avg. Price Change compares the last 30 days with the 30 days before.">
-        <StatCard
-          icon="list-checks"
-          tint="blue"
-          label="Active Price Lists"
-          value={pricingSummary.activePriceLists}
-          caption={pricingSummary.activePriceLists === '—' ? 'Summary unavailable' : undefined}
-        />
-        <StatCard
-          icon="package"
-          tint="purple"
-          label="Total Services"
-          value={pricingSummary.totalServices}
-          caption={pricingSummary.totalServices === '—' ? 'Summary unavailable' : undefined}
-        />
-        <StatCard
-          icon="trending-up"
-          tint="teal"
-          label="Avg. Price Change"
-          value={pricingSummary.avgPriceChange}
-          direction="down"
-          caption={pricingSummary.avgPriceChange === '—' ? 'Summary unavailable' : undefined}
-        />
-        <StatCard
-          icon="triangle-alert"
-          tint="amber"
-          label="Price Exceptions"
-          value={pricingSummary.priceExceptions}
-          caption={pricingSummary.priceExceptions === '—' ? 'Summary unavailable' : undefined}
-        />
-        <StatCard
-          icon="badge-percent"
-          tint="green"
-          label="Surcharges Active"
-          value={pricingSummary.surchargesActive}
-          caption={pricingSummary.surchargesActive === '—' ? 'Summary unavailable' : undefined}
-        />
+      <PageHeader crumbs={["Finance", "Pricing"]} title="Pricing"
+        description="What a trip costs: zone prices by destination state, per-km fares and terminal fees, and surcharges. Platform fees are on Platform Rates."
+        actions={<Button icon="plus" onClick={() => setZoneForm({ id: null })}>New zone</Button>} />
+      {notice && <Banner tone="success" title={notice} />}
+      <StatsPanel fixedLabel="Current setup" fixedHint="Counts reflect the pricing in use now; average change compares the last 30 days with the 30 before.">
+        <StatCard icon="map" tint="purple" label="Active Zones" value={summary?.activePriceLists ?? "—"} caption="state price lists" />
+        <StatCard icon="badge-percent" tint="green" label="Active Surcharges" value={summary?.surchargesActive ?? "—"} caption="added on top of fares" />
+        <StatCard icon="trending-up" tint="teal" label="Avg. Price Change" value={summary?.avgPriceChange ?? "—"} caption="last 30 days" />
       </StatsPanel>
-
-      <div className="pricing-layout pricing-layout-full">
-        <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
-          <Tabs
-            value={tab}
-            onChange={(v) => {
-              setTab(v);
-              setMenuFor(null);
-              setPage(1);
-            }}
-            style={{ padding: "0 var(--tk-card-pad)" }}
-            items={TABS}
-          />
-
-          {tab === "Service Pricing" && (
-            <>
-              <TableToolbar
-                search={<SearchField placeholder="Search by service, route, location or truck type…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
-                filters={<>
-                  <FilterChip name="Service" icon="tag" value={serviceType} allValue="All Services" options={serviceOptions} onChange={(v) => { setServiceType(v); setPage(1); }} />
-                  <FilterChip name="Unit" icon="ruler" value={jobType} allValue="All Job Types" options={["All Job Types", "Per Trip", "Per Day"]} onChange={(v) => { setJobType(v); setPage(1); }} />
-                  <FilterChip name="Route" icon="route" value={route} allValue="All Routes" options={routeOptions} onChange={(v) => { setRoute(v); setPage(1); }} />
-                  <FilterChip name="Location" icon="map-pin" value={location} allValue="All Locations" options={locationOptions} onChange={(v) => { setLocation(v); setPage(1); }} />
-                  <FilterChip name="Truck Type" icon="truck" value={truckType} allValue="All Truck Types" options={truckOptions} onChange={(v) => { setTruckType(v); setPage(1); }} />
-                </>}
-                onClear={serviceType !== "All Services" || jobType !== "All Job Types" || route !== "All Routes" || location !== "All Locations" || truckType !== "All Truck Types" || q.trim() ? resetFilters : undefined}
-                viewControl={
-                  <span style={{ display: "flex", border: "1px solid var(--tk-line-strong)", borderRadius: "var(--tk-r-md)", overflow: "hidden" }}>
-                    <IconButton icon="list" tone={view === "list" ? "blue" : "ghost"} style={{ borderRadius: 0 }} onClick={() => setView("list")} />
-                    <IconButton icon="grid-3x3" tone={view === "grid" ? "blue" : "ghost"} style={{ borderRadius: 0 }} onClick={() => setView("grid")} />
-                  </span>
-                }
-                trailing={
-                  <span style={{ position: "relative" }}>
-                    <Button variant="outline" icon="download" iconRight="chevron-down" onClick={() => setExportOpen((o) => !o)}>Export</Button>
-                    {exportOpen && (
-                      <span style={{ position: "absolute", right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setExportOpen(false)}>
-                        <DropdownMenu width={180} items={[
-                          { label: "Export as CSV", icon: "file-text", onClick: exportServices },
-                          { label: "Export as PDF", icon: "file-text", onClick: () => void exportServicesAsPdf() },
-                        ]} />
-                      </span>
-                    )}
-                  </span>
-                }
-              />
-
-              {servicesQuery.isFetching ? <DriverTableLoading columns={11} label="Loading service pricing" /> : view === "list" ? (
-                <DataTable
-                  rows={paged}
-                  rowKey={(r) => r.id}
-                  columns={[
-                    {
-                      key: "service",
-                      header: "Service / Job Type",
-                      render: (r) => (
-                        <Link
-                          to={pricingDetailUrl(r.id)}
-                          style={{
-                            font: "600 13px/18px var(--tk-font-sans)",
-                            color: "var(--tk-ink-900)",
-                          }}
-                        >
-                          {r.service}
-                        </Link>
-                      ),
-                    },
-                    {
-                      key: "route",
-                      header: "Route / Coverage",
-                      render: (r) => (
-                        <span style={{ display: "grid", gap: 2 }}>
-                          <span
-                            style={{
-                              font: "500 13px/18px var(--tk-font-sans)",
-                              color: "var(--tk-ink-700)",
-                            }}
-                          >
-                            {r.route}
-                          </span>
-                          <span className="tk-meta">{r.coverage}</span>
-                        </span>
-                      ),
-                    },
-                    { key: "truckType", header: "Truck Type / Container" },
-                    { key: "unit", header: "Unit" },
-                    {
-                      key: "basePrice",
-                      header: "Base Price (₦)",
-                      align: "right",
-                      render: (r) => pricingNumber(r.basePrice),
-                    },
-                    {
-                      key: "surcharge",
-                      header: "Surcharge",
-                      render: (r) => (
-                        <span style={{ display: "grid", gap: 2 }}>
-                          <span>{pricingNumber(r.surcharge)}</span>
-                          <span className="tk-meta">({r.surchargePct})</span>
-                        </span>
-                      ),
-                    },
-                    {
-                      key: "totalPrice",
-                      header: "Total Price (₦)",
-                      align: "right",
-                      render: (r) => (
-                        <span
-                          style={{
-                            font: "600 13px/18px var(--tk-font-sans)",
-                            color: "var(--tk-ink-900)",
-                          }}
-                        >
-                          {pricingNumber(r.totalPrice)}
-                        </span>
-                      ),
-                    },
-                    {
-                      key: "status",
-                      header: "Status",
-                      render: (r) => <Badge>{r.status}</Badge>,
-                    },
-                    {
-                      key: "updated",
-                      header: "Last Updated",
-                      render: (r) => (
-                        <span style={{ display: "grid", gap: 2 }}>
-                          <span>{r.updated}</span>
-                          <span className="tk-meta">{r.updatedTime}</span>
-                        </span>
-                      ),
-                    },
-                    {
-                      key: "x",
-                      header: "",
-                      width: 44,
-                      render: (r) => (
-                        <RowMenu
-                          id={r.id}
-                          menuFor={menuFor}
-                          setMenuFor={setMenuFor}
-                          items={[
-                            {
-                              label: "View Pricing",
-                              icon: "eye",
-                              onClick: () => {
-                                setMenuFor(null);
-                                navigate(pricingDetailUrl(r.id));
-                              },
-                            },
-                            {
-                              label: "Edit Pricing",
-                              icon: "pencil",
-                              disabled: r.statusCode !== 'DRAFT',
-                              onClick: () => { setMenuFor(null); setEditServiceId(r.id); setAddOpen(true); },
-                            },
-                            {
-                              label: "Duplicate",
-                              icon: "copy",
-                              onClick: () => void changePricing(r, 'duplicate'),
-                            },
-                            { label: 'Submit for Approval', icon: 'send', disabled: !canChangePricing(r, 'submit', admin), onClick: () => void changePricing(r, 'submit') },
-                            { divider: true },
-                            {
-                              label:
-                                r.status === "Active"
-                                  ? "Deactivate"
-                                  : "Activate",
-                              icon: "circle-slash",
-                              tone: "danger",
-                              onClick: () => {
-                                void changePricing(r, r.statusCode === 'ACTIVE' ? 'deactivate' : 'activate');
-                              },
-                            },
-                          ]}
-                        />
-                      ),
-                    },
-                  ]}
-                />
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(240px, 1fr))",
-                    gap: 12,
-                    padding: "0 var(--tk-card-pad) 12px",
-                  }}
-                >
-                  {paged.map((r) => (
-                    <Card
-                      key={r.id}
-                      pad="tight"
-                      style={{ display: "grid", gap: 8 }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 8,
-                        }}
-                      >
-                        <Link
-                          to={pricingDetailUrl(r.id)}
-                          style={{
-                            font: "600 13px/18px var(--tk-font-sans)",
-                            color: "var(--tk-ink-900)",
-                          }}
-                        >
-                          {r.service}
-                        </Link>
-                        <Badge>{r.status}</Badge>
-                      </div>
-                      <span className="tk-meta">
-                        {r.route} · {r.coverage}
-                      </span>
-                      <span className="tk-meta">
-                        {r.truckType} · {r.unit}
-                      </span>
-                      <span
-                        style={{
-                          font: "700 16px/22px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        {formatNaira(r.totalPrice)}
-                      </span>
-                    </Card>
-                  ))}
-                </div>
-              )}
-              <Pagination
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={servicesQuery.currentData && !servicesQuery.error ? filtered.length : '—'}
-                pageCount={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
-                onPage={setPage}
-                onPageSize={() => {}}
-              />
-            </>
-          )}
-
-          {tab === "Surcharges" && (
-            <>
-            <Banner style={{ margin: '14px var(--tk-card-pad)' }}>Terminal rates and draft surcharges can be edited here. Flat amounts are in Naira. Platform-wide fees such as the platform fee, commission, VAT and demurrage rates are on <Link to="/rates">Platform Rates</Link>.</Banner>
-            {(terminalQuery.isFetching || customSurchargesQuery.isFetching) && <><DriverLoadingNotice>Loading terminal rates…</DriverLoadingNotice><DriverTableLoading columns={5} label="Loading terminal rates" /></>}
-            {terminalQuery.error && <Banner tone="danger" title="Unable to load terminal rates" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>{pricingError(terminalQuery.error)}</Banner>}
-            {terminalQuery.currentData?.warnings.length > 0 && <Banner tone="warning" action={<Button variant="outline" onClick={terminalQuery.refetch}>Retry</Button>}>Terminal rates could not be loaded for: {terminalQuery.currentData.warnings.join(', ')}.</Banner>}
-            {!surcharges.length && !terminalQuery.isFetching && !customSurchargesQuery.isFetching && <EmptyState title="No surcharges or terminal rates" description="Retry to load the current pricing settings." />}
-            <DataTable
-              rows={surcharges}
-              rowKey={(r) => r.id}
-              columns={[
-                {
-                  key: "name",
-                  header: "Surcharge / Terminal Rate",
-                  render: (r) => (
-                    <span
-                      style={{ display: "flex", alignItems: "center", gap: 10 }}
-                    >
-                      <span
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "var(--tk-r-sm)",
-                          background: "var(--tk-warning-soft)",
-                          color: "var(--tk-warning)",
-                          display: "grid",
-                          placeItems: "center",
-                          flex: "0 0 auto",
-                        }}
-                      >
-                        <Icon name={r.icon} size={16} />
-                      </span>
-                      <span style={{ display: "grid", gap: 2 }}>
-                        <span
-                          style={{
-                            font: "600 13px/18px var(--tk-font-sans)",
-                            color: "var(--tk-ink-900)",
-                          }}
-                        >
-                          {r.name}
-                        </span>
-                        <span className="tk-meta">{r.description}</span>
-                      </span>
-                    </span>
-                  ),
-                },
-                { key: "rate", header: "Rate", render: (r) => <b>{r.rate}</b> },
-                { key: "appliesTo", header: "Applies To" },
-                { key: "effectiveFrom", header: "Effective From" },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (r) => <Badge>{r.status}</Badge>,
-                },
-                {
-                  key: "x",
-                  header: "",
-                  width: 44,
-                  render: (r) => (
-                    <RowMenu
-                      id={r.id}
-                      menuFor={menuFor}
-                      setMenuFor={setMenuFor}
-                      items={[
-                        { label: 'Edit', icon: 'pencil', disabled: !r.editable || (r.source === 'surcharge' ? customSurchargesQuery.isFetching : terminalQuery.isFetching), onClick: () => { setMenuFor(null); if (r.editable) setSetting(r); } },
-                      ]}
-                    />
-                  ),
-                },
-              ]}
-            /></>
-          )}
-
-          {tab === "Price Lists" && (listsQuery.isFetching ? <DriverTableLoading columns={6} label="Loading price lists" /> :
-            <DataTable
-              rows={priceLists}
-              rowKey={(r) => r.id}
-              columns={[
-                {
-                  key: "name",
-                  header: "Price List",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span
-                        style={{
-                          font: "600 13px/18px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        {r.name}
-                      </span>
-                      <span className="tk-meta">{r.id}</span>
-                    </span>
-                  ),
-                },
-                { key: "region", header: "Region / Coverage" },
-                { key: "services", header: "Services", align: "right", render: (r) => r.services ?? '—' },
-                { key: "currency", header: "Currency" },
-                { key: "lastUpdated", header: "Last Updated" },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (r) => <Badge>{r.status}</Badge>,
-                },
-              ]}
-            />
-          )}
-
-          {tab === "Approvals" && (approvalsLoading ? <DriverTableLoading columns={6} label="Loading pricing approvals" /> :
-            <DataTable
-              rows={pendingApprovals}
-              rowKey={(r) => `${r.entity}:${r.id}`}
-              columns={[
-                {
-                  key: "service",
-                  header: "Service / Route",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span
-                        style={{
-                          font: "600 13px/18px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        {r.service}
-                      </span>
-                      <span className="tk-meta">{r.route}</span>
-                    </span>
-                  ),
-                },
-                { key: "requestedBy", header: "Requested By" },
-                {
-                  key: "standardPrice",
-                  header: "Standard Price",
-                  align: "right",
-                  render: (r) => formatNaira(r.standardPrice),
-                },
-                {
-                  key: "exceptionPrice",
-                  header: "Requested Price",
-                  align: "right",
-                  render: (r) => (
-                    <b style={{ color: "var(--tk-blue)" }}>
-                      {formatNaira(r.exceptionPrice)}
-                    </b>
-                  ),
-                },
-                { key: "submitted", header: "Submitted" },
-                {
-                  key: "x",
-                  header: "Actions",
-                  width: 170,
-                  render: (r) => (
-                    <span style={{ display: "flex", gap: 8 }}>
-                      <Button
-                        size="sm"
-                        disabled={pricingChanging || !canChangePricing(r, r.entity === 'exceptions' ? 'approve' : 'activate', admin)}
-                        onClick={() => void changePricing(r, r.entity === 'exceptions' ? 'approve' : 'activate')}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        disabled={pricingChanging || !canChangePricing(r, 'reject', admin)}
-                        onClick={() => { setActionError(null); setRejectReason(''); setRejectRow(r); }}
-                      >
-                        Reject
-                      </Button>
-                    </span>
-                  ),
-                },
-              ]}
-            />
-          )}
-          {tab === "Approvals" &&
-            !approvalsLoading && !readError && pendingApprovals.length === 0 && (
-              <EmptyState
-                icon="circle-check"
-                title="Nothing pending"
-                description="All pricing changes and price exceptions have been reviewed."
-              />
-            )}
-
-          {tab === "Approvals" && !approvalsLoading && resolvedExceptions.length > 0 && (
-            <>
-            <h3 className="tk-section" style={{ margin: "20px var(--tk-card-pad) 8px" }}>Exception History</h3>
-            <DataTable
-              rows={resolvedExceptions}
-              rowKey={(r) => r.id}
-              columns={[
-                {
-                  key: "service",
-                  header: "Service / Route",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span
-                        style={{
-                          font: "600 13px/18px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        {r.service}
-                      </span>
-                      <span className="tk-meta">{r.route}</span>
-                    </span>
-                  ),
-                },
-                { key: "reason", header: "Reason" },
-                { key: "requestedBy", header: "Requested By" },
-                {
-                  key: "standardPrice",
-                  header: "Standard",
-                  align: "right",
-                  render: (r) => formatNaira(r.standardPrice),
-                },
-                {
-                  key: "exceptionPrice",
-                  header: "Exception",
-                  align: "right",
-                  render: (r) => formatNaira(r.exceptionPrice),
-                },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (r) => <Badge>{r.status}</Badge>,
-                },
-                { key: "submitted", header: "Submitted" },
-              ]}
-            />
-            </>
-          )}
-
-          {tab === "Price History" && (historyQuery.isFetching ? <DriverTableLoading columns={6} label="Loading price history" /> :
-            <DataTable
-              rows={history}
-              rowKey={(r) => r.id}
-              columns={[
-                {
-                  key: "service",
-                  header: "Service / Route",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span
-                        style={{
-                          font: "600 13px/18px var(--tk-font-sans)",
-                          color: "var(--tk-ink-900)",
-                        }}
-                      >
-                        {r.service}
-                      </span>
-                      <span className="tk-meta">{r.route}</span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "from",
-                  header: "From (₦)",
-                  align: "right",
-                  render: (r) => pricingNumber(r.from),
-                },
-                {
-                  key: "to",
-                  header: "To (₦)",
-                  align: "right",
-                  render: (r) => <b>{pricingNumber(r.to)}</b>,
-                },
-                {
-                  key: "pct",
-                  header: "Change",
-                  render: (r) => (
-                    <span
-                      style={{
-                        color: r.pct.startsWith("+")
-                          ? "var(--tk-success)"
-                          : "var(--tk-danger)",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {r.pct}
-                    </span>
-                  ),
-                },
-                {
-                  key: "updated",
-                  header: "Date",
-                  render: (r) => (
-                    <span style={{ display: "grid", gap: 2 }}>
-                      <span>{r.updated}</span>
-                      <span className="tk-meta">{r.time}</span>
-                    </span>
-                  ),
-                },
-                { key: "by", header: "Updated By" },
-              ]}
-            />
-          )}
-        </SectionCard>
-
-      </div>
-
-      <Modal open={Boolean(rejectRow)} title="Reject pricing" onClose={() => { if (!pricingChanging) setRejectRow(null); }} footer={<><Button variant="outline" disabled={pricingChanging} onClick={() => setRejectRow(null)}>Cancel</Button><Button variant="danger" disabled={pricingChanging || !rejectReason.trim()} onClick={() => void changePricing(rejectRow, 'reject', rejectReason)}>{pricingChanging ? 'Rejecting…' : 'Reject'}</Button></>}>
-        {actionError && <Banner tone="danger">{pricingError(actionError)}</Banner>}
-        <Textarea label="Reason for rejection" maxLength={500} disabled={pricingChanging} value={rejectReason} onChange={(event) => setRejectReason(event.target.value.slice(0, 500))} />
-      </Modal>
-      {setting && <PricingSettingModal key={setting.id} row={setting} onClose={() => setSetting(null)} onDone={setNotice} />}
-      {addOpen && <PricingServiceForm id={editServiceId} onClose={() => setAddOpen(false)} onDone={saved => { setAddOpen(false); setNotice(editServiceId ? 'Draft pricing updated.' : 'Draft pricing created.'); navigate(pricingDetailUrl(saved.id)); }} />}
+      <SectionCard title="" pad="none" className="fin-table" style={{ paddingTop: 4 }}>
+        <Tabs value={tab} onChange={switchTab} style={{ padding: "0 var(--tk-card-pad)" }} items={VISIBLE_TABS} />
+        <TableToolbar
+          search={<SearchField placeholder={`Search ${tab.toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)} />}
+          filters={<FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={statusOptions(current)} onChange={setStatus} />}
+          onClear={status !== "All Statuses" || q.trim() ? () => { setStatus("All Statuses"); setQ(""); } : undefined}
+        />
+        {query.error && <Banner tone="danger" title="Unable to load pricing" action={<Button variant="outline" size="sm" onClick={query.refetch}>Retry</Button>} style={{ margin: "0 var(--tk-card-pad) 12px" }}>{pricingError(query.error)}</Banner>}
+        {tab === TABS[2] && <p className="fin-note" style={{ padding: "0 var(--tk-card-pad) 10px" }}>The fare per km is used when no rate card or zone covers a trip. Changes apply to new quotes straight away.</p>}
+        <Table key={tab} rows={rows} columns={columns} loading={query.isFetching && !query.currentData}
+          empty={{ title: `No ${tab.toLowerCase()} found`, description: q.trim() || status !== "All Statuses" ? "Try adjusting your filters or search." : tab === TABS[0] ? "Create a rate card to price a specific lane." : "Nothing is set up here yet." }}
+          onOpen={openRow} />
+      </SectionCard>
+      {open && <RecordDrawer key={open.row.id} row={open.row} kind={open.kind} onClose={() => setOpen(null)} notify={notify} onEdit={(row) => { setOpen(null); if (open.kind === "zone") setZoneForm({ id: row.id }); else setForm({ id: row.id }); }} />}
+      {zoneForm && <ZoneEditor id={zoneForm.id} onClose={() => setZoneForm(null)} onDone={(saved) => { setZoneForm(null); notify(saved?.statusCode === "ACTIVE" ? "Zone is live." : "Zone saved and waiting for activation."); }} />}
+      {terminalRow && <TerminalDrawer terminal={terminals.find((t) => t.id === terminalRow.id) || terminalRow} onClose={() => setTerminalRow(null)} onEdit={setTerminal} />}
+      {form && <PricingServiceForm id={form.id} onClose={() => setForm(null)} onDone={(saved) => { setForm(null); notify(saved?.statusCode === "ACTIVE" ? "Rate card is live." : "Rate card saved and waiting for activation."); }} />}
+      {terminal && <RateEditDialog key={terminal.id} row={terminal} onClose={() => setTerminal(null)} onDone={notify} />}
     </>
   );
 }

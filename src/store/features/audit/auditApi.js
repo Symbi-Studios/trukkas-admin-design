@@ -84,7 +84,7 @@ function relatedRecord(dto, index = 0) {
   const targets = {
     JOB: { icon: 'package', label: 'Job', path: `/jobs/detail?id=${encoded}` },
     TRUCK: { icon: 'truck', label: 'Truck', path: `/fleet/detail?id=${encoded}` },
-    TRANSACTION: { icon: 'receipt', label: 'Transaction', path: `/transactions/detail?id=${encoded}` },
+    TRANSACTION: { icon: 'receipt', label: 'Transaction', path: `/transactions?id=${encoded}` },
     SETTLEMENT: { icon: 'coins', label: 'Settlement', path: `/settlements/detail?id=${encoded}` },
     USER: { icon: 'user', label: 'User', path: `/users/detail?id=${encoded}` },
     ADMIN: { icon: 'user', label: 'Admin', path: `/users/detail?id=${encoded}&source=admin` },
@@ -101,7 +101,7 @@ function relatedRecord(dto, index = 0) {
   if (['PAYOUT', 'TRANSACTION'].includes(type) && ['user_withdrawal', 'admin_payout'].includes(context.payoutSource)
     && (type === 'PAYOUT' || context.payoutSource === 'user_withdrawal' || text(context.payoutLogId))) {
     const payoutId = context.payoutSource === 'admin_payout' ? text(context.payoutLogId) || id : id;
-    target = { icon: 'receipt', label: 'Payout', path: `/payouts/detail?id=${encodeURIComponent(payoutId)}&source=${context.payoutSource}` };
+    target = { icon: 'receipt', label: 'Payout', path: `/payouts?id=${encodeURIComponent(payoutId)}&source=${context.payoutSource}` };
   }
   // Admin actors use the admin profile source; documents need their job context.
   target ||= { icon: 'file-text', label: label(type), path: null };
