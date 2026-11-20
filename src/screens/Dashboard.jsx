@@ -2,21 +2,20 @@
 
 
 import { useMemo } from "react";
-import { Link, useNavigate } from "../router.js";
+import { useNavigate } from "../router.js";
 import {
   Avatar,
   Badge,
   Button,
   Card,
-  DataTable,
   DonutChart,
   Icon,
   LegendList,
   PageHeader,
-  ProgressBar,
   SectionCard,
   Skeleton,
   StatCard,
+  TK_STATUS,
   StatsPanel,
 } from "../ds.js";
 import { formatNaira } from "../mock/format.js";
@@ -26,48 +25,340 @@ import styles from "./Dashboard.module.css";
 
 const compactNaira = (value) => formatNaira(value);
 
-function StarRating({ rating, reviews, trend, breakdown, allTime }) {
-  const rows = [5, 4, 3, 2, 1].map((stars) => ({
-    stars,
-    pct: breakdown?.[stars],
-  }));
-  const trendLabel = Number.isFinite(trend)
-    ? `${trend < 0 ? "↓" : "↑"} ${Math.abs(trend)} from ${allTime ? "last month" : "previous period"}`
-    : null;
+const numberFormat = new Intl.NumberFormat("en-NG");
+const formatCount = (value) => (Number.isFinite(value) ? numberFormat.format(value) : "—");
+
+/** "Apapa → Kano", "Apapa - Kano", "Apapa to Kano" → ["Apapa", "Kano"]. */
+function splitRoute(label) {
+  const text = String(label ?? "").trim();
+  const parts = text.split(/\s*(?:→|->|⇒|–|—|\s-\s|\bto\b)\s*/i).filter(Boolean);
+  return parts.length >= 2 ? [parts[0], parts.slice(1).join(" → ")] : [text || "—", null];
+}
+
+function RouteLabel({ route, className }) {
+  const [from, to] = splitRoute(route);
+  return (
+    <span className={`${styles.routeLabel}${className ? ` ${className}` : ""}`}>
+      <span>{from}</span>
+      {to && (
+        <>
+          <Icon name="arrow-right" size={12} aria-hidden="true" />
+          <span>{to}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+function TopRoutes({ routes, onSelect }) {
+  if (!routes.length) {
+    return (
+      <div className={styles.sectionEmpty}>
+        <Icon name="route" size={20} />
+        <strong>No route volume yet</strong>
+        <span>Routes rank here once trips are completed.</span>
+      </div>
+    );
+  }
+  const max = Math.max(...routes.map((route) => route.trips ?? 0), 1);
+  return (
+    <div className={styles.routes}>
+      <ol className={styles.routeList}>
+        {routes.map((route, index) => {
+          const width = route.trips == null ? 0 : Math.max((route.trips / max) * 100, 2);
+          return (
+            <li key={route.route}>
+              <button
+                type="button"
+                onClick={() => onSelect(route)}
+                title={`${route.route} · ${formatCount(route.trips)} ${route.trips === 1 ? "trip" : "trips"} · ${route.pct} of total`}
+              >
+                <span className={`${styles.rank} ${index < 3 ? styles.rankTop : ""}`}>{index + 1}</span>
+                <span className={styles.routeBody}>
+                  <span className={styles.routeHead}>
+                    <RouteLabel route={route.route} />
+                    <span className={styles.routeStats}>
+                      <span className={styles.routeTrips}>
+                        {formatCount(route.trips)} {route.trips === 1 ? "trip" : "trips"}
+                      </span>
+                      <strong className={styles.routeShare}>{route.pct}</strong>
+                    </span>
+                  </span>
+                  <span className={styles.routeBar} aria-hidden="true">
+                    <span
+                      className={index === 0 ? styles.routeBarLead : undefined}
+                      style={{ width: `${width}%` }}
+                    />
+                  </span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+const STAR_PATH =
+  "M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9z";
+
+function StarRow({ value, size = 18 }) {
+  const fill = Number.isFinite(value) ? Math.min(Math.max(value / 5, 0), 1) * 100 : 0;
+  const row = (className) => (
+    <span className={className}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+          <path d={STAR_PATH} fill="currentColor" />
+        </svg>
+      ))}
+    </span>
+  );
+  return (
+    <span
+      className={styles.starRow}
+      role="img"
+      aria-label={Number.isFinite(value) ? `${value.toFixed(1)} out of 5 stars` : "No rating"}
+    >
+      {row(styles.starBase)}
+      <span className={styles.starFill} style={{ width: `${fill}%` }}>
+        {row(styles.starFillRow)}
+      </span>
+    </span>
+  );
+}
+
+function StarRating({ rating, reviews, trend, breakdown }) {
+  const rows = [5, 4, 3, 2, 1].map((stars) => ({ stars, pct: breakdown?.[stars] }));
+  const known = rows.every((row) => row.pct != null);
+  const maxPct = Math.max(...rows.map((row) => row.pct ?? 0), 1);
+  const positive = known ? rows[0].pct + rows[1].pct : null;
+  const trendTone = !Number.isFinite(trend) ? null : trend < 0 ? styles.trendDown : styles.trendUp;
+
   return (
     <div className={styles.rating}>
-      <div className={styles.ratingHead}>
-        <span className={styles.starTile}>
-          <Icon name="star" size={22} />
+      <div className={styles.ratingHero}>
+        <strong className={styles.ratingScore}>
+          {Number.isFinite(rating) ? rating.toFixed(1) : "—"}
+          <small>/ 5</small>
+        </strong>
+        <span className={styles.ratingMeta}>
+          <StarRow value={rating} />
+          <span>{formatCount(reviews)} reviews</span>
         </span>
-        <span>
-          <strong>{Number.isFinite(rating) ? `${rating.toFixed(1)} / 5` : "—"}</strong>
-          <small>Based on {reviews ?? "—"} reviews</small>
-          {trendLabel && <em>{trendLabel}</em>}
-        </span>
+        {trendTone && (
+          <span className={`${styles.trendPill} ${trendTone}`} title="Change vs last month">
+            <Icon name={trend < 0 ? "trending-down" : "trending-up"} size={13} />
+            {trend > 0 ? "+" : ""}
+            {trend}
+          </span>
+        )}
       </div>
+
       <div className={styles.ratingRows}>
         {rows.map((row) => (
-          <div key={row.stars}>
-            <span>
-              {row.stars} <Icon name="star" size={11} />
+          <div key={row.stars} title={`${row.stars}-star: ${row.pct == null ? "—" : `${row.pct}%`}`}>
+            <span className={styles.ratingStarLabel}>
+              {row.stars}
+              <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true">
+                <path d={STAR_PATH} fill="currentColor" />
+              </svg>
             </span>
-            <ProgressBar
-              value={row.pct ?? 0}
-              color={
-                row.stars === 5
-                  ? "var(--tk-success)"
-                  : row.stars === 4
-                    ? "var(--tk-teal)"
-                    : "var(--tk-warning)"
-              }
-              height={16}
-            />
+            <span className={styles.ratingTrack}>
+              <span style={{ width: `${((row.pct ?? 0) / maxPct) * 100}%` }} />
+            </span>
             <small>{row.pct == null ? "—" : `${row.pct}%`}</small>
           </div>
         ))}
       </div>
+
+      {positive != null && (
+        <p className={styles.ratingFootnote}>
+          <Icon name="thumbs-up" size={14} />
+          <span>
+            <strong>{Number(positive.toFixed(1))}%</strong> of reviews are 4★ or higher
+          </span>
+        </p>
+      )}
     </div>
+  );
+}
+
+const HEALTH_RANK = { danger: 3, warning: 2, neutral: 1, success: 0 };
+
+function SystemHealth({ items, onSelect }) {
+  const known = items.filter((item) => item.status !== "—");
+  const healthy = items.filter((item) => item.tone === "success").length;
+  const issues = items.filter((item) => item.tone === "warning" || item.tone === "danger");
+  const worst = items.reduce(
+    (acc, item) => (HEALTH_RANK[item.tone] > HEALTH_RANK[acc] ? item.tone : acc),
+    "success",
+  );
+  const summary = !known.length
+    ? { tone: "neutral", icon: "help-circle", title: "Status unavailable", sub: "Health checks haven't reported yet" }
+    : issues.length
+      ? {
+          tone: worst === "danger" ? "danger" : "warning",
+          icon: "triangle-alert",
+          title: `${issues.length} ${issues.length === 1 ? "service needs" : "services need"} attention`,
+          sub: `${healthy} of ${items.length} services healthy`,
+        }
+      : {
+          tone: "success",
+          icon: "shield-check",
+          title: "All systems operational",
+          sub: `${healthy} of ${items.length} services healthy`,
+        };
+  const sorted = [...items].sort((a, b) => HEALTH_RANK[b.tone] - HEALTH_RANK[a.tone]);
+
+  return (
+    <div className={styles.health}>
+      <div className={`${styles.healthSummary} ${styles[`tone_${summary.tone}`]}`}>
+        <span className={styles.healthSummaryIcon}>
+          <Icon name={summary.icon} size={18} />
+        </span>
+        <span>
+          <strong>{summary.title}</strong>
+          <small>{summary.sub}</small>
+        </span>
+      </div>
+      <div className={styles.healthStrip} aria-hidden="true">
+        {sorted.map((item) => (
+          <span key={item.label} className={styles[`seg_${item.tone}`]} title={`${item.label}: ${item.status}`} />
+        ))}
+      </div>
+      <ul className={styles.healthList}>
+        {sorted.map((item) => (
+          <li key={item.label}>
+            <button type="button" onClick={() => onSelect(item)}>
+              <span className={styles.healthIcon}>
+                <Icon name={item.icon} size={15} />
+              </span>
+              <strong>{item.label}</strong>
+              <span className={`${styles.healthStatus} ${styles[`tone_${item.tone}`]}`}>
+                <i className={item.tone === "success" ? styles.pulse : undefined} />
+                {item.status}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Job labels follow the Jobs screens' vocabulary; anything they don't cover
+// (e.g. "Completed", "Pending") falls back to the shared design-system map.
+const jobTone = (status) => {
+  const tone = statusTone(status);
+  return tone === "neutral" && status !== "Cancelled" ? TK_STATUS[status] || "neutral" : tone;
+};
+const userTone = (status) => TK_STATUS[status] || statusTone(status);
+
+const JOB_ICON = { success: "circle-check", info: "truck", warning: "clock", danger: "circle-x", neutral: "package" };
+
+function RecentJobs({ jobs, onSelect }) {
+  if (!jobs.length) {
+    return (
+      <div className={styles.sectionEmpty}>
+        <Icon name="package" size={20} />
+        <strong>No jobs yet</strong>
+        <span>New jobs will show up here as they are posted.</span>
+      </div>
+    );
+  }
+  return (
+    <ul className={styles.feed}>
+      {jobs.map((job) => {
+        const tone = jobTone(job.status);
+        const meta = [job.cargo, job.company].filter(Boolean);
+        return (
+          <li key={job.id}>
+            <button type="button" className={styles.feedRow} onClick={() => onSelect(job)}>
+              <span className={`${styles.feedIcon} ${styles[`tone_${tone}`]}`}>
+                <Icon name={JOB_ICON[tone] || "package"} size={16} />
+              </span>
+              <span className={styles.feedMain}>
+                <RouteLabel route={job.routeLabel} className={styles.feedTitle} />
+                <span className={styles.feedMeta}>
+                  <span className={styles.jobId}>{job.displayId || job.id}</span>
+                  {meta.map((part) => (
+                    <span key={part}>{part}</span>
+                  ))}
+                </span>
+              </span>
+              <span className={styles.feedSide}>
+                <strong>{job.value == null ? "—" : formatNaira(job.value)}</strong>
+                <Badge tone={tone} dot>
+                  {job.status}
+                </Badge>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const TYPE_TONE = { Driver: "info", Company: "teal", Forwarder: "purple", Exporter: "orange" };
+const TYPE_ICON = { Driver: "user-round", Company: "building-2", Forwarder: "users-round", Exporter: "box" };
+const relativeFormat = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+function joinedAgo(row) {
+  if (!Number.isFinite(row.joinedTimestamp)) return row.joined;
+  const days = Math.round((row.joinedTimestamp - Date.now()) / 86_400_000);
+  if (days > 0 || days < -30) return row.joined;
+  if (days === 0) {
+    const hours = Math.round((row.joinedTimestamp - Date.now()) / 3_600_000);
+    return hours === 0 ? "Just now" : relativeFormat.format(hours, "hour");
+  }
+  return relativeFormat.format(days, "day");
+}
+
+function RecentRegistrations({ rows, onSelect }) {
+  if (!rows.length) {
+    return (
+      <div className={styles.sectionEmpty}>
+        <Icon name="users" size={20} />
+        <strong>No new registrations</strong>
+        <span>New drivers, companies and forwarders appear here.</span>
+      </div>
+    );
+  }
+  return (
+    <ul className={styles.feed}>
+      {rows.map((row) => {
+        const typeTone = TYPE_TONE[row.type] || "neutral";
+        return (
+          <li key={row.id}>
+            <button type="button" className={styles.feedRow} onClick={() => onSelect(row)}>
+              <span className={`${styles.avatarWrap} ${styles[`tone_${typeTone}`]}`}>
+                <Avatar name={row.avatar} size={34} />
+                <span className={styles.avatarType}>
+                  <Icon name={TYPE_ICON[row.type] || "user-round"} size={10} />
+                </span>
+              </span>
+              <span className={styles.feedMain}>
+                <span className={styles.feedTitle}>
+                  <span className={styles.personName}>{row.name}</span>
+                  <Badge tone={typeTone}>{row.type}</Badge>
+                </span>
+                <span className={styles.feedMeta}>
+                  <span>{row.contact}</span>
+                </span>
+              </span>
+              <span className={styles.feedSide}>
+                <small title={row.joined}>{joinedAgo(row)}</small>
+                <Badge tone={userTone(row.status)} dot>
+                  {row.status}
+                </Badge>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -145,10 +436,13 @@ export function Dashboard() {
     return { ...item, value: part?.amount, amount: part?.amount, percent: part?.percent };
   });
   const earningsKnown = earnings.every((item) => item.value != null);
-  const routes = (overview?.topRoutesByVolume || []).slice(0, 10).map((route) => ({
+  const routes = (overview?.topRoutesByVolume || []).slice(0, 5).map((route) => ({
     ...route,
     pct: route.percentOfTotal == null ? "—" : `${Number(route.percentOfTotal.toFixed(1))}%`,
   }));
+  const routeShare = routes.length && routes.every((route) => route.percentOfTotal != null)
+    ? routes.reduce((sum, route) => sum + route.percentOfTotal, 0)
+    : null;
   const rating = ratingOverview?.averageRating.average;
   const reviewCount = ratingOverview?.averageRating.totalReviews;
   const ratingTrend = ratingOverview?.averageRating.trendVsLastMonth;
@@ -244,6 +538,11 @@ export function Dashboard() {
       <section className={styles.financeGrid}>
         <SectionCard
           title="Top Routes by Volume"
+          description={
+            routeShare != null && routes.length > 1
+              ? `These ${routes.length} routes carry ${Number(Math.min(routeShare, 100).toFixed(1))}% of all trips`
+              : undefined
+          }
           action={
             <button
               className={styles.linkButton}
@@ -254,28 +553,10 @@ export function Dashboard() {
           }
           pad="none"
         >
-          <div className={styles.routeTable}>
-            <div>
-              <b>#</b>
-              <b>Route (Origin → Destination)</b>
-              <b>Trips</b>
-              <b>% of Total</b>
-            </div>
-            {routes.map((route, index) => (
-              <button
-                type="button"
-                key={route.route}
-                onClick={() =>
-                  navigate(`/jobs?route=${encodeURIComponent(route.route)}`)
-                }
-              >
-                <span>{index + 1}</span>
-                <strong>{route.route}</strong>
-                <span>{route.trips ?? "—"}</span>
-                <span>{route.pct}</span>
-              </button>
-            ))}
-          </div>
+          <TopRoutes
+            routes={routes}
+            onSelect={(route) => navigate(`/jobs?route=${encodeURIComponent(route.route)}`)}
+          />
         </SectionCard>
 
         <SectionCard
@@ -292,9 +573,11 @@ export function Dashboard() {
             />
             <LegendList
               style={{ width: "100%" }}
-              showShare={earnings.every((item) => item.percent != null)}
+              showShare={earningsKnown}
               items={earnings.map((item) => ({
                 ...item,
+                // Share of the breakdown itself, so it matches the donut and sums to 100%.
+                percent: undefined,
                 display: item.amount == null ? "—" : compactNaira(item.amount),
               }))}
             />
@@ -327,7 +610,6 @@ export function Dashboard() {
             reviews={reviewCount}
             trend={ratingTrend}
             breakdown={ratingBreakdown}
-            allTime
           />
         </SectionCard>
         <SectionCard
@@ -342,23 +624,7 @@ export function Dashboard() {
           }
           pad="none"
         >
-          <div className={styles.healthList}>
-            {systemHealth.map((item) => (
-              <button
-                type="button"
-                key={item.label}
-                onClick={() => navigate(item.route)}
-              >
-                <span className={`${styles.healthIcon} ${styles[item.tone]}`}>
-                  <Icon name={item.icon} size={16} />
-                </span>
-                <strong>{item.label}</strong>
-                <Badge tone={item.tone} dot>
-                  {item.status}
-                </Badge>
-              </button>
-            ))}
-          </div>
+          <SystemHealth items={systemHealth} onSelect={(item) => navigate(item.route)} />
         </SectionCard>
       </section>
 
@@ -375,40 +641,10 @@ export function Dashboard() {
           }
           pad="none"
         >
-          <div className={styles.compactTable}>
-            <DataTable
-              rows={recentJobs}
-              rowKey={(job) => job.id}
-              onRowClick={(job) => navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`)}
-              columns={[
-                {
-                  key: "id",
-                  header: "Job ID",
-                  render: (job) => <Link to={`/jobs/detail?id=${encodeURIComponent(job.id)}`}>{job.displayId || job.id}</Link>,
-                },
-                {
-                  key: "route",
-                  header: "Route",
-                  render: (job) => job.routeLabel,
-                },
-                { key: "cargo", header: "Cargo", render: (job) => job.cargo || "—" },
-                { key: "company", header: "Forwarder / Exporter", render: (job) => job.company || "—" },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (job) => (
-                    <Badge tone={statusTone(job.status)}>{job.status}</Badge>
-                  ),
-                },
-                {
-                  key: "value",
-                  header: "Value",
-                  align: "right",
-                  render: (job) => <strong>{job.value == null ? "—" : formatNaira(job.value)}</strong>,
-                },
-              ]}
-            />
-          </div>
+          <RecentJobs
+            jobs={recentJobs}
+            onSelect={(job) => navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`)}
+          />
         </SectionCard>
         <SectionCard
           title="Recent Registrations"
@@ -422,43 +658,7 @@ export function Dashboard() {
           }
           pad="none"
         >
-          <div className={styles.compactTable}>
-            <DataTable
-              rows={registrations}
-              rowKey={(row) => row.id}
-              onRowClick={(row) => navigate(row.route)}
-              columns={[
-                {
-                  key: "name",
-                  header: "Name",
-                  render: (row) => (
-                    <span className={styles.person}>
-                      <Avatar name={row.avatar} size={24} />
-                      <strong>{row.name}</strong>
-                    </span>
-                  ),
-                },
-                {
-                  key: "type",
-                  header: "Type",
-                  render: (row) => (
-                    <Badge tone={row.type === "Company" ? "info" : "neutral"}>
-                      {row.type}
-                    </Badge>
-                  ),
-                },
-                { key: "contact", header: "Contact" },
-                { key: "joined", header: "Joined" },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (row) => (
-                    <Badge tone={statusTone(row.status)}>{row.status}</Badge>
-                  ),
-                },
-              ]}
-            />
-          </div>
+          <RecentRegistrations rows={registrations} onSelect={(row) => navigate(row.route)} />
         </SectionCard>
       </section>
     </div>
