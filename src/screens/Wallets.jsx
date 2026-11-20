@@ -7,7 +7,7 @@ import { PageHeader, StatCard, SectionCard, TableToolbar, SearchField, DataTable
 import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from "../domain/statsPeriod.js";
 import { useUrlParams } from "../domain/urlState.js";
 import { FilterChip } from "../components/FilterChip.jsx";
-import { DateRangeFilter, EMPTY_RANGE, inRange } from "../components/finance/DateRangeFilter.jsx";
+import { DateRangeFilter, EMPTY_RANGE, inRange } from "../components/DateRangeFilter.jsx";
 import { DateCell, MiddleId, Money, PartyCell } from "../components/finance/FinanceCells.jsx";
 import {
   useGetAdminEscrowOverviewQuery, useGetAdminEscrowRegisterQuery, useGetAdminEscrowReleasesQuery,

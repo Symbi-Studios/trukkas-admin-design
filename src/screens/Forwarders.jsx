@@ -1,5 +1,6 @@
 "use client";
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+import { DateRangeFilter, EMPTY_RANGE, inRange } from '../components/DateRangeFilter.jsx';
 
 import { ViewToggle } from '../ds.js';
 
@@ -110,6 +111,7 @@ export function Forwarders() {
   const [status, setStatus] = useState("All Status");
   const [verification, setVerification] = useState("All Verification Status");
   const [location, setLocation] = useState("All Locations");
+  const [joined, setJoined] = useState(EMPTY_RANGE);
   const [type, setType] = useState("All Types");
   const [openFilter, setOpenFilter] = useState(null);
   const [menuFor, setMenuFor] = useState(null);
@@ -141,10 +143,11 @@ export function Forwarders() {
           matchesStatus &&
           matchesVerification &&
           matchesLocation &&
-          matchesType
+          matchesType &&
+          inRange(f.joinedAt, joined)
         );
       }),
-    [directoryQuery.currentData, directoryQuery.error, q, status, verification, location, type],
+    [directoryQuery.currentData, directoryQuery.error, q, status, verification, location, type, joined],
   );
 
   useEffect(() => { setPage(1); }, [q, status, verification, location, type, pageSize]);
@@ -356,6 +359,7 @@ export function Forwarders() {
                   </span>
                 )}
               </span>
+              <DateRangeFilter name="Joined" value={joined} onChange={(next) => { setJoined(next); setPage(1); }} />
               <FilterSelect label="More Filters" icon="layout-grid" onClick={() => unavailable("Additional filters")} />
             </>
           }

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
+import { DateRangeFilter, EMPTY_RANGE, inRange, isRangeSet } from '../components/DateRangeFilter.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, FilterSelect, DropdownMenu, StatCard, SectionCard, MapPanel,
@@ -44,22 +45,14 @@ function ScoreRing({ value }) {
 }
 
 const filterOptions = (rows, field, label) => [label, ...new Set(rows.map((row) => row[field]).filter(Boolean))];
-function inDateRange(value, filter) {
-  if (filter === 'All Dates') return true;
-  if (!value) return false;
-  const time = new Date(value).getTime();
-  if (!Number.isFinite(time)) return false;
-  const days = filter === 'Today' ? 1 : filter === 'Last 7 days' ? 7 : 30;
-  return Date.now() - time <= days * 86400000;
-}
-
 export function ContainerTriangulation() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
     location: 'All Locations', route: 'All Routes', container: 'All Container Types',
-    date: 'All Dates', company: 'All Companies', truck: 'All Truck Types',
+    company: 'All Companies', truck: 'All Truck Types',
   });
+  const [dates, setDates] = useState(EMPTY_RANGE);
   const [openFilter, setOpenFilter] = useState(null);
   const [sort, setSort] = useState('Best Match');
   const [radiusKm, setRadiusKm] = useState(150);
@@ -79,7 +72,6 @@ export function ContainerTriangulation() {
     location: filterOptions(rows, 'pickupLocation', 'All Locations'),
     route: filterOptions(rows, 'currentRoute', 'All Routes'),
     container: filterOptions(rows, 'container', 'All Container Types'),
-    date: rows.some((row) => row.identifiedAt) ? ['All Dates', 'Today', 'Last 7 days', 'Last 30 days'] : ['All Dates'],
     company: filterOptions(rows, 'company', 'All Companies'),
     truck: filterOptions(rows, 'truckType', 'All Truck Types'),
   }), [rows]);
@@ -90,8 +82,8 @@ export function ContainerTriangulation() {
     (filters.container === 'All Container Types' || row.container === filters.container) &&
     (filters.company === 'All Companies' || row.company === filters.company) &&
     (filters.truck === 'All Truck Types' || row.truckType === filters.truck) &&
-    inDateRange(row.identifiedAt, filters.date)
-  ), [rows, filters]);
+    (!isRangeSet(dates) || inRange(row.identifiedAt, dates))
+  ), [rows, filters, dates]);
   const sorted = useMemo(() => [...filtered].sort((a, b) => sort === 'Highest Revenue'
     ? (b.revenue ?? -1) - (a.revenue ?? -1) : (b.score ?? -1) - (a.score ?? -1)), [filtered, sort]);
   const mapPoints = useMemo(() => rows.flatMap((row) => [
@@ -135,7 +127,7 @@ export function ContainerTriangulation() {
     <div className="triangulation-filters">
       {[
         ['location', 'All Locations'], ['route', 'All Routes'], ['container', 'All Container Types'],
-        ['date', 'All Dates'], ['company', 'All Companies'], ['truck', 'All Truck Types'],
+        ['company', 'All Companies'], ['truck', 'All Truck Types'],
       ].map(([key, allLabel]) => <span key={key} style={{ position: 'relative' }}>
         <FilterSelect label={filters[key]} active={filters[key] !== allLabel}
           onClick={() => setOpenFilter(openFilter === key ? null : key)} />
@@ -146,6 +138,7 @@ export function ContainerTriangulation() {
           }))} />
         </span>}
       </span>)}
+      <DateRangeFilter value={dates} onChange={setDates} />
       <span style={{ position: 'relative' }}>
         <FilterSelect label={`Radius: ${radiusKm} km`} active={radiusKm !== 150}
           onClick={() => setOpenFilter(openFilter === 'radius' ? null : 'radius')} />

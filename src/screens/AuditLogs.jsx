@@ -1,4 +1,5 @@
 'use client';
+import { DateRangeFilter, isRangeSet, presetRange } from '../components/DateRangeFilter.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
 import { ViewToggle, TableToolbar } from '../ds.js';
@@ -29,7 +30,7 @@ import {
   StatsPanel,
 } from '../ds.js';
 import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
-import { useGetAdminAuditDirectoryQuery, useGetAdminSystemEventsQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery, auditPeriod, auditMatchesTab, auditTabAvailable, auditCsv, AUDIT_DATE_OPTIONS } from '../store/features/audit/auditApi.js';
+import { useGetAdminAuditDirectoryQuery, useGetAdminSystemEventsQuery, useGetAdminAuditScreenSummaryQuery, useGetAdminAuditDetailQuery, auditMatchesTab, auditTabAvailable, auditCsv } from '../store/features/audit/auditApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { DriverTableLoading } from './DriversLoading.jsx';
 import './AuditLogs.css';
@@ -39,7 +40,6 @@ const STATUS_TONE = { Success: 'success', Failed: 'danger' };
 
 const ACTION_TONE = { APPROVE: 'success', CREATE: 'info', UPDATE: 'warning', UPLOAD: 'purple', LOGIN: 'neutral', REJECT: 'danger', DELETE: 'danger', SYSTEM: 'neutral', VERIFY: 'success' };
 const TABS = ['All Logs', 'User Actions', 'System Events', 'Data Changes', 'Security Events', 'Login History'];
-const DATE_OPTIONS = AUDIT_DATE_OPTIONS;
 
 function MenuFilter({ value, options, icon, onChange }) {
   const [open, setOpen] = useState(false);
@@ -103,7 +103,7 @@ function AuditLogsScreen() {
   const canView = authenticated && Boolean(owner) && role === 'SUPER_ADMIN';
   const [tab, setTab] = useState('All Logs');
   const [query, setQuery] = usePageSearchState('', () => setPage(1));
-  const [draft, setDraft] = useState({ date: DATE_OPTIONS[0], user: 'All Users', module: 'All Modules', action: 'All Actions', status: 'All Statuses' });
+  const [draft, setDraft] = useState({ date: presetRange('This month'), user: 'All Users', module: 'All Modules', action: 'All Actions', status: 'All Statuses' });
   const [filters, setFilters] = useState(draft);
   const [selectedRows, setSelectedRows] = useState([]);
   const [selectedAuditId, setSelectedAuditId] = useState(null);
@@ -111,7 +111,7 @@ function AuditLogsScreen() {
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null), initialDrawer = useRef(false), active = useRef(true);
-  const period = useMemo(() => auditPeriod(filters.date), [filters.date]);
+  const period = useMemo(() => isRangeSet(filters.date) ? { dateFrom: filters.date.from, dateTo: filters.date.to } : {}, [filters.date]);
   const systemEvents = tab === 'System Events';
   const adminLogsQuery = useGetAdminAuditDirectoryQuery({ ...period, owner, role }, { skip: !canView || systemEvents, refetchOnMountOrArgChange: true });
   const systemEventsQuery = useGetAdminSystemEventsQuery({ ...period, owner, role }, { skip: !canView || !systemEvents, refetchOnMountOrArgChange: true });
@@ -138,7 +138,7 @@ function AuditLogsScreen() {
   const users = ['All Users', ...new Set(audits.map((row) => row.user).filter((value) => value !== '—'))];
   const modules = ['All Modules', ...new Set(audits.map((row) => row.module).filter((value) => value !== '—'))];
   const actions = ['All Actions', ...new Set(audits.map((row) => row.action).filter((value) => value !== '—'))];
-  const baseFilters = { date: DATE_OPTIONS[0], user: 'All Users', module: 'All Modules', action: 'All Actions', status: 'All Statuses' };
+  const baseFilters = { date: presetRange('This month'), user: 'All Users', module: 'All Modules', action: 'All Actions', status: 'All Statuses' };
 
 
 
@@ -191,7 +191,7 @@ function AuditLogsScreen() {
       <Tabs value={tab} onChange={(value) => { if ((value === 'System Events') !== systemEvents) { setSelectedAuditId(null); setSelectedRows([]); } setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
 
       <TableToolbar search={<><SearchField placeholder="Search audit logs..." value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} /></>} filters={<>
-        <MenuFilter value={draft.date} options={DATE_OPTIONS} icon="calendar-days" onChange={(date) => setDraft((old) => ({ ...old, date }))} />
+        <DateRangeFilter value={draft.date} onChange={(date) => setDraft((old) => ({ ...old, date }))} />
         <MenuFilter value={draft.user} options={users} onChange={(user) => setDraft((old) => ({ ...old, user }))} />
         <MenuFilter value={draft.module} options={modules} onChange={(module) => setDraft((old) => ({ ...old, module }))} />
         <MenuFilter value={draft.action} options={actions} onChange={(action) => setDraft((old) => ({ ...old, action }))} />

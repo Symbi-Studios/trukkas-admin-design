@@ -3,6 +3,7 @@
 import { usePageSearchState } from '../components/PageSearch.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+import { DateRangeFilter, EMPTY_RANGE, isRangeSet, rangeParams } from '../components/DateRangeFilter.jsx';
 
 
 import { useEffect, useState } from "react";
@@ -95,6 +96,7 @@ export function Documents() {
   const [typeFilter, setTypeFilter] = useState("All document types");
   const [statusFilter, setStatusFilter] = useState("All statuses");
   const [companyFilter, setCompanyFilter] = useState("All companies");
+  const [updated, setUpdated] = useState(EMPTY_RANGE);
   const [openFilter, setOpenFilter] = useState(null);
   const [openJob, setOpenJob] = useState(null);
   const [tableView, setTableView] = useState("list");
@@ -125,6 +127,7 @@ export function Documents() {
     companyId: companyFilter === "All companies" ? undefined : companyFilter,
     missing: statusFilter === "Missing Documents" ? true : undefined,
     attentionOnly: statusFilter === "Needs attention",
+    ...rangeParams(updated),
   }, {
     skip: !authenticated || search !== searchInput.trim(),
     refetchOnMountOrArgChange: true,
@@ -152,6 +155,7 @@ export function Documents() {
     setTypeFilter("All document types");
     setStatusFilter("All statuses");
     setCompanyFilter("All companies");
+    setUpdated(EMPTY_RANGE);
     setOpenFilter(null);
     setPage(1);
     setSelectedDocs([]);
@@ -351,6 +355,7 @@ export function Documents() {
                   onClick: () => selectFilter(setCompanyFilter, company.id),
                 }))}
               />
+              <DateRangeFilter name="Updated" value={updated} onChange={(next) => selectFilter(setUpdated, next)} />
             </div>
           }
           trailing={
@@ -367,7 +372,8 @@ export function Documents() {
             searchInput ||
             typeFilter !== "All document types" ||
             statusFilter !== "All statuses" ||
-            companyFilter !== "All companies"
+            companyFilter !== "All companies" ||
+            isRangeSet(updated)
               ? resetFilters
               : undefined
           }

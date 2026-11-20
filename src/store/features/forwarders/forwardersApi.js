@@ -42,7 +42,7 @@ export function adaptAdminForwarder(dto = {}) {
     statusCode: text(dto.status), status: ['PENDING_PROFILE', 'PENDING_REVIEW'].includes(dto.status) ? 'Pending' : label(dto.status),
     isExporter: dto.type === 'EXPORTER' ? true : dto.type === 'FORWARDER' ? false : dto.exporterLicenseStatus === 'VERIFIED' ? true : null, exporterLicenseStatus: text(dto.exporterLicenseStatus),
     jobs: count(dto.totalJobs), spend: dto.currency === 'NGN' ? nonNegative(dto.totalSpend) : null, currency: text(dto.currency),
-    location: text(dto.location) || '—', joined: forwarderDate(dto.joinedAt), verification: forwarderVerification(dto.verificationStatus), kycStatusCode: text(dto.verificationStatus),
+    location: text(dto.location) || '—', joined: forwarderDate(dto.joinedAt), joinedAt: text(dto.joinedAt), verification: forwarderVerification(dto.verificationStatus), kycStatusCode: text(dto.verificationStatus),
   };
 }
 export function adaptAdminForwarderProfile(response) {

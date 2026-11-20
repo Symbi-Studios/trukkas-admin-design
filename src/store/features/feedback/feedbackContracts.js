@@ -127,9 +127,12 @@ export function feedbackFilters({ search = '', status, type, channel, date = '',
     result.status = FEEDBACK_STATUSES[tab];
   }
   if (feedbackText(search)) result.search = search.trim();
-  if (date) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || feedbackTimestamp(`${date}T00:00:00+01:00`) == null) throw new Error('Choose a valid Lagos calendar date.');
-    result.dateFrom = date; result.dateTo = date;
+  // `date` is one Lagos day (YYYY-MM-DD) or an inclusive { from, to } range of them.
+  const range = typeof date === 'string' ? (date ? { from: date, to: date } : null) : (date?.from || date?.to ? date : null);
+  if (range) {
+    const valid = (day) => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) && feedbackTimestamp(`${day}T00:00:00+01:00`) != null;
+    if (!valid(range.from) || !valid(range.to) || range.from > range.to) throw new Error('Choose a valid Lagos calendar date.');
+    result.dateFrom = range.from; result.dateTo = range.to;
   }
   return { params: result, incompatible: false };
 }

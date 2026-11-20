@@ -1,5 +1,6 @@
 "use client";
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { DateRangeFilter, EMPTY_RANGE, isRangeSet, rangeParams } from '../components/DateRangeFilter.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 
@@ -58,11 +59,6 @@ const REQUEST_TYPES = [
   "Transfer / Value Chain",
   "Break-Bulk",
 ];
-const DATE_OPTIONS = [
-  "All Dates",
-  "Last 7 Days",
-  "Previous 7 Days",
-];
 const TAB_API_VALUE = {
   "Pending Approval": "pendingApproval", Bidding: "bidding", Assigned: "assigned",
   "In Transit": "inTransit", Delivered: "delivered", Cancelled: "cancelled", Flagged: "flagged",
@@ -73,22 +69,6 @@ const TRIP_TYPE_API_VALUE = {
   "Transfer / Value Chain": "PORT_TO_PORT", "Break-Bulk": "BULK_BREAK",
 };
 const DELIVERY_ROLES = new Set(["SUPER_ADMIN", "OPS_ADMIN"]);
-
-function dateRange(value) {
-  if (value === "All Dates") return {};
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const from = new Date(start);
-  const to = new Date(start);
-  if (value === "Previous 7 Days") {
-    from.setDate(from.getDate() - 13);
-    to.setDate(to.getDate() - 7);
-  } else {
-    from.setDate(from.getDate() - 6);
-  }
-  to.setHours(23, 59, 59, 999);
-  return { dateFrom: from.toISOString(), dateTo: to.toISOString() };
-}
 
 function apiErrorMessage(error, fallback) {
   return getApiErrorMessage(error, fallback);
@@ -474,7 +454,7 @@ export function JobsTrips() {
   const [cargoFilter, setCargoFilter] = useState("All Cargo");
   const [originFilter, setOriginFilter] = useState("All Locations");
   const [destinationFilter, setDestinationFilter] = useState("All Locations");
-  const [dateFilter, setDateFilter] = useState("All Dates");
+  const [dateFilter, setDateFilter] = useState(EMPTY_RANGE);
   const [menu, setMenu] = useState(null);
   const [selected, setSelected] = useState([]);
   const [selectedJobId, setSelectedJobId] = useState(null);
@@ -494,7 +474,7 @@ export function JobsTrips() {
     requiredTrucks: 1,
   });
 
-  const selectedRange = useMemo(() => dateRange(dateFilter), [dateFilter]);
+  const selectedRange = useMemo(() => rangeParams(dateFilter), [dateFilter]);
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const {
@@ -592,7 +572,7 @@ export function JobsTrips() {
   const hasLocalFilters = statusFilter !== "All Statuses" && Boolean(selectedTabFilter || !selectedStatusFilter);
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
   const filtersActive = tab !== "All Jobs" || typeFilter !== "All Types" || cargoFilter !== "All Cargo" || originFilter !== "All Locations"
-    || destinationFilter !== "All Locations" || dateFilter !== "All Dates" || Boolean(query.trim());
+    || destinationFilter !== "All Locations" || isRangeSet(dateFilter) || Boolean(query.trim());
   const statCaption = statsPeriod(statsPeriodKey).vs;
   const card = (key) => statsResponse?.cards[key];
   const statDelta = (key) => card(key)?.changePercent == null ? undefined : `${Math.abs(card(key).changePercent)}%`;
@@ -605,7 +585,7 @@ export function JobsTrips() {
     setCargoFilter("All Cargo");
     setOriginFilter("All Locations");
     setDestinationFilter("All Locations");
-    setDateFilter("All Dates");
+    setDateFilter(EMPTY_RANGE);
     setQuery("");
   }
   function exportRows(rows) {
@@ -909,7 +889,7 @@ export function JobsTrips() {
             <FilterControl name="Cargo" icon="package" value={cargoFilter} allValue="All Cargo" options={["All Cargo", ...cargoTypes]} menu={menu} setMenu={setMenu} onChange={setCargoFilter} />
             <FilterControl name="Origin" icon="map-pin" value={originFilter} allValue="All Locations" options={["All Locations", ...origins]} menu={menu} setMenu={setMenu} onChange={setOriginFilter} />
             <FilterControl name="Destination" icon="flag" value={destinationFilter} allValue="All Locations" options={["All Locations", ...destinations]} menu={menu} setMenu={setMenu} onChange={setDestinationFilter} />
-            <FilterControl name="Date" icon="calendar" value={dateFilter} allValue="All Dates" options={DATE_OPTIONS} menu={menu} setMenu={setMenu} onChange={setDateFilter} />
+            <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
             {filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}
           </div>
           <div className={styles.toolbarRight}>

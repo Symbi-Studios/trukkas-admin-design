@@ -37,7 +37,7 @@ export function adaptBroadcast(value) {
   const channels = Array.isArray(dto.channels) && dto.channels.every((channel) => text(channel)) && new Set(dto.channels).size === dto.channels.length ? dto.channels : null;
   return { id: text(dto.id), t: text(title) ? title : '—', p: text(message) ? message : '—', searchKnown: typeof dto.title === 'string' && typeof dto.message === 'string',
     type: type || '—', typeKnown: Boolean(type), icon: icons[type] || 'megaphone', aud: audience || '—', audienceKnown: Boolean(audience), statusCode: status, st: labels[status] || '—',
-    d: display.d, tm: display.tm, v: count(dto.seenCount ?? dto.viewCount), sentCount: count(dto.sentCount), acknowledgedCount: count(dto.acknowledgedCount), createdAt: timestamp(dto.createdAt), priority: priority || '—', pinned, acknowledgement, channels,
+    d: display.d, tm: display.tm, displayAt: timestamp(status === 'SCHEDULED' ? dto.scheduledFor : dto.publishedAt), v: count(dto.seenCount ?? dto.viewCount), sentCount: count(dto.sentCount), acknowledgedCount: count(dto.acknowledgedCount), createdAt: timestamp(dto.createdAt), priority: priority || '—', pinned, acknowledgement, channels,
     version: timestamp(dto.version) == null ? null : dto.version,
     form: { title, message, type: type || null, audience: mode ? audienceNames[mode] : null, targeting,
       schedule: status === 'SCHEDULED' ? 'Schedule for Later' : status ? 'Publish Now' : null,

@@ -2,6 +2,7 @@
 import { CustomSelect } from '../ds/components/forms/Select.jsx';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { DateRangeFilter, EMPTY_RANGE, presetRange, rangeParams } from '../components/DateRangeFilter.jsx';
 
 
 import { useEffect, useState } from 'react';
@@ -69,7 +70,7 @@ export function NotificationCenter() {
   const [statuses, setStatuses] = useState(['Unread']);
   const [priorities, setPriorities] = useState([]);
   const [category, setCategory] = useState('All Categories');
-  const [range, setRange] = useState('All Time');
+  const [range, setRange] = useState(EMPTY_RANGE);
   const [sort, setSort] = useState('Latest First');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -80,15 +81,12 @@ export function NotificationCenter() {
   const [settingsDraft, setSettingsDraft] = useState(null);
   const [toast, setToast] = useState('');
 
-  const dateStart = new Date();
-  dateStart.setHours(0, 0, 0, 0);
-  if (range === 'This Week') dateStart.setDate(dateStart.getDate() - 6);
-  if (range === 'This Month') dateStart.setDate(1);
+  const today = presetRange('Today'), showingToday = range.from === today.from && range.to === today.to;
   const { currentData: data, isLoading, isFetching, error, refetch } = useGetAdminNotificationsQuery(
     { page, limit: pageSize, tab: TAB_API_VALUE[tab], search: q.trim(),
       status: statuses.length === 1 ? statuses[0].toLowerCase() : 'all',
       priorities: priorities.map((value) => value.toUpperCase()).sort(),
-      category: CATEGORY_API_VALUE[category] || 'ALL', dateFrom: range === 'All Time' ? undefined : dateStart.toISOString(),
+      category: CATEGORY_API_VALUE[category] || 'ALL', ...rangeParams(range),
       sort: sort === 'Oldest First' ? 'oldest' : 'newest' },
     { refetchOnMountOrArgChange: true },
   );
@@ -208,7 +206,7 @@ export function NotificationCenter() {
         <Card pad="none">
           <Tabs value={tab} onChange={(value) => { setTab(value); setPage(1); }} items={TABS} style={{ padding: '0 16px' }} />
           <div className="notify-list-head">
-            <strong>{range === 'Today' ? 'Today' : 'Notifications'}</strong><span />
+            <strong>{showingToday ? 'Today' : 'Notifications'}</strong><span />
             <CustomSelect value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }}><option>Latest First</option><option>Oldest First</option></CustomSelect>
             <IconButton icon="list" tone="outline" onClick={() => notify('List view active')} />
           </div>
@@ -233,11 +231,11 @@ export function NotificationCenter() {
         </Card>
       </main>
       <aside className="notify-rail">
-        <SectionCard title="Filters" action={<button className="notify-link" onClick={() => { setStatuses([]); setPriorities([]); setCategory('All Categories'); setRange('All Time'); setTab('All'); setPage(1); }}>Clear all</button>}>
+        <SectionCard title="Filters" action={<button className="notify-link" onClick={() => { setStatuses([]); setPriorities([]); setCategory('All Categories'); setRange(EMPTY_RANGE); setTab('All'); setPage(1); }}>Clear all</button>}>
           <FilterTitle>Status</FilterTitle><div className="notify-checks">{['Unread', 'Read'].map((value) => <Checkbox key={value} label={value} checked={statuses.includes(value)} onChange={() => toggle(statuses, setStatuses, value)} />)}</div>
           <FilterTitle>Priority</FilterTitle><div className="notify-checks">{['High', 'Medium', 'Low'].map((value) => <Checkbox key={value} label={value} checked={priorities.includes(value)} onChange={() => toggle(priorities, setPriorities, value)} />)}</div>
           <FilterTitle>Category</FilterTitle><CustomSelect className="notify-select" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }}>{['All Categories', 'Maintenance', 'Jobs & Trips', 'Fleet', 'Finance', 'System', 'Ratings'].map((value) => <option key={value}>{value}</option>)}</CustomSelect>
-          <FilterTitle>Date Range</FilterTitle><CustomSelect className="notify-select" value={range} onChange={(event) => { setRange(event.target.value); setPage(1); }}>{['All Time', 'Today', 'This Week', 'This Month'].map((value) => <option key={value}>{value}</option>)}</CustomSelect>
+          <FilterTitle>Date Range</FilterTitle><DateRangeFilter value={range} align="right" onChange={(next) => { setRange(next); setPage(1); }} />
         </SectionCard>
         <SectionCard title="Notification Settings">
           {settingsError && <div className="notify-settings-error" role="alert">{errorMessage(settingsError, 'Could not load notification settings.')} <button className="notify-link" onClick={refetchSettings}>Try again</button></div>}
