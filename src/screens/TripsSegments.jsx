@@ -4,6 +4,7 @@ import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 import { ViewToggle, TableToolbar, SearchField } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { DateRangeFilter, EMPTY_RANGE, isRangeSet, rangeParams } from '../components/DateRangeFilter.jsx';
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
@@ -21,7 +22,6 @@ import "./Trips.css";
 const PAGE_SIZE = 10;
 const TRIP_STATUSES = ["Assigned", "In Transit", "At Pickup", "At Delivery", "Returning Container", "Delayed", "Delivered"];
 const STATUS_TO_API = { Assigned: "assigned", "In Transit": "inTransit", "At Pickup": "atPickup", "At Delivery": "atDelivery", "Returning Container": "returningContainer", Delayed: "delayed", Delivered: "completed" };
-const DATE_OPTIONS = ["All Dates", "Last 7 Days", "Previous 7 Days"];
 const tones = { Assigned: "info", "In Transit": "success", "At Pickup": "purple", "At Delivery": "orange", "Returning Container": "teal", Delayed: "danger", Delivered: "success" };
 const issueLabel = (value) => typeof value === "string" && value.trim() ? value.trim().toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "—";
 const issueDate = (value) => { const date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date.toLocaleString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"; };
@@ -46,15 +46,6 @@ function DriverCell({ trip }) {
   </span>;
 }
 
-function dateRange(value) {
-  if (value === "All Dates") return {};
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  const start = new Date(today + "T00:00:00+01:00").getTime();
-  const day = 86400000;
-  return value === "Previous 7 Days"
-    ? { dateFrom: new Date(start - 13 * day).toISOString(), dateTo: new Date(start - 6 * day - 1).toISOString() }
-    : { dateFrom: new Date(start - 6 * day).toISOString(), dateTo: new Date(start + day - 1).toISOString() };
-}
 function downloadCsv(csv) {
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
@@ -117,14 +108,14 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   useEffect(() => { const timer = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 250); return () => clearTimeout(timer); }, [searchInput]);
   const [originFilter, setOriginFilter] = useState("All Locations"), [destFilter, setDestFilter] = useState("All Locations");
   const [driverFilter, setDriverFilter] = useState("All Drivers"), [driverId, setDriverId] = useState(null);
-  const [dateFilter, setDateFilter] = useState("All Dates"), [menu, setMenu] = useState(null);
+  const [dateFilter, setDateFilter] = useState(EMPTY_RANGE), [menu, setMenu] = useState(null);
   const [selectedId, setSelectedId] = useState(null), [zoom, setZoom] = useState(100), [fitVersion, setFitVersion] = useState(0);
   const [contactOpen, setContactOpen] = useState(false), [message, setMessage] = useState("");
   const [delayTarget, setDelayTarget] = useState(null), [reason, setReason] = useState(""), [actionError, setActionError] = useState("");
   const [toast, setToast] = useState(null);
   const active = useRef(true), actionLock = useRef(false), selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
-  const selectedRange = useMemo(() => dateRange(dateFilter), [dateFilter]);
+  const selectedRange = useMemo(() => rangeParams(dateFilter), [dateFilter]);
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const session = { owner, role };
@@ -179,11 +170,11 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
   function choose(setter, value) { setter(value); setPage(1); setMenu(null); }
   function selectTrip(t) { setSelectedId(t.id); setZoom(100); setFitVersion(0); setContactOpen(false); setMessage(""); setActionError(""); setMenu(null); }
   function closeTrip() { if (actionBusy) return; setSelectedId(null); setContactOpen(false); setMessage(""); setActionError(""); }
-  const filtersActive = statusFilter !== "All Trips" || originFilter !== "All Locations" || destFilter !== "All Locations" || driverFilter !== "All Drivers" || dateFilter !== "All Dates" || Boolean(search);
+  const filtersActive = statusFilter !== "All Trips" || originFilter !== "All Locations" || destFilter !== "All Locations" || driverFilter !== "All Drivers" || isRangeSet(dateFilter) || Boolean(search);
   function resetFilters() {
     setSearchInput(''); setSearch('');
     setStatusFilter("All Trips"); setOriginFilter("All Locations"); setDestFilter("All Locations");
-    setDriverFilter("All Drivers"); setDriverId(null); setDateFilter("All Dates"); setMenu(null); setPage(1);
+    setDriverFilter("All Drivers"); setDriverId(null); setDateFilter(EMPTY_RANGE); setMenu(null); setPage(1);
   }
   async function exportTrips() {
     if (exporting || !authenticated) return;
@@ -215,7 +206,6 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
       onClick: () => choose(menu.key === "origin" ? setOriginFilter : setDestFilter, s) }))
     : menu?.key === "driver" ? [{ label: "All Drivers", onClick: () => { setDriverId(null); choose(setDriverFilter, "All Drivers"); } },
       ...(options?.drivers || []).map((d) => ({ label: d.label, icon: d.id === driverId ? "check" : undefined, onClick: () => { setDriverId(d.id); choose(setDriverFilter, d.label); } }))]
-    : menu?.key === "date" ? DATE_OPTIONS.map((s) => ({ label: s, icon: s === dateFilter ? "check" : undefined, onClick: () => choose(setDateFilter, s) }))
     : [];
 
   const cols = [
@@ -283,7 +273,7 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
 <FilterChip icon="map-pin" label="Origin" value={originFilter} active={originFilter !== "All Locations"} onOpen={(e) => openMenu(e, "origin")} onClear={() => choose(setOriginFilter, "All Locations")} />
 <FilterChip icon="flag" label="Destination" value={destFilter} active={destFilter !== "All Locations"} onOpen={(e) => openMenu(e, "destination")} onClear={() => choose(setDestFilter, "All Locations")} />
 <FilterChip icon="user" label="Driver" value={driverFilter} active={driverFilter !== "All Drivers"} onOpen={(e) => openMenu(e, "driver")} onClear={() => { setDriverId(null); choose(setDriverFilter, "All Drivers"); }} />
-<FilterChip icon="calendar" label="Date" value={dateFilter} active={dateFilter !== "All Dates"} onOpen={(e) => openMenu(e, "date")} onClear={() => choose(setDateFilter, "All Dates")} />
+<DateRangeFilter value={dateFilter} onChange={(next) => choose(setDateFilter, next)} />
 {filtersActive && <button type="button" className="tk-clear-filters" onClick={resetFilters}>Clear all</button>}</>} viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} map />} trailing={<Button variant="outline" icon="download" disabled={exporting || !authenticated || total == null || total === 0} onClick={() => void exportTrips()}>Export</Button>} />
 
         {tableView !== 'map' && listLoading && <div aria-busy="true" style={{ padding: 18 }}><Skeleton height={260} /></div>}

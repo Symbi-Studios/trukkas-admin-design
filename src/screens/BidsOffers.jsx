@@ -4,6 +4,14 @@ import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 import { ViewToggle, TableToolbar } from '../ds.js';
 
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { DateRangeFilter, rangeParams } from '../components/DateRangeFilter.jsx';
+
+// Bids always load for a date range; the default is the current Monday–Sunday week in Lagos.
+function currentWeek() {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const day = new Date(today + 'T00:00:00Z'), monday = new Date(day.getTime() - ((day.getUTCDay() + 6) % 7) * 86400000);
+  return { from: monday.toISOString().slice(0, 10), to: new Date(monday.getTime() + 6 * 86400000).toISOString().slice(0, 10) };
+}
 
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +38,7 @@ import {
 import { DEFAULT_STATS_PERIOD, statsPeriodRange } from '../domain/statsPeriod.js';
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
-import { bidScreenDateOptions, selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenOfferQuery } from "../store/features/bids/bidScreenApi.js";
+import { selectBidScreenRows, useGetAdminBidScreenDirectoryQuery, useGetAdminBidScreenAnalyticsQuery, useGetAdminBidScreenOfferQuery } from "../store/features/bids/bidScreenApi.js";
 import { useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation } from "../store/features/jobs/jobDetailApi.js";
 import "./Operations.css";
 
@@ -120,13 +128,12 @@ function BidsOffersContent({owner,role,authenticated}) {
   const [tableView, setTableView] = useState('list');
   const navigate=useNavigate();
   const [bidType,setBidType]=useState("All Bids"),[page,setPage]=useState(1),[q,setQ]=usePageSearchState("", () => setPage(1));
-  const [statusFilter,setStatusFilter]=useState("All Status"),[dateKey,setDateKey]=useState("week");
+  const [statusFilter,setStatusFilter]=useState("All Status"),[dateRange,setDateRange]=useState(currentWeek);
   const [menu,setMenu]=useState(null),[offerModal,setOfferModal]=useState(null),[toast,setToast]=useState(null),[offerError,setOfferError]=useState("");
   const [offerReason,setOfferReason]=useState("");
   const offerActionLock=useRef(false);
-  const dateOptions=useMemo(()=>bidScreenDateOptions(),[]);
-  const selectedDate=dateOptions.find((d)=>d.key===dateKey)||dateOptions[0],dateRange=selectedDate.label;
-  const session={owner,role},dates={dateFrom:selectedDate.dateFrom,dateTo:selectedDate.dateTo};
+  const defaultWeek=useMemo(currentWeek,[]),isDefaultRange=dateRange.from===defaultWeek.from&&dateRange.to===defaultWeek.to;
+  const session={owner,role},dates=useMemo(()=>rangeParams(dateRange),[dateRange]);
   const directoryQuery=useGetAdminBidScreenDirectoryQuery(session,{skip:!authenticated,refetchOnMountOrArgChange:true});
   const [statsPeriodKey,setStatsPeriodKey]=useState(DEFAULT_STATS_PERIOD);
   const statsRange=useMemo(()=>statsPeriodRange(statsPeriodKey),[statsPeriodKey]);
@@ -144,11 +151,10 @@ function BidsOffersContent({owner,role,authenticated}) {
   const pageCount=Math.max(1,Math.ceil(pageRows.length/8));
   const overviewKnown=Boolean(data?.overviewKnown),rowsKnown=Boolean(data&&(isCounterOfferView?data.offersKnown:overviewKnown));
   useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(null),2600);return()=>clearTimeout(timer);},[toast]);
-  useEffect(()=>{setPage(1);},[bidType,q,statusFilter,dateKey]);
+  useEffect(()=>{setPage(1);},[bidType,q,statusFilter,dateRange]);
   useEffect(()=>{if(page>pageCount)setPage(pageCount);},[page,pageCount]);
   function openMenu(event,key){const anchor=event.currentTarget;setMenu((previous)=>previous?.key===key?null:{key,anchor});}
-  const menuItems=menu?.key==="date"?dateOptions.map((d)=>({label:d.label,icon:d.key===dateKey?"check":undefined,onClick:()=>{setDateKey(d.key);setPage(1);setMenu(null);}}))
-    :menu?.key === "type" ? ["All Bids", "Counter Offers"].map((value) => ({label:value,icon:value===bidType?"check":undefined,onClick:()=>{setBidType(value);setStatusFilter("All Status");setPage(1);setMenu(null);}}))
+  const menuItems=menu?.key === "type" ? ["All Bids", "Counter Offers"].map((value) => ({label:value,icon:value===bidType?"check":undefined,onClick:()=>{setBidType(value);setStatusFilter("All Status");setPage(1);setMenu(null);}}))
     :["All Status",...(isCounterOfferView ? ["Pending", "Accepted", "Rejected", "Expired", "Withdrawn"] : STATUSES)].map((s)=>({label:s,icon:s===statusFilter?"check":undefined,onClick:()=>{setStatusFilter(s);setPage(1);setMenu(null);}}));
   function viewJob(row){if(row.jobId)navigate("/jobs/detail?id="+encodeURIComponent(row.jobId));else setToast({tone:"info",title:"Job details are unavailable."});}
   async function resolveOffer(offer,accept){
@@ -173,7 +179,7 @@ function BidsOffersContent({owner,role,authenticated}) {
     const cell=(v)=>{const s=String(v??"");return '"'+(/^[=+\-@\t\r]/.test(s)?"'":"")+s.replaceAll('"','""')+'"';};
     const csv=[header,...rows].map((r)=>r.map(cell).join(",")).join("\r\n");
     const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})),link=document.createElement("a");
-    link.href=url;link.download="trukkas-bids-"+dateKey+".csv";document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),0);
+    link.href=url;link.download="trukkas-bids-"+dateRange.from+"_"+dateRange.to+".csv";document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),0);
     setToast({tone:"success",title:pageRows.length+" record(s) exported."});
   }
   const cols = [
@@ -301,11 +307,11 @@ function BidsOffersContent({owner,role,authenticated}) {
             filters={<>
               <FilterSelect prefix="Status" icon="circle-dot" label={statusFilter} active={statusFilter !== 'All Status'} onClick={(event) => openMenu(event, 'status')} onClear={() => setStatusFilter('All Status')} />
               <FilterSelect prefix="Type" icon="layers" label={bidType} active={bidType !== 'All Bids'} onClick={(event) => openMenu(event, 'type')} onClear={() => { setBidType('All Bids'); setStatusFilter('All Status'); }} />
-              <FilterSelect prefix="Date" icon="calendar" label={dateRange} active onClick={(event) => openMenu(event, 'date')} />
+              <DateRangeFilter value={dateRange} required onChange={(next) => { setDateRange(next); setPage(1); setMenu(null); }} />
             </>}
             viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
             trailing={<Button variant="outline" icon="download" disabled={!rowsKnown || !pageRows.length} onClick={exportRows}>Export</Button>}
-            onClear={q || statusFilter !== 'All Status' || bidType !== 'All Bids' || dateKey !== 'week' ? () => { setQ(''); setStatusFilter('All Status'); setBidType('All Bids'); setDateKey('week'); setPage(1); setMenu(null); } : undefined}
+            onClear={q || statusFilter !== 'All Status' || bidType !== 'All Bids' || !isDefaultRange ? () => { setQ(''); setStatusFilter('All Status'); setBidType('All Bids'); setDateRange(defaultWeek); setPage(1); setMenu(null); } : undefined}
           />
           {directoryQuery.isFetching ? <BidsTableLoading columns={isCounterOfferView ? offerCols : cols} /> : !rowsKnown ? <DriverLoadingNotice>—</DriverLoadingNotice> : isCounterOfferView ? (
             <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.offers} boardOnRowClick={openOffer} view={tableView} boardGroupBy={(row) => row.statusCode}

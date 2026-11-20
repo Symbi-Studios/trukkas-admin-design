@@ -36,7 +36,7 @@ import { DriverTableLoading } from "./DriversLoading.jsx";
 import styles from "./Transactions.module.css";
 import { useUrlParams } from "../domain/urlState.js";
 import { FilterChip, datePresetRange } from "../components/FilterChip.jsx";
-import { DateRangeFilter } from "../components/finance/DateRangeFilter.jsx";
+import { DateRangeFilter } from "../components/DateRangeFilter.jsx";
 import { DateCell, MiddleId, Money, PartyCell } from "../components/finance/FinanceCells.jsx";
 import { TransactionDrawer, TRANSACTION_STATUS_TONE, TRANSACTION_TYPE_TONE } from "./TransactionDrawer.jsx";
 

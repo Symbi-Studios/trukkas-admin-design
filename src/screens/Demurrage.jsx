@@ -10,7 +10,7 @@ import { useGetAdminFeeDeductionsQuery } from "../store/features/fees/feeTabsApi
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { useUrlParams } from "../domain/urlState.js";
 import { FilterChip } from "../components/FilterChip.jsx";
-import { DateRangeFilter, EMPTY_RANGE, inRange } from "../components/finance/DateRangeFilter.jsx";
+import { DateRangeFilter, EMPTY_RANGE, inRange } from "../components/DateRangeFilter.jsx";
 import { DateCell, MiddleId, Money, PartyCell } from "../components/finance/FinanceCells.jsx";
 import { DemurrageDrawer, DEMURRAGE_STATUS_TONE } from "./DemurrageDrawer.jsx";
 import { DriverTableLoading } from "./DriversLoading.jsx";

@@ -31,7 +31,7 @@ import {
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import { FilterChip } from "../components/FilterChip.jsx";
-import { DateRangeFilter, EMPTY_RANGE, inRange } from "../components/finance/DateRangeFilter.jsx";
+import { DateRangeFilter, EMPTY_RANGE, inRange } from "../components/DateRangeFilter.jsx";
 import { DateCell, MiddleId, Money, PartyCell, formatNaira as naira, partyRole } from "../components/finance/FinanceCells.jsx";
 import { PayoutDrawer, PAYOUT_STATUS_TONE } from "./PayoutDrawer.jsx";
 import { useUrlParams } from "../domain/urlState.js";

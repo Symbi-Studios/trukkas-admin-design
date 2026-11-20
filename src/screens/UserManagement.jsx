@@ -1,5 +1,6 @@
 'use client';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+import { DateRangeFilter, EMPTY_RANGE, inRange } from '../components/DateRangeFilter.jsx';
 
 import { ViewToggle } from '../ds.js';
 
@@ -98,6 +99,7 @@ export function UserManagement() {
   const [role, setRole] = useState('All Roles');
   const [status, setStatus] = useState('All Statuses');
   const [entity, setEntity] = useState('All Entities');
+  const [joined, setJoined] = useState(EMPTY_RANGE);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState([]);
@@ -114,8 +116,9 @@ export function UserManagement() {
     managedUserMatchesRole(u, role) &&
     (status === 'All Statuses' || u.status === status) &&
     (entity === 'All Entities' || u.entity === entity) &&
+    inRange(u.joinedAt, joined) &&
     (!q || [u.name, u.email, u.phone, u.entity].some((s) => s !== '—' && s && s.toLowerCase().includes(q.toLowerCase())))
-  )), [users, role, status, entity, q]);
+  )), [users, role, status, entity, joined, q]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -126,7 +129,7 @@ export function UserManagement() {
   }, [filtered, pageCount]);
 
   function resetFilters() {
-    setRole('All Roles'); setStatus('All Statuses'); setEntity('All Entities'); setQ(''); setPage(1);
+    setRole('All Roles'); setStatus('All Statuses'); setEntity('All Entities'); setJoined(EMPTY_RANGE); setQ(''); setPage(1);
   }
 
   function resetForm() { formVersion.current += 1; setAddOpen(false); setForm(EMPTY_FORM); setSaving(false); }
@@ -220,6 +223,7 @@ export function UserManagement() {
                 onChange={(v) => { setStatus(v); setPage(1); }} />
               <FilterButton value={entity} options={['All Entities', ...entities]} active={entity !== 'All Entities'}
                 onChange={(v) => { setEntity(v); setPage(1); }} />
+              <DateRangeFilter name="Joined" value={joined} onChange={(next) => { setJoined(next); setPage(1); }} />
             </>}
             trailing={<Button variant="outline" icon="download" onClick={exportUsers}>Export</Button>}
             onClear={resetFilters} />

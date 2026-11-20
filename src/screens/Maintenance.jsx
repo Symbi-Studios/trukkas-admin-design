@@ -1,4 +1,5 @@
 "use client";
+import { DateRangeFilter, EMPTY_RANGE, rangeParams } from '../components/DateRangeFilter.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 
 import { ViewToggle, TableToolbar } from '../ds.js';
@@ -111,7 +112,7 @@ export function Maintenance() {
     [status, setStatus] = useState("All Statuses"),
     [priority, setPriority] = useState("All Priorities"),
     [type, setType] = useState("All Types"),
-    [date, setDate] = useState(""),
+    [date, setDate] = useState(EMPTY_RANGE),
     [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(PAGE_SIZE),
     [schedule, setSchedule] = useState(false),
@@ -131,7 +132,7 @@ export function Maintenance() {
     [toast, setToast] = useState(""),
     [pendingOnly, setPendingOnly] = useState(false);
   const conflicting = status !== "All Statuses" && (pendingOnly || tab !== "All Maintenance" && status !== tab);
-  const args = { owner, tab: pendingOnly ? "requested" : maintenanceTabs[status !== "All Statuses" ? status : tab], search: q.trim(), priority: priority === "All Priorities" ? undefined : priority.toUpperCase(), type: type === "All Types" ? undefined : type.toUpperCase(), ...(date ? { dateFrom: `${date}T00:00:00+01:00`, dateTo: `${date}T23:59:59.999+01:00` } : {}), page, limit: pageSize };
+  const args = { owner, tab: pendingOnly ? "requested" : maintenanceTabs[status !== "All Statuses" ? status : tab], search: q.trim(), priority: priority === "All Priorities" ? undefined : priority.toUpperCase(), type: type === "All Types" ? undefined : type.toUpperCase(), ...rangeParams(date), page, limit: pageSize };
   const list = useGetAdminMaintenanceQuery(args, { skip: !authenticated || conflicting, refetchOnMountOrArgChange: true });
   const statsQuery = useGetAdminMaintenanceStatsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const stats = statsQuery.error ? null : statsQuery.currentData;
@@ -468,11 +469,10 @@ export function Maintenance() {
               {TYPES.map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </CustomSelect><input
-              className="maint-select"
-              type="date"
+            </CustomSelect><DateRangeFilter
+              name="Due"
               value={date}
-              onChange={(e) => { setDate(e.target.value); setPage(1); }}
+              onChange={(next) => { setDate(next); setPage(1); }}
             /><Button
               variant="outline"
               icon="rotate-ccw"
@@ -482,7 +482,7 @@ export function Maintenance() {
                 setStatus("All Statuses");
                 setPriority("All Priorities");
                 setType("All Types");
-                setDate("");
+                setDate(EMPTY_RANGE);
                 setPage(1);
               }}
             >

@@ -1,5 +1,6 @@
 "use client";
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
+import { DateRangeFilter, EMPTY_RANGE, inRange } from '../components/DateRangeFilter.jsx';
 
 import { ViewToggle, TableToolbar } from '../ds.js';
 
@@ -94,6 +95,7 @@ export function Announcements() {
     [status, setStatus] = useState("All"),
     [type, setType] = useState("All"),
     [audience, setAudience] = useState("All"),
+    [dates, setDates] = useState(EMPTY_RANGE),
     [page, setPage] = useState(1),
     [menu, setMenu] = useState(null),
     [toast, setToast] = useState("");
@@ -127,12 +129,13 @@ export function Announcements() {
         (r) =>
           (type === "All" || r.type === type) &&
           (audience === "All" || r.aud === audience) &&
+          inRange(r.displayAt, dates) &&
           (!q.trim() ||
             [r.t, r.p, r.id].some((v) =>
               v.toLowerCase().includes(q.trim().toLowerCase()),
             )),
       ),
-    [rows, tab, status, type, audience, q],
+    [rows, tab, status, type, audience, dates, q],
   );
   const total = available ? filtered.length : null;
   const pageCount = total == null ? null : Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -259,7 +262,7 @@ export function Announcements() {
               {[...new Set((allRows || []).filter((r) => r.audienceKnown).map((r) => r.aud))].map((x) => (
                 <option key={x}>{x}</option>
               ))}
-            </CustomSelect><Button
+            </CustomSelect><DateRangeFilter value={dates} onChange={(next) => { setDates(next); setPage(1); }} /><Button
               variant="outline"
               icon="rotate-ccw"
               onClick={() => {
@@ -267,6 +270,7 @@ export function Announcements() {
                 setStatus("All");
                 setType("All");
                 setAudience("All");
+                setDates(EMPTY_RANGE);
                 setPage(1);
               }}
             >

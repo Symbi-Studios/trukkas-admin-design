@@ -9,7 +9,7 @@ import { useGetAdminFeeTransactionsQuery } from "../store/features/fees/feeTabsA
 import { useFeeOperations } from "../store/features/fees/useFeeOperations.js";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { FilterChip } from "../components/FilterChip.jsx";
-import { DateRangeFilter, EMPTY_RANGE } from "../components/finance/DateRangeFilter.jsx";
+import { DateRangeFilter, EMPTY_RANGE } from "../components/DateRangeFilter.jsx";
 import { DateCell, MiddleId, Money, PartyCell } from "../components/finance/FinanceCells.jsx";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import { TransactionDrawer } from "./TransactionDrawer.jsx";

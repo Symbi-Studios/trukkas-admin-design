@@ -8,7 +8,7 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { VerificationDateRangeDialog } from './VerificationDateRangeDialog.jsx';
+import { DateRangeFilter, EMPTY_RANGE } from '../components/DateRangeFilter.jsx';
 import { verificationDateParams } from '../store/features/verification/verificationDates.js';
 import { Link, useNavigate } from '../router.js';
 import {
@@ -80,7 +80,6 @@ function VerificationScreen() {
   const [range, setRange] = useState(null);
   const [entityType, setEntityType] = useState('All Types');
   const [verType, setVerType] = useState('All Types');
-  const [dateDialog, setDateDialog] = useState(false);
   const allTime = useGetAdminVerificationSummaryQuery({ owner: operations.owner, role: operations.role }, { skip: !operations.authenticated, refetchOnMountOrArgChange: true });
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
@@ -164,7 +163,7 @@ function VerificationScreen() {
               onChange={(v) => { setStatus(v === 'Expiring Soon' ? 'All Statuses' : v); setTab(v === 'Expiring Soon' ? v : 'All Verifications'); setPage(1); }} />
             <FilterButton value={riskLevel} options={['All Levels', ...RISK_LEVELS]} active={riskLevel !== 'All Levels'}
               onChange={(v) => { setRiskLevel(v); setPage(1); }} />
-            <FilterSelect label="Date Range" icon="calendar" active={Boolean(range)} onClick={() => setDateDialog(true)} />
+            <DateRangeFilter value={range || EMPTY_RANGE} onChange={next => { setRange(next.from && next.to ? next : null); setPage(1); setMenuFor(null); }} />
           </>}
           trailing={<Button variant="outline" icon="download" onClick={exportReport}>Export</Button>}
           onClear={resetFilters} />
@@ -226,7 +225,6 @@ function VerificationScreen() {
           pageCount={Math.max(1, Math.ceil(filtered.length / pageSize))}
           onPage={(next) => setPage(Math.max(1, Math.min(next, Math.max(1, Math.ceil(filtered.length / pageSize)))))} onPageSize={(size) => { if (Number.isInteger(size) && size > 0) { setPageSize(size); setPage(1); } }} />
       </SectionCard>
-      {dateDialog && <VerificationDateRangeDialog range={range} onClose={() => setDateDialog(false)} onApply={next => { setRange(next); setPage(1); setMenuFor(null); setDateDialog(false); }} />}
       {dialog && <VerificationActionDialog key={operations.owner + dialog.action + (dialog.model?.id || '')} {...dialog} canManage={operations.canManage} onClose={() => setDialog(null)} />}
     </>
   );

@@ -270,8 +270,8 @@ export const documentsApi = baseApi.injectEndpoints({
       providesTags: ['AdminDocReviewStats'],
     }),
     getAdminDocReviewQueue: builder.query({
-      async queryFn({ status = 'all', search, documentType, companyId, missing, attentionOnly = false, page = 1, limit = 20 } = {}, _api, _options, baseQuery) {
-        const params = { status, ...(search ? { search } : {}), ...(documentType ? { documentType: documentType.toUpperCase() } : {}), ...(companyId ? { companyId } : {}), ...(missing === true ? { missing: true } : {}) };
+      async queryFn({ status = 'all', search, documentType, companyId, missing, attentionOnly = false, dateFrom, dateTo, page = 1, limit = 20 } = {}, _api, _options, baseQuery) {
+        const params = { status, ...(search ? { search } : {}), ...(dateFrom && dateTo ? { dateFrom, dateTo } : {}), ...(documentType ? { documentType: documentType.toUpperCase() } : {}), ...(companyId ? { companyId } : {}), ...(missing === true ? { missing: true } : {}) };
         // The existing By Status default combines awaiting + rejected jobs.
         // Preserve that union using the complete server-filtered collection.
         if (attentionOnly) {
