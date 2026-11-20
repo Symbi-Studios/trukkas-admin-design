@@ -1,0 +1,65 @@
+/* Finance › Pricing › Port Rates. Tokens only; the port menu reuses .fin-rates-nav. */
+
+.layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--tk-grid-gap); align-items: start; padding: 4px var(--tk-card-pad) var(--tk-card-pad); }
+.nav { top: 76px; }
+
+.panel { display: grid; gap: 18px; min-width: 0; }
+.stack { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.stack strong { font: 600 13px/18px var(--tk-font-sans); color: var(--tk-ink-900); }
+.stack small { font: 400 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.stackRight { display: inline-grid; justify-items: end; gap: 0; }
+.stackRight small { font: 400 11px/14px var(--tk-font-sans); color: var(--tk-ink-400); }
+
+.head { display: flex; align-items: center; gap: 14px; }
+.head h3 { margin: 0; font: 700 18px/24px var(--tk-font-sans); color: var(--tk-ink-900); letter-spacing: -0.01em; }
+.portIcon { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: var(--tk-r-lg); background: var(--tk-blue-soft); color: var(--tk-blue); }
+
+.levers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.lever { display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--tk-line); border-radius: var(--tk-r-lg); background: var(--tk-surface); min-width: 0; }
+.leverIcon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: var(--tk-r-md); background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
+.leverIcon[data-tone="amber"] { background: var(--tk-warning-soft); color: var(--tk-warning); }
+.leverIcon[data-tone="blue"] { background: var(--tk-blue-soft); color: var(--tk-blue); }
+.leverLabel { font: 500 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.leverValue { font: 700 20px/26px var(--tk-font-sans) !important; color: var(--tk-ink-900); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+.block { display: grid; gap: 10px; min-width: 0; }
+.blockHead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid var(--tk-line); }
+.blockHead h4 { margin: 0; font: 600 14px/20px var(--tk-font-sans); color: var(--tk-ink-900); }
+.blockHead p { margin: 2px 0 0; font: 400 12px/17px var(--tk-font-sans); color: var(--tk-ink-400); }
+
+.equipment { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.equipmentIcon { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: var(--tk-r-md); background: var(--tk-blue-soft); color: var(--tk-blue); }
+.equipmentIcon[data-bulk="true"] { background: var(--tk-warning-soft); color: var(--tk-warning); }
+
+.terminals { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border: 1px solid var(--tk-line); border-radius: var(--tk-r-lg); overflow: hidden; }
+.terminals li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--tk-surface); color: var(--tk-ink-400); }
+.terminals li + li { border-top: 1px solid var(--tk-line); }
+.terminals li[data-inactive="true"] { background: var(--tk-surface-soft); }
+.terminals li[data-inactive="true"] .stack strong { color: var(--tk-ink-500); }
+
+.check { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 16px; align-items: start; padding: 16px; border-radius: var(--tk-r-lg); background: var(--tk-surface-sunk); }
+.checkInputs { display: grid; gap: 14px; min-width: 0; }
+.checkPair { display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); gap: 12px; }
+.steps { background: var(--tk-surface); }
+.steps .muted { opacity: 0.55; }
+.checkEmpty { display: flex; align-items: center; gap: 10px; min-height: 120px; padding: 16px; border: 1px dashed var(--tk-line); border-radius: var(--tk-r-lg); background: var(--tk-surface); color: var(--tk-ink-400); font: 400 13px/18px var(--tk-font-sans); }
+
+/* Dialog: current → new under each field */
+.field { display: grid; gap: 6px; }
+.was { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font: 400 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }
+.was strong { font-weight: 600; color: var(--tk-ink-700); font-variant-numeric: tabular-nums; }
+.was .next { color: var(--tk-blue); }
+
+/* Below 1240px the port menu becomes a scrolling row above the port (same as .fin-rates-nav on small screens). */
+@media (max-width: 1240px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .nav { position: static; grid-template-columns: none; grid-auto-flow: column; justify-content: start; overflow-x: auto; }
+  .nav button { width: auto; white-space: nowrap; }
+}
+@media (max-width: 1100px) {
+  .check { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .levers { grid-template-columns: minmax(0, 1fr); }
+  .lever { flex-wrap: wrap; }
+}

@@ -14,6 +14,7 @@ import { FilterChip } from "../components/FilterChip.jsx";
 import { MiddleId, Money, FinanceFacts, cleanSteps } from "../components/finance/FinanceCells.jsx";
 import { RateEditDialog } from "./RateEditDialog.jsx";
 import { ZoneEditor } from "./ZoneEditor.jsx";
+import { PortPricing } from "./PortPricing.jsx";
 import { useGetAdminPricingZoneQuery } from "../store/features/pricing/zonePricingApi.js";
 import { PricingServiceForm } from "./PricingServiceForm.jsx";
 import { DriverTableLoading } from "./DriversLoading.jsx";
@@ -22,9 +23,11 @@ import "../components/finance/finance.css";
 // Pricing is what a trip costs: rate cards for specific lanes, zone prices by destination state
 // for everything else, the per-km fare and terminal handling fee at each terminal, and surcharges.
 // Platform-wide fees live on Platform Rates. Saving publishes straight away (see usePublishPricing).
-const TABS = ["Rate Cards", "Zone Pricing", "Per-km & Terminal Rates", "Surcharges"];
+const TABS = ["Rate Cards", "Zone Pricing", "Per-km & Terminal Rates", "Surcharges", "Port Rates"];
 // Rate cards are hidden for now (zones and per-km cover pricing); the code stays for when they return.
-const VISIBLE_TABS = TABS.slice(1);
+// Port Rates (per-port ₦/km pricing, section 07) comes first; the older tabs keep working beside it.
+const VISIBLE_TABS = [TABS[4], ...TABS.slice(1, 4)];
+const PORT_TAB = TABS[4];
 const STATUS_TONE = { Active: "success", Draft: "neutral", "Pending Approval": "warning", Inactive: "neutral", "Active Terminal": "success", "Inactive Terminal / Port": "neutral" };
 const PAGE_SIZE = 10;
 const statusOptions = (rows) => ["All Statuses", ...new Set(rows.map((row) => row.status).filter((value) => !isMissing(value)))];
@@ -155,9 +158,9 @@ export function PricingManagement() {
     return [...byTerminal.values()];
   }, [terminalRows]);
 
-  const current = { [TABS[0]]: pick(servicesQuery), [TABS[1]]: pick(zonesQuery), [TABS[2]]: terminals, [TABS[3]]: pick(surchargesQuery) }[tab];
-  const query = { [TABS[0]]: servicesQuery, [TABS[1]]: zonesQuery, [TABS[2]]: terminalQuery, [TABS[3]]: surchargesQuery }[tab];
-  const keys = { [TABS[0]]: ["service", "code", "route", "coverage", "truckType"], [TABS[1]]: ["name", "region", "route"], [TABS[2]]: ["name"], [TABS[3]]: ["name", "appliesTo", "description"] }[tab];
+  const current = { [TABS[0]]: pick(servicesQuery), [TABS[1]]: pick(zonesQuery), [TABS[2]]: terminals, [TABS[3]]: pick(surchargesQuery) }[tab] || [];
+  const query = { [TABS[0]]: servicesQuery, [TABS[1]]: zonesQuery, [TABS[2]]: terminalQuery, [TABS[3]]: surchargesQuery }[tab] || {};
+  const keys = { [TABS[0]]: ["service", "code", "route", "coverage", "truckType"], [TABS[1]]: ["name", "region", "route"], [TABS[2]]: ["name"], [TABS[3]]: ["name", "appliesTo", "description"] }[tab] || [];
   const rows = current.filter((row) => (status === "All Statuses" || row.status === status) && matches(row, keys, q));
   const notify = (text) => { setNotice(text); setTimeout(() => setNotice(null), 3200); };
   const switchTab = (next) => { setTab(next); setStatus("All Statuses"); setQ(""); setOpen(null); };
@@ -200,7 +203,7 @@ export function PricingManagement() {
   return (
     <>
       <PageHeader crumbs={["Finance", "Pricing"]} title="Pricing"
-        description="What a trip costs: zone prices by destination state, per-km fares and terminal fees, and surcharges. Platform fees are on Platform Rates."
+        description="What a trip costs: per-port rates, zone prices by destination state, per-km fares and terminal fees, and surcharges. Platform fees are on Platform Rates."
         actions={<Button icon="plus" onClick={() => setZoneForm({ id: null })}>New zone</Button>} />
       {notice && <Banner tone="success" title={notice} />}
       <StatsPanel fixedLabel="Current setup" fixedHint="Counts reflect the pricing in use now; average change compares the last 30 days with the 30 before.">
@@ -210,6 +213,7 @@ export function PricingManagement() {
       </StatsPanel>
       <SectionCard title="" pad="none" className="fin-table" style={{ paddingTop: 4 }}>
         <Tabs value={tab} onChange={switchTab} style={{ padding: "0 var(--tk-card-pad)" }} items={VISIBLE_TABS} />
+        {tab === PORT_TAB ? <PortPricing notify={notify} /> : <>
         <TableToolbar
           search={<SearchField placeholder={`Search ${tab.toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)} />}
           filters={<FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={statusOptions(current)} onChange={setStatus} />}
@@ -220,6 +224,7 @@ export function PricingManagement() {
         <Table key={tab} rows={rows} columns={columns} loading={query.isFetching && !query.currentData}
           empty={{ title: `No ${tab.toLowerCase()} found`, description: q.trim() || status !== "All Statuses" ? "Try adjusting your filters or search." : tab === TABS[0] ? "Create a rate card to price a specific lane." : "Nothing is set up here yet." }}
           onOpen={openRow} />
+        </>}
       </SectionCard>
       {open && <RecordDrawer key={open.row.id} row={open.row} kind={open.kind} onClose={() => setOpen(null)} notify={notify} onEdit={(row) => { setOpen(null); if (open.kind === "zone") setZoneForm({ id: row.id }); else setForm({ id: row.id }); }} />}
       {zoneForm && <ZoneEditor id={zoneForm.id} onClose={() => setZoneForm(null)} onDone={(saved) => { setZoneForm(null); notify(saved?.statusCode === "ACTIVE" ? "Zone is live." : "Zone saved and waiting for activation."); }} />}
