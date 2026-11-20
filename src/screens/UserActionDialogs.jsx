@@ -16,7 +16,7 @@ const TITLES = {
   permissions: 'Update Permissions',
   EMAIL: 'Send Email',
   SMS: 'Send SMS',
-  import: 'Import Users'
+  import: 'Import Admins'
 };
 export function useManagedUserOperations() {
   const admin = useSelector(s => s.auth.admin);
@@ -330,7 +330,7 @@ function AccountDialog({
   const disabled = saving || owner !== admin?.id || result != null || reasonAction && (!reason.trim() || !target?.version) || action === 'permissions' && (!target?.version || !roles.some(r => r.value === roleId) || roleQuery.isFetching) || messageAction && (!message.trim() || action === 'EMAIL' && !subject.trim()) || action === 'import' && !file;
   return <Modal open onClose={() => {
     if (!saving) onClose();
-  }} title={TITLES[action]} description={target ? `${target.name} · ${target.email}` : 'Upload a CSV containing accountType, email, name and role. Platform users also require phone.'} footer={<><Button variant="outline" disabled={saving} onClick={onClose}>{result ? 'Close' : 'Cancel'}</Button>{!result && <Button variant={action === 'delete' ? 'danger' : 'primary'} disabled={disabled} onClick={submit}>{saving ? 'Saving…' : action === 'import' ? 'Import Users' : messageAction ? 'Send' : action === 'password-reset' ? 'Send Reset' : 'Confirm'}</Button>}</>}>
+  }} title={TITLES[action]} description={target ? `${target.name} · ${target.email}` : 'Upload a CSV containing email, name and role (SUPER_ADMIN, OPS_ADMIN or FINANCE_ADMIN). Each admin is emailed a link to set their password.'} footer={<><Button variant="outline" disabled={saving} onClick={onClose}>{result ? 'Close' : 'Cancel'}</Button>{!result && <Button variant={action === 'delete' ? 'danger' : 'primary'} disabled={disabled} onClick={submit}>{saving ? 'Saving…' : action === 'import' ? 'Import Users' : messageAction ? 'Send' : action === 'password-reset' ? 'Send Reset' : 'Confirm'}</Button>}</>}>
     <div style={{
       display: 'grid',
       gap: 14

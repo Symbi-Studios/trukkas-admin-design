@@ -28,27 +28,24 @@ import {
   Modal,
   TextField,
   Select,
-  DonutChart,
-  LegendList,
-  StatusDot,
   Skeleton,
-  ActivityFeed,
   StatsPanel,
 } from '../ds.js';
 import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from '../domain/statsPeriod.js';
 import {
   useGetUserManagementDirectoryQuery, useGetUserManagementStatsQuery, useRenameManagedUserMutation, useCreateManagedAdminMutation,
-  managedUserSummary, managedUserRoleChart, managedUserStatusChart, managedUsersCsv, managedUserMatchesRole, useGetUserManagementRecentActivityQuery,
+  managedUserSummary, managedUsersCsv, managedUserMatchesRole,
 } from '../store/features/users/usersApi.js';
 import { DriverTableLoading, DriverLoadingNotice } from './DriversLoading.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import styles from './UserManagement.module.css';
 
 import { UserActionDialogs, useManagedUserOperations } from './UserActionDialogs.jsx';
+import { AdminUserDrawer } from './AdminUserDrawer.jsx';
 
 const PAGE_SIZE = 8;
-const ROLES = ['Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Finance Manager', 'Viewer', 'Driver'];
-const STATUSES = ['Active', 'Inactive', 'Locked'];
+const ROLES = ['Super Admin', 'Operations Admin', 'Finance Admin'];
+const STATUSES = ['Active', 'Inactive', 'Locked', 'Revoked'];
 const EMPTY_FORM = { name: '', email: '', role: '', password: '' };
 const ADMIN_ROLE_OPTIONS = ['Super Admin', 'Operations Admin', 'Finance Admin'];
 const ADMIN_ROLE_CODES = { 'Super Admin': 'SUPER_ADMIN', 'Operations Admin': 'OPS_ADMIN', 'Finance Admin': 'FINANCE_ADMIN' };
@@ -76,21 +73,18 @@ export function UserManagement() {
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
-  const includeAdmins = admin?.role === 'SUPER_ADMIN';
-  const query = useGetUserManagementDirectoryQuery({ includeAdmins, owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const query = useGetUserManagementDirectoryQuery({ owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
-  const statsQuery = useGetUserManagementStatsQuery({ owner: admin?.id, includeAdmins, ...statsRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const statsQuery = useGetUserManagementStatsQuery({ owner: admin?.id, ...statsRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const directory = !authenticated || query.error ? null : query.currentData;
   const users = useMemo(() => directory?.rows || [], [directory]);
-  const usersSummary = managedUserSummary(directory?.rows, !authenticated || statsQuery.error ? null : statsQuery.currentData, includeAdmins, statsPeriod(statsPeriodKey).vs);
-  const usersByRole = managedUserRoleChart(directory?.rows, directory?.adminsIncluded, statsQuery.error ? null : statsQuery.currentData);
-  const usersByStatus = managedUserStatusChart(directory?.rows, usersSummary, statsQuery.error ? null : statsQuery.currentData);
+  const usersSummary = managedUserSummary(directory?.rows, !authenticated || statsQuery.error ? null : statsQuery.currentData, true, statsPeriod(statsPeriodKey).vs);
   const [renameUser, editState] = useRenameManagedUserMutation();
   const [createAdmin, createState] = useCreateManagedAdminMutation();
   const operations = useManagedUserOperations();
-  const [activityOpen, setActivityOpen] = useState(false);
-  const recentQuery = useGetUserManagementRecentActivityQuery({ owner: admin?.id, all: activityOpen }, { skip: !authenticated, refetchOnMountOrArgChange: true });
+  const [drawerId, setDrawerId] = useState(null);
+  const drawerUser = drawerId ? users.find((user) => user.id === drawerId) : null;
   const submitting = useRef(false);
   const unavailable = (action) => { setMenuFor(null); window.alert(`${action} is not available here.`); };
   const profilePath = (user) => `/users/detail?id=${encodeURIComponent(user.backendId)}&source=${user.source}`;
@@ -98,7 +92,6 @@ export function UserManagement() {
   const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [role, setRole] = useState('All Roles');
   const [status, setStatus] = useState('All Statuses');
-  const [entity, setEntity] = useState('All Entities');
   const [joined, setJoined] = useState(EMPTY_RANGE);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
@@ -109,16 +102,14 @@ export function UserManagement() {
   const [saving, setSaving] = useState(false);
   const formVersion = useRef(0);
 
-  const entities = useMemo(() => Array.from(new Set(users.map((u) => u.entity).filter((value) => value !== '—'))).sort(), [users]);
   const filterAvailable = Boolean(directory);
 
   const filtered = useMemo(() => users.filter((u) => (
     managedUserMatchesRole(u, role) &&
     (status === 'All Statuses' || u.status === status) &&
-    (entity === 'All Entities' || u.entity === entity) &&
     inRange(u.joinedAt, joined) &&
-    (!q || [u.name, u.email, u.phone, u.entity].some((s) => s !== '—' && s && s.toLowerCase().includes(q.toLowerCase())))
-  )), [users, role, status, entity, joined, q]);
+    (!q || [u.name, u.email].some((s) => s !== '—' && s && s.toLowerCase().includes(q.toLowerCase())))
+  )), [users, role, status, joined, q]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -129,7 +120,7 @@ export function UserManagement() {
   }, [filtered, pageCount]);
 
   function resetFilters() {
-    setRole('All Roles'); setStatus('All Statuses'); setEntity('All Entities'); setJoined(EMPTY_RANGE); setQ(''); setPage(1);
+    setRole('All Roles'); setStatus('All Statuses'); setJoined(EMPTY_RANGE); setQ(''); setPage(1);
   }
 
   function resetForm() { formVersion.current += 1; setAddOpen(false); setForm(EMPTY_FORM); setSaving(false); }
@@ -155,7 +146,7 @@ export function UserManagement() {
   async function editUser(user) {
     setMenuFor(null);
     if (submitting.current || editState.isLoading) return;
-    if (!user.isAccount || (user.source === 'admin' && admin?.role !== 'SUPER_ADMIN')) { unavailable('Edit User'); return; }
+    if (!user.isAccount || admin?.role !== 'SUPER_ADMIN') { unavailable('Edit User'); return; }
     const name = window.prompt('Full Name', user.name === '—' ? '' : user.name);
     if (!name?.trim() || name.trim() === user.name) return;
     submitting.current = true;
@@ -180,22 +171,20 @@ export function UserManagement() {
       { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => { setMenuFor(null); operations.open('password-reset', u); } },
       { divider: true },
     ];
-    if (u.status === 'Locked' || u.statusCode === 'REVOKED') items.push({ label: 'Unlock Account', icon: 'lock-open', onClick: () => { setMenuFor(null); operations.open('unlock', u); } });
-    else items.push({ label: 'Lock Account', icon: 'lock', onClick: () => { setMenuFor(null); operations.open('lock', u); } });
-    if (['Inactive', 'Suspended', 'Revoked'].includes(u.status)) items.push({ label: 'Activate User', icon: 'user-check', onClick: () => updateAccess(u, 'activate') });
-    else items.push({ label: 'Deactivate User', icon: 'user-x', onClick: () => updateAccess(u, 'deactivate') });
-    items.push({ divider: true });
-    items.push({ label: 'Delete User', icon: 'trash-2', tone: 'danger', onClick: () => { setMenuFor(null); operations.open('delete', u); } });
+    // Admin accounts can't be deleted or suspended — revoking access (lock) is the only off-switch.
+    if (u.backendId === admin?.id) items.pop();
+    else if (u.statusCode === 'REVOKED') items.push({ label: 'Restore Access', icon: 'lock-open', onClick: () => updateAccess(u, 'unlock') });
+    else items.push({ label: 'Revoke Access', icon: 'lock', tone: 'danger', onClick: () => updateAccess(u, 'lock') });
     return items;
   }
 
   return (
     <>
       <PageHeader crumbs={['Administration', 'User Management']} title="User Management"
-        description="Manage users, view their roles, permissions and account status."
+        description="Manage the people who sign in to this admin dashboard — their roles, access and account security."
         actions={<>
-          <Button variant="outline" icon="upload" onClick={() => operations.open('import')}>Import Users</Button>
-          <Button icon="plus" onClick={() => setAddOpen(true)}>Add New User</Button>
+          <Button variant="outline" icon="upload" onClick={() => operations.open('import')}>Import Admins</Button>
+          <Button icon="plus" onClick={() => setAddOpen(true)}>Add Admin User</Button>
         </>} />
 
       <StatsPanel period={statsPeriodKey} onPeriodChange={setStatsPeriodKey}>
@@ -211,28 +200,25 @@ export function UserManagement() {
           delta={usersSummary.newThisMonthCaption} direction={usersSummary.newThisMonthDirection} />
       </StatsPanel>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
+      <div>
         <SectionCard title="" pad="none">
           <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
-            search={<SearchField placeholder="Search by name, email or phone…" value={q}
+            search={<SearchField placeholder="Search by name or email…" value={q}
               onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
             filters={<>
               <FilterButton value={role} options={['All Roles', ...ROLES]} active={role !== 'All Roles'}
                 onChange={(v) => { setRole(v); setPage(1); }} />
               <FilterButton value={status} options={['All Statuses', ...STATUSES]} active={status !== 'All Statuses'}
                 onChange={(v) => { setStatus(v); setPage(1); }} />
-              <FilterButton value={entity} options={['All Entities', ...entities]} active={entity !== 'All Entities'}
-                onChange={(v) => { setEntity(v); setPage(1); }} />
               <DateRangeFilter name="Joined" value={joined} onChange={(next) => { setJoined(next); setPage(1); }} />
             </>}
             trailing={<Button variant="outline" icon="download" onClick={exportUsers}>Export</Button>}
             onClear={resetFilters} />
 
-          {!authenticated || query.isFetching ? <DriverTableLoading columns={7} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.users} boardOnRowClick={(row) => navigate(profilePath(row))} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
+          {!authenticated || query.isFetching ? <DriverTableLoading columns={6} label="Loading users" /> : query.error ? <DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice> : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.users} boardOnRowClick={(row) => setDrawerId(row.id)} onRowClick={(row) => setDrawerId(row.id)} view={tableView} boardGroupBy={(row) => row.status} rows={paged} rowKey={(r) => r.id} selectable selected={selected} onSelect={setSelected}
             columns={[
               { key: 'user', header: 'User', render: (r) => (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', minWidth: 240 }}
-                      onClick={() => navigate(profilePath(r))}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 240 }}>
                   <Avatar name={r.name} src={r.profileImageUrl} size={36} />
                   <span style={{ display: 'grid', gap: 1, minWidth: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -243,7 +229,6 @@ export function UserManagement() {
                   </span>
                 </span>) },
               { key: 'role', header: 'Role', render: (r) => <Badge tone={r.roleTone}>{r.role}</Badge> },
-              { key: 'entity', header: 'Entity / Company' },
               { key: 'status', header: 'Status', render: (r) => <Badge dot>{r.status}</Badge> },
               { key: 'lastActive', header: 'Last Active' },
               { key: 'joinedOn', header: 'Joined On' },
@@ -263,36 +248,24 @@ export function UserManagement() {
             onPage={(value) => setPage(Math.max(1, Math.min(value, pageCount)))} onPageSize={(value) => { setPageSize(value); setPage(1); }} />
         </SectionCard>
 
-        <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', alignContent: 'start' }}>
-          <SectionCard title="Users by Role">
-            <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-              <DonutChart size={168} thickness={22} centerValue={query.isFetching ? '—' : usersSummary.total ?? '—'} centerLabel="Total"
-                data={directory && users.every((user) => usersByRole.some((item) => item.value != null && item.label === user.role)) ? usersByRole.filter((item) => item.value != null) : []} />
-              <LegendList style={{ width: '100%' }} items={usersByRole} showShare={false} />
-            </div>
-          </SectionCard>
-          <SectionCard title="Users by Status">
-            <div style={{ display: 'grid', gap: 12 }}>
-              {usersByStatus.map((s) => (
-                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <StatusDot tone={{ Active: 'success', Inactive: 'neutral', Locked: 'danger', 'Pending Invitation': 'warning' }[s.label]} />
-                  <span style={{ flex: 1, font: '400 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>{s.label}</span>
-                  <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{s.value}</span>
-                  <span className="tk-meta" style={{ width: 46, textAlign: 'right' }}>({s.share})</span>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-          <SectionCard title="Recent User Activity" action={<a href="#" onClick={(event) => { event.preventDefault(); if (activityOpen) recentQuery.refetch(); else setActivityOpen(true); }}>View All</a>}>
-            <div style={{ display: 'grid', gap: 16 }}>
-              {recentQuery.isFetching ? <DriverTableLoading columns={1} label="Loading user activity" /> : recentQuery.error ? <DriverLoadingNotice>{getApiErrorMessage(recentQuery.error)}</DriverLoadingNotice> : recentQuery.currentData ? <ActivityFeed items={recentQuery.currentData} /> : '—'}
-            </div>
-          </SectionCard>
-        </div>
       </div>
 
+      {drawerUser && (
+        <AdminUserDrawer
+          key={drawerUser.id}
+          user={drawerUser}
+          owner={admin?.id}
+          isSelf={drawerUser.backendId === admin?.id}
+          onClose={() => setDrawerId(null)}
+          onOpen={() => navigate(profilePath(drawerUser))}
+          onEdit={editUser}
+          onResetPassword={(u) => operations.open('password-reset', u)}
+          onAccess={updateAccess}
+        />
+      )}
+
       <UserActionDialogs operations={operations} />
-      <Modal open={addOpen} onClose={resetForm} title="Add New User" description="Create a new admin user and assign a role."
+      <Modal open={addOpen} onClose={resetForm} title="Add Admin User" description="Give someone access to this dashboard and assign their admin role."
         footer={<>
           <Button variant="outline" onClick={resetForm}>Cancel</Button>
           <Button disabled={saving || createState.isLoading || !form.name.trim() || !form.email.trim() || !form.role || Array.from(form.password || '').length < 8}
