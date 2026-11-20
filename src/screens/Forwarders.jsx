@@ -55,6 +55,22 @@ const VERIFICATION_META = {
   Rejected: { tone: "danger", icon: "circle-x" },
 };
 const naira = forwarderMoney;
+/** Short money for stat cards: ₦25.6m, ₦1.2b, ₦850k. Full amount stays in the tooltip. */
+function nairaShort(value) {
+  const n = Number(value);
+  if (value == null || value === '' || !Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  const units = [[1e3, 'k'], [1e6, 'm'], [1e9, 'b'], [1e12, 't']];
+  for (let i = units.length - 1; i >= 0; i -= 1) {
+    const [size, suffix] = units[i];
+    if (abs < size) continue;
+    const rounded = Math.round((abs / size) * 10) / 10;
+    // 999,960 rounds to "1000k"; show it as the next unit up instead.
+    if (rounded >= 1000 && units[i + 1]) return `${n < 0 ? '-' : ''}₦1${units[i + 1][1]}`;
+    return `${n < 0 ? '-' : ''}₦${String(rounded).replace(/\.0$/, '')}${suffix}`;
+  }
+  return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
+}
 
 function ForwarderCell({ f }) {
   return (
@@ -193,7 +209,7 @@ export function Forwarders() {
         <StatCard icon="circle-check" tint="green" label="Active Forwarders" value={STATS.active} />
         <StatCard icon="hourglass" tint="amber" label="Pending Verification" value={STATS.pending} direction="down" />
         <StatCard icon="circle-x" tint="purple" label="Suspended" value={STATS.suspended} direction="down" />
-        <StatCard icon="wallet" tint="blue" label="Total Spend (₦)" value={naira(STATS.totalSpend)} />
+        <StatCard icon="wallet" tint="blue" label="Total Spend" value={<span title={naira(STATS.totalSpend)}>{nairaShort(STATS.totalSpend)}</span>} />
       </StatsPanel>
 
       <SectionCard pad="none">
