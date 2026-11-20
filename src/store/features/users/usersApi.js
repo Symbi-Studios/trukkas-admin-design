@@ -18,7 +18,7 @@ const failure = (message, status = 'CUSTOM_ERROR') => ({
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN']);
 const STATUSES = new Set(['ACTIVE', 'PENDING_PROFILE', 'PENDING_REVIEW', 'INACTIVE', 'SUSPENDED', 'BANNED', 'LOCKED', 'PENDING_INVITATION', 'REVOKED', 'DELETED']);
 const ROLE_LABELS = {
-  SUPER_ADMIN: 'Admin',
+  SUPER_ADMIN: 'Super Admin',
   OPS_ADMIN: 'Operations Admin',
   FINANCE_ADMIN: 'Finance Admin',
   FORWARDER: 'Forwarder',
@@ -71,7 +71,7 @@ function roleData(raw, source) {
     code,
     core,
     kind: text(r.kind) || (source === 'admin' ? 'ADMIN_ACCESS' : bare ? 'PLATFORM_ROLE' : null),
-    label: text(r.label) || (code?.startsWith('TEAM:') ? code.slice(5) : ROLE_LABELS[core]) || '—',
+    label: (source === 'admin' && ROLE_LABELS[core]) || text(r.label) || (code?.startsWith('TEAM:') ? code.slice(5) : ROLE_LABELS[core]) || '—',
     id: text(r.id) || text(r.roleId)
   };
 }
@@ -145,13 +145,11 @@ export function adaptManagedUser(raw, source = 'user', _profile = false, extras 
   };
 }
 export function managedUserRoleAvailable(value, rows) {
-  return ['All Roles', 'Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Finance Manager', 'Viewer', 'Driver'].includes(value) || Boolean(rows?.some(r => r.role === value));
+  return ['All Roles', 'Super Admin', 'Operations Admin', 'Finance Admin'].includes(value) || Boolean(rows?.some(r => r.role === value));
 }
 export function managedUserMatchesRole(user, value) {
   if (value === 'All Roles') return true;
-  if (value === 'Super Admin' || value === 'Admin') return user.source === 'admin' && user.roleCode === 'SUPER_ADMIN';
-  if (value === 'Driver') return user.roleFilterCode === 'DRIVER';
-  return user.roleKind === 'TEAM_ROLE' && user.role.toLowerCase() === value.toLowerCase();
+  return user.source === 'admin' && ROLE_LABELS[user.roleCode] === value;
 }
 function collection(dto, names) {
   if (Array.isArray(dto)) return dto;
@@ -261,11 +259,11 @@ function share(v) {
   return n != null && n >= 0 && n <= 100 ? n : null;
 }
 export function managedUserRoleChart(_rows, _adminsIncluded, stats) {
-  const labels = ['Super Admin', 'Admin', 'Operations Manager', 'Dispatcher', 'Verifier', 'Driver', 'Viewer'];
-  const colors = ['var(--tk-viz-1)', 'var(--tk-blue-hover)', 'var(--tk-viz-3)', 'var(--tk-viz-5)', 'var(--tk-viz-6)', 'var(--tk-viz-2)', 'var(--tk-ink-300)'];
+  const roles = [['Super Admin', 'SUPER_ADMIN'], ['Operations Admin', 'OPS_ADMIN'], ['Finance Admin', 'FINANCE_ADMIN']];
+  const colors = ['var(--tk-viz-1)', 'var(--tk-viz-3)', 'var(--tk-viz-5)'];
   const entries = breakdown(stats?.byRole);
-  return labels.map((name, i) => {
-    const codes = name === 'Admin' ? ['ADMIN:SUPER_ADMIN'] : name === 'Driver' ? ['DRIVER'] : [`TEAM:${name}`];
+  return roles.map(([name, core], i) => {
+    const codes = [`ADMIN:${core}`, core];
     const item = entries.find(e => codes.includes(text(e.code) || text(e.role?.code) || text(e.role)) || (text(e.label) || text(e.role?.label)) === name);
     const value = item ? count(item.count) : null,
       percent = item ? share(item.sharePercent ?? item.share) : null;
@@ -279,7 +277,7 @@ export function managedUserRoleChart(_rows, _adminsIncluded, stats) {
 }
 export function managedUserStatusChart(_rows, _summary, stats) {
   const entries = breakdown(stats?.byStatus);
-  return ['Active', 'Inactive', 'Locked', 'Pending Invitation'].map(name => {
+  return ['Active', 'Inactive', 'Locked', 'Revoked'].map(name => {
     const code = name.toUpperCase().replaceAll(' ', '_'),
       item = entries.find(e => (text(e.code) || text(e.status)) === code || (text(e.label)?.toUpperCase().replaceAll(' ', '_')) === code),
       value = item ? count(item.count) : null,
@@ -410,26 +408,20 @@ export const usersApi = apiWithTags.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: builder => secureEndpoints({
     getUserManagementDirectory: builder.query({
-      async queryFn({
-        includeAdmins = false
-      } = {}, api, _opts, baseQuery) {
-        const blocked = access(api, includeAdmins ? 'admin' : 'user');
+      // User Management lists admin-dashboard accounts only. Forwarders,
+      // trucking companies and drivers are managed on their own screens.
+      async queryFn(_args, api, _opts, baseQuery) {
+        const blocked = access(api, 'admin');
         if (blocked) return blocked;
-        const sources = includeAdmins ? ['user', 'admin'] : ['user'],
-          rows = [];
-        for (const source of sources) {
-          const result = await readPages(baseQuery, api, ROOT, ['users'], {
-            accountType: source,
-            sort: '-joinedAt'
-          });
-          if (result.error) return result;
-          if (result.data.some(r => text(r.accountType) && r.accountType !== source)) return failure('The directory mixed account namespaces.');
-          rows.push(...result.data.map(r => adaptManagedUser(r, source)));
-        }
+        const result = await readPages(baseQuery, api, ROOT, ['users'], {
+          accountType: 'admin',
+          sort: '-joinedAt'
+        });
+        if (result.error) return result;
+        if (result.data.some(r => text(r.accountType) && r.accountType !== 'admin')) return failure('The directory mixed account namespaces.');
         return {
           data: {
-            rows,
-            adminsIncluded: includeAdmins
+            rows: result.data.map(r => adaptManagedUser(r, 'admin'))
           }
         };
       },
@@ -437,20 +429,20 @@ export const usersApi = apiWithTags.injectEndpoints({
     }),
     getUserManagementStats: builder.query({
       async queryFn({
-        includeAdmins = false, dateFrom, dateTo
+        dateFrom, dateTo
       } = {}, api, _opts, baseQuery) {
-        const blocked = access(api, includeAdmins ? 'admin' : 'user');
+        const blocked = access(api, 'admin');
         if (blocked) return blocked;
         const result = await baseQuery({
           url: `${ROOT}/summary`,
           params: {
-            scope: includeAdmins ? 'all' : 'users',
+            scope: 'admins',
             ...(dateFrom && dateTo ? { dateFrom, dateTo } : {})
           }
         });
         if (result.error) return result;
         const data = record(unwrapApiResponseData(result.data));
-        if (data.scope !== (includeAdmins ? 'all' : 'users')) return failure('The summary response does not match the requested account scope.');
+        if (data.scope !== 'admins') return failure('The summary response does not match the requested account scope.');
         return { data };
       },
       providesTags: ['AdminManagedUsers']
@@ -850,11 +842,12 @@ export const usersApi = apiWithTags.injectEndpoints({
       async queryFn({
         file
       }, api, _opts, baseQuery) {
-        const blocked = access(api);
+        const blocked = access(api, 'admin');
         if (blocked) return blocked;
         if (!(file instanceof File) || !file.size) return failure('Select a CSV file.');
         const body = new FormData();
         body.append('file', file);
+        body.append('accountType', 'admin');
         const result = await baseQuery({
           url: `${ROOT}/import`,
           method: 'POST',

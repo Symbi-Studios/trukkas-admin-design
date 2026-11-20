@@ -68,8 +68,8 @@ export const BOARD_LAYOUTS = {
     ['Pending', 'warning'], ['In Review', 'info'], ['Verified', 'success'], ['Rejected', 'danger'],
   ], { title: 'id', subtitle: 'entity', body: ['type'], footer: ['entityType', 'riskLevel'] }, 'No verifications'),
   users: layout([
-    ['Active', 'success'], ['Inactive', 'neutral'], ['Locked', 'danger'],
-  ], { title: (row) => row.name, subtitle: (row) => row.email, body: ['entity', 'lastActive'], footer: ['role', 'joinedOn'] }, 'No users'),
+    ['Active', 'success'], ['Inactive', 'neutral'], ['Locked', 'danger'], ['Revoked', 'warning'],
+  ], { title: (row) => row.name, subtitle: (row) => row.email, body: ['lastActive'], footer: ['role', 'joinedOn'] }, 'No users'),
   tickets: layout([
     ['Open', 'info'], ['In Progress', 'purple'], ['Pending', 'warning'], ['Escalated', 'danger'], ['Resolved', 'success'], ['Closed', 'neutral'],
   ], { title: (row) => row.subject, subtitle: (row) => `${row.id} · ${row.customer}`,  body: ['updated'], footer: ['category', 'priority'] }, 'No tickets'),
