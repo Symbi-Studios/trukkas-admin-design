@@ -169,7 +169,7 @@ export function adaptAdminPayout(dto) {
     ],
     approvalSteps: [
       { title: 'Submitted', time: datePart(dto.createdAt), state: payoutTimestamp(dto.createdAt) != null ? 'done' : 'pending', icon: 'check' },
-      { title: 'Under Review', time: text(dto.reviewedAt) ? datePart(dto.reviewedAt) : '—', state: payoutTimestamp(dto.reviewedAt) != null ? 'done' : 'pending', icon: 'search' },
+      { title: 'Under Review', time: text(dto.reviewedAt) ? datePart(dto.reviewedAt) : '—', state: payoutTimestamp(dto.reviewedAt) != null || ['APPROVED', 'REJECTED'].includes(dto.reviewStatus) ? 'done' : 'pending', icon: 'search' },
       { title: rawStatus === 'REJECTED' ? 'Rejected' : 'Approved', time: approvedOn ? datePart(approvedOn) : '—', state: payoutTimestamp(approvedOn) != null ? rawStatus === 'REJECTED' ? 'danger' : 'done' : 'pending', icon: rawStatus === 'REJECTED' ? 'x' : 'check' },
       { title: 'Processed', time: processedOn ? datePart(processedOn) : '—', state: payoutTimestamp(processedOn) != null ? 'done' : 'pending', icon: 'banknote' },
     ],

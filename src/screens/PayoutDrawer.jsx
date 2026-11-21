@@ -30,7 +30,8 @@ export function PayoutDrawer({ target, row, onClose }) {
   const [saveNotes, notesState] = useUpdateAdminPayoutNotesMutation();
   const [readStatement, statementState] = useLazyGetAdminPayoutStatementQuery();
   const [readDocument, documentState] = useLazyGetAdminPayoutDocumentQuery();
-  const busy = approveState.isLoading || rejectState.isLoading || infoState.isLoading || issueState.isLoading || notesState.isLoading || statementState.isFetching || documentState.isFetching;
+  const [refreshingApproval, setRefreshingApproval] = useState(false);
+  const busy = refreshingApproval || approveState.isLoading || rejectState.isLoading || infoState.isLoading || issueState.isLoading || notesState.isLoading || statementState.isFetching || documentState.isFetching;
   const pending = useRef(false);
   const [modal, setModal] = useState(null);
   const [text, setText] = useState("");
@@ -38,12 +39,23 @@ export function PayoutDrawer({ target, row, onClose }) {
   const [notice, setNotice] = useState(null);
   useEffect(() => { setModal(null); setText(""); setMenu(false); setNotice(null); }, [target.id, target.source]);
 
-  async function run(task, success) {
+  async function run(task, success, refreshAfterApproval = false) {
     if (pending.current || busy) return;
     pending.current = true; setMenu(false);
-    try { const result = await task(); setNotice({ tone: "success", text: success(result) }); setModal(null); setText(""); }
-    catch (error) { setNotice({ tone: "danger", text: getApiErrorMessage(error) }); }
-    finally { pending.current = false; }
+    if (refreshAfterApproval) setRefreshingApproval(true);
+    let approved = false;
+    try {
+      const result = await task();
+      approved = refreshAfterApproval;
+      if (refreshAfterApproval) await query.refetch().unwrap();
+      setNotice({ tone: "success", text: success(result) });
+      setModal(null); setText("");
+    } catch (error) {
+      setNotice({ tone: "danger", text: approved ? "Payout approved, but its latest details could not be loaded. Retry the details request." : getApiErrorMessage(error) });
+    } finally {
+      if (refreshAfterApproval) setRefreshingApproval(false);
+      pending.current = false;
+    }
   }
   const submitModal = () => {
     const ids = { id: r.id, source: r.source };
@@ -78,8 +90,8 @@ export function PayoutDrawer({ target, row, onClose }) {
     </span>
     {r.canReject && <Button variant="danger" disabled={busy} onClick={() => { setText(""); setModal("reject"); }}>Reject</Button>}
     {r.canReject && <Button icon="check" disabled={busy || !r.canApprove} title={!r.canApprove ? "This payout isn't ready to approve yet" : undefined}
-      onClick={() => run(() => approve({ id: r.id, source: r.source, adminRemark: "" }).unwrap(), (res) => res.message || "Payout approved.")}>
-      {approveState.isLoading ? "Approving…" : "Approve payout"}
+      onClick={() => run(() => approve({ id: r.id, source: r.source, adminRemark: "" }).unwrap(), (res) => res.message || "Payout approved.", true)}>
+      {approveState.isLoading || refreshingApproval ? "Approving…" : "Approve payout"}
     </Button>}
     {!r.canReject && <Button variant="outline" icon="file-text" disabled={busy} onClick={statement}>Statement</Button>}
   </div>;
