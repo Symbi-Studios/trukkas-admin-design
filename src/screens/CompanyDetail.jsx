@@ -14,6 +14,7 @@ import { CompanyDetailLoading } from './CompaniesLoading.jsx';
 import { DriverTableLoading } from './DriversLoading.jsx';
 import { useGetAdminCompanyDocumentsQuery } from '../store/features/companies/companyDocumentsApi.js';
 import { CompanyDocumentDialog } from './CompanyDocumentDialog.jsx';
+import { FleetReviewModal } from './FleetReviewModal.jsx';
 import './CompanyDetail.css';
 
 const statusTone = { Active: 'success', Approved: 'success', Available: 'success', 'On Trip': 'info', 'In Maintenance': 'warning', Inactive: 'neutral', Suspended: 'danger', 'Pending Review': 'warning', Pending: 'warning', Delivered: 'success', Completed: 'success', Processing: 'info', Failed: 'danger', Reversed: 'warning', 'In Transit': 'info', Assigned: 'info', Open: 'warning', Verified: 'success', Rejected: 'danger' };
@@ -135,7 +136,7 @@ function CompanyScreen() {
         <Card><PanelHeader title="Recent Activity" action="View All" onAction={() => setSection('Activity Log')} /><ActivityList rows={activity.slice(0, 5)} query={activityQuery} /></Card>
       </aside></div>
     </div>}
-    {tab === 'Trucks' && <TrucksTab onActivity={() => setSection('Activity Log')} company={company} trucks={trucks} available={profile.fleet != null} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} page={page} setPage={setPage} selected={selectedTruck} setSelected={(row) => setSelectedTruckId(row.id)} checked={checkedTrucks} setChecked={setCheckedTrucks} navigate={navigate} />}
+    {tab === 'Trucks' && <TrucksTab onActivity={() => setSection('Activity Log')} onReviewSuccess={setNotice} company={company} trucks={trucks} available={profile.fleet != null} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} page={page} setPage={setPage} selected={selectedTruck} setSelected={(row) => setSelectedTruckId(row.id)} checked={checkedTrucks} setChecked={setCheckedTrucks} navigate={navigate} />}
     {tab === 'Drivers' && <DriversTab onActivity={() => setSection('Activity Log')} company={company} drivers={drivers} dataQuery={driversQuery} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} page={page} setPage={setPage} selected={selectedDriver} setSelected={(row) => setSelectedDriverId(row.id)} checked={checkedDrivers} setChecked={setCheckedDrivers} navigate={navigate} />}
     {tab === 'Payouts' && <PayoutsTab company={company} payouts={payouts} query={payoutsQuery} summary={summary} summaryQuery={summaryQuery} />}
     {['Jobs', 'Documents', 'Compliance', 'Activity Log'].includes(tab) && <CompanyRecords tab={tab} jobs={jobs} jobsQuery={jobsQuery} documents={documents} infoQuery={documentsQuery} onDocument={setSelectedDocument} activity={activity} activityQuery={activityQuery} navigate={navigate} />}
@@ -190,7 +191,7 @@ function TruckRowMenu({ anchor, onClose, onView }) {
   return createPortal(<div ref={menuRef} style={{ position: 'fixed', zIndex: 95, top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden' }}><DropdownMenu width={205} items={[{ label: 'View Full Details', icon: 'eye', onClick: onView }]} /></div>, document.body);
 }
 
-function TrucksTab({ onActivity, company, trucks, available, query, setQuery, filter, setFilter, page, setPage, selected, setSelected, checked, setChecked, navigate }) {
+function TrucksTab({ onActivity, onReviewSuccess, company, trucks, available, query, setQuery, filter, setFilter, page, setPage, selected, setSelected, checked, setChecked, navigate }) {
   const [type, setType] = useState('All Fleet Types');
   const [rowMenu, setRowMenu] = useState(null);
   const filtered = trucks.filter((truck) => (!query || [truck.plate, truck.type, truck.ref, truck.vin].some((value) => value?.toLowerCase().includes(query.toLowerCase()))) && (filter === 'All Statuses' || truck.status === filter) && (type === 'All Fleet Types' || truck.type === type));
@@ -204,7 +205,7 @@ function TrucksTab({ onActivity, company, trucks, available, query, setQuery, fi
         { key: 'plate', header: 'Plate Number', render: (row) => <span className="company-vehicle"><span><Icon name="truck" size={20} /></span><strong>{row.plate || '—'}</strong></span> },
         { key: 'type', header: 'Truck Type' }, { key: 'model', header: 'Make / Model', render: (row) => [row.make, row.model].filter(Boolean).join(' ') || '—' }, { key: 'year', header: 'Year' }, { key: 'status', header: 'Status', render: (row) => <Status value={row.status} /> }, { key: 'date', header: 'Last Active', render: (row) => row.date || '—' }, { key: 'actions', header: 'Actions', render: (row) => <IconButton icon="ellipsis" label="Truck actions" aria-haspopup="menu" aria-expanded={rowMenu?.id === row.id} onClick={(event) => { event.stopPropagation(); setSelected(row); setRowMenu(current => current?.id === row.id ? null : { id: row.id, anchor: event.currentTarget }); }} /> }
       ]} />{!filtered.length && <EmptyRecords label="No records match these filters" />}<Pagination page={currentPage} pageCount={pages} pageSize={10} total={filtered.length} onPage={setPage} /></>}
-    </Card>{rowMenu && <TruckRowMenu anchor={rowMenu.anchor} onClose={setRowMenu} onView={() => { navigate('/fleet/detail?id='+encodeURIComponent(rowMenu.id)); setRowMenu(null); }} />}{selected && <CompanyTruckRail key={selected.id} companyId={company.id} truck={selected} navigate={navigate} onActivity={onActivity} />}</div>
+    </Card>{rowMenu && <TruckRowMenu anchor={rowMenu.anchor} onClose={setRowMenu} onView={() => { navigate('/fleet/detail?id='+encodeURIComponent(rowMenu.id)); setRowMenu(null); }} />}{selected && <CompanyTruckRail key={selected.id} companyId={company.id} companyName={company.name} truck={selected} navigate={navigate} onActivity={onActivity} onReviewSuccess={onReviewSuccess} />}</div>
   </div>;
 }
 function DriversTab({ onActivity, company, drivers, dataQuery, query, setQuery, filter, setFilter, page, setPage, selected, setSelected, checked, setChecked, navigate }) {
@@ -251,15 +252,16 @@ function PayoutsTab({ company, payouts, query, summary, summaryQuery }) {
   </div>;
 }
 
-function CompanyTruckRail({ companyId, truck, navigate, onActivity }) {
+function CompanyTruckRail({ companyId, companyName, truck, navigate, onActivity, onReviewSuccess }) {
   const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
-  const detailQuery = useGetAdminCompanyTruckQuery({ id: truck.id, companyId, owner });
+  const detailQuery = useGetAdminCompanyTruckQuery({ id: truck.id, companyId, owner }, { refetchOnMountOrArgChange: true });
+  const [review, setReview] = useState(null);
   const activityQuery = useGetAdminCompanyScreenActivityQuery({ id: companyId, owner, role, entityType: 'TRUCK', entityId: truck.id });
   const detail = detailQuery.error ? null : detailQuery.currentData;
   const truckActivity = companyTruckActivityValues(truck, detail);
   const model = [detail?.make || truck.make, detail?.model || truck.model].filter(Boolean).join(' ') || '—';
   const maintenanceId = detail?.maintenanceRecordId;
-  return <aside className="company-detail-rail"><Card><PanelHeader title="Truck Details" /><div className="company-truck-visual"><Icon name="truck" size={72} /></div><h2 className="tk-title">{truck.plate || '—'}</h2><p className="tk-body">{model} <Badge tone="info">{detail?.tag || truck.tag || '—'}</Badge></p><QueryError query={detailQuery} title="Truck details unavailable" />{detailQuery.isFetching ? <DriverTableLoading columns={2} label="Loading truck details" /> : <KeyValues rows={[["VIN Number", detail?.vin || truck.vin], ['Engine Number', detail?.engineNumber || truck.engineNumber], ['Year of Manufacture', detail?.year || truck.year], ['Fleet Type', detail?.type || truck.type], ['Load Capacity', detail?.weight || truck.weight], ['Fuel Type', detail?.fuelType || truck.fuelType], ['Status', <Status value={detail?.status || truck.status} />], ['Last Active', truckActivity.date], ['Current Location', truckActivity.location], ['Assigned Driver', detail?.driver || truck.driver]]} />}<div style={{ display: 'flex', gap: 6, marginTop: 16 }}><Button onClick={() => navigate('/fleet/detail?id='+encodeURIComponent(truck.id))}>View Full Details</Button><Button variant="outline" icon="wrench" onClick={() => navigate(maintenanceId ? '/maintenance/detail?id='+encodeURIComponent(maintenanceId) : '/maintenance')}>View Maintenance</Button></div></Card><Card><PanelHeader title="Recent Activity" action="View All" onAction={onActivity} /><ActivityList rows={activityQuery.error ? [] : (activityQuery.currentData || []).slice(0,5)} query={activityQuery} /></Card></aside>;
+  return <aside className="company-detail-rail"><Card><PanelHeader title="Truck Details" /><div className="company-truck-visual"><Icon name="truck" size={72} /></div><h2 className="tk-title">{truck.plate || '—'}</h2><p className="tk-body">{model} <Badge tone="info">{detail?.tag || truck.tag || '—'}</Badge></p><QueryError query={detailQuery} title="Truck details unavailable" />{detailQuery.isFetching ? <DriverTableLoading columns={2} label="Loading truck details" /> : <KeyValues rows={[["VIN Number", detail?.vin || truck.vin], ['Engine Number', detail?.engineNumber || truck.engineNumber], ['Year of Manufacture', detail?.year || truck.year], ['Fleet Type', detail?.type || truck.type], ['Load Capacity', detail?.weight || truck.weight], ['Fuel Type', detail?.fuelType || truck.fuelType], ['Status', <Status value={detail?.status || truck.status} />], ['Last Active', truckActivity.date], ['Current Location', truckActivity.location], ['Assigned Driver', detail?.driver || truck.driver]]} />}<div style={{ display: 'flex', gap: 6, marginTop: 16, flexWrap: 'wrap' }}>{detail?.statusCode === 'PENDING_REVIEW' && !detailQuery.isFetching && <Button onClick={() => setReview({ truck: { ...detail, company: companyName }, kind: 'registration', decision: 'approve' })}>Approve Truck</Button>}<Button onClick={() => navigate('/fleet/detail?id='+encodeURIComponent(truck.id))}>View Full Details</Button><Button variant="outline" icon="wrench" onClick={() => navigate(maintenanceId ? '/maintenance/detail?id='+encodeURIComponent(maintenanceId) : '/maintenance')}>View Maintenance</Button></div></Card><Card><PanelHeader title="Recent Activity" action="View All" onAction={onActivity} /><ActivityList rows={activityQuery.error ? [] : (activityQuery.currentData || []).slice(0,5)} query={activityQuery} /></Card><FleetReviewModal review={review} onClose={() => setReview(null)} onSuccess={onReviewSuccess} /></aside>;
 }
 function CompanyDriverRail({ companyId, driver, navigate, onActivity }) {
   const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);

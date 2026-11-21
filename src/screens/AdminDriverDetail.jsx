@@ -8,6 +8,8 @@ import { Avatar, Badge, Banner, Button, Card, DataTable, EmptyState, Icon, Label
 import { adminDriverError, useGetAdminDriverActivityQuery, useGetAdminDriverJobsQuery, useGetAdminDriverLicenseQuery, useGetAdminDriverProfileQuery, useGetAdminDriverTransactionsQuery, useReviewAdminDriverMutation, useVerifyAdminDriverLicenseMutation } from '../store/features/drivers/driversApi.js';
 import { useGetAdminTripsQuery } from '../store/features/trips/tripsApi.js';
 import { DriverDetailLoading, DriverLicenseLoading, DriverTableLoading } from './DriversLoading.jsx';
+import { fleetError, useGetAdminFleetTruckQuery } from '../store/features/fleet/fleetApi.js';
+import { FleetReviewModal } from './FleetReviewModal.jsx';
 
 const TAB_ITEMS = ['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wallet', 'Maintenance Log', 'Compliance', 'Incidents', 'Reviews & Ratings', 'Notes'];
 const SUPPORTED_TABS = new Set(['Overview', 'Documents', 'Trips & Activity', 'Earnings & Wallet', 'Compliance']);
@@ -50,6 +52,19 @@ function HistorySection({ title, query, columns, page, limit, onPage, onLimit, c
   </SectionCard>;
 }
 
+function OwnerTruckActions({ truck, ownerId, onReview, navigate }) {
+  const query = useGetAdminFleetTruckQuery(truck.id, { skip: !truck.id, refetchOnMountOrArgChange: true });
+  const current = query.error ? null : query.currentData;
+  if (!truck.id) return '—';
+  return <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    <Button size="sm" variant="outline" onClick={() => navigate(`/fleet/detail?id=${encodeURIComponent(truck.id)}`)}>View Truck</Button>
+    {query.error && <span className="tk-meta">{fleetError(query.error)} <Button size="sm" variant="outline" onClick={query.refetch}>Retry</Button></span>}
+    {current && current.ownerId !== ownerId && <span className="tk-meta">Truck owner could not be confirmed.</span>}
+    {current?.id === truck.id && current.ownerId === ownerId && current.canReviewRegistration && !query.isFetching &&
+      <Button size="sm" onClick={() => onReview({ truck: current, kind: 'registration', decision: 'approve' })}>Approve Truck</Button>}
+  </div>;
+}
+
 export function AdminDriverDetail() {
   const navigate = useNavigate();
   const searchParams = useSearchParams();
@@ -72,6 +87,8 @@ export function AdminDriverDetail() {
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
+  const [truckReview, setTruckReview] = useState(null);
+  useEffect(() => { setTruckReview(null); }, [id]);
   const actionLock = useRef(false);
   const actionBusy = reviewState.isLoading || licenseActionState.isLoading;
   const profile = profileQuery.currentData;
@@ -194,6 +211,15 @@ export function AdminDriverDetail() {
         { key: 'status', header: 'Status', render: (truck) => <Badge>{truck.status || '—'}</Badge> },
       ]} /> : <EmptyState icon="truck" title="No vehicles assigned" />}
     </SectionCard>}
+    {tab === 'Overview' && profile?.isOwnerOperator && <SectionCard title="Registered Trucks" pad="none">
+      {!profile.ownedTrucks ? <span className="tk-meta">—</span> : profile.ownedTrucks.length ? <DataTable rows={profile.ownedTrucks} rowKey={(truck) => truck.id || truck.plate} columns={[
+        { key: 'plate', header: 'Plate Number', render: (truck) => truck.plate || '—' },
+        { key: 'type', header: 'Truck Type', render: (truck) => truck.type || '—' },
+        { key: 'status', header: 'Status', render: (truck) => <Badge>{truck.status || '—'}</Badge> },
+        { key: 'actions', header: 'Actions', render: (truck) => <OwnerTruckActions truck={truck} ownerId={profile.id} onReview={setTruckReview} navigate={navigate} /> },
+      ]} /> : <EmptyState icon="truck" title="No registered trucks" />}
+    </SectionCard>}
+    <FleetReviewModal review={truckReview} onClose={() => setTruckReview(null)} onSuccess={setNotice} />
     {tab === 'Trips & Activity' && <>
       <HistorySection title="Trip History" query={tripsQuery} page={tripPage} limit={tripLimit} onPage={setTripPage} onLimit={setTripLimit} columns={[
         { key: 'id', header: 'Trip ID' }, { key: 'containerNumber', header: 'Container', render: (trip) => trip.containerNumber || '—' },

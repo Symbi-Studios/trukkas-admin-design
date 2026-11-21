@@ -98,7 +98,7 @@ export const fleetApi = baseApi.injectEndpoints({
         return { message: text(data.message), truck: data.truck ? adaptTruck(data.truck) : null };
       },
       invalidatesTags: (_result, error, { id }) => error ? [] : [
-        { type: 'AdminFleet', id }, { type: 'AdminFleet', id: 'LIST' }, { type: 'AdminFleet', id: 'INSPECTIONS' }, { type: 'AdminFleet', id: 'OVERVIEW' }, 'AdminTrips',
+        { type: 'AdminFleet', id }, { type: 'AdminFleet', id: 'LIST' }, { type: 'AdminFleet', id: 'INSPECTIONS' }, { type: 'AdminFleet', id: 'OVERVIEW' }, 'AdminTrips', 'AdminDrivers', 'AdminDriverStats', 'AdminCompanies', 'AdminDocReviewQueue', 'AdminDocReviewDetail', 'AdminDocReviewStats',
       ],
     }),
   }),

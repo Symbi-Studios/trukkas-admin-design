@@ -133,6 +133,11 @@ export function adaptAdminDriverProfile(response, directoryDriver = null) {
       type: cleanText(truck.containerType), size: cleanText(truck.containerSize),
       year: cleanText(truck.year) || (count(truck.year) != null ? String(truck.year) : null), status: formatEnum(truck.status),
     })) : null,
+    ownedTrucks: ownerOperator && Array.isArray(dto.trucks) ? records(dto.trucks).map((truck) => ({
+      id: cleanText(truck.id), plate: cleanText(truck.plateNumber),
+      type: cleanText(truck.containerType), size: cleanText(truck.containerSize),
+      year: cleanText(truck.year) || (count(truck.year) != null ? String(truck.year) : null), status: formatEnum(truck.status),
+    })) : null,
   };
 }
 
