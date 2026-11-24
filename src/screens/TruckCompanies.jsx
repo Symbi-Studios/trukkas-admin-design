@@ -125,7 +125,7 @@ function CompaniesDirectory() {
   }
   if (!directoryQuery.currentData && (directoryQuery.isLoading || directoryQuery.isFetching)) return <CompaniesLoading />;
   return <div className="tc-page">
-    <PageHeader crumbs={['Companies', 'Trucking Companies']} title="Trucking Companies" description="Review, verify and manage all registered trucking companies on Trukkas." actions={<Button icon="plus" onClick={() => { setCreateError(null); setAddOpen(true); }}>Add Company</Button>} />
+    <PageHeader crumbs={['Users', 'Truck Companies']} title="Trucking Companies" description="Review, verify and manage all registered trucking companies on Trukkas." actions={<Button icon="plus" onClick={() => { setCreateError(null); setAddOpen(true); }}>Add Company</Button>} />
     {directoryQuery.error && <Banner tone="danger" title="Unable to load companies">{companyError(directoryQuery.error)}<Button variant="outline" onClick={directoryQuery.refetch}>Retry</Button></Banner>}
     {pendingQuery.error && <Banner tone="warning" title="Pending company information unavailable">{companyError(pendingQuery.error)}<Button variant="outline" onClick={pendingQuery.refetch}>Retry</Button></Banner>}
     {payoutsQuery.error && <Banner tone="warning" title="Company payout summary unavailable">{companyError(payoutsQuery.error)}<Button variant="outline" onClick={payoutsQuery.refetch}>Retry</Button></Banner>}

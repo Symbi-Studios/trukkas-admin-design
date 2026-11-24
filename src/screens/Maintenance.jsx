@@ -232,7 +232,7 @@ export function Maintenance() {
   return (
     <div className="maint-page">
       <PageHeader
-        crumbs={["Fleet", "Fleet Management", "Maintenance"]}
+        crumbs={["Fleet", "Fleet Maintenance"]}
         title="Maintenance"
         description="Track, manage and schedule maintenance activities for all fleet assets."
         actions={

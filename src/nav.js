@@ -15,24 +15,18 @@ export const NAV = [
     ],
   },
   {
-    section: "Fleet",
+    section: "Users",
     items: [
-      // { id: "fleet", icon: "truck", label: "Fleet Management" },
-      { id: "maintenance", icon: "settings", label: "Fleet Maintenance" },
       { id: "drivers", icon: "user", label: "Drivers" },
       { id: "companies", icon: "building-2", label: "Truck Companies" },
+      { id: "forwarders", icon: "users", label: "Forwarders" },
     ],
   },
-  // { section: 'Cargo', items: [
-  //   { id: 'cargo', icon: 'container', label: 'Cargo Management' },
-  //   { id: 'cargo-types', icon: 'boxes', label: 'Cargo Types' },
-  //   { id: 'calculator', icon: 'calculator', label: 'Truck Calculator' },
-  // ] },
   {
-    section: "Partners",
+    section: "Fleet",
     items: [
-      { id: "forwarders", icon: "users", label: "Forwarders" },
-      // { id: 'exporters', icon: 'briefcase', label: 'Exporters' },
+      { id: "fleet", icon: "truck", label: "Trucks" },
+      { id: "maintenance", icon: "wrench", label: "Fleet Maintenance" },
     ],
   },
   {

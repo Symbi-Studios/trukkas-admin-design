@@ -200,7 +200,7 @@ export function MaintenanceDetail() {
   return (
     <div className="maint-page mdet-page">
       <PageHeader
-        crumbs={["Fleet Management", "Maintenance", r.reference]}
+        crumbs={["Fleet", "Fleet Maintenance", r.reference]}
         title="Maintenance Record Details"
         description="View the complete maintenance record, service history and asset status for compliance and safety oversight."
         actions={
