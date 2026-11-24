@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card } from '../core/Card.jsx';
 import { Avatar } from '../core/Avatar.jsx';
+import { shortMoneyValue } from '../data/ShortMoney.jsx';
 
 /** Identity block at the top of a detail page: avatar, name, badges, then a row of fact columns. */
 export function EntityHeaderCard({ name, avatar, initials, badges, subtitle, facts = [], actions, style }) {
@@ -24,7 +25,7 @@ export function EntityHeaderCard({ name, avatar, initials, badges, subtitle, fac
                                   borderLeft: i ? '1px solid var(--tk-line)' : 'none' }}>
               <div className="tk-meta" style={{ marginBottom: 4 }}>{f.label}</div>
               <div style={{ font: '600 14px/20px var(--tk-font-sans)', color: f.tone || 'var(--tk-ink-900)' }}>
-                {f.value}
+                {shortMoneyValue(f.value)}
               </div>
               {f.hint && <div className="tk-meta" style={{ marginTop: 2 }}>{f.hint}</div>}
             </div>
