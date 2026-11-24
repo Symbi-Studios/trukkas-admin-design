@@ -1,0 +1,199 @@
+.page {
+  display: grid;
+  gap: var(--tk-space-4);
+  min-width: 0;
+}
+
+.tabs {
+  padding: 4px var(--tk-card-pad) 0;
+  border-bottom: 1px solid var(--tk-line);
+}
+
+.pageSummary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px var(--tk-card-pad);
+  border-top: 1px solid var(--tk-line);
+  background: var(--tk-surface-soft, var(--tk-surface-sunk));
+  color: var(--tk-ink-500);
+  font: 400 12px/16px var(--tk-font-sans);
+}
+.pageSummary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pageSummary strong {
+  color: var(--tk-ink-900);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.personText {
+  display: grid;
+  gap: 2px;
+}
+.personText strong {
+  font: 600 13px/16px var(--tk-font-sans);
+  color: var(--tk-ink-900);
+}
+.personText small,
+.muted {
+  font: 400 12px/16px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+  white-space: nowrap;
+}
+.money {
+  font: 400 13px/18px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.balance {
+  font: 600 14px/18px var(--tk-font-sans);
+  color: var(--tk-ink-900);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.balance[data-zero] {
+  color: var(--tk-ink-400);
+  font-weight: 500;
+}
+
+.emptyTable {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--tk-ink-400);
+}
+.emptyTable strong {
+  color: var(--tk-ink-900);
+  font: 600 14px/20px var(--tk-font-sans);
+}
+.emptyTable span {
+  font: 400 13px/18px var(--tk-font-sans);
+}
+
+/* Drawer */
+.balanceCard {
+  display: grid;
+  gap: 6px;
+  padding: 18px 20px;
+  margin-bottom: var(--tk-space-4);
+  border-radius: var(--tk-r-lg, 14px);
+  background: var(--tk-navy);
+  color: var(--tk-ink-on-navy);
+}
+.balanceLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tk-ink-on-navy-dim);
+  font: 500 12px/16px var(--tk-font-sans);
+}
+.balanceCard > strong {
+  font: 700 30px/36px var(--tk-font-sans);
+  font-variant-numeric: tabular-nums;
+}
+.balanceFacts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding-top: 12px;
+  margin-top: 6px;
+  border-top: 1px solid var(--tk-line-navy, rgba(255, 255, 255, 0.12));
+}
+.balanceFacts div {
+  display: grid;
+  gap: 2px;
+}
+.balanceFacts span {
+  color: var(--tk-ink-on-navy-dim);
+  font: 400 12px/16px var(--tk-font-sans);
+}
+.balanceFacts b {
+  font: 600 14px/18px var(--tk-font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.txList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.txList li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+.txList li + li {
+  border-top: 1px solid var(--tk-line);
+}
+.txIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--tk-r-sm);
+  background: var(--tk-surface-sunk);
+  color: var(--tk-ink-500);
+}
+.txMain {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.txMain strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tk-ink-900);
+  font: 500 13px/18px var(--tk-font-sans);
+}
+.txMain small {
+  color: var(--tk-ink-400);
+  font: 400 12px/16px var(--tk-font-sans);
+}
+.txSide {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+.txSide b {
+  color: var(--tk-ink-900);
+  font: 600 13px/18px var(--tk-font-sans);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.txPager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--tk-line);
+  color: var(--tk-ink-500);
+  font: 400 12px/16px var(--tk-font-sans);
+}
+.skeletonList {
+  display: grid;
+  gap: 8px;
+}
+.emptySmall {
+  margin: 0;
+  padding: 8px 0;
+  color: var(--tk-ink-400);
+  font: 400 13px/18px var(--tk-font-sans);
+}

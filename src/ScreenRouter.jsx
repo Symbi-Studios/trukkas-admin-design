@@ -26,10 +26,14 @@ import { Transactions } from './screens/Transactions.jsx';
 import { RequestedPayouts } from './screens/RequestedPayouts.jsx';
 import { ReportsAnalytics } from './screens/ReportsAnalytics.jsx';
 import { UserManagement } from './screens/UserManagement.jsx';
+import { UsersOverview } from './screens/UsersOverview.jsx';
 import { RolesPermissions } from './screens/RolesPermissions.jsx';
 import { SupportTickets } from './screens/SupportTickets.jsx';
 import { KnowledgeBase } from './screens/KnowledgeBase.jsx';
 import { Feedback } from './screens/Feedback.jsx';
+import { RatingsReviews } from './screens/RatingsReviews.jsx';
+import { FinanceOverview } from './screens/FinanceOverview.jsx';
+import { UserWallets } from './screens/UserWallets.jsx';
 import { Demurrage } from './screens/Demurrage.jsx';
 import { PlatformRates } from './screens/PlatformRates.jsx';
 import { Maintenance } from './screens/Maintenance.jsx';
@@ -70,10 +74,14 @@ const screens = {
   'cargo-types': CargoTypes,
   calculator: TruckCalculator,
   users: UserManagement,
+  'users-overview': UsersOverview,
   roles: RolesPermissions,
   tickets: SupportTickets,
   'knowledge-base': KnowledgeBase,
   feedback: Feedback,
+  reviews: RatingsReviews,
+  'finance-overview': FinanceOverview,
+  'user-wallets': UserWallets,
   demurrage: Demurrage,
   maintenance: Maintenance,
   notifications: NotificationCenter,
