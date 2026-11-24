@@ -174,6 +174,7 @@ export function AdminDriverDetail() {
           <LabelValue layout="stack" label="Full Name" value={fullName} />
           <LabelValue layout="stack" label="Phone Number" value={profile.phone || '—'} />
           <LabelValue layout="stack" label="Email Address" value={profile.email || '—'} />
+          <LabelValue layout="stack" label="Gender" value={profile.gender || '—'} />
           <LabelValue layout="stack" label="Account Status" value={profile.status || '—'} />
           <LabelValue layout="stack" label="Account Type" value={profile.registrationType || '—'} />
           <LabelValue layout="stack" label="Company" value={profile.company || '—'} />

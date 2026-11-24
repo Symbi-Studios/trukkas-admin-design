@@ -182,13 +182,14 @@ export function ForwarderDetail() {
               <div className="fd-info-grid">
                 <LabelValue layout="stack" label="Full Name" value={FORWARDER.name} />
                 <LabelValue layout="stack" label="Date of Birth" value={FORWARDER.dob} />
+                <LabelValue layout="stack" label="Gender" value={FORWARDER.gender} />
                 <LabelValue layout="stack" label="Nationality" value={FORWARDER.nationality} />
                 <LabelValue layout="stack" label="National ID (NIN)" value={FORWARDER.nin} />
                 <LabelValue layout="stack" label="Phone" value={FORWARDER.phone} />
                 <LabelValue layout="stack" label="Email" value={FORWARDER.email} />
                 <LabelValue layout="stack" label="Language(s)" value={FORWARDER.languages} />
                 <LabelValue layout="stack" label="Forwarding License No." value={present(FORWARDER.license) ? FORWARDER.license : <NotSubmitted />} />
-                <LabelValue layout="stack" label="Home Address" value={FORWARDER.address} style={{ gridColumn: '1 / -1' }} />
+                <LabelValue layout="stack" label="Home Address" value={FORWARDER.address} />
               </div>
             </SectionCard>
 

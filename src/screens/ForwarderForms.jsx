@@ -38,8 +38,9 @@ function SaveError({
 }) {
   return state.error ? <Banner tone="danger" title="Unable to confirm the update">{forwarderError(state.error)}</Banner> : null;
 }
-const PROFILE_FIELDS = [['Personal Information', [['firstName', 'First Name'], ['middleName', 'Middle Name'], ['lastName', 'Last Name'], ['dateOfBirth', 'Date of Birth', 'date'], ['nationality', 'Nationality'], ['languages', 'Languages', 'list']]], ['Forwarding License (optional)', [['forwardingLicenseNumber', 'Forwarding License No.']]]];
+const PROFILE_FIELDS = [['Personal Information', [['firstName', 'First Name'], ['middleName', 'Middle Name'], ['lastName', 'Last Name'], ['dateOfBirth', 'Date of Birth', 'date'], ['gender', 'Gender', 'gender'], ['nationality', 'Nationality'], ['languages', 'Languages', 'list']]], ['Forwarding License (optional)', [['forwardingLicenseNumber', 'Forwarding License No.']]]];
 const CREATE_FIELDS = [['firstName', 'First Name'], ['lastName', 'Last Name'], ['email', 'Email', 'email'], ['phone', 'Phone', 'tel'], ['dateOfBirth', 'Date of Birth', 'date'], ['businessName', 'Business Name']];
+const GENDER_OPTIONS = ['Male', 'Female'];
 const LIST_FIELDS = new Set(PROFILE_FIELDS.flatMap(([, fields]) => fields.filter(([,, type]) => type === 'list').map(([key]) => key)));
 function formValues(profile) {
   return Object.fromEntries(PROFILE_FIELDS.flatMap(([, fields]) => fields).map(([key]) => [key, LIST_FIELDS.has(key) ? (profile?.editable?.[key] || []).join('\n') : profile?.editable?.[key] ?? '']));
@@ -88,6 +89,7 @@ export function ForwarderProfileModal({
       disabled: blocked,
       onChange: edit(key)
     };
+    if (type === 'gender') return <Select key={key} {...props} placeholder="Select gender" options={GENDER_OPTIONS} />;
     return type === 'list' || type === 'textarea' ? <Textarea key={key} {...props} rows={3} hint={type === 'list' ? 'One item per line' : undefined} /> : <TextField key={key} {...props} type={type} min={type === 'number' ? 0 : undefined} step={type === 'number' ? 1 : undefined} required={!editing && key !== 'businessName'} />;
   }
   return <Modal open title={editing ? 'Edit Forwarder' : 'Add Forwarder'} description={forwarder?.name} width={editing ? 760 : 600} onClose={save.close} footer={<><Button variant="outline" disabled={busy} onClick={save.close}>Cancel</Button><Button type="submit" form="forwarder-profile-form" disabled={blocked || editing && !Object.keys(changes()).length}>{busy ? 'Saving…' : editing ? 'Save Changes' : 'Add Forwarder'}</Button></>}>
