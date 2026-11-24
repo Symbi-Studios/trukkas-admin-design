@@ -29,13 +29,13 @@ const historyPagination = (data, args) => ({
   totalPages: count(data.pagination?.totalPages),
 });
 
-const driverFilters = ({ status, registrationType, companyId, licenseStatus, onTrip, search } = {}) => {
-  const licenseVerificationStatus = ['PENDING_REVIEW', 'REJECTED'].includes(licenseStatus) ? licenseStatus : undefined;
+const driverFilters = ({ status, registrationType, companyId, licenseStatus, licenseVerificationStatus: verification, onTrip, search } = {}) => {
+  const licenseVerificationStatus = verification || (['PENDING_REVIEW', 'REJECTED'].includes(licenseStatus) ? licenseStatus : undefined);
   return Object.fromEntries(Object.entries({
     status: status === 'INACTIVE' ? undefined : status,
     statuses: status === 'INACTIVE' ? 'INACTIVE,SUSPENDED,BANNED' : undefined,
     registrationType, companyId,
-    licenseStatus: licenseVerificationStatus ? undefined : licenseStatus,
+    licenseStatus: licenseVerificationStatus && !verification ? undefined : licenseStatus,
     licenseVerificationStatus, onTrip, search: cleanText(search),
   }).filter(([, value]) => value !== undefined && value !== null && value !== ''));
 };
@@ -60,6 +60,34 @@ async function allUsers(baseQuery, path, params = {}, signal) {
   return { data: [...users.values()] };
 }
 
+const AWAITING_REVIEW = new Set(['SUBMITTED', 'PENDING', 'PENDING_REVIEW', 'IN_REVIEW', 'UNDER_REVIEW']);
+/**
+ * One plain-language licence state from the two API fields: validity (`licenseStatus`:
+ * VALID | EXPIRING_SOON | EXPIRED | NONE) and review (`license.verificationStatus`).
+ * A rejected or expired licence outranks everything; then pending review; then verified.
+ */
+export function driverLicenseState({ hasNumber, validity, verification }) {
+  if (!hasNumber && (validity === 'NONE' || !validity) && (!verification || verification === 'NOT_STARTED')) return { label: 'No license', tone: 'neutral', icon: 'file-x' };
+  if (verification === 'REJECTED') return { label: 'Rejected', tone: 'danger', icon: 'circle-x' };
+  if (validity === 'EXPIRED') return { label: 'Expired', tone: 'danger', icon: 'calendar-x' };
+  if (AWAITING_REVIEW.has(verification)) return { label: 'Awaiting review', tone: 'warning', icon: 'hourglass' };
+  if (verification === 'VERIFIED') return validity === 'EXPIRING_SOON'
+    ? { label: 'Expiring soon', tone: 'warning', icon: 'calendar-clock' }
+    : { label: 'Verified', tone: 'success', icon: 'badge-check' };
+  return { label: 'Not verified', tone: 'neutral', icon: 'shield' };
+}
+
+/** License filter options and the API filter each one sends. */
+export const DRIVER_LICENSE_FILTERS = {
+  Verified: { licenseVerificationStatus: 'VERIFIED' },
+  'Awaiting review': { licenseVerificationStatus: 'PENDING_REVIEW' },
+  'Not verified': { licenseVerificationStatus: 'NOT_STARTED' },
+  Rejected: { licenseVerificationStatus: 'REJECTED' },
+  'Expiring soon': { licenseStatus: 'EXPIRING_SOON' },
+  Expired: { licenseStatus: 'EXPIRED' },
+  'No license': { licenseStatus: 'NONE' },
+};
+
 export function adaptAdminDriver(dto = {}) {
   const company = record(dto.linkedCompany);
   const license = record(dto.license);
@@ -78,6 +106,13 @@ export function adaptAdminDriver(dto = {}) {
     licenseVerificationStatus: cleanText(license.verificationStatus),
     licenseStatus: licenseStatusLabels[rawLicense] || formatEnum(rawLicense) || '—',
     licenseExpiresAt: date(license.expiresAt) || date(dto.licenseExpiresAt), truckPlate: cleanText(record(dto.assignedTruck).plateNumber) || cleanText(dto.truckPlate),
+    truckId: cleanText(record(dto.assignedTruck).id), licenseClass: cleanText(license.class) || cleanText(dto.licenseClass),
+    avatarUrl: cleanText(dto.avatarUrl)?.startsWith('https://') ? cleanText(dto.avatarUrl) : null,
+    companyEmail: cleanText(company?.email),
+    licenseState: driverLicenseState({
+      hasNumber: Boolean(cleanText(license.number) || cleanText(dto.licenseNumber)), validity: rawLicense,
+      verification: cleanText(license.verificationStatus)?.toUpperCase() || null,
+    }),
     totalJobs: count(dto.totalJobs),
     joined: date(dto.joinedAt) || date(dto.createdAt),
     rating: count(record(dto.rating).count) === 0 ? null : finiteNumber(record(dto.rating).average), reviews: count(record(dto.rating).count), totalEarnings: finiteNumber(record(dto.earnings).completedTripValue),
@@ -224,6 +259,22 @@ export const driversApi = baseApi.injectEndpoints({
         return { data: { drivers: records(data.users).map(adaptAdminDriver).filter((driver) => driver.id), pagination: historyPagination(data, { page, limit }) } };
       },
       providesTags: (result) => [{ type: 'AdminDrivers', id: 'LIST' }, ...(result?.drivers || []).map((driver) => ({ type: 'AdminDrivers', id: driver.id }))],
+    }),
+    // Cards for one tab (company or individual). The stats endpoint only splits totals by
+    // type, so each figure is the pagination total of a one-row filtered list request.
+    getAdminDriverTabStats: builder.query({
+      async queryFn(registrationType, _api, _options, baseQuery) {
+        const figures = {
+          total: {}, active: { status: 'ACTIVE' }, onTrip: { status: 'ON_TRIP' }, pendingReview: { status: 'PENDING_REVIEW' },
+          awaitingLicense: { licenseVerificationStatus: 'PENDING_REVIEW' }, expired: { licenseStatus: 'EXPIRED' }, expiringSoon: { licenseStatus: 'EXPIRING_SOON' },
+        };
+        const entries = Object.entries(figures);
+        const results = await Promise.all(entries.map(([, filters]) => baseQuery({ url: '/admin/users/drivers', params: { ...driverFilters({ registrationType, ...filters }), page: 1, limit: 1 } })));
+        const failed = results.find((result) => result.error);
+        if (failed && results.every((result) => result.error)) return { error: failed.error };
+        return { data: Object.fromEntries(entries.map(([key], index) => [key, results[index].error ? null : count(unwrapApiResponseData(results[index].data)?.pagination?.total)])) };
+      },
+      providesTags: [{ type: 'AdminDrivers', id: 'LIST' }],
     }),
     getAdminPendingDrivers: builder.query({
       query: () => ({ url: '/admin/drivers/pending' }),
@@ -418,7 +469,7 @@ export const driversApi = baseApi.injectEndpoints({
 });
 
 export const {
-  useGetAdminDriversQuery, useGetAdminPendingDriversQuery, useGetAdminDriverStatsQuery, useGetAdminDriverEarningsQuery,
+  useGetAdminDriversQuery, useGetAdminDriverTabStatsQuery, useGetAdminPendingDriversQuery, useGetAdminDriverStatsQuery, useGetAdminDriverEarningsQuery,
   useGetAdminDriverProfileQuery, useGetAdminDriverLicenseQuery, useReviewAdminDriverMutation,
   useGetAdminDriverJobsQuery, useGetAdminDriverTransactionsQuery,
   useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery, useGetAdminDriverRankingsQuery, useGetAdminDriverActivityQuery,
