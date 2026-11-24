@@ -6,8 +6,10 @@ import { NAV } from '../../../nav.js';
 
 const NAV_PAGES = NAV.flatMap((group) => group.items.map((item) => ({ ...item, section: group.section, path: '/' + item.id })));
 const labelOf = (crumb) => (typeof crumb === 'string' ? crumb : crumb?.label) || '';
-const pageFor = (crumb) => NAV_PAGES.find((page) => page.label.toLowerCase() === labelOf(crumb).toLowerCase()
-  || (crumb && typeof crumb === 'object' && (crumb.to || crumb.href) === page.path));
+// An explicit link wins over a label match, since labels like "Overview" repeat across sections.
+const pathOf = (crumb) => (crumb && typeof crumb === 'object' ? crumb.to || crumb.href : null);
+const pageFor = (crumb) => (pathOf(crumb) && NAV_PAGES.find((page) => page.path === pathOf(crumb)))
+  || NAV_PAGES.find((page) => page.label.toLowerCase() === labelOf(crumb).toLowerCase());
 
 /**
  * Breadcrumbs that always start from a real sidebar section:

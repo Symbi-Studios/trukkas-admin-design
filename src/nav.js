@@ -33,9 +33,11 @@ export const NAV = [
   {
     section: "Finance",
     items: [
-      // Ordered along the money flow: held → released → withdrawn → ledger,
+      // Ordered along the money flow: held → released to wallets → withdrawn → ledger,
       // then charges, then the pages that configure prices and rates.
+      { id: "finance-overview", icon: "chart-pie", label: "Overview" },
       { id: "wallets", icon: "lock", label: "Escrow" },
+      { id: "user-wallets", icon: "wallet", label: "Wallets" },
       { id: "payouts", icon: "banknote", label: "Payouts" },
       { id: "transactions", icon: "receipt", label: "Transactions" },
       { id: "demurrage", icon: "hourglass", label: "Demurrage" },
@@ -58,14 +60,6 @@ export const NAV = [
     ],
   },
   {
-    section: "Administration",
-    items: [
-      { id: "users", icon: "users-round", label: "User Management" },
-      { id: "roles", icon: "key-round", label: "Roles & Permissions" },
-      { id: "settings", icon: "settings", label: "System Settings" },
-    ],
-  },
-  {
     section: "Support System",
     items: [
       { id: "tickets", icon: "ticket", label: "Support Tickets" },
@@ -73,7 +67,16 @@ export const NAV = [
       { id: "faq", icon: "circle-help", label: "FAQ" },
       { id: "announcements", icon: "megaphone", label: "Announcements" },
       { id: "feedback", icon: "message-square", label: "Feedback" },
+      { id: "reviews", icon: "star", label: "Ratings & Reviews" },
       { id: "notifications", icon: "bell", label: "Notification Center" },
+    ],
+  },
+  {
+    section: "Administration",
+    items: [
+      { id: "users", icon: "users-round", label: "User Management" },
+      { id: "roles", icon: "key-round", label: "Roles & Permissions" },
+      { id: "settings", icon: "settings", label: "System Settings" },
     ],
   },
 ];
@@ -96,7 +99,9 @@ export const SEARCH_PLACEHOLDER = {
   forwarders: "Search forwarders, RC number, email...",
   exporters: "Search exporters, RC number, email...",
   pricing: "Search by service, route, truck type, location...",
+  "finance-overview": "Search payouts, transactions, escrow...",
   wallets: "Search by job ID, Trip ID, customer, truck, or reference...",
+  "user-wallets": "Search wallets by name, email or business...",
   payouts: "Search payouts, recipients, references...",
   demurrage: "Search by job ID, container number, customer...",
   transactions: "Search transactions, references, users...",
@@ -114,6 +119,7 @@ export const SEARCH_PLACEHOLDER = {
   faq: "Search FAQ...",
   announcements: "Search tickets, articles, announcements...",
   feedback: "Search feedback submissions...",
+  reviews: "Search reviews by user, job or comment...",
   notifications: "Search notifications...",
   profile: "Search settings and activity...",
 };

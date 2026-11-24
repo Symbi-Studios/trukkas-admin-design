@@ -1,0 +1,297 @@
+.page {
+  display: grid;
+  gap: var(--tk-space-4);
+  min-width: 0;
+}
+
+.gridTwo,
+.gridThree {
+  display: grid;
+  gap: var(--tk-grid-gap);
+  align-items: stretch;
+}
+.gridTwo {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+}
+.gridThree {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.gridTwo > div,
+.gridThree > div {
+  min-width: 0;
+}
+.gridTwo :global(.tk-section-card-body),
+.gridThree :global(.tk-section-card-body) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tk-space-4);
+}
+
+.donutRow {
+  display: flex;
+  align-items: center;
+  gap: var(--tk-space-5);
+  flex: 1 1 auto;
+}
+
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: auto 0 0;
+  padding-top: var(--tk-space-3);
+  border-top: 1px solid var(--tk-line);
+}
+.facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 400 13px/18px var(--tk-font-sans);
+}
+.facts dt {
+  color: var(--tk-ink-500);
+}
+.facts dd {
+  margin: 0;
+  color: var(--tk-ink-900);
+  font-weight: 600;
+  text-align: right;
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tk-blue);
+  font: var(--tk-label-weight) var(--tk-label-size)/var(--tk-label-lh) var(--tk-font-sans);
+  cursor: pointer;
+}
+
+.list {
+  display: grid;
+  padding: 4px var(--tk-card-pad) 8px;
+}
+.list > * + * {
+  border-top: 1px solid var(--tk-line);
+}
+
+.empty {
+  display: grid;
+  flex: 1 1 auto;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 32px var(--tk-card-pad);
+  color: var(--tk-ink-400);
+  text-align: center;
+  font: var(--tk-meta-weight) var(--tk-meta-size)/var(--tk-meta-lh) var(--tk-font-sans);
+}
+.empty strong {
+  margin-top: 6px;
+  color: var(--tk-ink-700);
+  font-weight: var(--tk-label-weight);
+}
+
+/* loading + error, matching the Dashboard */
+.loadingLines {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 14px;
+}
+.loadError {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 520px;
+  margin: min(18vh, 150px) auto;
+  padding: 32px;
+  text-align: center;
+}
+.loadError h1 {
+  margin: 0;
+  color: var(--tk-ink-900);
+  font: 700 20px/28px var(--tk-font-sans);
+}
+.loadError p {
+  margin: 0 0 4px;
+  color: var(--tk-ink-500);
+  font: 400 14px/21px var(--tk-font-sans);
+}
+.loadErrorIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tk-danger-soft);
+  color: var(--tk-danger);
+  font: 700 19px/1 var(--tk-font-sans);
+}
+
+@media (max-width: 1280px) {
+  .gridThree {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gridThree > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 960px) {
+  .gridTwo,
+  .gridThree {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* six KPI tiles sit on one row at desktop widths, then reflow */
+.page :global(.tk-stats-grid) {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+/* Escrow split */
+.segmentList {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+.segment {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font: 400 13px/18px var(--tk-font-sans);
+}
+.segment i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.segmentLabel {
+  display: grid;
+  color: var(--tk-ink-700, var(--tk-ink-900));
+}
+.segmentLabel small {
+  color: var(--tk-ink-400);
+  font-size: 12px;
+}
+.segment strong {
+  color: var(--tk-ink-900);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Commission trend */
+.trendFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--tk-space-3);
+  padding-top: var(--tk-space-3);
+  border-top: 1px solid var(--tk-line);
+  margin-top: auto;
+}
+.trendFacts div {
+  display: grid;
+  gap: 2px;
+}
+.trendFacts span,
+.trendFacts small {
+  color: var(--tk-ink-500);
+  font: 400 12px/16px var(--tk-font-sans);
+}
+.trendFacts strong {
+  color: var(--tk-ink-900);
+  font: 600 15px/20px var(--tk-font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Money movement */
+.flow {
+  display: grid;
+  gap: 10px;
+}
+.flowRow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font: 400 13px/18px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+}
+.flowRow strong,
+.flowNet strong {
+  color: var(--tk-ink-900);
+  font: 600 15px/20px var(--tk-font-sans);
+  font-variant-numeric: tabular-nums;
+}
+.flowIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--tk-r-sm);
+}
+.flowIcon[data-tone="in"] { background: var(--tk-success-soft); color: var(--tk-success); }
+.flowIcon[data-tone="out"] { background: var(--tk-danger-soft); color: var(--tk-danger); }
+.flowNet {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--tk-r-md, 10px);
+  background: var(--tk-surface-sunk);
+  font: 500 13px/18px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+}
+.flowNet strong { font-size: 17px; color: var(--tk-success); }
+.flowNet strong[data-negative] { color: var(--tk-danger); }
+
+/* Last 7 days */
+.weekly {
+  display: grid;
+  gap: 14px;
+}
+.weeklyRow {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.weeklyIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--tk-r-sm);
+  background: var(--tk-surface-sunk);
+}
+.weeklyMain {
+  display: grid;
+  gap: 5px;
+}
+.weeklyHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font: 400 13px/18px var(--tk-font-sans);
+  color: var(--tk-ink-500);
+}
+.weeklyHead strong {
+  color: var(--tk-ink-900);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.weeklyTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--tk-viz-track, var(--tk-surface-sunk));
+  overflow: hidden;
+}
+.weeklyTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 300ms ease;
+}
+.weeklyMain small {
+  color: var(--tk-ink-400);
+  font: 400 12px/16px var(--tk-font-sans);
+}
