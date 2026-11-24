@@ -9,13 +9,20 @@ const integer = (v) => Number.isSafeInteger(v) && v >= 0 ? v : null;
 const percent = (v) => number(v) != null && v <= 100 ? v : null;
 const bool = (v) => typeof v === 'boolean' ? v : null;
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
+export const PENDING_BACKEND = 'Waiting on the backend: this view uses a proposed endpoint that is not live yet.';
+// Proposed endpoints (not in the OpenAPI spec yet). A 404/405/501 means "not
+// shipped", which screens show as a pending state rather than a failure.
+const notLive = { error: { status: 'CUSTOM_ERROR', error: PENDING_BACKEND, pendingBackend: true } };
+const pending = (result, also = []) => [404, 405, 501, ...also].includes(result?.error?.status) ? notLive : null;
+export const isPendingBackend = (error) => Boolean(error?.pendingBackend);
 const types = { PREVENTIVE: 'Preventive', REPAIR: 'Repair', INSPECTION: 'Inspection', BREAKDOWN: 'Breakdown' };
 const priorities = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
-const statuses = { REQUESTED: 'Requested', SCHEDULED: 'Scheduled', IN_PROGRESS: 'In Progress', COMPLETED: 'Completed', OVERDUE: 'Overdue', CANCELLED: 'Cancelled', REJECTED: 'Rejected' };
+const statuses = { REQUESTED: 'Requested', SCHEDULED: 'Scheduled', IN_PROGRESS: 'In Progress', SUBMITTED: 'Awaiting Verification', VERIFIED: 'Verified', COMPLETED: 'Completed', OVERDUE: 'Overdue', CANCELLED: 'Cancelled', REJECTED: 'Rejected' };
 const truckStatuses = { ACTIVE: 'Active', APPROVED: 'Approved', PENDING_REVIEW: 'Pending Review', REJECTED: 'Rejected', INACTIVE: 'Inactive', MAINTENANCE: 'In Maintenance' };
-export const maintenanceTabs = { 'All Maintenance': 'all', Scheduled: 'scheduled', 'In Progress': 'inProgress', Completed: 'completed', Overdue: 'overdue', Cancelled: 'cancelled' };
+export const maintenanceTabs = { 'All Maintenance': 'all', Requested: 'requested', Scheduled: 'scheduled', 'In Progress': 'inProgress', 'Awaiting Verification': 'submitted', Completed: 'completed', Overdue: 'overdue', Cancelled: 'cancelled', Rejected: 'rejected' };
 export const maintenanceHref = (id) => `/maintenance/detail?id=${encodeURIComponent(id)}`;
 export function maintenanceError(error) {
+  if (error?.data?.pendingBackend || error?.pendingBackend) return PENDING_BACKEND;
   if (error?.status === 403) return 'Your account cannot perform this maintenance operation.';
   if (error?.status === 401) return 'Please sign in again.';
   return getApiErrorMessage(error, 'The maintenance request could not be completed.');
@@ -145,7 +152,86 @@ function mapStats(response) {
   };
 }
 
-const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminMaintenance'] });
+function mapEligibility(dto, truckId) {
+  if (dto?.id !== truckId) throw new Error('The eligibility response returned a different truck.');
+  const code = text(dto.ineligibility?.reason);
+  return {
+    truckId, plate: text(dto.plateNumber) || '—', eligible: bool(dto.eligibleForJobs),
+    reasonCode: code, message: text(dto.ineligibility?.message) || null,
+    restricted: Boolean(dateValue(dto.restrictedAt)), restrictedAt: maintenanceDate(dto.restrictedAt), restrictionReason: text(dto.restrictionReason) || null,
+    liftedAt: maintenanceDate(dto.restrictionLiftedAt),
+  };
+}
+function mapCompletion(dto) {
+  if (!dto || typeof dto !== 'object') return null;
+  return {
+    completedAt: maintenanceDate(dto.completedAt), odometer: number(dto.odometerKm), workshop: text(dto.workshop?.name) || '—',
+    workPerformed: text(dto.workPerformed) || '—', actualCost: number(dto.actualCost),
+    nextDueKm: number(dto.nextDue?.km), nextDueDate: maintenanceDate(dto.nextDue?.date),
+    documents: Array.isArray(dto.documents) ? dto.documents.filter((doc) => text(doc?.id)).map((doc) => ({ id: doc.id, name: text(doc.name) || '—', url: safeUrl(doc.downloadUrl) })) : [],
+    submittedBy: text(dto.submittedBy?.name) || '—', submittedAt: maintenanceDate(dto.submittedAt),
+  };
+}
+function mapRequirement(dto) {
+  return {
+    ruleId: dto.ruleId, ruleName: text(dto.ruleName) || '—', category: text(dto.category), mandatory: bool(dto.mandatory), status: text(dto.status),
+    lastServiceKm: number(dto.lastServiceKm), lastServiceDate: maintenanceDate(dto.lastServiceDate),
+    dueKm: number(dto.dueKm), dueDate: maintenanceDate(dto.dueDate), remainingKm: Number.isFinite(dto.remainingKm) ? dto.remainingKm : null,
+    remainingDays: Number.isSafeInteger(dto.remainingDays) ? dto.remainingDays : null, intervalKm: number(dto.intervalKm), intervalDays: integer(dto.intervalDays),
+  };
+}
+function mapFleetRow(dto) {
+  const next = dto.nextRequirement && typeof dto.nextRequirement === 'object' ? mapRequirement({ ruleId: 'next', ...dto.nextRequirement }) : null;
+  return {
+    id: dto.truck.id, plate: text(dto.truck.plateNumber) || '—', vehicleClass: text(dto.truck.vehicleClass), truckType: text(dto.truck.label) || '—',
+    companyId: text(dto.company?.id), company: text(dto.company?.name) || '—',
+    odometer: number(dto.odometerKm), odometerUpdated: maintenanceDate(dto.odometerUpdatedAt), odometerSource: text(dto.odometerSource),
+    complianceStatus: text(dto.complianceStatus), next,
+    restriction: dto.restriction && typeof dto.restriction === 'object' ? { id: text(dto.restriction.id), source: text(dto.restriction.source), reason: text(dto.restriction.reason) || '—' } : null,
+    activeTripId: text(dto.activeTripId),
+  };
+}
+function mapRule(dto) {
+  const trigger = dto.trigger && typeof dto.trigger === 'object' ? { type: text(dto.trigger.type), interval: number(dto.trigger.interval) } : null;
+  return {
+    id: dto.id, name: text(dto.name) || '—', category: text(dto.category), trigger,
+    dueSoonKm: number(dto.dueSoon?.km), dueSoonDays: integer(dto.dueSoon?.days), graceDays: integer(dto.graceDays),
+    mandatory: bool(dto.mandatory), blocksAssignment: bool(dto.blocksAssignment),
+    vehicleClasses: Array.isArray(dto.scope?.vehicleClasses) ? dto.scope.vehicleClasses.filter(text) : [],
+    status: text(dto.status), version: integer(dto.version), trucksAffected: integer(dto.trucksAffected),
+    updatedAt: maintenanceDate(dto.updatedAt), updatedBy: text(dto.updatedBy?.name) || '—',
+  };
+}
+function mapException(dto) {
+  return {
+    id: dto.id, kind: text(dto.kind), truckId: text(dto.truck?.id), plate: text(dto.truck?.plateNumber) || '—', company: text(dto.company?.name) || '—',
+    reason: text(dto.reason) || '—', actor: text(dto.actor?.name) || 'System', createdAt: maintenanceDate(dto.createdAt), open: bool(dto.open),
+    tripId: text(dto.tripId),
+  };
+}
+function ruleProblem(rule) {
+  if (!text(rule.name) || rule.name.trim().length > 120) return 'Give the rule a name (up to 120 characters).';
+  if (!text(rule.category)) return 'Choose a maintenance category.';
+  if (!['KM', 'DAYS', 'ENGINE_HOURS'].includes(rule.triggerType)) return 'Choose what triggers this rule.';
+  const interval = Number(rule.interval);
+  if (!Number.isFinite(interval) || interval <= 0) return 'Enter an interval greater than zero.';
+  if (rule.dueSoon !== '' && (!Number.isFinite(Number(rule.dueSoon)) || Number(rule.dueSoon) < 0 || Number(rule.dueSoon) >= interval)) return 'The due-soon warning must be smaller than the interval.';
+  if (rule.graceDays !== '' && (!Number.isSafeInteger(Number(rule.graceDays)) || Number(rule.graceDays) < 0 || Number(rule.graceDays) > 60)) return 'Grace period must be 0–60 days.';
+  return null;
+}
+function ruleBody(rule) {
+  const dueSoon = rule.dueSoon === '' ? null : Number(rule.dueSoon);
+  return {
+    name: text(rule.name), category: rule.category,
+    trigger: { type: rule.triggerType, interval: Number(rule.interval) },
+    dueSoon: rule.triggerType === 'DAYS' ? { days: dueSoon } : { km: rule.triggerType === 'KM' ? dueSoon : null, days: null, hours: rule.triggerType === 'ENGINE_HOURS' ? dueSoon : null },
+    graceDays: rule.graceDays === '' ? 0 : Number(rule.graceDays),
+    mandatory: Boolean(rule.mandatory), blocksAssignment: Boolean(rule.mandatory && rule.blocksAssignment),
+    scope: { vehicleClasses: rule.vehicleClasses || [] },
+  };
+}
+
+const taggedApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminMaintenance', 'AdminMaintenanceRules'] });
 export const maintenanceApi = taggedApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
@@ -347,9 +433,11 @@ export const maintenanceApi = taggedApi.injectEndpoints({
       invalidatesTags: ['AdminMaintenance', 'AdminFleet'],
     }),
     restrictAdminMaintenanceTruck: builder.mutation({
-      async queryFn({ truckId, reference }, _api, _options, fetch) {
+      async queryFn({ truckId, reference, reason }, _api, _options, fetch) {
         if (!text(truckId)) return failure('The maintenance record does not contain a truck ID.');
-        const result = await fetch({ url: `${path}/trucks/${encodeURIComponent(truckId)}/restrict`, method: 'POST', body: { reason: `Suspend Asset requested from maintenance record ${reference}.` } });
+        const why = text(reason) || `Restricted from maintenance record ${reference}.`;
+        if (why.length > 500) return failure('Keep the reason under 500 characters.');
+        const result = await fetch({ url: `${path}/trucks/${encodeURIComponent(truckId)}/restrict`, method: 'POST', body: { reason: why } });
         if (result.error) return result;
         const confirmation = await fetch(`${path}/trucks/${encodeURIComponent(truckId)}/eligibility`);
         const data = unwrapApiResponseData(confirmation.data);
@@ -358,6 +446,178 @@ export const maintenanceApi = taggedApi.injectEndpoints({
       },
       invalidatesTags: ['AdminMaintenance', 'AdminFleet'],
     }),
+
+    getAdminMaintenanceEligibility: builder.query({
+      query: ({ truckId }) => `${path}/trucks/${encodeURIComponent(truckId)}/eligibility`,
+      transformResponse: (response, _meta, { truckId }) => mapEligibility(unwrapApiResponseData(response), truckId),
+      providesTags: ['AdminMaintenance', 'AdminFleet'],
+    }),
+    liftAdminMaintenanceRestriction: builder.mutation({
+      async queryFn({ truckId, reason }, _api, _options, fetch) {
+        if (!text(truckId)) return failure('This truck has no ID.');
+        if (!text(reason)) return failure('Enter a reason. Every manual clear is audited.');
+        if (reason.trim().length > 500) return failure('Keep the reason under 500 characters.');
+        const result = await fetch({ url: `${path}/trucks/${encodeURIComponent(truckId)}/lift-restriction`, method: 'POST', body: { reason: reason.trim() } });
+        if (result.error) return result;
+        const confirmation = await fetch(`${path}/trucks/${encodeURIComponent(truckId)}/eligibility`);
+        if (confirmation.error) return failure('The restriction was lifted, but the truck state could not be confirmed. Refresh before trying again.');
+        try { return { data: mapEligibility(unwrapApiResponseData(confirmation.data), truckId) }; } catch (error) { return failure(error.message); }
+      },
+      invalidatesTags: ['AdminMaintenance', 'AdminFleet'],
+    }),
+    reviewAdminMaintenanceRequest: builder.mutation({
+      async queryFn({ id, decision, reason, dueDate, serviceCenterName, serviceCenterLocation, notes }, _api, _options, fetch) {
+        if (!text(id) || !['approve', 'reject'].includes(decision)) return failure('Unsupported review action.');
+        if (decision === 'reject' && !text(reason)) return failure('Enter the reason the company will see.');
+        if (dueDate && !dateValue(dueDate)) return failure('Enter a valid date.');
+        const body = decision === 'reject' ? { reason: reason.trim() } : {
+          ...(dueDate ? { dueDate } : {}),
+          ...(text(serviceCenterName) ? { serviceCenterName: serviceCenterName.trim() } : {}),
+          ...(text(serviceCenterLocation) ? { serviceCenterLocation: serviceCenterLocation.trim() } : {}),
+          ...(text(notes) ? { notes: notes.trim() } : {}),
+        };
+        const result = await fetch({ url: `${path}/${encodeURIComponent(id)}/${decision}`, method: 'POST', body });
+        if (result.error) return result;
+        const confirmation = await fetch(`${path}/${encodeURIComponent(id)}`);
+        const dto = unwrapApiResponseData(confirmation.data);
+        const expected = decision === 'approve' ? 'SCHEDULED' : 'REJECTED';
+        if (confirmation.error || dto?.id !== id || dto.status !== expected) return failure('The decision was sent, but the record could not be confirmed. Refresh before trying again.');
+        try { return { data: mapRecord(dto) }; } catch (error) { return failure(error.message); }
+      },
+      invalidatesTags: ['AdminMaintenance'],
+    }),
+    // ---- Proposed endpoints (see the Fleet Maintenance backend brief) ----
+    verifyAdminMaintenanceCompletion: builder.mutation({
+      async queryFn({ id, decision, reason }, _api, _options, fetch) {
+        if (!text(id) || !['verify', 'return'].includes(decision)) return failure('Unsupported verification action.');
+        if (decision === 'return' && !text(reason)) return failure('Tell the company what to fix before resubmitting.');
+        const result = await fetch({ url: `${path}/${encodeURIComponent(id)}/${decision}`, method: 'POST', body: decision === 'return' ? { reason: reason.trim() } : {} });
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data)?.maintenance;
+        const expected = decision === 'verify' ? 'VERIFIED' : 'IN_PROGRESS';
+        if (dto?.id !== id || dto.status !== expected) return failure('The decision was sent, but the record could not be confirmed. Refresh before trying again.');
+        try { return { data: mapRecord(dto) }; } catch (error) { return failure(error.message); }
+      },
+      invalidatesTags: ['AdminMaintenance', 'AdminFleet'],
+    }),
+    getAdminMaintenanceSubmissions: builder.query({
+      async queryFn(args = {}, _api, _options, fetch) {
+        const query = { tab: 'submitted', page: args.page || 1, limit: args.limit || 10 };
+        const result = await fetch({ url: path, params: query });
+        // An older backend rejects the unknown `submitted` tab with 400.
+        if (result.error) return pending(result, [400]) || result;
+        try {
+          const list = mapList(result.data, query);
+          // An older backend ignores the unknown tab and returns every status.
+          if (list.rows.some((row) => row.statusCode !== 'SUBMITTED')) return notLive;
+          const raw = unwrapApiResponseData(result.data).maintenance;
+          return { data: { ...list, rows: list.rows.map((row, index) => ({ ...row, completion: mapCompletion(raw[index]?.completion) })) } };
+        } catch (error) { return failure(error.message); }
+      },
+      providesTags: ['AdminMaintenance'],
+    }),
+    getAdminMaintenanceFleet: builder.query({
+      async queryFn(args = {}, _api, _options, fetch) {
+        const params = Object.fromEntries(Object.entries(args).filter(([key, value]) => ['status', 'companyId', 'vehicleClass', 'restricted', 'search', 'page', 'limit'].includes(key) && value !== '' && value != null));
+        const result = await fetch({ url: `${path}/fleet`, params });
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data);
+        if (!Array.isArray(dto?.trucks)) return failure('The fleet compliance response is missing its trucks.');
+        const p = dto.pagination || {};
+        return { data: {
+          rows: dto.trucks.filter((item) => text(item?.truck?.id)).map(mapFleetRow),
+          pagination: { page: integer(p.page) ?? 1, total: integer(p.total), totalPages: integer(p.totalPages) ?? 1 },
+          counts: Object.fromEntries(Object.entries(dto.counts || {}).map(([key, value]) => [key, integer(value)])),
+        } };
+      },
+      providesTags: ['AdminMaintenance', 'AdminFleet'],
+    }),
+    getAdminMaintenanceRequirements: builder.query({
+      async queryFn({ truckId }, _api, _options, fetch) {
+        if (!text(truckId)) return failure('This truck has no ID.');
+        const result = await fetch(`${path}/trucks/${encodeURIComponent(truckId)}/requirements`);
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data);
+        if (!Array.isArray(dto?.requirements)) return failure('The requirements response is missing its list.');
+        return { data: dto.requirements.filter((item) => text(item?.ruleId)).map(mapRequirement) };
+      },
+      providesTags: ['AdminMaintenance'],
+    }),
+    getAdminMaintenanceRules: builder.query({
+      async queryFn(args = {}, _api, _options, fetch) {
+        const result = await fetch({ url: `${path}/rules`, params: args.status ? { status: args.status } : {} });
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data);
+        if (!Array.isArray(dto?.rules)) return failure('The rules response is missing its list.');
+        return { data: dto.rules.filter((item) => text(item?.id)).map(mapRule) };
+      },
+      providesTags: ['AdminMaintenanceRules'],
+    }),
+    getAdminMaintenanceRule: builder.query({
+      async queryFn({ id }, _api, _options, fetch) {
+        const result = await fetch(`${path}/rules/${encodeURIComponent(id)}`);
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data);
+        if (dto?.id !== id) return failure('The rule could not be confirmed. Please refresh.');
+        return { data: { ...mapRule(dto), versions: Array.isArray(dto.versions) ? dto.versions.map((v) => ({ version: integer(v?.version), changedBy: text(v?.changedBy?.name) || '—', changedAt: maintenanceDate(v?.changedAt), reason: text(v?.reason) || '—' })) : [] } };
+      },
+      providesTags: ['AdminMaintenanceRules'],
+    }),
+    previewAdminMaintenanceRule: builder.mutation({
+      async queryFn(rule, _api, _options, fetch) {
+        const result = await fetch({ url: `${path}/rules/preview`, method: 'POST', body: ruleBody(rule) });
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data) || {};
+        return { data: { trucksInScope: integer(dto.trucksInScope), wouldBeDue: integer(dto.wouldBeDue), wouldBeRestricted: integer(dto.wouldBeRestricted) } };
+      },
+    }),
+    saveAdminMaintenanceRule: builder.mutation({
+      async queryFn({ id, reason, ...rule }, _api, _options, fetch) {
+        const problem = ruleProblem(rule);
+        if (problem) return failure(problem);
+        if (id && !text(reason)) return failure('Enter a reason for this change. Rule edits are versioned and audited.');
+        const result = await fetch({ url: id ? `${path}/rules/${encodeURIComponent(id)}` : `${path}/rules`, method: id ? 'PATCH' : 'POST', body: { ...ruleBody(rule), ...(id ? { reason: reason.trim() } : {}) } });
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data)?.rule;
+        if (!text(dto?.id) || (id && dto.id !== id)) return failure('The rule was sent, but the saved version could not be confirmed. Refresh before trying again.');
+        return { data: mapRule(dto) };
+      },
+      invalidatesTags: ['AdminMaintenanceRules', 'AdminMaintenance', 'AdminFleet'],
+    }),
+    archiveAdminMaintenanceRule: builder.mutation({
+      async queryFn({ id, reason }, _api, _options, fetch) {
+        if (!text(reason)) return failure('Enter a reason for archiving this rule.');
+        const result = await fetch({ url: `${path}/rules/${encodeURIComponent(id)}`, method: 'PATCH', body: { status: 'ARCHIVED', reason: reason.trim() } });
+        if (result.error) return pending(result) || result;
+        return unwrapApiResponseData(result.data)?.rule?.status === 'ARCHIVED' ? { data: true } : failure('The rule could not be confirmed as archived. Refresh before trying again.');
+      },
+      invalidatesTags: ['AdminMaintenanceRules', 'AdminMaintenance', 'AdminFleet'],
+    }),
+    getAdminMaintenanceExceptions: builder.query({
+      async queryFn(args = {}, _api, _options, fetch) {
+        const result = await fetch({ url: `${path}/exceptions`, params: { page: args.page || 1, limit: args.limit || 10, ...(args.kind ? { kind: args.kind } : {}) } });
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data);
+        if (!Array.isArray(dto?.exceptions)) return failure('The exceptions response is missing its list.');
+        const p = dto.pagination || {};
+        return { data: { rows: dto.exceptions.filter((item) => text(item?.id)).map(mapException), pagination: { page: integer(p.page) ?? 1, total: integer(p.total), totalPages: integer(p.totalPages) ?? 1 } } };
+      },
+      providesTags: ['AdminMaintenance'],
+    }),
+    getAdminMaintenanceCompliance: builder.query({
+      async queryFn(_args, _api, _options, fetch) {
+        const result = await fetch(`${path}/reports/compliance`);
+        if (result.error) return pending(result) || result;
+        const dto = unwrapApiResponseData(result.data) || {};
+        return { data: {
+          complianceRate: percent(dto.complianceRate),
+          assignmentRejections: integer(dto.assignmentRejections?.count),
+          byCompany: Array.isArray(dto.byCompany) ? dto.byCompany.map((item) => ({ name: text(item?.name) || '—', rate: percent(item?.complianceRate), trucks: integer(item?.trucks), overdue: integer(item?.overdue) })) : [],
+          byVehicleClass: Array.isArray(dto.byVehicleClass) ? dto.byVehicleClass.map((item) => ({ name: text(item?.label) || text(item?.vehicleClass) || '—', rate: percent(item?.complianceRate) })) : [],
+        } };
+      },
+      providesTags: ['AdminMaintenance'],
+    }),
   }),
 });
-export const { useGetAdminMaintenanceQuery, useGetAdminMaintenanceStatsQuery, useGetAdminMaintenanceAssetQuery, useGetAdminMaintenanceDetailQuery, useGetAdminMaintenanceTruckRecordsQuery, useLazyExportAdminMaintenanceQuery, useImportAdminMaintenanceMutation, useUpdateAdminMaintenanceStatusMutation, useRestrictAdminMaintenanceTruckMutation, useGetAdminMaintenanceUsageQuery, useGetAdminMaintenanceDocumentsQuery, useFlagAdminMaintenanceMutation, useCreateAdminMaintenanceMutation, useGetAdminMaintenanceTruckOptionsQuery, useGetAdminMaintenanceServiceCentersQuery, useGetAdminMaintenanceCalendarQuery, useGetAdminMaintenancePoliciesQuery, useUpdateAdminMaintenancePoliciesMutation } = maintenanceApi;
+export const { useGetAdminMaintenanceQuery, useGetAdminMaintenanceStatsQuery, useGetAdminMaintenanceAssetQuery, useGetAdminMaintenanceDetailQuery, useGetAdminMaintenanceTruckRecordsQuery, useLazyExportAdminMaintenanceQuery, useImportAdminMaintenanceMutation, useUpdateAdminMaintenanceStatusMutation, useRestrictAdminMaintenanceTruckMutation, useGetAdminMaintenanceUsageQuery, useGetAdminMaintenanceDocumentsQuery, useFlagAdminMaintenanceMutation, useCreateAdminMaintenanceMutation, useGetAdminMaintenanceTruckOptionsQuery, useGetAdminMaintenanceServiceCentersQuery, useGetAdminMaintenanceCalendarQuery, useGetAdminMaintenancePoliciesQuery, useUpdateAdminMaintenancePoliciesMutation, useGetAdminMaintenanceEligibilityQuery, useLiftAdminMaintenanceRestrictionMutation, useReviewAdminMaintenanceRequestMutation, useVerifyAdminMaintenanceCompletionMutation, useGetAdminMaintenanceSubmissionsQuery, useGetAdminMaintenanceFleetQuery, useGetAdminMaintenanceRequirementsQuery, useGetAdminMaintenanceRulesQuery, useGetAdminMaintenanceRuleQuery, usePreviewAdminMaintenanceRuleMutation, useSaveAdminMaintenanceRuleMutation, useArchiveAdminMaintenanceRuleMutation, useGetAdminMaintenanceExceptionsQuery, useGetAdminMaintenanceComplianceQuery } = maintenanceApi;

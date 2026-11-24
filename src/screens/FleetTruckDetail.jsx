@@ -107,7 +107,7 @@ export function FleetTruckDetail() {
               {menu && (
                 <span>
                   <DropdownMenu width={220} items={[
-                    { label: "Schedule maintenance", icon: "wrench", onClick: () => navigate("/maintenance") },
+                    { label: "View maintenance", icon: "wrench", onClick: () => navigate("/maintenance?view=records") },
                     { divider: true },
                     { label: "Print profile", icon: "printer", onClick: () => window.print() },
                   ]}/>

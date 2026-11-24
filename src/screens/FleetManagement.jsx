@@ -50,7 +50,7 @@ export function FleetManagement() {
   function notify(message) { clearTimeout(toastTimer.current); setToast(message); toastTimer.current = setTimeout(() => setToast(''), 4500); }
   function unavailable(action) { setMenu(null); notify(`${action} is not available for these trucks yet.`); }
   function openTruck(truck) { navigate(`/fleet/detail?id=${encodeURIComponent(truck.id)}`); }
-  function scheduleMaintenance(truck) { setMenu(null); navigate(`/maintenance?schedule=1${truck?.id ? `&truckId=${encodeURIComponent(truck.id)}` : ''}`); }
+  function openMaintenance(truck) { setMenu(null); navigate(`/maintenance?view=records${truck?.id ? `&truckId=${encodeURIComponent(truck.id)}` : ''}`); }
   function openReview(value) { setMenu(null); setReview(value); }
   function download() { if (!rows.length) { notify('No trucks to export on this page.'); return; } exportCsv(rows); setMenu(null); showToast('The displayed page has been exported.'); }
   function refresh() { query.refetch(); inspections.refetch(); overview.refetch(); }
@@ -61,7 +61,7 @@ export function FleetManagement() {
       <input ref={upload} hidden type="file" accept=".csv,.xlsx" onChange={(event) => { if (event.target.files?.[0]) notify('Bulk import is not available yet. No trucks were imported.'); event.target.value = ''; }} />
       <span className="fleet-menu-wrap"><Button variant="outline" iconRight="chevron-down" onClick={() => setMenu(menu === 'top' ? null : 'top')}>More Actions</Button>{menu === 'top' && <span className="fleet-dropdown"><DropdownMenu width={210} items={[
         { label: 'Export Fleet', icon: 'download', onClick: download }, { label: 'Refresh Fleet', icon: 'rotate-ccw', onClick: () => { refresh(); setMenu(null); } },
-        { label: 'Schedule Maintenance', icon: 'wrench', onClick: () => scheduleMaintenance() }, { label: 'Print Fleet List', icon: 'printer', onClick: () => { setMenu(null); window.print(); } },
+        { label: 'Fleet Maintenance', icon: 'wrench', onClick: () => openMaintenance() }, { label: 'Print Fleet List', icon: 'printer', onClick: () => { setMenu(null); window.print(); } },
       ]} /></span>}</span>
     </>} />
     <div className="fleet-stats">
@@ -98,7 +98,7 @@ export function FleetManagement() {
           <IconButton icon="ellipsis-vertical" tone="outline" onClick={() => setMenu(menu === r.id ? null : r.id)} />
           {menu === r.id && <span className="fleet-dropdown"><DropdownMenu width={225} items={[
             { label: 'View Truck', icon: 'eye', onClick: () => openTruck(r) }, ...fleetReviewItems(r, openReview),
-            { label: 'Schedule Maintenance', icon: 'wrench', onClick: () => scheduleMaintenance(r) }, { divider: true },
+            { label: 'View maintenance', icon: 'wrench', onClick: () => openMaintenance(r) }, { divider: true },
             ...STATUSES.map((x) => ({ label: `Mark as ${x}`, icon: 'check', onClick: () => unavailable('Changing operational status') })),
           ]} /></span>}
         </span> },
@@ -116,7 +116,7 @@ export function FleetManagement() {
       </SectionCard>
       <QuickActionsCard items={[
         { icon: 'truck', label: 'Add Truck', hint: 'Register a new truck to the fleet', onClick: () => setAddOpen(true) },
-        { icon: 'wrench', label: 'Schedule Maintenance', hint: 'Plan maintenance for a truck', onClick: () => scheduleMaintenance() },
+        { icon: 'wrench', label: 'Fleet Maintenance', hint: 'Compliance, reviews and rules', onClick: () => openMaintenance() },
         { icon: 'upload', label: 'Bulk Upload', hint: 'Upload truck data in bulk', onClick: () => upload.current?.click() },
         { icon: 'download', label: 'Export Fleet', hint: 'Download fleet data report', onClick: download },
       ]} />

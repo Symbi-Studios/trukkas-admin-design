@@ -245,3 +245,15 @@
     width: 100%;
   }
 }
+
+.mdet-block { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--tk-r-lg); border: 1px solid var(--tk-danger-soft); background: var(--tk-danger-soft); }
+.mdet-block-ico { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--tk-surface); color: var(--tk-danger); flex: 0 0 auto; }
+.mdet-block-copy { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.mdet-block-copy strong { font: 600 14px/20px var(--tk-font-sans); color: var(--tk-danger); }
+.mdet-block-copy span { font: 400 13px/18px var(--tk-font-sans); color: var(--tk-ink-700); }
+.mdet-req { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--tk-line); }
+.mdet-req:last-child { border-bottom: 0; padding-bottom: 0; }
+.mdet-req-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mdet-req-head strong { font: 600 13px/18px var(--tk-font-sans); color: var(--tk-ink-900); }
+.mdet-req small { font-size: var(--tk-meta-size); color: var(--tk-ink-500); }
+@media (max-width: 760px) { .mdet-block { flex-wrap: wrap; } }
