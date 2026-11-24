@@ -32,7 +32,7 @@ export const BOARD_LAYOUTS = {
   ], { title: (row) => row.displayId, subtitle: (row) => row.company || '—', route: (row) => route(row.job.route), footer: ['jobType', (row) => row.updatedAt ? `Updated ${new Date(row.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : null] }, 'No jobs'),
   drivers: layout([
     ['Active', 'success'], ['On Trip', 'info'], ['Inactive', 'neutral'], ['Pending Profile', 'warning'], ['Pending Review', 'warning'], ['Rejected', 'danger'],
-  ], { title: (row) => row.name, value: 'rating', subtitle: 'company', body: ['license', 'truckPlate'], footer: ['registrationType', 'licenseStatus'] }, 'No drivers'),
+  ], { title: (row) => row.name, value: (row) => row.rating == null ? '' : `★ ${row.rating.toFixed(1)}`, subtitle: 'company', body: ['truckPlate'], footer: [(row) => `License: ${row.licenseState?.label ?? '—'}`] }, 'No drivers'),
   companies: layout([
     ['Active', 'success'], ['Inactive', 'neutral'], ['Pending Review', 'warning'], ['Suspended', 'danger'], ['Rejected', 'danger'],
   ], { title: (row) => row.name, value: (row) => row.trucks == null ? '—' : `${row.trucks} trucks`, subtitle: 'location', body: ['contact'], footer: ['verification', 'joined'] }, 'No companies'),

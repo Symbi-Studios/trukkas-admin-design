@@ -1,16 +1,11 @@
 'use client';
 import { showToast } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
-
-import { ViewToggle } from '../ds.js';
-
 import { usePageSearchState } from '../components/PageSearch.jsx';
 
-
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Link, useNavigate } from '../router.js';
-import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
+import { useSearchParams } from 'next/navigation';
+import { useNavigate } from '../router.js';
 import {
   PageHeader,
   Button,
@@ -22,8 +17,6 @@ import {
   DataTable,
   Pagination,
   Badge,
-  QuickActionsCard,
-  Card,
   DropdownMenu,
   IconButton,
   Avatar,
@@ -33,33 +26,40 @@ import {
   Modal,
   Textarea,
   Skeleton,
-  TextField,
-  Select,
-  LineChart,
   StatsPanel,
+  Tabs,
+  ViewToggle,
+  SideDrawer,
+  DrawerSection,
+  DrawerFacts,
 } from '../ds.js';
 import { DriverLicenseLoading, DriverLoadingNotice, DriverTableLoading, DriversLoading } from './DriversLoading.jsx';
 import {
-  adminDriverError, useActivateAdminDriverMutation, useGetAdminDriversQuery,
-  useGetAdminDriverLicenseQuery, useGetAdminDriverStatsQuery, useGetAdminDriverEarningsQuery,
-  useGetAdminPendingDriversQuery, useReviewAdminDriverMutation,
+  DRIVER_LICENSE_FILTERS,
+  adminDriverError, useActivateAdminDriverMutation, useGetAdminDriversQuery, useGetAdminDriverTabStatsQuery,
+  useGetAdminDriverLicenseQuery, useGetAdminDriverStatsQuery,
+  useReviewAdminDriverMutation,
   useSuspendAdminDriverMutation, useVerifyAdminDriverLicenseMutation,
-  useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery, useGetAdminDriverRankingsQuery,
-  useCreateAdminDriverMutation, useImportAdminDriversMutation, useLazyExportAdminDriverComplianceQuery,
+  useGetAdminDriverCompaniesQuery,
 } from '../store/features/drivers/driversApi.js';
 import './Drivers.css';
 
-const STATUS_TONE = { 'Pending Review': 'warning', Rejected: 'danger', Active: 'success', 'On Trip': 'info' };
-const REG_TYPES = ['Individual Driver', 'Company Driver'];
-const LICENSE_STATUSES = ['Valid', 'Expiring Soon', 'Expired', 'Pending Review', 'Rejected'];
+const TABS = {
+  company: { label: 'Company Drivers', single: 'company driver', query: 'company' },
+  individual: { label: 'Individual Drivers', single: 'individual driver', query: 'individual' },
+};
+const STATUS_TONE = { 'Pending Review': 'warning', 'Pending Profile': 'warning', Rejected: 'danger', Active: 'success', 'On Trip': 'info', Inactive: 'neutral' };
+const STATUSES = ['Active', 'On Trip', 'Pending Review', 'Pending Profile', 'Inactive', 'Rejected'];
 const STATUS_QUERY = {
   Active: 'ACTIVE', 'On Trip': 'ON_TRIP', Inactive: 'INACTIVE',
   'Pending Profile': 'PENDING_PROFILE', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED',
 };
-const TAB_QUERY = { Active: 'ACTIVE', 'On Trip': 'ON_TRIP', Inactive: 'INACTIVE', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
-const LICENSE_QUERY = { Valid: 'VALID', 'Expiring Soon': 'EXPIRING_SOON', Expired: 'EXPIRED', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED' };
-const EMPTY_DRIVER_FORM = { firstName: '', lastName: '', email: '', phone: '', licenseNumber: '', licenseExpiresAt: '', companyId: '', truckId: '' };
-const naira = (value) => Number.isFinite(value) ? `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+const LICENSE_OPTIONS = Object.keys(DRIVER_LICENSE_FILTERS);
+const fmt = (value) => (Number.isFinite(value) ? value.toLocaleString('en-NG') : '—');
+const day = (value) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+};
 
 function safeDocumentUrl(value) {
   try {
@@ -70,17 +70,9 @@ function safeDocumentUrl(value) {
   }
 }
 
-function driverDetailUrl(id) { return `/drivers/detail?id=${encodeURIComponent(id)}`; }
-
-function driverCell(driver) {
-  return <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-    <Avatar name={driver.name} size={34} />
-    <span style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-      <Link to={driverDetailUrl(driver.id)} style={{ font: '600 13px/18px var(--tk-font-sans)' }}>{driver.name}</Link>
-      <span className="tk-meta">{driver.phone || '—'}</span>
-    </span>
-  </span>;
-}
+const driverDetailUrl = (id) => `/drivers/detail?id=${encodeURIComponent(id)}`;
+const companyDetailUrl = (id) => `/companies/detail?id=${encodeURIComponent(id)}`;
+const truckDetailUrl = (id) => `/fleet/detail?id=${encodeURIComponent(id)}`;
 
 function download(name, text) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
@@ -90,76 +82,155 @@ function download(name, text) {
   anchor.click();
   URL.revokeObjectURL(url);
 }
+const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
 
-function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
+function DriverCell({ driver }) {
+  return <span className="driver-cell">
+    <Avatar name={driver.name} src={driver.avatarUrl || undefined} size={32} />
+    <span className="driver-cell-text">
+      <strong>{driver.name}</strong>
+      <small>{driver.phone || driver.email || '—'}</small>
+    </span>
+  </span>;
+}
 
-function DriverRowMenu({ anchor, items, onClose }) {
-  const menuRef = useRef(null);
-  const [position, setPosition] = useState(null);
-  useEffect(() => {
-    const update = () => {
-      if (!anchor?.isConnected || !menuRef.current) { onClose(null); return; }
-      const button = anchor.getBoundingClientRect(), menu = menuRef.current.getBoundingClientRect();
-      setPosition({
-        left: Math.max(8, Math.min(button.right - menu.width, window.innerWidth - menu.width - 8)),
-        top: button.bottom + 6 + menu.height <= window.innerHeight - 8 ? button.bottom + 6 : Math.max(8, button.top - menu.height - 6),
-      });
-    };
-    const outside = (event) => { if (!anchor?.contains(event.target) && !menuRef.current?.contains(event.target)) onClose(null); };
-    const escape = (event) => { if (event.key === 'Escape') onClose(null); };
-    update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    document.addEventListener('pointerdown', outside);
-    document.addEventListener('keydown', escape);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-      document.removeEventListener('pointerdown', outside);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [anchor, onClose]);
-  return createPortal(<div ref={menuRef} style={{ position: 'fixed', zIndex: 95, top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden' }}>
-    <DropdownMenu width={205} items={items} />
-  </div>, document.body);
+function CompanyChip({ name, size = 24 }) {
+  if (!name) return <span className="tk-meta">—</span>;
+  return <span className="driver-company"><Avatar name={name} size={size} square /><span>{name}</span></span>;
+}
+
+function TruckPlate({ plate }) {
+  if (!plate) return <span className="driver-no-truck">No truck</span>;
+  return <span className="driver-plate"><Icon name="truck" size={12} /><span>{plate}</span></span>;
+}
+
+function LicenseBadge({ driver, showExpiry = true }) {
+  const state = driver.licenseState;
+  return <span className="driver-license">
+    <Badge tone={state.tone}><Icon name={state.icon} size={11} />{state.label}</Badge>
+    {showExpiry && driver.licenseExpiresAt && <small>Exp. {day(driver.licenseExpiresAt)}</small>}
+  </span>;
+}
+
+function Rating({ driver }) {
+  if (driver.rating == null) return <span className="tk-meta">No ratings</span>;
+  return <span className="driver-rating"><span aria-hidden="true">★</span>{driver.rating.toFixed(1)}<small>({fmt(driver.reviews)})</small></span>;
+}
+
+function FilterMenu({ name, icon, value, allValue, options, open, setOpen, onChange }) {
+  return <span style={{ position: 'relative' }}>
+    <FilterSelect icon={icon} prefix={name} label={value} active={value !== allValue}
+      onClick={() => setOpen(open ? null : name)} onClear={() => { onChange(allValue); setOpen(null); }} />
+    {open && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+      <DropdownMenu width={220} items={[allValue, ...options].map((item) => ({
+        label: item, icon: item === value ? 'check' : undefined, onClick: () => { onChange(item); setOpen(null); },
+      }))} />
+    </span>}
+  </span>;
+}
+
+function DriverDrawer({ driver: d, companyTab, onClose, onOpen, onAction, onReviewLicense, navigate }) {
+  const licenseAwaiting = d.licenseState.label === 'Awaiting review';
+  return <SideDrawer
+    label="Driver details"
+    eyebrow={companyTab ? 'Company driver' : 'Individual driver'}
+    onClose={onClose}
+    title={<span className="driver-drawer-title"><Avatar name={d.name} src={d.avatarUrl || undefined} size={44} /><h2 className="tk-title">{d.name}</h2></span>}
+    meta={<>
+      <Badge tone={STATUS_TONE[d.status] || 'neutral'} dot>{d.status}</Badge>
+      <Badge tone={d.licenseState.tone}><Icon name={d.licenseState.icon} size={11} />License {d.licenseState.label.toLowerCase()}</Badge>
+    </>}
+    headerActions={<IconButton icon="maximize-2" label="Open full page" onClick={onOpen} />}
+    footer={<>
+      {(d.canReview || licenseAwaiting) && <div className="tk-drawer-footer-row">
+        {licenseAwaiting && <Button variant={d.canReview ? 'outline' : 'primary'} icon="file-check" onClick={onReviewLicense}>Review License</Button>}
+        {d.canReview && <>
+          <Button variant="outline" icon="circle-x" onClick={() => onAction('reject', d)}>Reject</Button>
+          <Button icon="circle-check" onClick={() => onAction('approve', d)}>Approve Driver</Button>
+        </>}
+      </div>}
+      <div className="tk-drawer-footer-row">
+        {d.canSuspend && <Button variant="danger" icon="ban" onClick={() => onAction('suspend', d)}>Suspend</Button>}
+        {d.canActivate && <Button variant="outline" icon="circle-check" onClick={() => onAction('activate', d)}>Reactivate</Button>}
+        <Button iconRight="maximize-2" onClick={onOpen}>Open Full Page</Button>
+      </div>
+    </>}
+  >
+    {d.rejectionReason && <Banner tone="danger" title="Application rejected">{d.rejectionReason}</Banner>}
+
+    <DrawerSection title="Contact">
+      <DrawerFacts items={[
+        { label: 'Phone', value: d.phone },
+        { label: 'Joined', value: day(d.joined) },
+        { label: 'Email', value: d.email, wide: true },
+      ]} />
+    </DrawerSection>
+
+    {companyTab && <DrawerSection title="Company">
+      {d.company ? <button type="button" className="driver-drawer-link" disabled={!d.linkedCompanyId} onClick={() => navigate(companyDetailUrl(d.linkedCompanyId))}>
+        <CompanyChip name={d.company} size={32} />
+        {d.companyEmail && <small>{d.companyEmail}</small>}
+        {d.linkedCompanyId && <Icon name="chevron-right" size={14} />}
+      </button> : <p className="tk-meta" style={{ margin: 0 }}>Not linked to a company.</p>}
+    </DrawerSection>}
+
+    <DrawerSection title="Assigned truck">
+      <div className="driver-drawer-truck">
+        <TruckPlate plate={d.truckPlate} />
+        {d.truckId && <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => navigate(truckDetailUrl(d.truckId))}>View truck</Button>}
+      </div>
+    </DrawerSection>
+
+    <DrawerSection title="License">
+      <DrawerFacts items={[
+        { label: 'Status', value: <LicenseBadge driver={d} showExpiry={false} /> },
+        { label: 'Expires', value: day(d.licenseExpiresAt) },
+        { label: 'License number', value: d.license ? <span className="tk-mono">{d.license}</span> : '—' },
+        { label: 'Class', value: d.licenseClass },
+      ]} />
+    </DrawerSection>
+
+    <DrawerSection title="At a glance">
+      <DrawerFacts items={[
+        { label: 'Total jobs', value: fmt(d.totalJobs) },
+        { label: 'Rating', value: <Rating driver={d} /> },
+      ]} />
+    </DrawerSection>
+  </SideDrawer>;
 }
 
 export function Drivers() {
-  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
-  const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
-  const [tab, setTab] = useState('All Drivers');
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('type') === 'individual' ? 'individual' : 'company');
+  const [tableView, setTableView] = useState('list');
+  const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [q, setQ] = usePageSearchState('', () => setPage(1));
   const [search, setSearch] = useState('');
-  const [regType, setRegType] = useState('All Account Types');
   const [status, setStatus] = useState('All Status');
   const [company, setCompany] = useState('All Companies');
-  const [licenseStatus, setLicenseStatus] = useState('All');
+  const [licenseFilter, setLicenseFilter] = useState('All Licenses');
   const [openMenu, setOpenMenu] = useState(null);
-  const [rowMenu, setRowMenu] = useState(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [toast, setToast] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
   const [action, setAction] = useState(null);
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [licenseDriverId, setLicenseDriverId] = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [driverForm, setDriverForm] = useState(EMPTY_DRIVER_FORM);
-  const [createError, setCreateError] = useState('');
-  const createLock = useRef(false), importLock = useRef(false), actionLock = useRef(false);
-  const importInput = useRef(null);
+  const actionLock = useRef(false);
+  const companyTab = tab === 'company';
+
   const companiesQuery = useGetAdminDriverCompaniesQuery();
-  const rankingQuery = useGetAdminDriverRankingsQuery();
   const companyRecords = companiesQuery.currentData || [];
   const companyOptions = companyRecords.map((item) => ({ ...item, label: companyRecords.filter((other) => other.name === item.name).length > 1 ? `${item.name} · ${item.email || item.id}` : item.name }));
   const filters = {
-    search, status: STATUS_QUERY[status] || TAB_QUERY[tab],
-    tabStatus: TAB_QUERY[tab], onTrip: status === 'Active' ? false : status === 'On Trip' ? true : undefined,
-    registrationType: regType === 'Company Driver' ? 'company' : regType === 'Individual Driver' ? 'individual' : undefined,
-    companyId: companyOptions.find((item) => item.label === company)?.id,
-    licenseStatus: LICENSE_QUERY[licenseStatus],
+    search,
+    registrationType: TABS[tab].query,
+    status: STATUS_QUERY[status],
+    onTrip: status === 'Active' ? false : undefined,
+    companyId: companyTab ? companyOptions.find((item) => item.label === company)?.id : undefined,
+    ...(DRIVER_LICENSE_FILTERS[licenseFilter] || {}),
   };
 
   useEffect(() => {
@@ -167,16 +238,9 @@ export function Drivers() {
     return () => clearTimeout(timer);
   }, [q]);
 
-  const driversQuery = useGetAdminDriversQuery(
-    { ...filters, page, limit: pageSize },
-  );
-  const pendingQuery = useGetAdminPendingDriversQuery();
+  const driversQuery = useGetAdminDriversQuery({ ...filters, page, limit: pageSize });
+  const tabStatsQuery = useGetAdminDriverTabStatsQuery(TABS[tab].query);
   const statsQuery = useGetAdminDriverStatsQuery();
-  const earningsQuery = useGetAdminDriverEarningsQuery(6);
-  const companyTrucksQuery = useGetAdminDriverCompanyTrucksQuery(driverForm.companyId, { skip: !addOpen || !driverForm.companyId });
-  const [createDriver, createState] = useCreateAdminDriverMutation();
-  const [importDrivers, importState] = useImportAdminDriversMutation();
-  const [exportCompliance, exportState] = useLazyExportAdminDriverComplianceQuery();
   const licenseQuery = useGetAdminDriverLicenseQuery(licenseDriverId, { skip: !licenseDriverId });
   const license = licenseQuery.currentData;
   const [reviewDriver, reviewState] = useReviewAdminDriverMutation();
@@ -185,55 +249,40 @@ export function Drivers() {
   const [activateDriver, activateState] = useActivateAdminDriverMutation();
   const actionBusy = reviewState.isLoading || licenseActionState.isLoading || suspendState.isLoading || activateState.isLoading;
 
-  const pendingById = useMemo(() => new Map((pendingQuery.data?.drivers || []).map((driver) => [driver.id, driver])), [pendingQuery.data]);
-  const drivers = useMemo(() => (driversQuery.currentData?.drivers || []).map((driver) => {
-    const pending = pendingById.get(driver.id);
-    return pending ? { ...driver, license: driver.license || pending.license, licenseStatus: driver.licenseStatus !== '—' ? driver.licenseStatus : pending.licenseStatus, licenseExpiresAt: driver.licenseExpiresAt || pending.licenseExpiresAt } : driver;
-  }), [driversQuery.currentData, pendingById]);
-  const companies = companyOptions.map((item) => item.label).sort();
-
-  const counts = {
-    total: statsQuery.data?.total ?? null,
-    individual: statsQuery.data?.individual,
-    company: statsQuery.data?.company,
-    pending: statsQuery.data?.pendingReview ?? pendingQuery.data?.count ?? null,
-    active: statsQuery.data?.active,
-    onTrip: statsQuery.data?.onTrip,
-    inactive: [statsQuery.data?.inactive, statsQuery.data?.suspended, statsQuery.data?.banned].every((value) => value != null)
-      ? statsQuery.data.inactive + statsQuery.data.suspended + statsQuery.data.banned : null,
-    rejected: statsQuery.data?.rejected,
-    expiringDocs: statsQuery.data?.documentsExpiring.expiringSoon,
-    totalEarnings: statsQuery.data?.earnings.completedTripValue,
-    avgRating: statsQuery.data?.averageRating.average,
-    totalReviews: statsQuery.data?.averageRating.count,
-  };
-  counts.approved = counts.active;
-
-  const filtered = drivers;
-
+  const drivers = useMemo(() => driversQuery.currentData?.drivers || [], [driversQuery.currentData]);
+  const selected = drivers.find((driver) => driver.id === selectedId) || null;
   const pageCount = driversQuery.currentData?.pagination.totalPages || 1;
   const total = driversQuery.currentData?.pagination.total;
-  const pendingCountLoading = !statsQuery.data && statsQuery.isFetching && !pendingQuery.data;
-  const inactiveCountLoading = !statsQuery.data && statsQuery.isFetching;
-  const metricValue = (value, loading) => loading ? <Skeleton as="span" width={54} height={23} /> : value ?? '—';
+  const tabStats = tabStatsQuery.currentData;
+  const tabStatsLoading = !tabStats && tabStatsQuery.isFetching;
+  const tabCounts = { company: statsQuery.data?.company, individual: statsQuery.data?.individual };
+  const metric = (value) => (tabStatsLoading ? <Skeleton as="span" width={54} height={23} /> : fmt(value));
+  const licenseIssues = tabStats && tabStats.expired != null && tabStats.expiringSoon != null ? tabStats.expired + tabStats.expiringSoon : null;
+  const filtersActive = Boolean(q.trim()) || status !== 'All Status' || company !== 'All Companies' || licenseFilter !== 'All Licenses';
 
-  function exportRoster() {
-    const header = ['Driver', 'Account Type', 'Company', 'License No.', 'Status', 'License Status', 'Joined', 'Earnings', 'Rating'];
-    const rows = filtered.map((driver) => [driver.name, driver.registrationType, driver.company, driver.license, driver.status, driver.licenseStatus, driver.joined, driver.totalEarnings, driver.rating]);
-    download('drivers-export.csv', [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n'));
+  function switchTab(value) {
+    setTab(value);
+    setCompany('All Companies');
+    setPage(1);
+    setSelectedId(null);
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === 'individual') params.set('type', 'individual'); else params.delete('type');
+    window.history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`);
+  }
+  function resetFilters() {
+    setQ(''); setStatus('All Status'); setCompany('All Companies'); setLicenseFilter('All Licenses'); setPage(1);
   }
 
-  function changeTab(value) {
-    setTab('All Drivers');
-    setStatus(value === 'All Drivers' ? 'All Status' : value);
-    setPage(1);
+  function exportRoster() {
+    const header = ['Driver', 'Phone', 'Email', ...(companyTab ? ['Company'] : []), 'Truck', 'Status', 'License', 'License Expiry', 'Total Jobs', 'Rating', 'Joined'];
+    const rows = drivers.map((d) => [d.name, d.phone, d.email, ...(companyTab ? [d.company] : []), d.truckPlate, d.status, d.licenseState.label, d.licenseExpiresAt?.slice(0, 10), d.totalJobs, d.rating, d.joined?.slice(0, 10)]);
+    download(`${tab}-drivers.csv`, [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n'));
   }
 
   function openAction(kind, driver) {
     setAction({ kind, id: driver.id, name: driver.name, reviewPath: driver.reviewPath });
     setReason('');
     setActionError('');
-    setRowMenu(null);
   }
 
   async function applyAction() {
@@ -252,6 +301,7 @@ export function Drivers() {
       showToast(`${action.name} ${actionSuccess[action.kind]}.`);
       setAction(null);
       setReason('');
+      if (action.kind.endsWith('license')) setLicenseDriverId(null);
     } catch (error) {
       setActionError(adminDriverError(error));
     } finally {
@@ -269,197 +319,78 @@ export function Drivers() {
   };
   const actionNeedsReason = action?.kind === 'suspend' || action?.kind === 'reject' || action?.kind === 'reject-license';
   const actionReasonRequired = action?.kind === 'suspend';
-
-  const filterMenu = (open, setOpen, options, value, onChange, width = 220) => open && (
-    <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
-      <DropdownMenu width={width} items={options.map((item) => ({
-        label: item, icon: item === value ? 'check' : undefined,
-        onClick: () => { onChange(item); setOpen(null); setPage(1); },
-      }))} />
-    </span>
-  );
-
-  const pendingRow = pendingQuery.data?.drivers?.[0];
-  const verifyDocuments = () => {
-    if (pendingRow?.id) setLicenseDriverId(pendingRow.id);
-    else setToast('There are no pending driver licenses to review.');
-  };
-
-  async function downloadCompliance() {
-    if (exportState.isFetching) return;
-    if (filters.tabStatus && filters.tabStatus !== 'ON_TRIP' && filters.status !== filters.tabStatus) {
-      setToast('The selected tab and account status do not overlap.');
-      return;
-    }
-    try { download('driver-compliance.csv', await exportCompliance(filters, false).unwrap()); }
-    catch (error) { setToast(adminDriverError(error)); }
-  }
-
-  async function submitDriver(event) {
-    event.preventDefault();
-    if (createLock.current || createState.isLoading) return;
-    if (!['firstName', 'lastName', 'email', 'phone'].every((key) => driverForm[key].trim())) { setCreateError('First name, last name, email and phone are required.'); return; }
-    if (!/^\+?[0-9\s-]{10,16}$/.test(driverForm.phone.trim())) { setCreateError('Enter a valid local or international phone number.'); return; }
-    createLock.current = true; setCreateError('');
-    try {
-      const created = await createDriver(driverForm).unwrap();
-      setAddOpen(false); setDriverForm(EMPTY_DRIVER_FORM);
-      showToast(created.invite.sms === true || created.invite.email === true ? 'Driver created and password invite sent.'
-        : created.invite.sms === false && created.invite.email === false ? 'Driver created, but both invite delivery channels failed.' : 'Driver created. Invite delivery status was not returned.');
-    } catch (error) { setCreateError(adminDriverError(error)); }
-    finally { createLock.current = false; }
-  }
-
-  async function importCsv(event) {
-    const file = event.target.files?.[0]; event.target.value = '';
-    if (!file || importLock.current) return;
-    if (!/\.csv$/i.test(file.name) || file.size > 2 * 1024 * 1024) { setToast('Choose a CSV file up to 2 MB.'); return; }
-    importLock.current = true;
-    try {
-      const result = await importDrivers(file).unwrap();
-      const failures = result.results.filter((row) => row.status === 'FAILED').map((row) => `Line ${row.line ?? '—'}: ${userFacingMessage(row.error, 'Could not import this row.')}`).join('; ');
-      setToast(`Created: ${result.created ?? '—'}. Failed: ${result.failed ?? '—'}.${failures ? ` ${failures}` : ''}`);
-    } catch (error) { setToast(adminDriverError(error)); }
-    finally { importLock.current = false; }
-  }
+  const licenseDriver = drivers.find((driver) => driver.id === licenseDriverId);
 
   if (!driversQuery.data && driversQuery.isFetching) return <DriversLoading />;
+
+  const columns = [
+    { key: 'name', header: 'Driver', render: (d) => <DriverCell driver={d} /> },
+    ...(companyTab ? [{ key: 'company', header: 'Company', render: (d) => <CompanyChip name={d.company} /> }] : []),
+    { key: 'truckPlate', header: 'Truck', render: (d) => <TruckPlate plate={d.truckPlate} /> },
+    { key: 'status', header: 'Status', render: (d) => <Badge dot tone={STATUS_TONE[d.status] || 'neutral'}>{d.status}</Badge> },
+    { key: 'licenseStatus', header: 'License', render: (d) => <LicenseBadge driver={d} /> },
+    { key: 'totalJobs', header: 'Jobs', align: 'right', render: (d) => fmt(d.totalJobs) },
+    { key: 'rating', header: 'Rating', render: (d) => <Rating driver={d} /> },
+    { key: 'joined', header: 'Joined', render: (d) => <span className="driver-joined">{day(d.joined)}</span> },
+  ];
 
   return <div className="drivers-page">
     <PageHeader
       crumbs={['Users', 'Drivers']}
       title="Drivers"
-      description="Monitor, review and manage all drivers on the Trukkas platform — individual drivers and drivers under trucking companies."
-      actions={<>
-        <Button icon="user-check" onClick={() => changeTab('Pending Review')}>Review Pending Drivers ({counts.pending ?? '—'})</Button>
-        <span style={{ position: 'relative' }}>
-          <Button variant="outline" iconRight="chevron-down" onClick={() => setMoreOpen((open) => !open)}>More Actions</Button>
-          {moreOpen && <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
-            <DropdownMenu width={230} items={[
-              { label: 'Add Driver', icon: 'user-plus', onClick: () => { setMoreOpen(false); setCreateError(''); setAddOpen(true); } },
-              { label: 'Import Drivers', icon: 'upload', onClick: () => { setMoreOpen(false); if (!importState.isLoading) importInput.current?.click(); } },
-              { label: 'Driver Compliance Report', icon: 'shield-check', onClick: () => { setMoreOpen(false); void downloadCompliance(); } },
-            ]} />
-          </span>}
-        </span>
-      </>}
+      description="Review and manage company drivers and individual drivers on Trukkas."
     />
 
-    {toast && <Banner tone="info" title={toast} style={{ marginBottom: 'var(--tk-space-4)' }} />}
-    {driversQuery.isFetching && <DriverLoadingNotice>Loading drivers…</DriverLoadingNotice>}
-    {pendingQuery.error && <Banner tone="warning" title="Pending driver review data unavailable">{adminDriverError(pendingQuery.error)}</Banner>}
 
-    <StatsPanel stack fixedLabel="All time" fixedHint="Driver totals cover all time; the driver stats API can’t be filtered by date yet.">
-    <div className="drivers-metrics">
-      <StatCard icon="users" label="Total Drivers" value={metricValue(counts.total, !statsQuery.data && statsQuery.isFetching)} caption={statsQuery.isLoading ? <Skeleton as="span" width={86} height={11} /> : counts.total == null ? 'Not available' : 'All registered drivers'} />
-      <StatCard icon="user" tint="green" label="Individual Drivers" value={metricValue(counts.individual, statsQuery.isLoading)} caption="Individual registrations" />
-      <StatCard icon="building-2" tint="navy" label="Company Drivers" value={metricValue(counts.company, statsQuery.isLoading)} caption="Company registrations" />
-      <StatCard icon="clock" tint="amber" label="Pending Review" value={metricValue(counts.pending, pendingCountLoading)} caption="Pending review queue" />
-      <StatCard icon="circle-check" tint="green" label="Approved / Active" value={metricValue(counts.approved, statsQuery.isLoading)} caption="ACTIVE account status" />
-    </div>
-
-    <div className="drivers-metrics drivers-metrics-secondary">
-      <StatCard icon="route" label="On Trip" value={metricValue(counts.onTrip, statsQuery.isLoading)} caption="Drivers on active trips" />
-      <StatCard icon="circle-minus" tint="navy" label="Inactive" value={metricValue(counts.inactive, inactiveCountLoading)} caption="INACTIVE, SUSPENDED, and BANNED" />
-      <StatCard icon="circle-x" tint="red" label="Rejected" value={metricValue(counts.rejected, statsQuery.isLoading)} caption="Rejected applications" />
-      <StatCard icon="triangle-alert" tint="amber" label="Documents Expiring" value={metricValue(counts.expiringDocs, statsQuery.isLoading)} caption={statsQuery.data?.documentsExpiring.withinDays == null ? '—' : `Within ${statsQuery.data.documentsExpiring.withinDays} days`} />
-      <StatCard icon="wallet" tint="green" label="Total Driver Earnings" value={naira(counts.totalEarnings)} caption="Completed trip value; paid to companies" />
-      <StatCard icon="star" tint="amber" label="Average Rating" value={counts.avgRating == null ? '—' : counts.avgRating.toFixed(1)} caption={counts.totalReviews == null ? '—' : `${counts.totalReviews} reviews`} />
-    </div>
+    <StatsPanel title={TABS[tab].label} fixedLabel="All time" fixedHint="Counts cover every driver of this type; driver stats can’t be filtered by date yet.">
+      <StatCard icon={companyTab ? 'building-2' : 'user-round'} tint="blue" label="Total Drivers" value={metric(tabStats?.total)}
+        caption={tabStats?.active != null ? `${fmt(tabStats.active)} active` : undefined} />
+      <StatCard icon="route" tint="teal" label="On a Trip" value={metric(tabStats?.onTrip)} caption="Driving right now" />
+      <StatCard icon="user-check" tint="amber" label="Pending Review" value={metric(tabStats?.pendingReview)} caption="Waiting for approval" />
+      <StatCard icon="file-check" tint="purple" label="License Awaiting Review" value={metric(tabStats?.awaitingLicense)} caption="Submitted, not yet checked" />
+      <StatCard icon="calendar-x" tint="red" label="License Issues" value={metric(licenseIssues)}
+        caption={tabStats?.expired != null ? `${fmt(tabStats.expired)} expired · ${fmt(tabStats.expiringSoon)} expiring soon` : undefined} />
     </StatsPanel>
 
-    <div className="drivers-layout">
-      <Card pad="none">
-        <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
-          search={<SearchField placeholder="Search by driver name, license number, phone, or company..." value={q} onChange={(event) => setQ(event.target.value)} />}
-          filters={<>
-            <span style={{ position: 'relative' }}><FilterSelect label={regType} active={regType !== 'All Account Types'} onClick={() => setOpenMenu(openMenu === 'reg' ? null : 'reg')} />{filterMenu(openMenu === 'reg', setOpenMenu, ['All Account Types', ...REG_TYPES], regType, setRegType)}</span>
-            <span style={{ position: 'relative' }}><FilterSelect label={status} active={status !== 'All Status'} onClick={() => setOpenMenu(openMenu === 'status' ? null : 'status')} />{filterMenu(openMenu === 'status', setOpenMenu, ['All Status', 'Active', 'On Trip', 'Inactive', 'Pending Profile', 'Pending Review', 'Rejected'], status, setStatus)}</span>
-            <span style={{ position: 'relative' }}><FilterSelect label={company} active={company !== 'All Companies'} onClick={() => setOpenMenu(openMenu === 'company' ? null : 'company')} />{filterMenu(openMenu === 'company', setOpenMenu, ['All Companies', ...companies], company, setCompany)}</span>
-            <span style={{ position: 'relative' }}><FilterSelect label={licenseStatus === 'All' ? 'All License Status' : licenseStatus} active={licenseStatus !== 'All'} onClick={() => setOpenMenu(openMenu === 'license' ? null : 'license')} />{filterMenu(openMenu === 'license', setOpenMenu, ['All', ...LICENSE_STATUSES], licenseStatus, setLicenseStatus)}</span>
-          </>}
-          trailing={<Button variant="outline" icon="download" disabled={driversQuery.isFetching} onClick={exportRoster}>Export</Button>}
-        />
+    <SectionCard pad="none">
+      <Tabs
+        value={tab}
+        onChange={switchTab}
+        items={Object.entries(TABS).map(([value, meta]) => ({ value, label: meta.label, count: tabCounts[value] ?? undefined }))}
+        style={{ padding: '0 16px' }}
+      />
+      <TableToolbar
+        viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
+        search={<SearchField placeholder={companyTab ? 'Search name, phone, plate, company...' : 'Search name, phone or plate...'} value={q} onChange={(event) => setQ(event.target.value)} />}
+        filters={<>
+          <FilterMenu name="Status" icon="circle-dot" value={status} allValue="All Status" options={STATUSES} open={openMenu === 'Status'} setOpen={setOpenMenu} onChange={(value) => { setStatus(value); setPage(1); }} />
+          {companyTab && <FilterMenu name="Company" icon="building-2" value={company} allValue="All Companies" options={companyOptions.map((item) => item.label).sort()} open={openMenu === 'Company'} setOpen={setOpenMenu} onChange={(value) => { setCompany(value); setPage(1); }} />}
+          <FilterMenu name="License" icon="id-card" value={licenseFilter} allValue="All Licenses" options={LICENSE_OPTIONS} open={openMenu === 'License'} setOpen={setOpenMenu} onChange={(value) => { setLicenseFilter(value); setPage(1); }} />
+          {filtersActive && <Button variant="ghost" icon="rotate-ccw" onClick={resetFilters}>Reset</Button>}
+        </>}
+        trailing={<Button variant="outline" icon="download" disabled={driversQuery.isFetching || !drivers.length} onClick={exportRoster}>Export</Button>}
+      />
 
+      {driversQuery.isFetching && driversQuery.data && <DriverLoadingNotice>Loading drivers…</DriverLoadingNotice>}
+      {driversQuery.isFetching ? <DriverTableLoading columns={columns.length} />
+        : driversQuery.error ? <div style={{ padding: 'var(--tk-card-pad)' }}><Banner tone="danger" title="Unable to load drivers">{adminDriverError(driversQuery.error)}</Banner><Button variant="outline" onClick={() => driversQuery.refetch()}>Retry</Button></div>
+          : drivers.length === 0 && tableView !== 'board' ? <EmptyState icon="users" title={`No ${TABS[tab].label.toLowerCase()} found`} description={filtersActive ? 'Try different filters or search terms.' : `${TABS[tab].label} appear here once they register.`} />
+            : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.drivers} view={tableView} boardGroupBy={(row) => row.status}
+              boardOnRowClick={(row) => setSelectedId(row.id)} onRowClick={(row) => setSelectedId(row.id)}
+              rows={drivers} rowKey={(driver) => driver.id} columns={columns} />}
+      {!driversQuery.isFetching && !driversQuery.error && <Pagination page={page} pageSize={pageSize} pageCount={pageCount} total={total} onPage={(next) => setPage(Math.max(1, Math.min(pageCount, next)))} onPageSize={(size) => { setPageSize(size); setPage(1); }} />}
+    </SectionCard>
 
-        {driversQuery.isFetching ? <DriverTableLoading />
-          : driversQuery.error ? <div style={{ padding: 'var(--tk-card-pad)' }}><Banner tone="danger" title="Unable to load drivers">{adminDriverError(driversQuery.error)}</Banner><Button variant="outline" onClick={() => driversQuery.refetch()}>Retry</Button></div>
-            : filtered.length === 0 && tableView !== 'board' ? <EmptyState icon="users" title="No drivers found" description={total ? 'No drivers on this page match the selected filters.' : 'No drivers match this search or status.'} />
-              : <DataTable boardHideEmpty={hideEmptyColumns} boardConfig={BOARD_LAYOUTS.drivers} boardOnRowClick={(row) => navigate(driverDetailUrl(row.id))} view={tableView} boardGroupBy={(row) => row.status} rows={filtered} rowKey={(driver) => driver.id} columns={[
-                { key: 'name', header: 'Driver', render: driverCell },
-                { key: 'registrationType', header: 'Account Type', render: (driver) => <Badge tone={driver.registrationType === 'Company Driver' ? 'info' : 'neutral'}>{driver.registrationType}</Badge> },
-                { key: 'company', header: 'Company', render: (driver) => driver.company || '—' },
-                { key: 'license', header: 'License No.', render: (driver) => <span className="tk-mono">{driver.license || '—'}</span> },
-                { key: 'truckPlate', header: 'Assigned Truck', render: (driver) => driver.truckPlate ? <span className="tk-mono">{driver.truckPlate}</span> : <span className="tk-meta">—</span> },
-                { key: 'status', header: 'Status', render: (driver) => <Badge dot tone={STATUS_TONE[driver.status]}>{driver.status}</Badge> },
-                { key: 'licenseStatus', header: 'License Status', render: (driver) => <Badge>{driver.licenseStatus}</Badge> },
-                { key: 'joined', header: 'Joined', render: (driver) => driver.joined ? new Date(driver.joined).toLocaleDateString() : '—' },
-                { key: 'earnings', header: 'Earnings', render: (driver) => <strong style={{ color: 'var(--tk-ink-900)' }}>{naira(driver.totalEarnings)}</strong> },
-                { key: 'rating', header: 'Rating', render: (driver) => driver.rating != null ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="star" size={13} color="var(--tk-warning)" />{driver.rating.toFixed(1)}</span> : <span className="tk-meta">—</span> },
-                { key: 'actions', header: 'Actions', width: 130, render: (driver) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Link to={driverDetailUrl(driver.id)}><Button size="sm" variant="outline">View</Button></Link>
-                  <IconButton icon="ellipsis-vertical" label={`Actions for ${driver.name}`} onClick={(event) => setRowMenu((current) => current?.driver.id === driver.id ? null : { driver, anchor: event.currentTarget })} />
-                </span> },
-              ]} />}
-        {!driversQuery.isFetching && !driversQuery.error && <Pagination page={page} pageSize={pageSize} pageCount={pageCount} total={total} onPage={(next) => setPage(Math.max(1, Math.min(pageCount, next)))} onPageSize={(size) => { setPageSize(size); setPage(1); }} />}
-      </Card>
-
-      <div className="drivers-rail">
-        <SectionCard title="Driver Status">
-          <div style={{ display: 'grid', gap: 12 }}>
-            {[
-              ['Active', counts.active], ['Pending Review', counts.pending], ['Inactive', counts.inactive], ['On Trip', counts.onTrip],
-            ].map(([label, value]) => <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span className="tk-meta">{label}</span><strong style={{ color: 'var(--tk-ink-900)' }}>{value ?? '—'}</strong></div>)}
-            <span className="tk-meta">On-trip drivers are included in active accounts.</span>
-          </div>
-        </SectionCard>
-        <SectionCard title="Earnings Overview" description="Last 6 months">
-          {earningsQuery.isFetching ? <Skeleton height={180} />
-            : !earningsQuery.error && earningsQuery.currentData ? <LineChart height={180} area
-              labels={earningsQuery.currentData.chart.map((month) => month.label)}
-              series={[{ name: 'Completed trip value', color: 'var(--tk-blue)', points: earningsQuery.currentData.chart.map((month) => month.value) }]}
-              format={naira} />
-              : <EmptyState icon="wallet" title="Earnings data unavailable" description={earningsQuery.error ? adminDriverError(earningsQuery.error) : '—'} style={{ padding: '24px 8px' }} />}
-        </SectionCard>
-        <SectionCard title="Top Rated Drivers">
-          {rankingQuery.isFetching ? <DriverTableLoading columns={3} /> : rankingQuery.error ? <EmptyState icon="star" title="Ratings data unavailable" description={adminDriverError(rankingQuery.error)} style={{ padding: '24px 8px' }} />
-            : rankingQuery.currentData?.length ? <DataTable rows={rankingQuery.currentData} rowKey={(driver) => driver.id} columns={[
-              { key: 'name', header: 'Driver', render: driverCell }, { key: 'rating', header: 'Rating', render: (driver) => driver.rating.toFixed(1) }, { key: 'reviews', header: 'Reviews' },
-            ]} /> : <EmptyState icon="star" title="Ratings data unavailable" description="No rated drivers were returned." style={{ padding: '24px 8px' }} />}
-        </SectionCard>
-        <QuickActionsCard items={[
-          { icon: 'user-check', label: 'Review Pending Drivers', hint: 'Verify and approve driver registrations', onClick: () => changeTab('Pending Review') },
-          { icon: 'shield-check', label: 'Verify Documents', hint: 'Review a pending driver license', onClick: verifyDocuments },
-          { icon: 'file-chart-column', label: 'Driver Compliance Report', hint: 'Download the compliance CSV', onClick: () => void downloadCompliance() },
-          { icon: 'download', label: 'Export Driver List', hint: 'Download the displayed page', onClick: exportRoster },
-        ]} />
-      </div>
-    </div>
-
-    {rowMenu && <DriverRowMenu anchor={rowMenu.anchor} onClose={setRowMenu} items={[
-      { label: 'Review License', icon: 'file-check', onClick: () => { setLicenseDriverId(rowMenu.driver.id); setRowMenu(null); } },
-      ...(rowMenu.driver.canReview ? [
-        { label: 'Approve Driver', icon: 'circle-check', onClick: () => openAction('approve', rowMenu.driver) },
-        { label: 'Reject Driver', icon: 'circle-x', tone: 'danger', onClick: () => openAction('reject', rowMenu.driver) },
-      ] : []),
-      ...(rowMenu.driver.canSuspend ? [{ label: 'Suspend Driver', icon: 'user-x', tone: 'danger', onClick: () => openAction('suspend', rowMenu.driver) }] : []),
-      ...(rowMenu.driver.canActivate ? [{ label: 'Reactivate Driver', icon: 'circle-check', onClick: () => openAction('activate', rowMenu.driver) }] : []),
-    ]} />}
-
-    <input ref={importInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importCsv(event)} />
-    <Modal open={addOpen} onClose={() => { if (!createState.isLoading) setAddOpen(false); }} title="Add Driver" footer={<>
-      <Button variant="outline" disabled={createState.isLoading} onClick={() => setAddOpen(false)}>Cancel</Button>
-      <Button type="submit" form="add-driver-form" disabled={createState.isLoading}>{createState.isLoading ? 'Saving…' : 'Add Driver'}</Button>
-    </>}>
-      <form id="add-driver-form" onSubmit={submitDriver} style={{ display: 'grid', gap: 14 }}>
-        {[['firstName', 'First Name', 'text', 80], ['lastName', 'Last Name', 'text', 80], ['email', 'Email', 'email'], ['phone', 'Phone', 'tel'], ['licenseNumber', 'License Number', 'text', 40], ['licenseExpiresAt', 'License Expiry', 'date']].map(([key, label, type, maxLength]) => (
-          <TextField key={key} label={label} type={type} maxLength={maxLength} required={['firstName', 'lastName', 'email', 'phone'].includes(key)} value={driverForm[key]} disabled={createState.isLoading} onChange={(event) => setDriverForm((form) => ({ ...form, [key]: event.target.value }))} />
-        ))}
-        <Select label="Company (optional)" placeholder="Individual Driver" value={driverForm.companyId} disabled={createState.isLoading || companiesQuery.isFetching} options={[...(driverForm.companyId ? [{ value: '', label: 'Individual Driver' }] : []), ...companyOptions.map((item) => ({ value: item.id, label: item.label }))]} onChange={(event) => setDriverForm((form) => ({ ...form, companyId: event.target.value, truckId: '' }))} />
-        <Select label="Assigned Truck (optional)" placeholder="Unassigned" value={driverForm.truckId} disabled={!driverForm.companyId || companyTrucksQuery.isFetching || createState.isLoading} options={[...(driverForm.truckId ? [{ value: '', label: 'Unassigned' }] : []), ...(companyTrucksQuery.currentData || []).map((truck) => ({ value: truck.id, label: truck.plate }))]} onChange={(event) => setDriverForm((form) => ({ ...form, truckId: event.target.value }))} />
-        {(createError || companyTrucksQuery.error || companiesQuery.error) && <Banner tone="danger" title="Action not completed">{createError || adminDriverError(companyTrucksQuery.error || companiesQuery.error)}</Banner>}
-      </form>
-    </Modal>
+    {selected && <DriverDrawer
+      key={selected.id}
+      driver={selected}
+      companyTab={companyTab}
+      navigate={navigate}
+      onClose={() => setSelectedId(null)}
+      onOpen={() => navigate(driverDetailUrl(selected.id))}
+      onAction={openAction}
+      onReviewLicense={() => setLicenseDriverId(selected.id)}
+    />}
 
     <Modal open={Boolean(action)} onClose={() => { if (!actionBusy) { setAction(null); setActionError(''); } }} title={action ? actionTitle[action.kind] : ''} description={action?.name} footer={<>
       <Button variant="outline" disabled={actionBusy} onClick={() => { setAction(null); setActionError(''); }}>Cancel</Button>
@@ -469,17 +400,17 @@ export function Drivers() {
       {actionError && <Banner tone="danger" title="Action not completed" style={{ marginTop: 12 }}>{actionError}</Banner>}
     </Modal>
 
-    <Modal open={Boolean(licenseDriverId)} onClose={() => setLicenseDriverId(null)} title="Driver License Review" description={licenseDriverId || undefined} footer={<>
+    <Modal open={Boolean(licenseDriverId)} onClose={() => setLicenseDriverId(null)} title="Driver License Review" description={licenseDriver?.name || undefined} footer={<>
       {!licenseQuery.isFetching && safeDocumentUrl(license?.licenseUrl) && <Button variant="outline" onClick={() => window.open(safeDocumentUrl(license.licenseUrl), '_blank', 'noopener,noreferrer')}>Open Document</Button>}
-      {!licenseQuery.isFetching && ['PENDING', 'PENDING_REVIEW'].includes(license?.statusCode) && <>
-        <Button variant="outline" disabled={licenseActionState.isLoading} onClick={() => openAction('reject-license', { id: licenseDriverId, name: licenseDriverId })}>Reject License</Button>
-        <Button disabled={licenseActionState.isLoading} onClick={() => openAction('approve-license', { id: licenseDriverId, name: licenseDriverId })}>Verify License</Button>
+      {!licenseQuery.isFetching && ['PENDING', 'PENDING_REVIEW', 'SUBMITTED'].includes(license?.statusCode) && <>
+        <Button variant="outline" disabled={licenseActionState.isLoading} onClick={() => openAction('reject-license', { id: licenseDriverId, name: licenseDriver?.name || 'Driver' })}>Reject License</Button>
+        <Button disabled={licenseActionState.isLoading} onClick={() => openAction('approve-license', { id: licenseDriverId, name: licenseDriver?.name || 'Driver' })}>Verify License</Button>
       </>}
     </>}>
       {licenseQuery.isFetching ? <DriverLicenseLoading /> : licenseQuery.error ? <Banner tone="danger" title="Unable to load license">{adminDriverError(licenseQuery.error)}</Banner> : license ? <div style={{ display: 'grid', gap: 12 }}>
         <div><span className="tk-meta">License number</span><p className="tk-body tk-mono">{license.licenseNumber || '—'}</p></div>
         <div><span className="tk-meta">Status</span><p><Badge>{license.status}</Badge></p></div>
-        <div><span className="tk-meta">Expires</span><p className="tk-body">{license.expiresAt ? new Date(license.expiresAt).toLocaleDateString() : '—'}</p></div>
+        <div><span className="tk-meta">Expires</span><p className="tk-body">{day(license.expiresAt)}</p></div>
         {!license.licenseUrl && <EmptyState icon="file-text" title="No license file provided" description="The license document is not available." style={{ padding: '18px 8px' }} />}
       </div> : null}
     </Modal>

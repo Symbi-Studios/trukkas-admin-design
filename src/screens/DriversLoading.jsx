@@ -20,14 +20,9 @@ export function DriverTableLoading({ columns = 11, label = 'Loading drivers' }) 
 
 export function DriversLoading() {
   const metrics = [
-    ['users', 'Total Drivers', 'blue'], ['user', 'Individual Drivers', 'green'],
-    ['building-2', 'Company Drivers', 'navy'], ['clock', 'Pending Review', 'amber'],
-    ['circle-check', 'Approved / Active', 'green'],
-  ];
-  const secondary = [
-    ['route', 'On Trip', 'blue'], ['circle-minus', 'Inactive', 'navy'],
-    ['circle-x', 'Rejected', 'red'], ['triangle-alert', 'Documents Expiring', 'amber'],
-    ['wallet', 'Total Driver Earnings', 'green'], ['star', 'Average Rating', 'amber'],
+    ['building-2', 'Total Drivers', 'blue'], ['route', 'On a Trip', 'teal'],
+    ['user-check', 'Pending Review', 'amber'], ['file-check', 'License Awaiting Review', 'purple'],
+    ['calendar-x', 'License Issues', 'red'],
   ];
   const metric = ([icon, label, tint]) => <StatCard key={label} icon={icon} label={label} tint={tint}
     value={<Skeleton as="span" width={54} height={23} />}
@@ -40,17 +35,11 @@ export function DriversLoading() {
     </div>
     <DriverLoadingNotice>Loading drivers…</DriverLoadingNotice>
     <div className={styles.metrics} aria-label="Loading driver summary">{metrics.map(metric)}</div>
-    <div className={styles.secondary} aria-hidden="true">{secondary.map(metric)}</div>
-    <div className={styles.layout}>
-      <Card pad="none">
-        <div className={styles.tools} aria-hidden="true"><Skeleton width={280} height={38} radius={8} />{[110, 100, 130, 120].map((width, index) => <Skeleton key={index} width={width} height={38} radius={8} />)}</div>
-        <div className={styles.tabs} aria-hidden="true">{[90, 130, 60, 70, 65, 70].map((width, index) => <Skeleton key={index} width={width} height={13} />)}</div>
-        <DriverTableLoading />
-      </Card>
-      <div className={styles.rail} aria-hidden="true">
-        {Array.from({ length: 4 }, (_, index) => <Card key={index}><Skeleton width="60%" height={18} /><div style={{ marginTop: 20 }}><Skeleton height={index === 0 ? 140 : 180} /></div></Card>)}
-      </div>
-    </div>
+    <Card pad="none">
+      <div className={styles.tabs} aria-hidden="true">{[130, 140].map((width, index) => <Skeleton key={index} width={width} height={13} />)}</div>
+      <div className={styles.tools} aria-hidden="true"><Skeleton width={280} height={38} radius={8} />{[120, 140, 130].map((width, index) => <Skeleton key={index} width={width} height={38} radius={8} />)}</div>
+      <DriverTableLoading columns={8} />
+    </Card>
   </div>;
 }
 
