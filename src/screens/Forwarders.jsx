@@ -1,4 +1,5 @@
 "use client";
+import { formatNairaShort } from '../lib/money.js';
 import { ToastRelay } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 import { DateRangeFilter, EMPTY_RANGE, inRange } from '../components/DateRangeFilter.jsx';
@@ -56,22 +57,7 @@ const VERIFICATION_META = {
   Rejected: { tone: "danger", icon: "circle-x" },
 };
 const naira = forwarderMoney;
-/** Short money for stat cards: ₦25.6m, ₦1.2b, ₦850k. Full amount stays in the tooltip. */
-function nairaShort(value) {
-  const n = Number(value);
-  if (value == null || value === '' || !Number.isFinite(n)) return '—';
-  const abs = Math.abs(n);
-  const units = [[1e3, 'k'], [1e6, 'm'], [1e9, 'b'], [1e12, 't']];
-  for (let i = units.length - 1; i >= 0; i -= 1) {
-    const [size, suffix] = units[i];
-    if (abs < size) continue;
-    const rounded = Math.round((abs / size) * 10) / 10;
-    // 999,960 rounds to "1000k"; show it as the next unit up instead.
-    if (rounded >= 1000 && units[i + 1]) return `${n < 0 ? '-' : ''}₦1${units[i + 1][1]}`;
-    return `${n < 0 ? '-' : ''}₦${String(rounded).replace(/\.0$/, '')}${suffix}`;
-  }
-  return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
-}
+const nairaShort = formatNairaShort;
 
 function ForwarderCell({ f }) {
   return (

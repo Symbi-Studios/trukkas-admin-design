@@ -1,4 +1,5 @@
 "use client";
+import { formatNairaAmount, formatNairaShort } from "../lib/money.js";
 
 import { useMemo, useState } from "react";
 import { useSelector } from "react-redux";
@@ -25,15 +26,10 @@ import styles from "./FinanceOverview.module.css";
 
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
 const count = (value) => (isNum(value) ? new Intl.NumberFormat("en-NG").format(value) : "—");
-/** ₦12.5M style for cards and chart axes; full kobo amounts stay in lists. */
-function compact(value) {
-  if (!isNum(value)) return "—";
-  const abs = Math.abs(value), sign = value < 0 ? "-" : "";
-  if (abs >= 1e9) return `${sign}₦${Number((abs / 1e9).toFixed(1))}B`;
-  if (abs >= 1e6) return `${sign}₦${Number((abs / 1e6).toFixed(1))}M`;
-  if (abs >= 1e3) return `${sign}₦${Number((abs / 1e3).toFixed(1))}K`;
-  return `${sign}₦${Math.round(abs)}`;
-}
+/** ₦12.5m style for cards and chart axes; full kobo amounts stay in lists. */
+const compact = (value) => (isNum(value) ? formatNairaShort(value) : "—");
+/** Full amount for stat cards: StatCard shortens it and keeps the exact figure in a hover tooltip. */
+const full = (value) => (isNum(value) ? formatNairaAmount(value) : "—");
 const pct = (value) => (isNum(value) ? `${Number(value.toFixed(1))}%` : "—");
 
 /** StatCard delta props for a % change; nothing when there's no comparison. */
@@ -115,17 +111,17 @@ export function FinanceOverview() {
       />
 
       <StatsPanel period={periodKey} onPeriodChange={setPeriodKey}>
-        <StatCard layout="stack" icon="chart-line" tint="green" label="Commission Earned" value={v(compact(overview?.commission.earned))}
+        <StatCard layout="stack" icon="chart-line" tint="green" label="Commission Earned" value={v(full(overview?.commission.earned))}
           {...change(overview?.commission.delta, period)} caption={change(overview?.commission.delta, period).caption ?? (isNum(overview?.commission.rate) ? `${overview.commission.rate}% platform rate` : undefined)} />
-        <StatCard layout="stack" icon="lock" tint="navy" label="Escrow Balance" value={v(compact(b?.total))}
+        <StatCard layout="stack" icon="lock" tint="navy" label="Escrow Balance" value={v(full(b?.total))}
           {...change(b?.totalDelta, period)} caption={change(b?.totalDelta, period).caption ?? "At the end of the period"} />
-        <StatCard layout="stack" icon="send" tint="blue" label="Total Paid Out" value={v(compact(overview?.totalPaidOut))}
+        <StatCard layout="stack" icon="send" tint="blue" label="Total Paid Out" value={v(full(overview?.totalPaidOut))}
           {...change(overview?.totalPaidOutDelta, period)} caption={change(overview?.totalPaidOutDelta, period).caption ?? "Escrows settled"} />
-        <StatCard layout="stack" icon="truck" tint="teal" label="Paid to Truckers" value={v(compact(p?.toTruckers))}
+        <StatCard layout="stack" icon="truck" tint="teal" label="Paid to Truckers" value={v(full(p?.toTruckers))}
           caption={isNum(p?.trips) ? `Across ${count(p.trips)} trips` : undefined} />
         <StatCard layout="stack" icon="badge-check" tint="purple" label="Payout Success" value={v(pct(p?.successRate))}
           {...change(p?.successRateDelta, period, " pts")} caption={change(p?.successRateDelta, period).caption ?? "Bank transfers delivered"} />
-        <StatCard layout="stack" icon="hourglass" tint="amber" label="Demurrage Collected" value={v(compact(overview?.demurrage.collected))}
+        <StatCard layout="stack" icon="hourglass" tint="amber" label="Demurrage Collected" value={v(full(overview?.demurrage.collected))}
           caption={isNum(overview?.demurrage.charged) ? `${compact(overview.demurrage.charged)} charged` : undefined} />
       </StatsPanel>
 

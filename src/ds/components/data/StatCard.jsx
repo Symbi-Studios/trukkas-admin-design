@@ -1,6 +1,7 @@
 import React from "react";
 import { Card } from "../core/Card.jsx";
 import { Icon } from "../../assets/icons/Icon.jsx";
+import { formatNairaShort, parseNairaText } from "../../../lib/money.js";
 
 const TINT = {
   blue: ["var(--tk-blue-soft)", "var(--tk-blue)"],
@@ -30,6 +31,9 @@ export function StatCard({
   style,
 }) {
   const [bg, fg] = TINT[tint] || TINT.blue;
+  // Naira amounts are shortened (₦750.6k, ₦25.6m) so tiles fit smaller desktops; the full figure stays on hover.
+  const amount = parseNairaText(value);
+  const shown = amount == null ? value : <span title={value}>{formatNairaShort(amount)}</span>;
   const good = direction !== "down";
   const labelBelow = labelPosition === "bottom";
   const labelEl = (
@@ -73,7 +77,7 @@ export function StatCard({
         {icon && tile}
         <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
           {!labelBelow && labelEl}
-          <span className="tk-metric">{value}</span>
+          <span className="tk-metric">{shown}</span>
           {labelBelow && labelEl}
           {!labelBelow && (delta || caption) && (
             <span
