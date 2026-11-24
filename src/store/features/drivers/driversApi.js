@@ -247,12 +247,12 @@ export const driversApi = baseApi.injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
     getAdminDrivers: builder.query({
-      async queryFn({ page = 1, limit = 10, ...filters } = {}, api, _options, baseQuery) {
+      async queryFn({ page = 1, limit = 10, dateFrom, dateTo, ...filters } = {}, api, _options, baseQuery) {
         if (filters.tabStatus && filters.tabStatus !== 'ON_TRIP' && filters.status !== filters.tabStatus) {
           return { data: { drivers: [], pagination: { page, limit, total: 0, totalPages: 0 } } };
         }
         const params = driverFilters(filters);
-        const result = await baseQuery({ url: '/admin/users/drivers', params: { ...params, page, limit } });
+        const result = await baseQuery({ url: '/admin/users/drivers', params: { ...params, page, limit, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined } });
         if (result.error) return result;
         const data = unwrapApiResponseData(result.data);
         if (!Array.isArray(data?.users)) return { error: { status: 'CUSTOM_ERROR', error: 'The driver response is missing its list.' } };

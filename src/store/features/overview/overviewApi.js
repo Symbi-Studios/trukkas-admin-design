@@ -68,15 +68,18 @@ function mapHealthStatus(value) {
 }
 
 function mapMoneyBreakdown(part) {
+  const amount = numberOrNull(part?.amount);
+  const percent = numberOrNull(part?.percent);
   return {
-    amount: numberOrNull(part?.amount),
-    percent: numberOrNull(part?.percent),
+    amount: amount != null && amount >= 0 ? amount : null,
+    percent: percent != null && percent >= 0 && percent <= 100 ? percent : null,
   };
 }
 
 function mapAdminOverviewResponse(response) {
   const data = unwrapApiResponseData(response) || {};
   const jobs = data.jobs || {};
+  const earnings = data.earningsBreakdown;
 
   return {
     range: data.range ? {
@@ -124,12 +127,16 @@ function mapAdminOverviewResponse(response) {
         }))
       : [],
     earningsBreakdown: {
-      totalOrders: numberOrNull(data.earningsBreakdown?.totalOrders),
-      drivers: mapMoneyBreakdown(data.earningsBreakdown?.drivers),
-      companies: mapMoneyBreakdown(data.earningsBreakdown?.companies),
-      platformFees: mapMoneyBreakdown(data.earningsBreakdown?.platformFees),
-      demurrage: mapMoneyBreakdown(data.earningsBreakdown?.demurrage),
-      otherCosts: mapMoneyBreakdown(data.earningsBreakdown?.otherCosts),
+      totalOrders: numberOrNull(earnings?.totalOrders),
+      drivers: mapMoneyBreakdown(earnings?.drivers),
+      companies: mapMoneyBreakdown(earnings?.companies),
+      platformFees: mapMoneyBreakdown(earnings?.platformFees),
+      demurrage: mapMoneyBreakdown(earnings?.demurrage),
+      otherCosts: mapMoneyBreakdown(earnings?.otherCosts),
+      completedJobs: numberOrNull(earnings?.completedJobs),
+      refunds: { amount: numberOrNull(earnings?.refunds?.amount), count: numberOrNull(earnings?.refunds?.count) },
+      currency: earnings?.currency === 'NGN' ? earnings.currency : null,
+      basis: typeof earnings?.basis === 'string' && earnings.basis.trim() ? earnings.basis.trim() : null,
     },
     tripActivity: {
       totalTrips: numberOrNull(data.tripActivity?.totalTrips),
