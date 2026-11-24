@@ -81,7 +81,8 @@ export function RequestedPayouts() {
   const open = (row) => setSelected({ id: row.id, source: row.source });
   const close = () => setSelected(null);
   const roleLabel = (row) => partyRole(row.partyRole)?.label;
-  const partyOptions = useMemo(() => [...new Set(all.map(roleLabel).filter(Boolean))].sort(), [all]);
+  // Individual Driver is always offered, even before any individual has requested a payout.
+  const partyOptions = useMemo(() => [...new Set(["Individual Driver", ...all.map(roleLabel).filter(Boolean)])].sort(), [all]);
   const filtersActive = status !== "All Statuses" || party !== "All Parties" || Boolean(dates.from) || Boolean(q.trim());
   function resetFilters() { setStatus("All Statuses"); setParty("All Parties"); setDates(EMPTY_RANGE); setQ(""); setPage(1); }
 

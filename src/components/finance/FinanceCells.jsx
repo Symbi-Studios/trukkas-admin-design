@@ -33,7 +33,7 @@ export function MiddleId({ value, head = 8, tail = 4, onOpen, label = 'ID' }) {
 const ROLES = {
   FORWARDER: ['Forwarder', 'info'], IMPORTER: ['Importer', 'info'], CUSTOMER: ['Customer', 'info'],
   TRUCKER: ['Trucking Company', 'purple'], COMPANY: ['Trucking Company', 'purple'], TRANSPORTER: ['Trucking Company', 'purple'],
-  DRIVER: ['Driver', 'teal'], PLATFORM: ['Platform', 'neutral'], ESCROW: ['Escrow', 'warning'], ADMIN: ['Admin', 'neutral'],
+  DRIVER: ['Driver', 'teal'], INDIVIDUAL_DRIVER: ['Individual Driver', 'orange'], INDIVIDUAL_TRUCKER: ['Individual Driver', 'orange'], PLATFORM: ['Platform', 'neutral'], ESCROW: ['Escrow', 'warning'], ADMIN: ['Admin', 'neutral'],
   SYSTEM: ['System', 'neutral'], INTERNAL: ['Internal', 'neutral'],
 };
 /** Normalises API roles ("TRUCKER", "Trucker", "company") to a label and badge tone. */

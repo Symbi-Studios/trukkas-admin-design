@@ -44,6 +44,7 @@ const dateTime = (value) => datePart(value) === '—' ? '—' : datePart(value) 
 function profileType(profile) {
   if (profile.role === 'DRIVER') return 'driver';
   if (profile.role === 'TRUCKER' && profile.truckerType === 'COMPANY') return 'company';
+  if (profile.role === 'TRUCKER' && profile.truckerType === 'INDIVIDUAL') return 'individual';
   return null;
 }
 
@@ -118,11 +119,11 @@ export function adaptAdminPayout(dto) {
   return {
     id: text(dto.id), key: identity(dto), source: text(dto.source), reference: text(dto.reference) || '—',
     party: partyName, partyId: partyId || '—', partyType, companyId,
-    partyRole: party.truckerType === 'COMPANY' ? 'COMPANY' : text(party.role),
+    partyRole: partyType === 'company' ? 'COMPANY' : partyType === 'individual' ? 'INDIVIDUAL_DRIVER' : text(party.role),
     jobNumbers: Array.isArray(dto.jobNumbers) ? dto.jobNumbers : [], deductionLines: Array.isArray(dto.deductionLines) ? dto.deductionLines : [],
     totalDeductions: number(dto.totalDeductions), transferReference: text(dto.transferReference),
     companyName: companyId ? partyName : null,
-    type: partyType === 'driver' ? 'Driver Payout' : partyType === 'company' ? 'Company Payout' : '—',
+    type: partyType === 'driver' || partyType === 'individual' ? 'Driver Payout' : partyType === 'company' ? 'Company Payout' : '—',
     dateRequested: datePart(dto.createdAt), dateRequestedTime: datePart(dto.createdAt, true),
     timestamp: payoutTimestamp(dto.createdAt),
     amount: number(dto.amount), fee: number(dto.fee), grossAmount: number(dto.grossAmount), netAmount: number(dto.netAmount), deductions: number(dto.deductions),
