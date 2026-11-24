@@ -35,7 +35,7 @@ export const BOARD_LAYOUTS = {
   ], { title: (row) => row.name, value: (row) => row.rating == null ? '' : `★ ${row.rating.toFixed(1)}`, subtitle: 'company', body: ['truckPlate'], footer: [(row) => `License: ${row.licenseState?.label ?? '—'}`] }, 'No drivers'),
   companies: layout([
     ['Active', 'success'], ['Inactive', 'neutral'], ['Pending Review', 'warning'], ['Suspended', 'danger'], ['Rejected', 'danger'],
-  ], { title: (row) => row.name, value: (row) => row.trucks == null ? '—' : `${row.trucks} trucks`, subtitle: 'location', body: ['contact'], footer: ['verification', 'joined'] }, 'No companies'),
+  ], { title: (row) => row.name, value: (row) => row.trucks == null ? '—' : `${row.trucks} trucks`, subtitle: 'city', body: ['contact'], footer: ['verification', 'joined'] }, 'No companies'),
   forwarders: layout([
     ['Active', 'success'], ['Pending', 'warning'], ['Suspended', 'danger'], ['Inactive', 'neutral'], ['Banned', 'danger'],
   ], { title: (row) => row.name, subtitle: 'location', body: ['email'], footer: ['verification', 'joined'] }, 'No forwarders'),
