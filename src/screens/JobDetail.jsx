@@ -2,7 +2,6 @@
 
 import { ToastRelay } from '../components/ActionToast.jsx';
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "../router.js";
 import {
@@ -21,21 +20,19 @@ import {
   Avatar,
   Pagination,
   EmptyState,
-  SearchField,
   FilterSelect,
-  SplitButton,
   Skeleton,
   TextField,
   Select,
   NotAvailable,
   orNA,
   isMissing,
-  DocumentPreview,
-  documentTitle,
   RouteStack,
 } from "../ds.js";
 import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
-import { useGetAdminCompanyDocumentPreviewQuery } from "../store/features/companies/companyDocumentsApi.js";
+import { useGetContainerReviewJobQuery } from "../store/features/documents/containerReviewApi.js";
+import { countDocuments } from "../domain/containerReview.js";
+import { JobContainerDocuments } from "./JobContainerDocuments.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { JobDetailMap } from "./JobDetailMap.jsx";
@@ -168,7 +165,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const [bidDecision, setBidDecision] = useState("acceptBid");
   const [flagReason, setFlagReason] = useState("PRICING");
   const actionLock = useRef(false), adminActionLock = useRef(false), active = useRef(true);
-  const [rejectionReason, setRejectionReason] = useState("");
   const [delayReason, setDelayReason] = useState("");
   const [delayOpen, setDelayOpen] = useState(null);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
@@ -177,23 +173,17 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   }, [job]);
 
   const [tab, setTab] = useState("Overview");
-    const [approveOpen, setApproveOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [acceptBidFor, setAcceptBidFor] = useState(null);
   const bidActionQuery = useGetAdminJobBidActionDetailQuery({ id: acceptBidFor?.id, jobId: job?.apiId, owner, role }, { skip: !authenticated || !acceptBidFor?.id || !job?.apiId, refetchOnMountOrArgChange: true });
-  const [reviewDoc, setReviewDoc] = useState(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const documentPreview = useGetAdminCompanyDocumentPreviewQuery(
-    { companyId: jobId, id: reviewDoc?.id, url: reviewDoc?.url, owner },
-    { skip: !authenticated || !jobId || !reviewDoc?.url || tab !== "Documents" },
+  const containerReview = useGetContainerReviewJobQuery(
+    { jobId: job?.apiId, hint: { jobNumber: job?.id, forwarder: job?.forwarder, origin: job?.origin, destination: job?.destination, stage: job?.canApprove ? 'review' : 'past' } },
+    { skip: !job?.apiId, refetchOnMountOrArgChange: true },
   );
-  const previewUrl = documentPreview.error ? null : documentPreview.currentData?.url;
+  const review = containerReview.currentData;
+  const reviewCounts = review ? countDocuments(review.units) : null;
   const [toast, setToast] = useState(null);
 
-  const [docQuery, setDocQuery] = usePageSearchState("", undefined, tab === "Documents");
-  const [docStatusFilter, setDocStatusFilter] = useState("All Statuses");
-  const [docOpenFilter, setDocOpenFilter] = useState(false);
   const [logPage, setLogPage] = useState(1);
   const [activityFilter, setActivityFilter] = useState("All Activities");
   const [activityOpenFilter, setActivityOpenFilter] = useState(false);
@@ -207,7 +197,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   }, [toast]);
 
   const bids = useMemo(() => job?.bids || [], [job]);
-  const documents = useMemo(() => job?.documents || [], [job]);
   const transactions = useMemo(() => job?.transactions || [], [job]);
   const activityLog = useMemo(() => job?.activityLog || [], [job]);
   const jobTrips = useMemo(() => job?.trips || [], [job]);
@@ -242,13 +231,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     }
   }, [jobTrips]);
 
-  useEffect(() => {
-    setReviewDoc((d) =>
-      d
-        ? documents.find((x) => x.id === d.id) || documents[0] || null
-        : documents[0] || null,
-    );
-  }, [documents]);
 
   if (authenticated && (jobQuery.isLoading || jobQuery.isFetching && !job)) return <LoadingDetail />;
   if (!job) {
@@ -284,25 +266,18 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     { title: "Job Closed", description: job.statusCode === "COMPLETED" ? "Delivery confirmed" : "—", state: job.statusCode === "COMPLETED" ? "done" : "pending", icon: "flag" },
   ];
   function unavailable(action) { notify("info", action + " is not available right now."); }
-  function openReject(target = true) { setRejectionReason(""); setRejectOpen(target); }
   async function perform(action, details = {}) {
     if (actionLock.current || !authenticated) return;
     actionLock.current = true;
     try {
       await changeJob({ id: job.apiId, owner, role, expectedStatus: job.statusCode, action, ...details }).unwrap();
       if (!active.current) return;
-      setApproveOpen(false); setRejectOpen(false); setDelayOpen(null); setTripMenu(null);
+      setDelayOpen(null); setTripMenu(null);
       const messages = { approve: "Job documents approved and released for bidding.", reject: "Job documents rejected.", approveDocument: "Document approved.", rejectDocument: "Document rejected.", deliver: "Job marked delivered.", cancel: "Job cancelled.", atDelivery: "Job and its trips marked at delivery.", delay: "Job and its trips marked delayed." };
       notify("success", messages[action]);
     } catch (error) {
       if (active.current) notify("danger", getApiErrorMessage(error));
     } finally { actionLock.current = false; }
-  }
-  function doApprove() { return perform("approve"); }
-  function doReject() {
-    if (!rejectionReason.trim()) return;
-    const doc = typeof rejectOpen === "object" ? rejectOpen : null;
-    return perform(doc ? "rejectDocument" : "reject", { reason: rejectionReason, ...(doc ? { documentId: doc.apiId, version: doc.version, documentUrl: doc.url } : {}) });
   }
   function openAdminAction(action) { setAdminReason(""); setAdminDate(""); setAdminCargo(""); setAdminInstructions(""); setAdminPickup(""); setAdminDelivery(""); setAdminReturn(""); setFlagReason(job.reviewFlag?.reason || "PRICING"); setAdminAction(action); }
   function doMarkInTransit() { openAdminAction("transit"); }
@@ -339,11 +314,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     unavailable("Mark " + status);
   }
   function doCancel() { return perform("cancel"); }
-  function doReviewDoc(doc, approve) {
-    if (!job.canApprove || !doc.canReview || !doc.apiId) { unavailable("Review document"); return; }
-    if (!approve) { openReject(doc); return; }
-    return perform("approveDocument", { documentId: doc.apiId, version: doc.version, documentUrl: doc.url });
-  }
   async function shareJob() {
     try {
       await navigator.clipboard.writeText(new URL(jobScreenUrl(job.apiId), window.location.origin).href);
@@ -390,13 +360,12 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
           >
             Edit Job
           </Button> */}
-          <SplitButton
-            icon="check"
-            onAction={() => setApproveOpen(true)}
-            onToggle={() => openReject()}
+          <Button
+            icon="file-check-2"
+            onClick={() => { if (review) navigate(`/documents/review?jobId=${encodeURIComponent(review.id)}&ref=${encodeURIComponent(job.id)}`); else setTab("Documents"); }}
           >
-            Approve Job
-          </SplitButton>
+            {reviewCounts?.pending ? `Review documents (${reviewCounts.pending} left)` : "Review documents"}
+          </Button>
         </>
       ) : !terminal ? (
         <>
@@ -415,12 +384,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
     </>
   );
 
-  const documentStatusCounts = job.documentStatusCounts;
-  const filteredDocuments = documents.filter(
-    (d) =>
-      (docStatusFilter === "All Statuses" || d.status === docStatusFilter) &&
-      (!docQuery || d.name.toLowerCase().includes(docQuery.toLowerCase())),
-  );
 
   const LOG_PAGE_SIZE = 8;
   const filteredActivity =
@@ -434,7 +397,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const activityActions = [...new Set(activityLog.map((a) => a.action))];
   const uniqueActivityUsers = job.uniqueActivityUsers;
   const bidsCount = job.bidsKnown ? bids.length : "—";
-  const docsCount = job.documentsKnown ? job.documentStatusCounts.total ?? documents.filter((document) => document.apiId).length : "—";
+  const docsCount = reviewCounts ? reviewCounts.total : "—";
   const tripsCount = job.tripsKnown ? jobTrips.length : "—";
   const activityCount = job.activityKnown ? activityLog.length : "—";
 
@@ -918,61 +881,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               )}</section>)}
 
       {tab === "Documents" && (
-        <section className="jd-tab-stack"><JobTabHeading title="Documents" description="Review submitted documents and their approval status." />
-          <InfoStrip items={[{label:'Total documents',value:displayCount(documentStatusCounts.total)},{label:'Approved',value:displayCount(documentStatusCounts.approved)},{label:'Pending review',value:displayCount(documentStatusCounts.pending)},{label:'Rejected',value:displayCount(documentStatusCounts.rejected)}]} />
-          <SectionCard
-            title={`Documents (${job.documentsKnown ? filteredDocuments.length : "—"})`}
-            description="Select a document to preview it and approve it or request a re-upload."
-            pad="none"
-          >
-            <div className="jd-doc-toolbar">
-              <SearchField placeholder="Search documents…" value={docQuery} onChange={(e) => setDocQuery(e.target.value)} />
-              <span style={{ position: "relative" }}>
-                <FilterSelect prefix="Status" label={docStatusFilter} active={docStatusFilter !== "All Statuses"} onClick={() => setDocOpenFilter((o) => !o)} onClear={() => setDocStatusFilter("All Statuses")} />
-                {docOpenFilter && (
-                  <span style={{ position: "absolute", left: 0, top: 40, zIndex: 30 }}>
-                    <DropdownMenu width={180} items={["All Statuses", "Approved", "Pending", "Rejected"].map((s) => ({ label: s, icon: s === docStatusFilter ? "check" : undefined, onClick: () => { setDocStatusFilter(s); setDocOpenFilter(false); } }))} />
-                  </span>
-                )}
-              </span>
-            </div>
-            {!job.documentsKnown ? <DriverLoadingNotice>Document data is unavailable. Refresh to try again.</DriverLoadingNotice> : filteredDocuments.length ? (
-              <DataTable emptyAs={<NotAvailable />}
-                rows={filteredDocuments}
-                rowKey={(r) => r.id}
-                onRowClick={(r) => { setReviewDoc(r); setPreviewOpen(true); }}
-                columns={[
-                  { key: "name", header: "Document", render: (r) => (
-                    <span className="jd-doc-cell">
-                      <span className="jd-doc-icon"><Icon name={/\.(xlsx?|csv)$/i.test(r.name) ? "file-spreadsheet" : /\.(png|jpe?g|gif|webp)$/i.test(r.name) ? "image" : "file-text"} size={18} /></span>
-                      <span><strong>{documentTitle(r.type) || r.name}</strong><small title={r.name}>{r.name}</small></span>
-                    </span>
-                  ) },
-                  { key: "scope", header: "Applies to", render: (r) => <Badge tone={r.tripId ? "info" : "neutral"}>{r.tripId || "Whole job"}</Badge> },
-                  { key: "submittedBy", header: "Submitted by" },
-                  { key: "date", header: "Submitted" },
-                  { key: "status", header: "Status", render: (r) => <Badge tone={r.status === "Approved" ? "success" : r.status === "Rejected" ? "danger" : "warning"} dot>{r.status}</Badge> },
-                ]}
-              />
-            ) : (
-              <EmptyState icon="file-text" title="No documents match" description="Try a different search or filter." />
-            )}
-          </SectionCard>
-          <DocumentPreview
-            open={previewOpen}
-            onClose={() => setPreviewOpen(false)}
-            title={`${job.id} documents`}
-            subtitle={`${job.forwarder || job.contactPerson || ""}${job.origin ? " · " + job.origin + " → " + (job.destination || "") : ""}`}
-            documents={filteredDocuments.map((d) => ({ ...d, scope: d.tripId || "Whole job" }))}
-            selectedId={reviewDoc?.id}
-            onSelect={(id) => setReviewDoc(filteredDocuments.find((d) => d.id === id) || null)}
-            preview={{ url: previewUrl, loading: Boolean(reviewDoc?.url) && !previewUrl && !documentPreview.error, error: documentPreview.error }}
-            canReview={(d) => Boolean(job.canApprove && d.canReview && d.apiId)}
-            busy={actionBusy}
-            onApprove={(d) => doReviewDoc(d, true)}
-            onRequestReupload={(d) => doReviewDoc(d, false)}
-          />
-        </section>
+        <JobContainerDocuments review={review} loading={containerReview.isFetching} error={containerReview.error} onRetry={containerReview.refetch} jobRef={job.id} />
       )}
 
       {tab === "Financials" && (<section className="jd-tab-stack"><JobTabHeading title="Financials" description="Payments, costs and payouts for this job." /><InfoStrip items={[{label:'Job value',value:naira(job.jobValue)},{label:'Platform fee',value:naira(fee),caption:percentage(job.platformFeePct)},{label:'Company payment',value:naira(driverPayment)},{label:'Net platform earnings',value:naira(netEarnings)}]} /><div className="jd-finance-layout"><div className="jd-tab-stack"><SectionCard title="Transactions" pad="none">
@@ -1188,52 +1097,6 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               </SectionCard></section>)}
 
       {tripActionTarget && <TripActionMenu anchor={tripMenu.anchor} onClose={setTripMenu} items={["Assigned", "At Pickup", "In Transit", "At Delivery", "Delivered", "Delayed"].filter((status) => status !== tripActionTarget.status).map((status) => ({ label: "Mark " + status, icon: status === "Delivered" ? "circle-check" : status === "Delayed" ? "triangle-alert" : "route", tone: status === "Delayed" ? "danger" : undefined, onClick: () => doTripStatus(tripActionTarget.id, status) }))} />}
-
-      <Modal
-        open={approveOpen}
-        onClose={() => { if (!actionBusy) setApproveOpen(false); }}
-        title="Approve Job"
-        description={`Approve ${job.id} and publish it for carrier bidding?`}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setApproveOpen(false)}>
-              Cancel
-            </Button>
-            <Button icon="check" disabled={actionBusy || !job.canApprove} onClick={doApprove}>
-              Approve & Publish
-            </Button>
-          </>
-        }
-      >
-        <span className="tk-meta">
-          This will move the job from Pending Approval to Bidding. Trucking
-          companies will be able to submit bids once published.
-        </span>
-      </Modal>
-
-      <Modal
-        open={rejectOpen}
-        onClose={() => { if (!actionBusy) setRejectOpen(false); }}
-        title={typeof rejectOpen === "object" ? "Request re-upload" : "Reject Job"}
-        description={typeof rejectOpen === "object" ? rejectOpen.name : `Reject ${job.id}?`}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setRejectOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" icon="circle-x" disabled={actionBusy || !job.canApprove || !rejectionReason.trim()} onClick={doReject}>
-              {typeof rejectOpen === "object" ? "Request re-upload" : "Reject Job"}
-            </Button>
-          </>
-        }
-      >
-        <span className="tk-meta">
-          {typeof rejectOpen === "object"
-            ? "The document will be marked rejected and the forwarder asked to upload a new copy. Tell them what needs fixing."
-            : "This job will be marked as rejected and the forwarder will be notified. This action cannot be undone from this screen."}
-        </span>
-        <TextField label="Reason" required value={rejectionReason} disabled={actionBusy} onChange={(event) => setRejectionReason(event.target.value)} />
-      </Modal>
 
       <Modal
         open={!!acceptBidFor}
