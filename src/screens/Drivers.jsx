@@ -2,6 +2,7 @@
 import { showToast } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 import { usePageSearchState } from '../components/PageSearch.jsx';
+import { FilterMenu } from '../components/FilterMenu.jsx';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -13,11 +14,9 @@ import {
   SectionCard,
   TableToolbar,
   SearchField,
-  FilterSelect,
   DataTable,
   Pagination,
   Badge,
-  DropdownMenu,
   IconButton,
   Avatar,
   Icon,
@@ -115,18 +114,6 @@ function LicenseBadge({ driver, showExpiry = true }) {
 function Rating({ driver }) {
   if (driver.rating == null) return <span className="tk-meta">No ratings</span>;
   return <span className="driver-rating"><span aria-hidden="true">★</span>{driver.rating.toFixed(1)}<small>({fmt(driver.reviews)})</small></span>;
-}
-
-function FilterMenu({ name, icon, value, allValue, options, open, setOpen, onChange }) {
-  return <span style={{ position: 'relative' }}>
-    <FilterSelect icon={icon} prefix={name} label={value} active={value !== allValue}
-      onClick={() => setOpen(open ? null : name)} onClear={() => { onChange(allValue); setOpen(null); }} />
-    {open && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
-      <DropdownMenu width={220} items={[allValue, ...options].map((item) => ({
-        label: item, icon: item === value ? 'check' : undefined, onClick: () => { onChange(item); setOpen(null); },
-      }))} />
-    </span>}
-  </span>;
 }
 
 function DriverDrawer({ driver: d, companyTab, onClose, onOpen, onAction, onReviewLicense, navigate }) {
