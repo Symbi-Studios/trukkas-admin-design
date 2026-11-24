@@ -6,7 +6,6 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useNavigate } from '../router.js';
-import { userFacingMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader,
   Button,
@@ -27,8 +26,6 @@ import {
   Modal,
   Textarea,
   Skeleton,
-  TextField,
-  Select,
   StatsPanel,
   Tabs,
   ViewToggle,
@@ -41,10 +38,9 @@ import {
   DRIVER_LICENSE_FILTERS,
   adminDriverError, useActivateAdminDriverMutation, useGetAdminDriversQuery, useGetAdminDriverTabStatsQuery,
   useGetAdminDriverLicenseQuery, useGetAdminDriverStatsQuery,
-  useGetAdminPendingDriversQuery, useReviewAdminDriverMutation,
+  useReviewAdminDriverMutation,
   useSuspendAdminDriverMutation, useVerifyAdminDriverLicenseMutation,
-  useGetAdminDriverCompaniesQuery, useGetAdminDriverCompanyTrucksQuery,
-  useCreateAdminDriverMutation, useImportAdminDriversMutation, useLazyExportAdminDriverComplianceQuery,
+  useGetAdminDriverCompaniesQuery,
 } from '../store/features/drivers/driversApi.js';
 import './Drivers.css';
 
@@ -59,7 +55,6 @@ const STATUS_QUERY = {
   'Pending Profile': 'PENDING_PROFILE', 'Pending Review': 'PENDING_REVIEW', Rejected: 'REJECTED',
 };
 const LICENSE_OPTIONS = Object.keys(DRIVER_LICENSE_FILTERS);
-const EMPTY_DRIVER_FORM = { firstName: '', lastName: '', email: '', phone: '', licenseNumber: '', licenseExpiresAt: '', companyId: '', truckId: '' };
 const fmt = (value) => (Number.isFinite(value) ? value.toLocaleString('en-NG') : '—');
 const day = (value) => {
   const date = value ? new Date(value) : null;
@@ -219,17 +214,11 @@ export function Drivers() {
   const [licenseFilter, setLicenseFilter] = useState('All Licenses');
   const [openMenu, setOpenMenu] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [toast, setToast] = useState('');
   const [action, setAction] = useState(null);
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [licenseDriverId, setLicenseDriverId] = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [driverForm, setDriverForm] = useState(EMPTY_DRIVER_FORM);
-  const [createError, setCreateError] = useState('');
-  const createLock = useRef(false), importLock = useRef(false), actionLock = useRef(false);
-  const importInput = useRef(null);
+  const actionLock = useRef(false);
   const companyTab = tab === 'company';
 
   const companiesQuery = useGetAdminDriverCompaniesQuery();
@@ -252,11 +241,6 @@ export function Drivers() {
   const driversQuery = useGetAdminDriversQuery({ ...filters, page, limit: pageSize });
   const tabStatsQuery = useGetAdminDriverTabStatsQuery(TABS[tab].query);
   const statsQuery = useGetAdminDriverStatsQuery();
-  const pendingQuery = useGetAdminPendingDriversQuery();
-  const companyTrucksQuery = useGetAdminDriverCompanyTrucksQuery(driverForm.companyId, { skip: !addOpen || !driverForm.companyId });
-  const [createDriver, createState] = useCreateAdminDriverMutation();
-  const [importDrivers, importState] = useImportAdminDriversMutation();
-  const [exportCompliance, exportState] = useLazyExportAdminDriverComplianceQuery();
   const licenseQuery = useGetAdminDriverLicenseQuery(licenseDriverId, { skip: !licenseDriverId });
   const license = licenseQuery.currentData;
   const [reviewDriver, reviewState] = useReviewAdminDriverMutation();
@@ -272,7 +256,6 @@ export function Drivers() {
   const tabStats = tabStatsQuery.currentData;
   const tabStatsLoading = !tabStats && tabStatsQuery.isFetching;
   const tabCounts = { company: statsQuery.data?.company, individual: statsQuery.data?.individual };
-  const pendingTotal = statsQuery.data?.pendingReview ?? pendingQuery.data?.count ?? null;
   const metric = (value) => (tabStatsLoading ? <Skeleton as="span" width={54} height={23} /> : fmt(value));
   const licenseIssues = tabStats && tabStats.expired != null && tabStats.expiringSoon != null ? tabStats.expired + tabStats.expiringSoon : null;
   const filtersActive = Boolean(q.trim()) || status !== 'All Status' || company !== 'All Companies' || licenseFilter !== 'All Licenses';
@@ -338,40 +321,6 @@ export function Drivers() {
   const actionReasonRequired = action?.kind === 'suspend';
   const licenseDriver = drivers.find((driver) => driver.id === licenseDriverId);
 
-  async function downloadCompliance() {
-    if (exportState.isFetching) return;
-    try { download('driver-compliance.csv', await exportCompliance(filters, false).unwrap()); }
-    catch (error) { setToast(adminDriverError(error)); }
-  }
-
-  async function submitDriver(event) {
-    event.preventDefault();
-    if (createLock.current || createState.isLoading) return;
-    if (!['firstName', 'lastName', 'email', 'phone'].every((key) => driverForm[key].trim())) { setCreateError('First name, last name, email and phone are required.'); return; }
-    if (!/^\+?[0-9\s-]{10,16}$/.test(driverForm.phone.trim())) { setCreateError('Enter a valid local or international phone number.'); return; }
-    createLock.current = true; setCreateError('');
-    try {
-      const created = await createDriver(driverForm).unwrap();
-      setAddOpen(false); setDriverForm(EMPTY_DRIVER_FORM);
-      showToast(created.invite.sms === true || created.invite.email === true ? 'Driver created and password invite sent.'
-        : created.invite.sms === false && created.invite.email === false ? 'Driver created, but both invite delivery channels failed.' : 'Driver created. Invite delivery status was not returned.');
-    } catch (error) { setCreateError(adminDriverError(error)); }
-    finally { createLock.current = false; }
-  }
-
-  async function importCsv(event) {
-    const file = event.target.files?.[0]; event.target.value = '';
-    if (!file || importLock.current) return;
-    if (!/\.csv$/i.test(file.name) || file.size > 2 * 1024 * 1024) { setToast('Choose a CSV file up to 2 MB.'); return; }
-    importLock.current = true;
-    try {
-      const result = await importDrivers(file).unwrap();
-      const failures = result.results.filter((row) => row.status === 'FAILED').map((row) => `Line ${row.line ?? '—'}: ${userFacingMessage(row.error, 'Could not import this row.')}`).join('; ');
-      setToast(`Created: ${result.created ?? '—'}. Failed: ${result.failed ?? '—'}.${failures ? ` ${failures}` : ''}`);
-    } catch (error) { setToast(adminDriverError(error)); }
-    finally { importLock.current = false; }
-  }
-
   if (!driversQuery.data && driversQuery.isFetching) return <DriversLoading />;
 
   const columns = [
@@ -390,23 +339,8 @@ export function Drivers() {
       crumbs={['Users', 'Drivers']}
       title="Drivers"
       description="Review and manage company drivers and individual drivers on Trukkas."
-      actions={<>
-        <Button icon="user-check" onClick={() => { setStatus('Pending Review'); setPage(1); }}>Review Pending ({pendingTotal ?? '—'})</Button>
-        <span style={{ position: 'relative' }}>
-          <Button variant="outline" iconRight="chevron-down" onClick={() => setMoreOpen((open) => !open)}>More Actions</Button>
-          {moreOpen && <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
-            <DropdownMenu width={230} items={[
-              { label: 'Add Driver', icon: 'user-plus', onClick: () => { setMoreOpen(false); setCreateError(''); setAddOpen(true); } },
-              { label: 'Import Drivers', icon: 'upload', onClick: () => { setMoreOpen(false); if (!importState.isLoading) importInput.current?.click(); } },
-              { label: 'Driver Compliance Report', icon: 'shield-check', onClick: () => { setMoreOpen(false); void downloadCompliance(); } },
-            ]} />
-          </span>}
-        </span>
-      </>}
     />
 
-    {toast && <Banner tone="info" title={toast} onClose={() => setToast('')} />}
-    {pendingQuery.error && <Banner tone="warning" title="Pending driver review data unavailable">{adminDriverError(pendingQuery.error)}</Banner>}
 
     <StatsPanel title={TABS[tab].label} fixedLabel="All time" fixedHint="Counts cover every driver of this type; driver stats can’t be filtered by date yet.">
       <StatCard icon={companyTab ? 'building-2' : 'user-round'} tint="blue" label="Total Drivers" value={metric(tabStats?.total)}
@@ -457,21 +391,6 @@ export function Drivers() {
       onAction={openAction}
       onReviewLicense={() => setLicenseDriverId(selected.id)}
     />}
-
-    <input ref={importInput} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importCsv(event)} />
-    <Modal open={addOpen} onClose={() => { if (!createState.isLoading) setAddOpen(false); }} title="Add Driver" footer={<>
-      <Button variant="outline" disabled={createState.isLoading} onClick={() => setAddOpen(false)}>Cancel</Button>
-      <Button type="submit" form="add-driver-form" disabled={createState.isLoading}>{createState.isLoading ? 'Saving…' : 'Add Driver'}</Button>
-    </>}>
-      <form id="add-driver-form" onSubmit={submitDriver} style={{ display: 'grid', gap: 14 }}>
-        {[['firstName', 'First Name', 'text', 80], ['lastName', 'Last Name', 'text', 80], ['email', 'Email', 'email'], ['phone', 'Phone', 'tel'], ['licenseNumber', 'License Number', 'text', 40], ['licenseExpiresAt', 'License Expiry', 'date']].map(([key, label, type, maxLength]) => (
-          <TextField key={key} label={label} type={type} maxLength={maxLength} required={['firstName', 'lastName', 'email', 'phone'].includes(key)} value={driverForm[key]} disabled={createState.isLoading} onChange={(event) => setDriverForm((form) => ({ ...form, [key]: event.target.value }))} />
-        ))}
-        <Select label="Company (optional)" placeholder="Individual Driver" value={driverForm.companyId} disabled={createState.isLoading || companiesQuery.isFetching} options={[...(driverForm.companyId ? [{ value: '', label: 'Individual Driver' }] : []), ...companyOptions.map((item) => ({ value: item.id, label: item.label }))]} onChange={(event) => setDriverForm((form) => ({ ...form, companyId: event.target.value, truckId: '' }))} />
-        <Select label="Assigned Truck (optional)" placeholder="Unassigned" value={driverForm.truckId} disabled={!driverForm.companyId || companyTrucksQuery.isFetching || createState.isLoading} options={[...(driverForm.truckId ? [{ value: '', label: 'Unassigned' }] : []), ...(companyTrucksQuery.currentData || []).map((truck) => ({ value: truck.id, label: truck.plate }))]} onChange={(event) => setDriverForm((form) => ({ ...form, truckId: event.target.value }))} />
-        {(createError || companyTrucksQuery.error || companiesQuery.error) && <Banner tone="danger" title="Action not completed">{createError || adminDriverError(companyTrucksQuery.error || companiesQuery.error)}</Banner>}
-      </form>
-    </Modal>
 
     <Modal open={Boolean(action)} onClose={() => { if (!actionBusy) { setAction(null); setActionError(''); } }} title={action ? actionTitle[action.kind] : ''} description={action?.name} footer={<>
       <Button variant="outline" disabled={actionBusy} onClick={() => { setAction(null); setActionError(''); }}>Cancel</Button>
