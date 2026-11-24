@@ -59,6 +59,7 @@ function FaqItem({ item, open, onToggle }) {
             style={{
               font: "400 13px/20px var(--tk-font-sans)",
               color: "var(--tk-ink-500)",
+              whiteSpace: "pre-line",
             }}
           >
             {item.a}
