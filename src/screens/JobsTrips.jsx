@@ -273,6 +273,7 @@ function JobActionMenu({ anchor, items, onClose }) {
 }
 
 function JobDrawer({ job, onClose, onAction, canDeliver, actionBusy }) {
+  const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const role = useSelector((state) => state.auth.admin?.role);
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
@@ -287,8 +288,7 @@ function JobDrawer({ job, onClose, onAction, canDeliver, actionBusy }) {
     done: Boolean(event.completed),
   }));
   const primaryActions = [
-    job.canValidateDocs && <Button key="approve" icon="circle-check" disabled={actionBusy} onClick={() => onAction("approve", job)}>Approve Job</Button>,
-    job.canRejectDocs && <Button key="reject" variant="danger" icon="circle-x" disabled={actionBusy} onClick={() => onAction("reject", job)}>Reject Documents</Button>,
+    (job.canValidateDocs || job.canRejectDocs) && <Button key="review" icon="file-check-2" disabled={actionBusy} onClick={() => navigate(`/documents/review?jobId=${encodeURIComponent(job.id)}&ref=${encodeURIComponent(job.displayId || job.id)}`)}>Review documents</Button>,
     job.canMarkDelivered && canDeliver && <Button key="deliver" variant="outline" icon="circle-check" disabled={actionBusy} onClick={() => onAction("deliver", job)}>Mark Delivered</Button>,
   ].filter(Boolean);
   return (
