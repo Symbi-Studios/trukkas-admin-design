@@ -2,6 +2,8 @@ import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 
 const cleanText = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
+// The API accepts MALE/FEMALE in any case (and M/F); show it as Male/Female.
+const gender = (value) => ({ M: 'Male', MALE: 'Male', F: 'Female', FEMALE: 'Female' })[cleanText(value)?.toUpperCase()] || null;
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const records = (value) => Array.isArray(value) ? value.filter((item) => item && typeof item === 'object' && !Array.isArray(item)) : [];
 const accountStatusLabels = {
@@ -119,6 +121,7 @@ export function adaptAdminDriverProfile(response, directoryDriver = null) {
     role: cleanText(dto.role),
     registrationType: ownerOperator ? 'Individual Trucker' : cleanText(account.accountType) || (driver.registrationType === '—' ? null : driver.registrationType),
     lastLoginAt: date(dto.lastLoginAt) || date(account.lastLogin),
+    gender: gender(record(dto.details).personal?.gender) || gender(dto.gender),
     registrationStatus: formatEnum(account.registrationStatus),
     // For individual truckers, awarded jobs are self-driven. Failed jobs count
     // only awarded jobs that ended CANCELLED, excluding disputed/unawarded jobs.

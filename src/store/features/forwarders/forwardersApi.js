@@ -4,6 +4,8 @@ import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js
 import { forwarderJobBody } from './forwarderJobContracts.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
+// The API accepts MALE/FEMALE in any case (and M/F); show and edit it as Male/Female.
+const gender = (value) => ({ M: 'Male', MALE: 'Male', F: 'Female', FEMALE: 'Female' })[text(value)?.toUpperCase()] || null;
 const number = (value) => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
@@ -60,7 +62,7 @@ export function adaptAdminForwarderProfile(response) {
     spend: financial.currency === 'NGN' ? nonNegative(financial.totalSpend) : null, currency: text(financial.currency),
     joined: forwarderDate(dto.joinedAt || account.dateJoined), memberSince: forwarderDate(dto.joinedAt || account.dateJoined),
     lastActivity: forwarderDate(dto.lastLoginAt || account.lastLogin), verification: forwarderVerification(kycStatus), kycStatusCode: kycStatus,
-    dob: forwarderDate(personal.dateOfBirth), gender: text(personal.gender) || '—', nationality: text(personal.nationality) || '—', nin: text(personal.nin) || '—',
+    dob: forwarderDate(personal.dateOfBirth), gender: gender(personal.gender) || '—', nationality: text(personal.nationality) || '—', nin: text(personal.nin) || '—',
     altPhone: text(personal.alternatePhone) || '—', address: text(personal.address) || '—', languages: joinedStrings(personal.languages), yearsExperience: count(business.yearsExperience) ?? '—',
     license: text(business.forwardingLicense?.number) || '—', licenseExpiry: forwarderDate(business.forwardingLicense?.expiresAt),
     exportLicense: text(business.exportLicense?.number) || '—', exportLicenseExpiry: forwarderDate(business.exportLicense?.expiresAt),
@@ -96,7 +98,7 @@ function editableProfile(dto) {
   const p = dto.details?.personal || {}, b = dto.business || {};
   return { firstName: text(p.firstName), middleName: text(p.middleName), lastName: text(p.lastName), dateOfBirth: forwarderDate(p.dateOfBirth) === '—' ? null : p.dateOfBirth.slice(0, 10),
     businessName: text(b.businessName), businessAddress: text(b.address), cacNumber: text(b.cacNumber), taxId: text(b.taxId), website: text(b.website), businessType: text(b.businessType),
-    gender: text(p.gender), nationality: text(p.nationality), alternatePhone: text(p.alternatePhone), languages: strings(p.languages), yearsExperience: count(b.yearsExperience),
+    gender: gender(p.gender), nationality: text(p.nationality), alternatePhone: text(p.alternatePhone), languages: strings(p.languages), yearsExperience: count(b.yearsExperience),
     forwardingLicenseNumber: text(b.forwardingLicense?.number), forwardingLicenseExpiry: forwarderDate(b.forwardingLicense?.expiresAt) === '—' ? null : b.forwardingLicense.expiresAt.slice(0, 10),
     exportLicenseNumber: text(b.exportLicense?.number), exportLicenseExpiry: forwarderDate(b.exportLicense?.expiresAt) === '—' ? null : b.exportLicense.expiresAt.slice(0, 10),
     servicesOffered: strings(b.servicesOffered), coverageArea: strings(b.coverageArea), preferredCargoTypes: strings(b.preferredCargoTypes), preferredRoutes: strings(b.preferredRoutes), partnerNetwork: strings(b.partnerNetwork),
