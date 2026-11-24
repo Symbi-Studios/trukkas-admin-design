@@ -24,11 +24,18 @@ import {
 import { useSelector } from "react-redux";
 import { useSearchParams } from "next/navigation";
 import { DriverLoadingNotice, DriverTableLoading } from "./DriversLoading.jsx";
-import { maintenanceError, maintenanceHref, useGetAdminMaintenanceAssetQuery, useGetAdminMaintenanceDetailQuery, useGetAdminMaintenanceTruckRecordsQuery, useUpdateAdminMaintenanceStatusMutation, useRestrictAdminMaintenanceTruckMutation, useGetAdminMaintenanceUsageQuery, useGetAdminMaintenanceDocumentsQuery, useFlagAdminMaintenanceMutation } from "../store/features/maintenance/maintenanceApi.js";
+import { maintenanceError, maintenanceHref, useGetAdminMaintenanceAssetQuery, useGetAdminMaintenanceDetailQuery, useGetAdminMaintenanceTruckRecordsQuery, useRestrictAdminMaintenanceTruckMutation, useGetAdminMaintenanceUsageQuery, useGetAdminMaintenanceDocumentsQuery, useFlagAdminMaintenanceMutation, useGetAdminMaintenanceEligibilityQuery, useLiftAdminMaintenanceRestrictionMutation } from "../store/features/maintenance/maintenanceApi.js";
+import { INELIGIBILITY } from "../domain/maintenanceRules.js";
+import { ReasonModal } from "./maintenance/shared.jsx";
+import { RequirementsCard } from "./maintenance/RequirementsCard.jsx";
 import "./Maintenance.css";
 import "./MaintenanceDetail.css";
 
 const STATUS_TONE = {
+  Requested: "info",
+  "Awaiting Verification": "orange",
+  Verified: "success",
+  Rejected: "danger",
   Scheduled: "info",
   "In Progress": "warning",
   Completed: "success",
@@ -36,6 +43,10 @@ const STATUS_TONE = {
   Cancelled: "neutral",
 };
 const STATUS_ICON = {
+  Requested: "inbox",
+  "Awaiting Verification": "clipboard-check",
+  Verified: "shield-check",
+  Rejected: "circle-x",
   Scheduled: "calendar-clock",
   "In Progress": "wrench",
   Completed: "circle-check",
@@ -95,8 +106,12 @@ export function MaintenanceDetail() {
   const documents = documentsQuery.error ? null : documentsQuery.currentData;
   const [flagRecord] = useFlagAdminMaintenanceMutation();
   const busy = useRef(false);
-  const [updateStatus] = useUpdateAdminMaintenanceStatusMutation();
-  const [restrictTruck] = useRestrictAdminMaintenanceTruckMutation();
+  const [restrictTruck, restrictState] = useRestrictAdminMaintenanceTruckMutation();
+  const [liftRestriction, liftState] = useLiftAdminMaintenanceRestrictionMutation();
+  const [liftOpen, setLiftOpen] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const eligibilityQuery = useGetAdminMaintenanceEligibilityQuery({ truckId: record?.truckId, owner }, { skip: !authenticated || !record?.truckId, refetchOnMountOrArgChange: true });
+  const eligibility = eligibilityQuery.error ? null : eligibilityQuery.currentData;
 
   useEffect(() => {
     if (!toast) return;
@@ -147,6 +162,8 @@ export function MaintenanceDetail() {
     Completed: "This maintenance record has been completed.",
     Cancelled: "This maintenance record was cancelled.",
     Rejected: "This maintenance request was rejected.",
+    "Awaiting Verification": "The company submitted this service as complete. Trukkas must verify it before any restriction clears.",
+    Verified: "Trukkas verified this service. The truck's requirements were recalculated.",
   };
   const maintStatusDesc = maintStatusDescriptions[r.status];
   const remainingKm = r.remainingKm ?? (r.nextDueOdometer != null && r.currentOdometer != null ? Math.max(0, r.nextDueOdometer - r.currentOdometer) : null);
@@ -164,16 +181,6 @@ export function MaintenanceDetail() {
   const monthLabels = usage?.labels || [];
   const avgMonthlyKm = usage?.averageMonthlyDistanceKm ?? null;
 
-  async function changeStatus(action) {
-    if (busy.current) return;
-    if (!canWrite) return notify("danger", "Your account cannot perform this maintenance operation.");
-    busy.current = true;
-    try { await updateStatus({ id: r.id, action }).unwrap(); setMenuOpen(false); notify(action === "start" ? "info" : "success", action === "start" ? "Maintenance started." : "Maintenance marked as completed."); }
-    catch (error) { notify("danger", maintenanceError(error)); }
-    finally { busy.current = false; }
-  }
-  const markCompleted = () => changeStatus("complete");
-  const startMaintenance = () => changeStatus("start");
   async function submitFlag() {
     if (busy.current) return;
     if (!canWrite) return notify("danger", "Your account cannot perform this maintenance operation.");
@@ -183,12 +190,23 @@ export function MaintenanceDetail() {
     catch (error) { notify("danger", maintenanceError(error)); }
     finally { busy.current = false; }
   }
-  async function confirmSuspend() {
+  async function confirmSuspend(reason) {
     if (busy.current) return;
     if (!canWrite) return notify("danger", "Your account cannot restrict assets.");
-    busy.current = true;
-    try { await restrictTruck({ truckId: r.truckId, reference: r.reference }).unwrap(); setSuspendOpen(false); notify("danger", `${r.plate} has been suspended from active duty.`); }
-    catch (error) { notify("danger", maintenanceError(error)); }
+    busy.current = true; setActionError("");
+    try { await restrictTruck({ truckId: r.truckId, reference: r.reference, reason }).unwrap(); setSuspendOpen(false); notify("danger", `${r.plate} is blocked from new jobs. The company has been notified.`); }
+    catch (error) { setActionError(maintenanceError(error)); }
+    finally { busy.current = false; }
+  }
+  async function confirmLift(reason) {
+    if (busy.current) return;
+    if (!canWrite) return notify("danger", "Your account cannot lift restrictions.");
+    busy.current = true; setActionError("");
+    try {
+      const result = await liftRestriction({ truckId: r.truckId, reason }).unwrap();
+      setLiftOpen(false);
+      notify(result.eligible ? "success" : "warning", result.eligible ? `${r.plate} can take new jobs again.` : `Restriction lifted, but ${r.plate} is still unavailable: ${result.message || INELIGIBILITY[result.reasonCode] || "see eligibility"}.`);
+    } catch (error) { setActionError(maintenanceError(error)); }
     finally { busy.current = false; }
   }
   function viewHistory(row) {
@@ -256,21 +274,13 @@ export function MaintenanceDetail() {
                         },
                       },
                       { divider: true },
-                      ...(r.status === "Scheduled"
+                      ...(r.status === "Requested" || r.status === "Awaiting Verification"
                         ? [
+                            { divider: true },
                             {
-                              label: "Start Maintenance",
-                              icon: "play",
-                              onClick: startMaintenance,
-                            },
-                          ]
-                        : []),
-                      ...(r.status === "Scheduled" || r.status === "In Progress"
-                        ? [
-                            {
-                              label: "Mark Completed",
-                              icon: "circle-check",
-                              onClick: markCompleted,
+                              label: r.status === "Requested" ? "Review request" : "Verify completion",
+                              icon: "clipboard-check",
+                              onClick: () => navigate("/maintenance?view=reviews"),
                             },
                           ]
                         : []),
@@ -284,15 +294,18 @@ export function MaintenanceDetail() {
                           setFlagOpen(true);
                         },
                       },
-                      {
-                        label: "Suspend Asset",
-                        icon: "ban",
-                        tone: "danger",
-                        onClick: () => {
-                          setMenuOpen(false);
-                          setSuspendOpen(true);
-                        },
-                      },
+                      ...(eligibility?.restricted
+                        ? [{
+                            label: "Lift restriction",
+                            icon: "lock-keyhole-open",
+                            onClick: () => { setMenuOpen(false); setActionError(""); setLiftOpen(true); },
+                          }]
+                        : [{
+                            label: "Block from new jobs",
+                            icon: "lock-keyhole",
+                            tone: "danger",
+                            onClick: () => { setMenuOpen(false); setActionError(""); setSuspendOpen(true); },
+                          }]),
                     ]}
                   />
                 </span>
@@ -303,6 +316,17 @@ export function MaintenanceDetail() {
       />
 
       {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
+
+      {eligibility?.eligible === false && (
+        <div className="mdet-block" role="status">
+          <span className="mdet-block-ico"><Icon name="lock-keyhole" size={18} /></span>
+          <span className="mdet-block-copy">
+            <strong>Truck unavailable — {eligibility.reasonCode === "MAINTENANCE_OVERDUE" ? "mandatory maintenance required" : (INELIGIBILITY[eligibility.reasonCode] || "not eligible for jobs").toLowerCase()}</strong>
+            <span>{eligibility.message || eligibility.restrictionReason || "This truck cannot bid or be assigned to new jobs."}{eligibility.restricted ? ` Restricted ${eligibility.restrictedAt}.` : ""}</span>
+          </span>
+          {canWrite && eligibility.restricted && <Button size="sm" variant="outline" icon="lock-keyhole-open" onClick={() => { setActionError(""); setLiftOpen(true); }}>Lift restriction</Button>}
+        </div>
+      )}
 
       <Card pad="none">
         <div className="mdet-hero">
@@ -698,6 +722,7 @@ export function MaintenanceDetail() {
           </div>
 
           <div className="mdet-rail">
+            <RequirementsCard truckId={r.truckId} owner={owner} authenticated={authenticated} />
             <SectionCard title="Compliance & Eligibility">
               {compliance.map((c) => (
                 <div className="mdet-compliance-row" key={c.label}>
@@ -975,22 +1000,26 @@ export function MaintenanceDetail() {
         />
       </Modal>
 
-      <Modal
+      <ReasonModal
         open={suspendOpen}
+        title={`Block ${r.plate} from new jobs`}
+        description="The truck cannot bid or be assigned until the restriction is lifted. Trips already under way finish normally. The company is notified and the action is audited."
+        confirmLabel="Block truck"
+        tone="danger"
+        busy={restrictState.isLoading}
+        error={actionError}
         onClose={() => setSuspendOpen(false)}
-        title="Suspend Asset"
-        description={`Suspend ${r.plate} from active duty? It will no longer be eligible for new jobs until reactivated.`}
-        width={460}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setSuspendOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" icon="ban" onClick={confirmSuspend}>
-              Suspend Asset
-            </Button>
-          </>
-        }
+        onConfirm={confirmSuspend}
+      />
+      <ReasonModal
+        open={liftOpen}
+        title={`Lift restriction on ${r.plate}`}
+        description="Clears a manual restriction and overrides overdue-maintenance blocks for work already due. Maintenance that becomes overdue later blocks the truck again."
+        confirmLabel="Lift restriction"
+        busy={liftState.isLoading}
+        error={actionError}
+        onClose={() => setLiftOpen(false)}
+        onConfirm={confirmLift}
       />
     </div>
   );

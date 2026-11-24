@@ -83,7 +83,7 @@ export const BOARD_LAYOUTS = {
     ['Open', 'info'], ['In Progress', 'purple'], ['Resolved', 'success'], ['Spam', 'neutral'],
   ], { title: (row) => row.title, subtitle: 'user', body: [(row) => row.excerpt, 'date'], footer: ['type', 'channel'] }, 'No feedback'),
   maintenance: layout([
-    ['Scheduled', 'info'], ['In Progress', 'warning'], ['Completed', 'success'], ['Overdue', 'danger'], ['Cancelled', 'neutral'],
+    ['Requested', 'info'], ['Scheduled', 'info'], ['In Progress', 'warning'], ['Awaiting Verification', 'orange'], ['Overdue', 'danger'], ['Completed', 'success'], ['Verified', 'success'], ['Rejected', 'danger'], ['Cancelled', 'neutral'],
   ], { title: 'id', subtitle: 'company', body: ['description', 'plate'], footer: ['type', 'priority'] }, 'No maintenance'),
   audit: layout([
     ['Success', 'success'], ['Failed', 'danger'],
