@@ -33,6 +33,7 @@ import {
 import { companyError, useGetAdminCompaniesQuery, useGetAdminPendingCompaniesQuery, useGetAdminCompanyStatsQuery, useGetAdminCompanyPerformanceQuery, useCreateAdminCompanyMutation } from '../store/features/companies/companiesApi.js';
 import { useResetAdminCompanyScreenVerificationMutation } from '../store/features/companies/companyScreenApi.js';
 import { CompaniesLoading } from './CompaniesLoading.jsx';
+import { cityOptions, sameCity } from '../store/api/addressCity.js';
 import { CompanyActionModal } from './CompanyActionModal.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import './TruckingCompanies.css';
@@ -93,13 +94,13 @@ function CompaniesDirectory() {
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); };
   }, [menuFor]);
   const companies = directoryQuery.error ? [] : directoryQuery.currentData || [];
-  const locations = useMemo(() => [...new Set(companies.map((company) => company.location).filter(Boolean))], [companies]);
+  const locations = useMemo(() => cityOptions(companies), [companies]);
   const filtered = useMemo(() => companies.filter((company) => {
     const needle = query.toLowerCase();
     const queryMatch = !needle || [company.name, company.regNo, company.contactName, company.contactPhone, company.contactEmail].some((value) => value?.toLowerCase().includes(needle));
     const tabMatch = tab === 'All Companies' || (tab === 'Pending Review' ? company.displayStatusCode === 'PENDING_REVIEW' : tab === 'Suspended' ? company.statusCode === 'SUSPENDED' : tab === 'Rejected' ? company.isRejected === true || company.displayStatusCode === 'REJECTED' : company.verification === tab);
     const fleetMatch = fleet === 'All Fleet Sizes' || (company.trucks != null && (fleet === '1–15 trucks' ? company.trucks >= 1 && company.trucks <= 15 : fleet === '16–30 trucks' ? company.trucks >= 16 && company.trucks <= 30 : company.trucks > 30));
-    return queryMatch && tabMatch && (status === 'All Statuses' || (status === 'Pending Review' ? company.displayStatusCode === 'PENDING_REVIEW' : status === 'Rejected' ? company.isRejected === true || company.displayStatusCode === 'REJECTED' : status === 'Verified' ? company.verification === 'Verified' : company.status === status)) && (location === 'All Locations' || company.location === location) && fleetMatch && inRange(company.joinedAt, joined);
+    return queryMatch && tabMatch && (status === 'All Statuses' || (status === 'Pending Review' ? company.displayStatusCode === 'PENDING_REVIEW' : status === 'Rejected' ? company.isRejected === true || company.displayStatusCode === 'REJECTED' : status === 'Verified' ? company.verification === 'Verified' : company.status === status)) && (location === 'All Locations' || sameCity(company.city, location)) && fleetMatch && inRange(company.joinedAt, joined);
   }), [companies, fleet, joined, location, query, status, tab]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize)), currentPage = Math.min(page, pageCount);
   const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);

@@ -2,6 +2,7 @@ import { defaultSerializeQueryArgs } from '@reduxjs/toolkit/query';
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 import { adaptAdminDriver } from '../drivers/driversApi.js';
+import { addressCity } from '../../api/addressCity.js';
 import { companyCardComparison, companyPerformancePage, companyPayoutAllocation } from './companyUpdateContracts.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -32,7 +33,7 @@ const verification = (value) => ({ VERIFIED: 'Verified', IN_REVIEW: 'Pending', P
 export function adaptAdminCompany(dto = {}) {
   return {
     id: text(dto.id), name: text(dto.businessName) || text(dto.name) || '—',
-    truckerType: text(dto.truckerType), regNo: text(dto.rcNumber) || text(dto.cacNumber), location: text(dto.location) || text(dto.businessAddress),
+    truckerType: text(dto.truckerType), regNo: text(dto.rcNumber) || text(dto.cacNumber), location: text(dto.location) || text(dto.businessAddress), city: addressCity(text(dto.location) || text(dto.businessAddress)),
     contactName: text(dto.contactPerson) || text(dto.contactName) || [text(dto.firstName), text(dto.lastName)].filter(Boolean).join(' ') || null,
     contactPhone: text(dto.phone), contactEmail: text(dto.email),
     trucks: count(dto.fleet?.total) ?? count(dto.fleetSize), activeTrucks: count(dto.fleet?.active), drivers: count(dto.driverCount), totalJobs: count(dto.totalJobs),

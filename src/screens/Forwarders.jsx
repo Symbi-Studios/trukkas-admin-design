@@ -36,6 +36,7 @@ import {
 } from "../ds.js";
 
 import { forwarderMoney, forwarderError, useGetAdminForwarderDirectoryQuery, useGetAdminForwarderStatsQuery, useGetAdminForwarderJobsQuery, useGetAdminPendingExporterLicensesQuery } from '../store/features/forwarders/forwardersApi.js';
+import { cityOptions, sameCity } from '../store/api/addressCity.js';
 import { ForwardersLoading } from './ForwardersLoading.jsx';
 import { DriverLoadingNotice } from './DriversLoading.jsx';
 import { ForwarderActionModal, ForwarderAnnouncementModal, downloadForwarderCsv } from './ForwarderActions.jsx';
@@ -161,7 +162,7 @@ export function Forwarders() {
   const [openFilter, setOpenFilter] = useState(null);
 
   const locations = useMemo(
-    () => [...new Set(FORWARDERS.map((f) => f.location).filter((value) => value !== "—"))],
+    () => cityOptions(FORWARDERS),
     [directoryQuery.currentData, directoryQuery.error],
   );
 
@@ -178,7 +179,7 @@ export function Forwarders() {
           verification === "All Verification Status" ||
           f.verification === verification;
         const matchesLocation =
-          location === "All Locations" || f.location === location;
+          location === "All Locations" || sameCity(f.city, location);
         return matchesQ && matchesStatus && matchesVerification && matchesLocation && inRange(f.joinedAt, joined);
       }),
     [directoryQuery.currentData, directoryQuery.error, q, status, verification, location, joined],
