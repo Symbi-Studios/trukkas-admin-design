@@ -7,6 +7,7 @@ export const NAV = [
   {
     section: "Operations",
     items: [
+      { id: "operations-overview", icon: "chart-pie", label: "Overview" },
       { id: "jobs", icon: "package", label: "Jobs" },
       { id: "trips", icon: "route", label: "Trips" },
       { id: "bids", icon: "radio-tower", label: "Bids & Offers" },
@@ -83,6 +84,7 @@ export const NAV = [
 
 export const SEARCH_PLACEHOLDER = {
   dashboard: "Search jobs, trucks, companies, exporters...",
+  "operations-overview": "Search jobs, trips, bids, documents...",
   jobs: "Search jobs, routes, cargo, companies...",
   trips: "Search by Trip ID, Job ID, Container, Truck, Driver...",
   bids: "Search by Job ID, Trip ID, Company, Truck, Driver...",

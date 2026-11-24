@@ -26,6 +26,7 @@ import { Transactions } from './screens/Transactions.jsx';
 import { RequestedPayouts } from './screens/RequestedPayouts.jsx';
 import { ReportsAnalytics } from './screens/ReportsAnalytics.jsx';
 import { UserManagement } from './screens/UserManagement.jsx';
+import { OperationsOverview } from './screens/OperationsOverview.jsx';
 import { UsersOverview } from './screens/UsersOverview.jsx';
 import { RolesPermissions } from './screens/RolesPermissions.jsx';
 import { SupportTickets } from './screens/SupportTickets.jsx';
@@ -74,6 +75,7 @@ const screens = {
   'cargo-types': CargoTypes,
   calculator: TruckCalculator,
   users: UserManagement,
+  'operations-overview': OperationsOverview,
   'users-overview': UsersOverview,
   roles: RolesPermissions,
   tickets: SupportTickets,
