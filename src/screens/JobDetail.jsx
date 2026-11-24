@@ -28,6 +28,7 @@ import {
   orNA,
   isMissing,
   RouteStack,
+  shortMoneyValue,
 } from "../ds.js";
 import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
 import { useGetContainerReviewJobQuery } from "../store/features/documents/containerReviewApi.js";
@@ -72,7 +73,7 @@ function JobFact({ label, children, wide = false }) {
 function InfoStrip({ items }) {
   return <div className="jd-metric-strip" style={{ '--jd-metric-columns': items.length }}>
     {items.map((item, index) => <div className="jd-metric" key={index}>
-      <span>{item.label}</span><strong>{isMissing(item.value) ? <NotAvailable /> : item.value}</strong>{item.caption && !isMissing(item.caption) && <small>{item.caption}</small>}
+      <span>{item.label}</span><strong>{isMissing(item.value) ? <NotAvailable /> : shortMoneyValue(item.value)}</strong>{item.caption && !isMissing(item.caption) && <small>{item.caption}</small>}
     </div>)}
   </div>;
 }
@@ -443,7 +444,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
           <RouteStack from={job.origin} to={job.destination} wrap />
         </div>
         <dl className="jd-hero-stats">
-          <div><dt>Job value</dt><dd>{orNA(naira(job.jobValue))}</dd></div>
+          <div><dt>Job value</dt><dd>{shortMoneyValue(orNA(naira(job.jobValue)))}</dd></div>
           <div><dt>Trips</dt><dd>{job.tripsKnown ? `${displayCount(job.assignedTrips)} of ${displayCount(tripCounts.total)}` : <NotAvailable />}</dd></div>
           <div><dt>Bids</dt><dd>{job.bidsKnown ? bids.length : <NotAvailable />}</dd></div>
           <div><dt>Trucking company</dt><dd>{orNA(job.truckingCompany, "Not assigned")}</dd></div>

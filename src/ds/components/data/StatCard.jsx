@@ -1,7 +1,7 @@
 import React from "react";
 import { Card } from "../core/Card.jsx";
 import { Icon } from "../../assets/icons/Icon.jsx";
-import { formatNairaShort, parseNairaText } from "../../../lib/money.js";
+import { shortMoneyValue } from "./ShortMoney.jsx";
 
 const TINT = {
   blue: ["var(--tk-blue-soft)", "var(--tk-blue)"],
@@ -32,8 +32,7 @@ export function StatCard({
 }) {
   const [bg, fg] = TINT[tint] || TINT.blue;
   // Naira amounts are shortened (₦750.6k, ₦25.6m) so tiles fit smaller desktops; the full figure stays on hover.
-  const amount = parseNairaText(value);
-  const shown = amount == null ? value : <span title={value}>{formatNairaShort(amount)}</span>;
+  const shown = shortMoneyValue(value);
   const good = direction !== "down";
   const labelBelow = labelPosition === "bottom";
   const labelEl = (

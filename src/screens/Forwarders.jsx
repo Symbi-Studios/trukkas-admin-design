@@ -1,5 +1,4 @@
 "use client";
-import { formatNairaShort } from '../lib/money.js';
 import { ToastRelay } from '../components/ActionToast.jsx';
 import { BOARD_LAYOUTS } from '../domain/boardLayouts.js';
 import { DateRangeFilter, EMPTY_RANGE, inRange } from '../components/DateRangeFilter.jsx';
@@ -57,7 +56,6 @@ const VERIFICATION_META = {
   Rejected: { tone: "danger", icon: "circle-x" },
 };
 const naira = forwarderMoney;
-const nairaShort = formatNairaShort;
 
 function ForwarderCell({ f }) {
   return (
@@ -196,7 +194,7 @@ export function Forwarders() {
         <StatCard icon="circle-check" tint="green" label="Active Forwarders" value={STATS.active} />
         <StatCard icon="hourglass" tint="amber" label="Pending Verification" value={STATS.pending} direction="down" />
         <StatCard icon="circle-x" tint="purple" label="Suspended" value={STATS.suspended} direction="down" />
-        <StatCard icon="wallet" tint="blue" label="Total Spend" value={<span title={naira(STATS.totalSpend)}>{nairaShort(STATS.totalSpend)}</span>} />
+        <StatCard icon="wallet" tint="blue" label="Total Spend" value={naira(STATS.totalSpend)} />
       </StatsPanel>
 
       <SectionCard pad="none">
