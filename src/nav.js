@@ -17,6 +17,7 @@ export const NAV = [
   {
     section: "Users",
     items: [
+      { id: "users-overview", icon: "chart-pie", label: "Overview" },
       { id: "drivers", icon: "user", label: "Drivers" },
       { id: "companies", icon: "building-2", label: "Truck Companies" },
       { id: "forwarders", icon: "users", label: "Forwarders" },
@@ -86,6 +87,7 @@ export const SEARCH_PLACEHOLDER = {
   triangulation: "Search containers, jobs, terminals...",
   fleet: "Search trucks, drivers, routes, or locations...",
   maintenance: "Search maintenance, trucks, service centers...",
+  "users-overview": "Search drivers, companies, forwarders...",
   drivers: "Search drivers by name, license, phone...",
   companies: "Search jobs, trucks, companies, exporters...",
   cargo: "Search cargo records, jobs, containers...",
