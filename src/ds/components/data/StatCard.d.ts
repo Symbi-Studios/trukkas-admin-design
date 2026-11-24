@@ -8,9 +8,11 @@ export interface StatCardProps {
   tint?: 'blue' | 'green' | 'amber' | 'red' | 'purple' | 'teal' | 'navy';
   label: React.ReactNode;
   value: React.ReactNode;
-  /** e.g. "24%" — rendered with an arrow, green up / red down */
+  /** e.g. "24%" — rendered with an arrow; green when the change is good, red when bad, grey when flat */
   delta?: React.ReactNode;
   direction?: 'up' | 'down' | null;
+  /** false for metrics where a rise is bad (cancellations, locked users): flips the green/red, not the arrow */
+  higherIsBetter?: boolean;
   /** grey trailing caption, e.g. "vs last month" or "43.2% of total" — ignored when labelPosition="bottom" */
   caption?: React.ReactNode;
   /** optional <Sparkline/> under the figure */

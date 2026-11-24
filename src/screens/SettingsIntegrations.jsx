@@ -18,7 +18,7 @@ export function SettingsIntegrations() {
   return (
     <>
       <SettingsSectionHeader title="Integrations"
-        description="Configure integrations preferences for your Trukkas platform." />
+        description="Third-party services connected to Trukkas." />
       <SettingsReadNotice error={query.error} />
       <Card>
         {loading ? <>

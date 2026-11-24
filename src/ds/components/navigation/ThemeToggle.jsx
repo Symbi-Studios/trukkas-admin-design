@@ -14,7 +14,11 @@ export function ThemeToggle({ compact = false }) {
   const [theme, setTheme] = React.useState('light');
   React.useEffect(() => { setTheme(currentTheme()); }, []);
   const apply = (next) => {
-    document.documentElement.dataset.theme = next;
+    // Switch every colour at once: pause transitions for the frame the theme changes.
+    const root = document.documentElement;
+    root.classList.add('tk-theme-switching');
+    root.dataset.theme = next;
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('tk-theme-switching')));
     try { localStorage.setItem(KEY, next); } catch { /* private mode: still switch for this visit */ }
     setTheme(next);
   };

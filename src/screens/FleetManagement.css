@@ -71,7 +71,9 @@
   width: 39px;
   height: 30px;
   border-radius: 6px;
-  background: linear-gradient(145deg, #eff4f8, #97a9b6);
+  background: var(--tk-surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--tk-line);
+  color: var(--tk-ink-400);
   display: grid;
   place-items: center;
   font-size: 17px;
@@ -91,7 +93,7 @@
   position: absolute;
   right: 0;
   top: 38px;
-  z-index: 35;
+  z-index: var(--tk-z-dropdown);
 }
 .fleet-empty {
   text-align: center;
@@ -155,8 +157,9 @@
   width: 104px;
   height: 86px;
   border-radius: 10px;
-  background: linear-gradient(145deg, #e3ebf2, #758896);
-  color: #fff;
+  background: var(--tk-surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--tk-line);
+  color: var(--tk-ink-400);
   display: grid;
   place-items: center;
 }
@@ -274,8 +277,9 @@
 .truck-photo {
   height: 132px;
   border-radius: 8px;
-  background: linear-gradient(145deg, #edf1f4, #83909b);
-  color: #fff;
+  background: var(--tk-surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--tk-line);
+  color: var(--tk-ink-400);
   display: grid;
   place-items: center;
   position: relative;

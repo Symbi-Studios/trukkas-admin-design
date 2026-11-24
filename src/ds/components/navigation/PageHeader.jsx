@@ -38,8 +38,9 @@ function normalizeCrumbs(crumbs, pathname) {
 /** Title block: breadcrumbs, title, description, right-hand actions. */
 export function PageHeader({ crumbs, title, description, actions, meta, style }) {
   const pathname = usePathname();
-  const items = normalizeCrumbs(crumbs, pathname);
   const onDashboard = (pathname || '/') === '/' || pathname.startsWith('/dashboard');
+  // The dashboard is home: a trail there would only repeat its own title.
+  const items = onDashboard ? [] : normalizeCrumbs(crumbs, pathname);
   return (
     <header className="tk-page-header" style={style}>
       {items.length > 0 && <Breadcrumbs items={items} home={!onDashboard} />}

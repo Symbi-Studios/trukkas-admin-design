@@ -38,7 +38,7 @@ export function SettingsSecurity() {
       <SettingsReadNotice error={editor.error} />
 
       <SettingsGrid>
-        {editor.groupVisible('settingsAuth') && (<SettingsCard description="Configure how users authenticate and access the platform." title="Authentication Settings" save={<SettingsCardSave editor={editor} group="settingsAuth" />}>
+        {editor.groupVisible('settingsAuth') && (<SettingsCard title="Authentication Settings" save={<SettingsCardSave editor={editor} group="settingsAuth" />}>
           {editor.visible('settingsAuth', 'requireTwoFactorAuth') && (<Field><Switch checked={auth.requireTwoFactorAuth} label="Require Two-Factor Authentication (2FA)"
             hint="Require 2FA for all users, especially admins."
             onChange={(v) => updateAuthSettings({ requireTwoFactorAuth: v })} /></Field>) }
@@ -79,18 +79,18 @@ export function SettingsSecurity() {
           <div style={{ display: 'grid', gap: 14 }}>
             {recentSecurityEvents.map((e, i) => (
               <div key={i} style={{ display: 'flex', gap: 10 }}>
-                <span style={{ width: 30, height: 30, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)',
-                              color: e.tone, display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                <span style={{ width: 30, height: 30, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)',
+                              color: 'var(--tk-ink-500)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
                   <Icon name={e.icon} size={15} />
                 </span>
                 <div style={{ display: 'grid', gap: 1, minWidth: 0 }}>
                   <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{e.label}</span>
-                  <span className="tk-meta">{e.detail}</span>
+                  {e.detail && e.detail !== '—' && <span className="tk-meta">{e.detail}</span>}
                   <span className="tk-meta">{e.time} · {e.location}</span>
                 </div>
               </div>
             ))}
-            {recentSecurityEvents.length ? null : '—'}
+            {recentSecurityEvents.length ? null : <span className="tk-meta">No security events yet.</span>}
           </div>
         </SettingsCard>
       </SettingsGrid>

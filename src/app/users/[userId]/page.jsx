@@ -15,5 +15,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function UserDetailPage() {
-  return <Suspense fallback={<DriverDetailLoading />}><UserDetail /></Suspense>;
+  return <Suspense fallback={<DriverDetailLoading label="Loading user details…" />}><UserDetail /></Suspense>;
 }

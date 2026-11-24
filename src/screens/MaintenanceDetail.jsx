@@ -251,7 +251,7 @@ export function MaintenanceDetail() {
                     position: "absolute",
                     right: 0,
                     top: 44,
-                    zIndex: 30,
+                    zIndex: 'var(--tk-z-dropdown)',
                   }}
                 >
                   <DropdownMenu

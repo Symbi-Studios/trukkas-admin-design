@@ -20,16 +20,16 @@ export function ShortMoney({ value }) {
   const hide = () => setPos(null);
   return (
     <>
-      <span ref={ref} tabIndex={0} aria-label={full} style={{ cursor: "help", outline: "none" }}
+      <span ref={ref} tabIndex={0} aria-label={full} className="tk-short-money" style={{ cursor: "help" }}
             onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
         {short}
       </span>
       {pos && typeof document !== "undefined" && createPortal(
         <span role="tooltip" style={{
           position: "fixed", left: pos.x, top: pos.y - 8, transform: "translate(-50%, -100%)",
-          background: "var(--tk-navy)", color: "#fff", padding: "7px 10px",
+          background: "var(--tk-navy)", color: "var(--tk-ink-on-navy)", padding: "7px 10px",
           borderRadius: "var(--tk-r-sm)", font: "600 12px/16px var(--tk-font-sans)", letterSpacing: 0,
-          whiteSpace: "nowrap", zIndex: 1000, pointerEvents: "none", boxShadow: "var(--tk-shadow-menu)",
+          whiteSpace: "nowrap", zIndex: "var(--tk-z-popover)", pointerEvents: "none", boxShadow: "var(--tk-shadow-menu)",
           animation: "tk-fade-in var(--tk-dur-fast) var(--tk-ease)",
         }}>{full}</span>,
         document.body,

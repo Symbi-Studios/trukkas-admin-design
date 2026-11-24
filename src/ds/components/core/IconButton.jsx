@@ -1,25 +1,27 @@
 import React from 'react';
 import { Icon } from '../../assets/icons/Icon.jsx';
 
-export function IconButton({ icon, size = 32, tone = 'ghost', label, style, ...rest }) {
-  const tones = {
-    ghost: { bg: 'transparent', fg: 'var(--tk-ink-400)', bd: 'transparent' },
-    sunk:  { bg: 'var(--tk-surface-sunk)', fg: 'var(--tk-ink-500)', bd: 'transparent' },
-    outline: { bg: 'var(--tk-surface)', fg: 'var(--tk-ink-500)', bd: 'var(--tk-line-strong)' },
-    blue:  { bg: 'var(--tk-blue-soft)', fg: 'var(--tk-blue)', bd: 'transparent' },
-  };
-  const t = tones[tone] || tones.ghost;
-  const [hot, setHot] = React.useState(false);
+// fill / hover / text / border. Hover and press come from .tk-btn in styles.css.
+const TONES = {
+  ghost:   ['transparent', 'var(--tk-surface-sunk)', 'var(--tk-ink-400)', 'transparent'],
+  sunk:    ['var(--tk-surface-sunk)', 'var(--tk-line)', 'var(--tk-ink-500)', 'transparent'],
+  outline: ['var(--tk-surface)', 'var(--tk-surface-sunk)', 'var(--tk-ink-500)', 'var(--tk-line-strong)'],
+  blue:    ['var(--tk-blue-soft)', 'var(--tk-blue-soft)', 'var(--tk-blue)', 'transparent'],
+};
+
+export function IconButton({ icon, size = 32, tone = 'ghost', label, className, style, ...rest }) {
+  const [fill, hover, fg, bd] = TONES[tone] || TONES.ghost;
   return (
-    <button type="button" aria-label={label || icon}
-      onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)} {...rest}
+    <button type="button" aria-label={label || icon} {...rest}
+      className={'tk-btn' + (className ? ' ' + className : '')}
       style={{
+        '--tk-btn-fill': fill, '--tk-btn-fill-hover': hover, '--tk-btn-fill-press': hover,
         width: size, height: size, display: 'grid', placeItems: 'center',
-        borderRadius: 'var(--tk-r-sm)', border: '1px solid ' + t.bd,
-        background: hot && tone === 'ghost' ? 'var(--tk-surface-sunk)' : t.bg,
-        color: t.fg, cursor: 'pointer', transition: 'var(--tk-transition)', ...style,
+        borderRadius: 'var(--tk-r-sm)', border: '1px solid ' + bd,
+        background: 'var(--tk-btn-bg, var(--tk-btn-fill))',
+        color: fg, cursor: 'pointer', ...style,
       }}>
-      <Icon name={icon} size={Math.round(size * 0.5)} />
+      <Icon name={icon} size={Math.round(size * 0.5)} aria-hidden="true" />
     </button>
   );
 }

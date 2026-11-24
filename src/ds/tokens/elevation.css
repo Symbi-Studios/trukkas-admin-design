@@ -7,8 +7,8 @@
   --tk-shadow-modal: 0 24px 60px rgba(0, 8, 36, 0.22);
   --tk-shadow-blue: 0 6px 16px rgba(2, 65, 232, 0.24);
   --tk-shadow-orange: 0 6px 16px rgba(253, 83, 1, 0.24);
-  --tk-focus-ring: 0 0 0 3px rgba(2, 65, 232, 0.16);
-  --tk-focus-ring-danger: 0 0 0 3px rgba(224, 43, 34, 0.16);
+  --tk-focus-ring: 0 0 0 3px rgba(2, 65, 232, 0.3);
+  --tk-focus-ring-danger: 0 0 0 3px rgba(224, 43, 34, 0.28);
   --tk-scrim: rgba(0, 8, 36, 0.48);
 }
 :root[data-theme="dark"] {
@@ -17,4 +17,6 @@
   --tk-shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.55);
   --tk-shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.6);
   --tk-scrim: rgba(0, 0, 0, 0.6);
+  --tk-focus-ring: 0 0 0 3px rgba(77, 125, 255, 0.45);
+  --tk-focus-ring-danger: 0 0 0 3px rgba(255, 107, 107, 0.4);
 }

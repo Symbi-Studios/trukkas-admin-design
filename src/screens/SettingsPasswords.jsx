@@ -109,7 +109,7 @@ export function SettingsPasswords() {
           <Pagination page={sessionPage} pageSize={5} total={activeSessionsTotal} pageCount={sessionData?.pageCount ?? null} onPage={setSessionPage} />
         </SettingsCard>
         
-        {editor.groupVisible('settingsSessionSettings') && (<SettingsCard description="Configure user session behavior and inactivity rules." title="Session Settings" save={<SettingsCardSave editor={editor} group="settingsSessionSettings" />}>
+        {editor.groupVisible('settingsSessionSettings') && (<SettingsCard title="Session Settings" save={<SettingsCardSave editor={editor} group="settingsSessionSettings" />}>
           {editor.visible('settingsSessionSettings', 'sessionTimeoutMinutes') && (<Field><TextField label="Session timeout (minutes)" type="number" value={sessionSettings.sessionTimeoutMinutes}
             hint="Automatically log out users after this period of inactivity."
             onChange={(e) => updateSessionSettings({ sessionTimeoutMinutes: e.target.value })} /></Field>) }

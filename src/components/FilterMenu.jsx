@@ -6,7 +6,7 @@ export function FilterMenu({ name, icon, value, allValue, options, open, setOpen
   return <span style={{ position: 'relative' }}>
     <FilterSelect icon={icon} prefix={name} label={value} active={value !== allValue}
       onClick={() => setOpen(open ? null : name)} onClear={() => { onChange(allValue); setOpen(null); }} />
-    {open && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+    {open && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
       <DropdownMenu width={220} items={[allValue, ...options].map((item) => ({
         label: item, icon: item === value ? 'check' : undefined, onClick: () => { onChange(item); setOpen(null); },
       }))} />

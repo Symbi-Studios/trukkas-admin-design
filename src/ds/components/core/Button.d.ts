@@ -11,5 +11,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   /** Lucide glyph id rendered after the label — usually "chevron-down" */
   iconRight?: string;
   fullWidth?: boolean;
+  /** shows a spinner in place of the icon and blocks clicks until the action settles */
+  loading?: boolean;
 }
 export declare function Button(props: ButtonProps): JSX.Element;

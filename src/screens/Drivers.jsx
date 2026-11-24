@@ -143,7 +143,7 @@ function DriverDrawer({ driver: d, companyTab, onClose, onOpen, onAction, onRevi
       </div>
     </>}
   >
-    {d.rejectionReason && <Banner tone="danger" title="Application rejected">{d.rejectionReason}</Banner>}
+    {d.rejectionReason && <Banner inline tone="danger" title="Application rejected">{d.rejectionReason}</Banner>}
 
     <DrawerSection title="Contact">
       <DrawerFacts items={[
@@ -325,7 +325,7 @@ export function Drivers() {
     <PageHeader
       crumbs={['Users', 'Drivers']}
       title="Drivers"
-      description="Review and manage company drivers and individual drivers on Trukkas."
+      description="Company drivers and independent drivers, with their license status."
     />
 
 

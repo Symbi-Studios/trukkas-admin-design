@@ -132,7 +132,7 @@ export function ContainerTriangulation() {
       ].map(([key, allLabel]) => <span key={key} style={{ position: 'relative' }}>
         <FilterSelect label={filters[key]} active={filters[key] !== allLabel}
           onClick={() => setOpenFilter(openFilter === key ? null : key)} />
-        {openFilter === key && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+        {openFilter === key && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu width={210} items={options[key].map((option) => ({
             label: option, icon: option === filters[key] ? 'check' : undefined,
             onClick: () => { setFilters((old) => ({ ...old, [key]: option })); setOpenFilter(null); },
@@ -143,7 +143,7 @@ export function ContainerTriangulation() {
       <span style={{ position: 'relative' }}>
         <FilterSelect label={`Radius: ${radiusKm} km`} active={radiusKm !== 150}
           onClick={() => setOpenFilter(openFilter === 'radius' ? null : 'radius')} />
-        {openFilter === 'radius' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+        {openFilter === 'radius' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu width={160} items={[50, 100, 150, 250].map((value) => ({
             label: `${value} km`, icon: value === radiusKm ? 'check' : undefined,
             onClick: () => { setRadiusKm(value); setPage(1); setOpenFilter(null); },
@@ -152,7 +152,7 @@ export function ContainerTriangulation() {
       </span>
       <span style={{ position: 'relative' }}>
         <FilterSelect label={reviewStatus ? `Status: ${reviewStatus}` : 'Active statuses'} active={Boolean(reviewStatus)} onClick={() => setOpenFilter(openFilter === 'reviewStatus' ? null : 'reviewStatus')} />
-        {openFilter === 'reviewStatus' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+        {openFilter === 'reviewStatus' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu width={180} items={[['', 'Active statuses'], ['ALL', 'All statuses'], ['OPEN', 'Open'], ['PROPOSED', 'Proposed'], ['REJECTED', 'Rejected']].map(([value, label]) => ({
             label, icon: value === reviewStatus ? 'check' : undefined,
             onClick: () => { setReviewStatus(value); setPage(1); setOpenFilter(null); },
@@ -172,7 +172,7 @@ export function ContainerTriangulation() {
         count={response?.pagination.total ?? filtered.length} pad="none"
         action={<span style={{ position: 'relative' }}>
           <FilterSelect label={`Sort by: ${sort}`} onClick={() => setOpenFilter(openFilter === 'sort' ? null : 'sort')} />
-          {openFilter === 'sort' && <span style={{ position: 'absolute', right: 0, top: 40, zIndex: 30 }}>
+          {openFilter === 'sort' && <span style={{ position: 'absolute', right: 0, top: 40, zIndex: 'var(--tk-z-dropdown)' }}>
             <DropdownMenu width={180} items={['Best Match', 'Highest Revenue'].map((value) => ({
               label: value, icon: value === sort ? 'check' : undefined,
               onClick: () => { setSort(value); setOpenFilter(null); },

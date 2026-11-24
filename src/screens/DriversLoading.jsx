@@ -1,8 +1,9 @@
 import { Card, Skeleton, StatCard } from '../ds.js';
 import styles from './DriversLoading.module.css';
 
-export function DriverLoadingNotice({ children }) {
-  return <div className={styles.notice} role="status" aria-live="polite">
+/** Status line. `quiet` keeps it for screen readers only, for when a skeleton already shows the wait. */
+export function DriverLoadingNotice({ children, quiet = false }) {
+  return <div className={styles.notice + (quiet ? " tk-sr-only" : "")} role="status" aria-live="polite">
     <span className={styles.dot} aria-hidden="true" />{children}
   </div>;
 }
@@ -33,7 +34,7 @@ export function DriversLoading() {
       <div className={styles.title}><Skeleton width={190} height={28} /><Skeleton width={330} height={14} /></div>
       <Skeleton width={318} height={42} radius={10} />
     </div>
-    <DriverLoadingNotice>Loading drivers…</DriverLoadingNotice>
+    <DriverLoadingNotice quiet>Loading drivers…</DriverLoadingNotice>
     <div className={styles.metrics} aria-label="Loading driver summary">{metrics.map(metric)}</div>
     <Card pad="none">
       <div className={styles.tabs} aria-hidden="true">{[130, 140].map((width, index) => <Skeleton key={index} width={width} height={13} />)}</div>
@@ -52,10 +53,10 @@ export function DriverLicenseLoading() {
   </div>;
 }
 
-export function DriverDetailLoading() {
+export function DriverDetailLoading({ label = "Loading driver details…" }) {
   return <div className={styles.page} aria-busy="true">
     <Card aria-hidden="true"><Skeleton width={180} height={26} /><div style={{ marginTop: 14 }}><Skeleton width="55%" height={14} /></div></Card>
-    <DriverLoadingNotice>Loading driver details…</DriverLoadingNotice>
+    <DriverLoadingNotice quiet>{label}</DriverLoadingNotice>
     <Card aria-hidden="true"><div className={styles.hero}><Skeleton width={64} height={64} radius={32} /><div className={styles.title}><Skeleton width={190} height={24} /><Skeleton width={140} height={12} /></div></div></Card>
     <Card aria-hidden="true"><Skeleton width={170} height={20} /><div className={styles.fields} style={{ marginTop: 24 }}>
       {Array.from({ length: 7 }, (_, index) => <div className={styles.title} key={index}><Skeleton width={100} height={12} /><Skeleton width={150} height={18} /></div>)}

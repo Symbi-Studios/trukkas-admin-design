@@ -188,7 +188,7 @@ export function RatingsReviews() {
       render: (r) => (
         <span className={styles.menuWrap} onClick={(e) => e.stopPropagation()}>
           <IconButton icon="ellipsis" label="Review actions" onClick={(e) => { e?.stopPropagation?.(); setMenuId(menuId === r.id ? null : r.id); }} />
-          {menuId === r.id && <DropdownMenu width={220} items={menuItems(r)} style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20 }} />}
+          {menuId === r.id && <DropdownMenu width={220} items={menuItems(r)} style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 'var(--tk-z-sticky)' }} />}
         </span>
       ),
     },

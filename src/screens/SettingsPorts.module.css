@@ -22,11 +22,11 @@
   display: grid;
   place-items: center;
   flex: none;
-  background: var(--tk-blue-soft);
-  color: var(--tk-blue);
+  background: var(--tk-surface-sunk);
+  color: var(--tk-ink-500);
 }
-.statIcon[data-tone="success"] { background: var(--tk-success-soft); color: var(--tk-success); }
-.statIcon[data-tone="warning"] { background: var(--tk-warning-soft); color: var(--tk-warning); }
+.statIcon[data-tone="success"] { background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
+.statIcon[data-tone="warning"] { background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
 .statBody { display: grid; gap: 2px; min-width: 0; }
 .statValue { font: 700 20px/26px var(--tk-font-sans); color: var(--tk-ink-900); font-variant-numeric: tabular-nums; }
 .statLabel { font: 400 12px/16px var(--tk-font-sans); color: var(--tk-ink-400); }

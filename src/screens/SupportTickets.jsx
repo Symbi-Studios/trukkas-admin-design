@@ -118,7 +118,7 @@ export function SupportTickets() {
       <PageHeader
         crumbs={["Support System", "Tickets"]}
         title="Support Tickets"
-        description="View, manage and respond to customer support requests."
+        description="Requests from drivers, companies and forwarders."
         actions={
           <Button icon="plus" onClick={() => setCreate(true)}>
             New Ticket
@@ -141,6 +141,7 @@ export function SupportTickets() {
           value={value(summary.open)}
           delta={summary.changes.open.delta}
           direction={summary.changes.open.direction}
+          higherIsBetter={false}
           caption="from last 7 days"
         />
         <StatCard
@@ -159,6 +160,7 @@ export function SupportTickets() {
           value={value(summary.pending)}
           delta={summary.changes.pending.delta}
           direction={summary.changes.pending.direction}
+          higherIsBetter={false}
           caption="from last 7 days"
         />
         <StatCard
@@ -175,7 +177,7 @@ export function SupportTickets() {
         <TableToolbar search={<><SearchField
             className="grow"
             style={{ flex: 1, minWidth: 240 }}
-            placeholder="Search tickets, customers, subjects..."
+            placeholder="Search tickets…" title="Search by ticket, customer or subject"
             value={q}
             onChange={(e) => {
               setQ(e.target.value);

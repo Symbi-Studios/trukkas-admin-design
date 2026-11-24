@@ -188,9 +188,9 @@ function PortPanel({ port, canEdit, notify }) {
         {port.isActive != null && <Badge tone={port.isActive ? "success" : "neutral"} dot>{port.isActive ? "Active" : "Paused"}</Badge>}
       </div>
 
-      {port.isActive === false && <Banner tone="warning" title="This port is paused">Its rates are kept but no new jobs can be booked from it. Resume it in Settings › Ports & Terminals.</Banner>}
+      {port.isActive === false && <Banner inline tone="warning" title="This port is paused">Its rates are kept but no new jobs can be booked from it. Resume it in Settings › Ports & Terminals.</Banner>}
       {pricingQuery.error && (unavailable
-        ? <Banner tone="warning" title="Port rates aren't available yet">The server doesn't support per-port pricing yet, so these rates can't be shown or changed. Terminal handling fees below are live.</Banner>
+        ? <Banner inline tone="warning" title="Port rates aren't available yet">The server doesn't support per-port pricing yet, so these rates can't be shown or changed. Terminal handling fees below are live.</Banner>
         : <Banner tone="danger" title="Unable to load this port's rates" action={<Button variant="outline" size="sm" onClick={pricingQuery.refetch}>Retry</Button>}>{pricingError(pricingQuery.error)}</Banner>)}
       {!canEdit && <Banner tone="info">Only Super Admins and Finance Admins can change prices.</Banner>}
 

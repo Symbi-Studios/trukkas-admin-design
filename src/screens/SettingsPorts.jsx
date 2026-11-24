@@ -153,7 +153,7 @@ function PortDrawer({ port, onClose, onDialog }) {
         ) : terminals.isLoading ? (
           <div className={styles.terminalList}><Skeleton height={62} /><Skeleton height={62} /></div>
         ) : list.length === 0 ? (
-          <Banner tone="warning" title="No terminals">Every port needs at least one terminal before jobs can use it. Add one now.</Banner>
+          <Banner inline tone="warning" title="No terminals">Every port needs at least one terminal before jobs can use it. Add one now.</Banner>
         ) : (
           <div className={styles.terminalList}>
             {list.map((t) => {
@@ -362,7 +362,7 @@ function DeletePortDialog({ port, onClose, onDeleted }) {
       <div className={styles.form}>
         {error && <Banner tone="danger">{error}</Banner>}
         {inUse
-          ? <Banner tone="warning" title="This port has jobs">{`${show(port.jobCount)} job${port.jobCount === 1 ? '' : 's'} use this port, so it can’t be deleted. Pause it instead to stop new jobs.`}</Banner>
+          ? <Banner inline tone="warning" title="This port has jobs">{`${show(port.jobCount)} job${port.jobCount === 1 ? '' : 's'} use this port, so it can’t be deleted. Pause it instead to stop new jobs.`}</Banner>
           : <p className="tk-meta" style={{ margin: 0 }}>This removes the port and its {port.terminalCount === 1 ? 'terminal' : 'terminals'}. It can’t be undone.</p>}
       </div>
     </Modal>

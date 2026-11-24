@@ -1,6 +1,6 @@
 "use client";
-// App-wide confirmation toast for admin actions: Trukkas blue, top centre,
-// drops in from above. Call showToast() from anywhere; <ToastHost /> lives in
+// App-wide confirmation toast for admin actions: an inverted chip, bottom right.
+// Call showToast() from anywhere; <ToastHost /> lives in
 // the admin shell. Errors and warnings stay as inline banners on each screen.
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -25,10 +25,11 @@ function ToastItem({ toast, onRemove }) {
   return (
     <div
       className={'tk-toast' + (leaving ? ' leaving' : '')}
+      data-tone={toast.tone}
       role="status"
       onAnimationEnd={(event) => { if (leaving && event.target === event.currentTarget) onRemove(toast.id); }}
     >
-      <span className="tk-toast-icon" aria-hidden="true"><Icon name={toast.tone === 'info' ? 'info' : 'check'} size={16} color="currentColor" /></span>
+      <span className="tk-toast-icon" aria-hidden="true"><Icon name={toast.tone === 'info' ? 'info' : 'circle-check'} size={16} color="currentColor" /></span>
       <span className="tk-toast-message">{toast.message}</span>
       <button type="button" className="tk-toast-close" aria-label="Dismiss" onClick={leave}><Icon name="x" size={14} color="currentColor" /></button>
       <span className="tk-toast-timer" style={{ animationDuration: toast.duration + 'ms' }} onAnimationEnd={leave} aria-hidden="true" />

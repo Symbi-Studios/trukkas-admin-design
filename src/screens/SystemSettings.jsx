@@ -40,7 +40,7 @@ function SettingsTabs() {
       <PageHeader
         crumbs={[{ label: 'System Settings', onClick: () => select('general') }, label]}
         title="System Settings"
-        description="Configure and manage your Trukkas platform settings, integrations, and preferences." />
+        description="Platform-wide rules, integrations and security." />
       <div className="tk-settings-layout">
         <SettingsNav active={active} onChange={select} />
         <div className="tk-settings-content">

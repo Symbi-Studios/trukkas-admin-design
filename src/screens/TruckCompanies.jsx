@@ -249,7 +249,7 @@ function CompaniesDirectory() {
     <SectionCard pad="none">
       <TableToolbar
         viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
-        search={<SearchField value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search company, RC number, contact, city..." />}
+        search={<SearchField value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search companies…" title="Search by company, RC number, contact or city" />}
         filters={<>
           <FilterMenu name="Status" icon="circle-dot" value={status} allValue="All Status" options={STATUSES} open={openMenu === 'Status'} setOpen={setOpenMenu} onChange={filterChange(setStatus)} />
           <FilterMenu name="Verification" icon="shield-check" value={verification} allValue="All Verification" options={VERIFICATIONS} open={openMenu === 'Verification'} setOpen={setOpenMenu} onChange={filterChange(setVerification)} />

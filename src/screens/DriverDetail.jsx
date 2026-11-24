@@ -302,7 +302,7 @@ export function DriverDetail() {
           <span style={{ position: 'relative' }}>
             <Button variant="outline" iconRight="chevron-down" onClick={() => setMoreOpen((o) => !o)}>More Actions</Button>
             {moreOpen && (
-              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
+              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
                 <DropdownMenu width={210} items={[
                   { label: 'Edit Driver', icon: 'pencil', onClick: () => setMoreOpen(false) },
                   { label: 'Export Driver Report', icon: 'download', onClick: () => { setMoreOpen(false); download(`${d.id}.txt`, JSON.stringify(d, null, 2)); } },

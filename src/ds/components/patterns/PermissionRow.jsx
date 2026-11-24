@@ -12,7 +12,7 @@ export function PermissionRow({ icon, module, actions, value = 'none', levels = 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {expandable && <Icon name="chevron-right" size={15} color="var(--tk-ink-300)" />}
         <span style={{ width: 28, height: 28, borderRadius: 'var(--tk-r-sm)', display: 'grid',
-                       placeItems: 'center', background: 'var(--tk-blue-soft)', color: 'var(--tk-blue)' }}>
+                       placeItems: 'center', background: 'var(--tk-surface-sunk)', color: 'var(--tk-ink-500)' }}>
           <Icon name={icon} size={15} />
         </span>
         <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{module}</span>

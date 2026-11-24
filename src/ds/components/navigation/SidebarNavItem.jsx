@@ -1,7 +1,12 @@
 import React from "react";
+import NextLink from "next/link";
 import { Icon } from "../../assets/icons/Icon.jsx";
 
-/** One sidebar row. Active is a solid blue pill; idle rows wash sunk grey on hover. */
+/**
+ * One sidebar row. Active is a soft grey fill with full-strength ink; idle rows are muted and
+ * wash grey on hover. Pass `href` to render a real link (cmd-click, open in new tab);
+ * without it the row is a button that calls `onClick`.
+ */
 export function SidebarNavItem({
   icon,
   label,
@@ -11,55 +16,30 @@ export function SidebarNavItem({
   expanded,
   badge,
   depth = 0,
+  href,
   onClick,
   style,
 }) {
-  const [hot, setHot] = React.useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHot(true)}
-      onMouseLeave={() => setHot(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        width: "100%",
-        height: "var(--tk-h-nav-item)",
-        padding: "0 12px 0 " + (12 + depth * 16) + "px",
-        borderRadius: "var(--tk-r-md)",
-        border: 0,
-        cursor: "pointer",
-        textAlign: "left",
-        background: active
-          ? "var(--tk-blue)"
-          : hot
-            ? "var(--tk-surface-sunk)"
-            : "transparent",
-        color: active ? "#fff" : "var(--tk-ink-500)",
-        font: (active ? 600 : 500) + " 14px/1 var(--tk-font-sans)",
-        transition: "var(--tk-transition)",
-        ...style,
-      }}
-    >
-      {icon && <Icon name={icon} size={18} />}
-      {!collapsed && (
-        <span
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {label}
-        </span>
-      )}
+  const content = (
+    <>
+      {icon && <Icon name={icon} size={16} aria-hidden="true" />}
+      {!collapsed && <span className="tk-nav-label">{label}</span>}
       {!collapsed && badge}
       {!collapsed && expandable && (
-        <Icon name={expanded ? "chevron-down" : "chevron-right"} size={15} />
+        <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} aria-hidden="true" />
       )}
-    </button>
+    </>
   );
+  const props = {
+    className: "tk-nav-item",
+    "data-active": active || undefined,
+    "aria-current": active ? "page" : undefined,
+    "aria-label": collapsed ? label : undefined,
+    title: collapsed ? label : undefined,
+    style: { paddingLeft: 10 + depth * 16, ...style },
+  };
+  if (href) {
+    return <NextLink href={href} onClick={onClick} {...props}>{content}</NextLink>;
+  }
+  return <button type="button" onClick={onClick} {...props}>{content}</button>;
 }

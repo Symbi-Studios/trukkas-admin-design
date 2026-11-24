@@ -8,6 +8,8 @@ export interface LineChartProps {
   area?: boolean;
   yTicks?: number;
   format?: (value: number) => React.ReactNode;
+  /** shown in place of the lines when every point is zero (default "No activity in this period") */
+  emptyLabel?: string;
   style?: React.CSSProperties;
 }
 export declare function LineChart(props: LineChartProps): JSX.Element;

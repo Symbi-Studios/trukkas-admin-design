@@ -1,6 +1,6 @@
 /* ---------- Date-range picker ---------- */
 .date-range { position: relative; display: inline-flex; min-width: 0; }
-.date-cal { position: fixed; z-index: 1000; display: flex; border: 1px solid var(--tk-line); border-radius: 14px; background: var(--tk-surface); box-shadow: var(--tk-shadow-menu, 0 12px 32px rgba(0, 8, 36, 0.14)); overflow: hidden; }
+.date-cal { position: fixed; z-index: var(--tk-z-popover); display: flex; border: 1px solid var(--tk-line); border-radius: 14px; background: var(--tk-surface); box-shadow: var(--tk-shadow-menu, 0 12px 32px rgba(0, 8, 36, 0.14)); overflow: hidden; }
 .date-cal-shortcuts { display: grid; align-content: start; gap: 2px; min-width: 132px; padding: 12px 8px; border-right: 1px solid var(--tk-line); background: var(--tk-surface-sunk); }
 .date-cal-shortcuts button { height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--tk-ink-700); font: 500 13px/1 var(--tk-font-sans); text-align: left; cursor: pointer; white-space: nowrap; }
 .date-cal-shortcuts button:hover { background: var(--tk-surface); color: var(--tk-ink-900); }

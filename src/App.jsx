@@ -135,7 +135,7 @@ function AdminShellContent({ children }) {
               icon={item.icon}
               label={item.label}
               active={item.id === activeId}
-              onClick={() => router.push("/" + item.id)}
+              href={"/" + item.id}
             />
           ))}
         </React.Fragment>

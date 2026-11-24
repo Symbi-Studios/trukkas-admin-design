@@ -49,9 +49,8 @@ npm run build    # production build to dist/
   Verification, Wallets, Announcements, Jobs & Trips, Dispatch Center, Live Tracking,
   Container Triangulation, Drivers, Truck Companies, Cargo Management, Cargo Types,
   Truck Calculator), plus 4 detail routes (Job Detail, Triangulation Detail, Driver
-  Detail, Company Detail). The other 13 nav destinations still render an honest
-  `ScreenPlaceholder` ("isn't built yet") rather than a fabricated layout — see
-  `src/screens/ScreenPlaceholder.jsx`.
+  Detail, Company Detail). Every nav destination now has a screen; unknown URLs render
+  `src/screens/NotFound.jsx` through the `[screen]` catch-all.
 - **No loading/error states.** The mock API resolves after a short artificial delay but
   never rejects. A real backend integration needs to handle latency, failures, empty
   results, and permission errors — none of that exists here yet.
