@@ -25,9 +25,23 @@ function timestamp(value) {
 }
 const lagos = (options) => new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', ...options });
 
+const stamp = (date) => (date ? `${lagos({ day: 'numeric', month: 'short', year: 'numeric' }).format(date)} · ${lagos({ hour: '2-digit', minute: '2-digit' }).format(date)}` : null);
+// Sub-scores are only collected on some flows; a review without them leaves all three null.
+export const REVIEW_ASPECTS = [
+  ['punctuality', 'Punctuality', 'clock'],
+  ['communication', 'Communication', 'message-circle'],
+  ['professionalism', 'Professionalism', 'briefcase'],
+];
+
 function adaptReview(row) {
-  const dto = record(row), job = record(dto.job), created = timestamp(dto.createdAt);
+  const dto = record(row), job = record(dto.job), created = timestamp(dto.createdAt), replied = timestamp(dto.repliedAt);
+  const tags = [dto.selectedTags, dto.tags].find(Array.isArray) ?? [];
+  const aspects = REVIEW_ASPECTS.map(([key, label, icon]) => ({ key, label, icon, score: number(dto[key]) != null && dto[key] >= 1 && dto[key] <= 5 ? dto[key] : null }));
   return {
+    tags: [...new Set(tags.map(text).filter(Boolean))],
+    aspects: aspects.some((aspect) => aspect.score != null) ? aspects : null,
+    reply: text(dto.reply) ? { text: text(dto.reply), at: stamp(replied) } : null,
+    submittedAt: stamp(created),
     id: dto.id,
     score: score(dto.score),
     comment: text(dto.comment),
@@ -52,8 +66,8 @@ function adaptStats(value) {
   };
 }
 
-function listParams({ tab = 'feedback', star, userType, rateeRole, search, page = 1, limit = REVIEWS_PAGE_SIZE } = {}) {
-  return Object.fromEntries(Object.entries({ tab, star, userType, rateeRole, search: text(search), page, limit }).filter(([, value]) => value != null && value !== '' && value !== 'All'));
+function listParams({ tab = 'feedback', star, userType, rateeRole, rateeId, search, page = 1, limit = REVIEWS_PAGE_SIZE } = {}) {
+  return Object.fromEntries(Object.entries({ tab, star, userType, rateeRole, rateeId, search: text(search), page, limit }).filter(([, value]) => value != null && value !== '' && value !== 'All'));
 }
 
 function adaptPage(response) {

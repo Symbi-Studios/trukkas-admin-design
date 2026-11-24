@@ -43,10 +43,18 @@ const numberFormat = new Intl.NumberFormat("en-NG");
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
 const fmt = (value) => (isNum(value) ? numberFormat.format(value) : "—");
 const ROLE_TONE = { Forwarder: "purple", Trucker: "teal", Driver: "info" };
+const SCORE_WORD = { 5: "Excellent", 4: "Good", 3: "Average", 2: "Poor", 1: "Very poor" };
+const SCORE_TONE = { 5: "success", 4: "success", 3: "warning", 2: "danger", 1: "danger" };
 const STAR_FILTERS = [["All", "All ratings"], ["5", "5 stars"], ["4", "4 stars"], ["3", "3 stars"], ["2", "2 stars"], ["1", "1 star"]];
 const RATER_FILTERS = [["All", "All reviewers"], ["FORWARDER", "By forwarders"], ["TRUCKER", "By truckers"]];
 const RATEE_FILTERS = [["All", "About anyone"], ["DRIVER", "About drivers"], ["TRUCKER", "About truckers"], ["FORWARDER", "About forwarders"]];
-const EMPTY_FILTERS = { star: "All", userType: "All", rateeRole: "All" };
+const EMPTY_FILTERS = { star: "All", userType: "All", rateeRole: "All", ratee: null };
+// Forwarders and company drivers have their own profile pages; a trucker can be a company or an
+// individual driver and the review doesn't say which, so it gets no profile link.
+const PROFILE_ROUTE = {
+  FORWARDER: (id) => `/forwarders/detail?id=${encodeURIComponent(id)}`,
+  DRIVER: (id) => `/drivers/detail?id=${encodeURIComponent(id)}`,
+};
 
 export function Stars({ value, size = 14 }) {
   const filled = isNum(value) ? Math.round(value) : 0;
@@ -94,8 +102,9 @@ export function RatingsReviews() {
     return () => window.removeEventListener("click", close);
   }, [menuId]);
 
+  const { ratee, ...listFilters } = filters;
   const listQuery = useGetAdminReviewsQuery(
-    { tab, page, search, ...filters },
+    { tab, page, search, ...listFilters, rateeId: ratee?.id },
     { skip: !authenticated || search !== q.trim(), refetchOnMountOrArgChange: true },
   );
   const summaryQuery = useGetAdminReviewSummaryQuery(undefined, { skip: !authenticated });
@@ -120,6 +129,7 @@ export function RatingsReviews() {
   const setFilter = (key, value) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
   const reset = () => { setQ(""); setFilters(EMPTY_FILTERS); setPage(1); };
   const openReview = rows.find((row) => row.id === openId) || null;
+  const showAbout = (person) => { setTab("feedback"); setQ(""); setFilters({ ...EMPTY_FILTERS, ratee: { id: person.id, name: person.name } }); setPage(1); setOpenId(null); };
 
   async function archive(review) {
     try {
@@ -146,24 +156,39 @@ export function RatingsReviews() {
   const menuItems = (review) => [
     { label: "View review", icon: "eye", onClick: () => setOpenId(review.id) },
     { label: "Open job", icon: "package", disabled: !review.jobId, onClick: () => viewJob(review) },
+    { label: `All reviews about ${review.ratee.name.split(" ")[0]}`, icon: "list-filter", disabled: !review.ratee.id, onClick: () => showAbout(review.ratee) },
     { divider: true },
     { label: review.archived ? "Move to inbox" : "Archive", icon: review.archived ? "inbox" : "archive", disabled: archiveState.isLoading, onClick: () => archive(review) },
     ...(isSuperAdmin ? [{ label: "Delete", icon: "trash-2", tone: "danger", onClick: () => setConfirmDelete(review) }] : []),
   ];
 
   const columns = [
-    { key: "score", header: "Rating", width: 112, render: (r) => <span className={styles.ratingCell}><Stars value={r.score} />{r.unread && <span className={styles.unreadDot} title="New" />}</span> },
-    { key: "comment", header: "Review", render: (r) => <span className={r.comment ? styles.comment : styles.noComment}>{r.comment ?? "No written comment"}</span> },
-    { key: "rater", header: "Reviewer", render: (r) => <Person person={r.rater} avatar={false} /> },
-    { key: "ratee", header: "About", render: (r) => <Person person={r.ratee} avatar={false} /> },
+    { key: "ratee", header: "Rated User", render: (r) => <span className={styles.rateeCell + " " + styles.wrapName}>{r.unread && <span className={styles.unreadDot} title="New" />}<Person person={r.ratee} avatar={false} /></span> },
+    { key: "score", header: "Rating", width: 96, render: (r) => <span className={styles.ratingCell}><Stars value={r.score} /></span> },
+    {
+      key: "comment", header: "Review",
+      render: (r) => (
+        <span className={styles.reviewCell}>
+          <span className={r.comment ? styles.comment : styles.noComment}>{r.comment ?? "No written comment"}</span>
+          {(r.tags.length > 0 || r.reply) && (
+            <span className={styles.reviewMeta}>
+              {r.tags.slice(0, 2).map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}
+              {r.tags.length > 2 && <span className={styles.tagMore}>+{r.tags.length - 2}</span>}
+              {r.reply && <span className={styles.replied}><Icon name="reply" size={11} />Replied</span>}
+            </span>
+          )}
+        </span>
+      ),
+    },
     { key: "job", header: "Job", render: (r) => r.jobNumber ? <button type="button" className={styles.jobLink} onClick={(e) => { e.stopPropagation(); viewJob(r); }}>{r.jobNumber}</button> : "—" },
+    { key: "rater", header: "Rated By", render: (r) => <span className={styles.wrapName}><Person person={r.rater} avatar={false} /></span> },
     { key: "date", header: "Date", render: (r) => <span className={styles.date}>{r.date}<small>{r.time}</small></span> },
     {
       key: "actions", header: "", width: 48, align: "right",
       render: (r) => (
         <span className={styles.menuWrap} onClick={(e) => e.stopPropagation()}>
           <IconButton icon="ellipsis" label="Review actions" onClick={(e) => { e?.stopPropagation?.(); setMenuId(menuId === r.id ? null : r.id); }} />
-          {menuId === r.id && <DropdownMenu width={190} items={menuItems(r)} style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20 }} />}
+          {menuId === r.id && <DropdownMenu width={220} items={menuItems(r)} style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20 }} />}
         </span>
       ),
     },
@@ -206,13 +231,19 @@ export function RatingsReviews() {
                 <CustomSelect aria-label="Reviewer type" value={filters.userType} onChange={(e) => setFilter("userType", e.target.value)}>
                   {RATER_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </CustomSelect>
-                <CustomSelect aria-label="Reviewed user type" value={filters.rateeRole} onChange={(e) => setFilter("rateeRole", e.target.value)}>
+                <CustomSelect aria-label="Rated user type" value={filters.rateeRole} onChange={(e) => setFilter("rateeRole", e.target.value)}>
                   {RATEE_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </CustomSelect>
                 {filtered && <Button variant="outline" icon="rotate-ccw" onClick={reset}>Reset</Button>}
               </>
             }
           />
+          {filters.ratee && (
+            <div className={styles.activeFilter}>
+              <span>Showing reviews about <strong>{filters.ratee.name}</strong></span>
+              <button type="button" onClick={() => setFilter("ratee", null)}><Icon name="x" size={13} />Clear</button>
+            </div>
+          )}
           <DataTable rows={loading ? [] : rows} rowKey={(r) => r.id} onRowClick={(r) => setOpenId(r.id)} columns={columns} />
           {loading && <DriverTableLoading columns={6} label="Loading reviews" />}
           {!loading && !rows.length && (
@@ -248,7 +279,7 @@ export function RatingsReviews() {
                       onClick={() => setFilter("star", active ? "All" : String(row.star))}>
                       <span className={styles.barLabel}>{row.star}<span className={styles.starOn}>★</span></span>
                       <span className={styles.barTrack}><span className={styles.barFill} data-low={row.star <= 2 || undefined} style={{ width: `${share}%` }} /></span>
-                      <span className={styles.barCount}>{fmt(row.count)}</span>
+                      <span className={styles.barCount}>{fmt(row.count)}<small>{distributionTotal ? `${share.toFixed(0)}%` : ""}</small></span>
                     </button>
                   );
                 })}
@@ -271,39 +302,17 @@ export function RatingsReviews() {
       </div>
 
       {openReview && (
-        <SideDrawer
-          label="Review details"
-          eyebrow={openReview.jobNumber ? `Review · ${openReview.jobNumber}` : "Review"}
-          title={<span className={styles.drawerTitle}><Stars value={openReview.score} size={20} /><span>{isNum(openReview.score) ? `${openReview.score} out of 5` : "—"}</span></span>}
-          meta={`${openReview.date} · ${openReview.time}${openReview.archived ? " · Archived" : ""}`}
+        <ReviewDrawer
+          review={openReview}
+          isSuperAdmin={isSuperAdmin}
+          archiving={archiveState.isLoading}
           onClose={() => setOpenId(null)}
-          width={480}
-          footer={
-            <>
-              <Button icon="package" disabled={!openReview.jobId} onClick={() => viewJob(openReview)}>Open job</Button>
-              <Button variant="outline" icon={openReview.archived ? "inbox" : "archive"} disabled={archiveState.isLoading} onClick={() => archive(openReview)}>{openReview.archived ? "Move to inbox" : "Archive"}</Button>
-              {isSuperAdmin && <Button variant="ghost" icon="trash-2" onClick={() => setConfirmDelete(openReview)} style={{ color: "var(--tk-danger)" }}>Delete review</Button>}
-            </>
-          }
-        >
-          <DrawerSection title="Review">
-            <blockquote className={openReview.comment ? styles.quote : styles.quoteEmpty}>{openReview.comment ?? "The reviewer left a star rating without a written comment."}</blockquote>
-          </DrawerSection>
-          <DrawerSection title="Reviewer">
-            <Person person={openReview.rater} sub={openReview.rater.email ?? undefined} />
-          </DrawerSection>
-          <DrawerSection title="About">
-            <Person person={openReview.ratee} />
-          </DrawerSection>
-          <DrawerSection title="Details">
-            <DrawerFacts items={[
-              { label: "Job", value: openReview.jobNumber ?? "—" },
-              { label: "Reviewer role", value: openReview.rater.role ?? "—" },
-              { label: "Reviewed role", value: openReview.ratee.role ?? "—" },
-              { label: "Status", value: openReview.archived ? "Archived" : "In inbox" },
-            ]} />
-          </DrawerSection>
-        </SideDrawer>
+          onArchive={() => archive(openReview)}
+          onDelete={() => setConfirmDelete(openReview)}
+          onViewJob={() => viewJob(openReview)}
+          onShowAbout={showAbout}
+          onOpenProfile={(person) => navigate(PROFILE_ROUTE[person.roleCode](person.id))}
+        />
       )}
 
       <Modal
@@ -323,6 +332,112 @@ export function RatingsReviews() {
         </p>
       </Modal>
     </div>
+  );
+}
+
+function ReviewDrawer({ review, isSuperAdmin, archiving, onClose, onArchive, onDelete, onViewJob, onShowAbout, onOpenProfile }) {
+  const timeline = [
+    { icon: "star", tone: "done", title: "Review submitted", at: review.submittedAt, text: `${review.rater.name} rated ${review.ratee.name} after the job` },
+    review.reply
+      ? { icon: "reply", tone: "done", title: "Reply posted", at: review.reply.at, text: `${review.ratee.name} replied publicly` }
+      : { icon: "clock-3", tone: "waiting", title: "No reply yet", text: `${review.ratee.name} hasn’t replied` },
+    ...(review.archived ? [{ icon: "archive", tone: "muted", title: "Archived", text: "Moved out of the admin inbox" }] : []),
+  ];
+  const party = (label, person) => (
+    <div className={styles.partyCard}>
+      <span className={styles.partyLabel}>{label}</span>
+      <Person person={person} />
+      {person.email && <small className={styles.partyEmail}>{person.email}</small>}
+      <div className={styles.partyLinks}>
+        {person.id && <button type="button" onClick={() => onShowAbout(person)}>Reviews about them</button>}
+        {person.id && PROFILE_ROUTE[person.roleCode] && <button type="button" onClick={() => onOpenProfile(person)}>Profile</button>}
+      </div>
+    </div>
+  );
+
+  return (
+    <SideDrawer
+      label="Review details"
+      eyebrow={review.jobNumber ? `Review · ${review.jobNumber}` : "Review"}
+      title={
+        <span className={styles.drawerTitle}>
+          <strong>{isNum(review.score) ? review.score.toFixed(1) : "—"}<small>/ 5</small></strong>
+          <Stars value={review.score} size={20} />
+          {SCORE_WORD[review.score] && <Badge tone={SCORE_TONE[review.score]}>{SCORE_WORD[review.score]}</Badge>}
+        </span>
+      }
+      meta={`${review.submittedAt ?? "—"}${review.archived ? " · Archived" : ""}`}
+      onClose={onClose}
+      width={520}
+      footer={
+        <>
+          <Button icon="package" disabled={!review.jobId} onClick={onViewJob}>Open job</Button>
+          <Button variant="outline" icon={review.archived ? "inbox" : "archive"} disabled={archiving} onClick={onArchive}>{review.archived ? "Move to inbox" : "Archive"}</Button>
+          {isSuperAdmin && <Button variant="ghost" icon="trash-2" onClick={onDelete} style={{ color: "var(--tk-danger)" }}>Delete review</Button>}
+        </>
+      }
+    >
+      <DrawerSection title="Review">
+        <blockquote className={review.comment ? styles.quote : styles.quoteEmpty}>{review.comment ?? "The reviewer left a star rating without a written comment."}</blockquote>
+        {review.tags.length > 0 && <div className={styles.tagList}>{review.tags.map((tag) => <span key={tag} className={styles.tag}>{tag}</span>)}</div>}
+      </DrawerSection>
+
+      {review.aspects && (
+        <DrawerSection title="Rating Breakdown">
+          <div className={styles.aspects}>
+            {review.aspects.map((aspect) => (
+              <div key={aspect.key} className={styles.aspect}>
+                <span className={styles.aspectLabel}><Icon name={aspect.icon} size={14} />{aspect.label}</span>
+                <Stars value={aspect.score} size={13} />
+                <b>{isNum(aspect.score) ? aspect.score.toFixed(1) : "—"}</b>
+              </div>
+            ))}
+          </div>
+        </DrawerSection>
+      )}
+
+      <DrawerSection title="Reply">
+        {review.reply ? (
+          <div className={styles.reply}>
+            <span className={styles.replyHead}><Icon name="reply" size={13} /><strong>{review.ratee.name}</strong>{review.reply.at && <small>{review.reply.at}</small>}</span>
+            <p>{review.reply.text}</p>
+          </div>
+        ) : (
+          <p className={styles.emptySmallLeft}>{review.ratee.name} hasn’t replied to this review.</p>
+        )}
+      </DrawerSection>
+
+      <DrawerSection title="People">
+        <div className={styles.parties}>
+          {party("Rated user", review.ratee)}
+          {party("Rated by", review.rater)}
+        </div>
+      </DrawerSection>
+
+      <DrawerSection title="Details">
+        <DrawerFacts items={[
+          { label: "Job", value: review.jobNumber ?? "—" },
+          { label: "Submitted", value: review.submittedAt ?? "—" },
+          { label: "Status", value: review.archived ? "Archived" : "In inbox" },
+          { label: "Seen by admin", value: review.unread ? "New" : "Yes" },
+        ]} />
+      </DrawerSection>
+
+      <DrawerSection title="Timeline">
+        <ol className={styles.timeline}>
+          {timeline.map((step) => (
+            <li key={step.title} data-tone={step.tone}>
+              <span className={styles.timelineDot}><Icon name={step.icon} size={12} /></span>
+              <div>
+                <strong>{step.title}</strong>
+                {step.at && <small>{step.at}</small>}
+                <span>{step.text}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </DrawerSection>
+    </SideDrawer>
   );
 }
 
