@@ -2,7 +2,7 @@ import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 
 // Keep the existing screen taxonomy and category presentation.
 export const FAQ_CATEGORIES = ['All Categories', 'Getting Started', 'Jobs & Trips', 'Billing & Payments', 'Fleet & Drivers', 'Account & Security'];
-const CATEGORY_ICONS = { 'Getting Started': 'rocket', 'Jobs & Trips': 'package', 'Billing & Payments': 'wallet', 'Fleet & Drivers': 'truck', 'Account & Security': 'shield-check' };
+export const CATEGORY_ICONS = { 'Getting Started': 'rocket', 'Jobs & Trips': 'package', 'Billing & Payments': 'wallet', 'Fleet & Drivers': 'truck', 'Account & Security': 'shield-check' };
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN']);
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 const text = value => typeof value === 'string' && value.trim() ? value : null;
