@@ -33,11 +33,16 @@ export function formatNairaShort(value) {
   return `${sign}₦${abs.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
-/** Parses a formatted naira string ("₦750,600.00", "-₦1,200") back to a number; null when it isn't one. */
+/**
+ * Parses a formatted naira string back to a number; null when it isn't one.
+ * Accepts the sign before or after the symbol and any spacing: "₦750,600.00", "-₦1,200", "₦-1,200",
+ * "−₦ 1,200", "+₦50", "NGN 1,200.50".
+ */
 export function parseNairaText(text) {
   if (typeof text !== 'string') return null;
-  const match = text.trim().match(/^(-)?₦\s?(\d{1,3}(?:,\d{3})*|\d+)(\.\d+)?$/);
-  if (!match) return null;
-  const n = Number(match[2].replace(/,/g, '') + (match[3] || ''));
-  return Number.isFinite(n) ? (match[1] ? -n : n) : null;
+  const clean = text.replace(/[\s\u00a0\u202f]/g, '').replace(/\u2212/g, '-');
+  const match = clean.match(/^([+-])?(?:₦|NGN)([+-])?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?$/i);
+  if (!match || (match[1] && match[2])) return null;
+  const n = Number(match[3].replace(/,/g, '') + (match[4] || ''));
+  return Number.isFinite(n) ? ((match[1] || match[2]) === '-' ? -n : n) : null;
 }
