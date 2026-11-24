@@ -13,10 +13,8 @@ import {
   SearchField,
   Tabs,
   Icon,
-  QuickActionsCard,
 } from "../ds.js";
-import { faqQuickTopics } from "../mock/fixtures/faq.js";
-import { FAQ_CATEGORIES, useGetAdminFaqDirectoryQuery, useGetAdminFaqHelpLinksQuery } from "../store/features/faq/faqApi.js";
+import { FAQ_CATEGORIES, useGetAdminFaqDirectoryQuery } from "../store/features/faq/faqApi.js";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 
@@ -75,8 +73,6 @@ export function FAQ() {
   const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
   const navigate = useNavigate();
   const query = useGetAdminFaqDirectoryQuery({ owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const helpQuery = useGetAdminFaqHelpLinksQuery({ owner: admin?.id }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const helpLinks = authenticated && !helpQuery.error ? helpQuery.currentData : null;
   const groups = useMemo(() => authenticated && !query.error ? query.currentData || [] : [], [authenticated, query.error, query.currentData]);
   const loading = !authenticated || query.isLoading || query.isFetching;
   const [category, setCategory] = useState("All Categories");
@@ -86,15 +82,6 @@ export function FAQ() {
   const available = authenticated && !query.error && Boolean(query.currentData)
     && (category === "All Categories" || groups.every((group) => group.categoryAvailable))
     && (!q.trim() || groups.every((group) => group.questions.every((item) => item.questionAvailable && item.answerAvailable)));
-  const quickTopics = faqQuickTopics.map((topic) => ({ ...topic, onClick: () => {
-    if (topic.label === "Visit Knowledge Base") { navigate("/knowledge-base"); return; }
-    if (helpQuery.isFetching) { window.alert('Wait for FAQ help links to finish loading.'); return; }
-    if (helpQuery.error) { window.alert(getApiErrorMessage(helpQuery.error)); return; }
-    const target = helpLinks?.[({ 'Contact Support': 'contactSupport', 'Send Feedback': 'feedback', 'View My Tickets': 'myTickets' })[topic.label]];
-    if (!target) { window.alert(`${topic.label} is not available for this account.`); return; }
-    if (topic.label === 'Contact Support') window.location.assign(target);
-    else navigate(target);
-  } }));
 
   const visibleGroups = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -131,15 +118,7 @@ export function FAQ() {
         />
       </Card>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 320px",
-          gap: "var(--tk-grid-gap)",
-          alignItems: "start",
-        }}
-      >
-        <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
+      <div style={{ display: "grid", gap: "var(--tk-grid-gap)" }}>
           <SearchField
             placeholder="Search frequently asked questions…"
             value={q}
@@ -175,59 +154,6 @@ export function FAQ() {
               </div>
             </SectionCard>
           ))}
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gap: "var(--tk-grid-gap)",
-            alignContent: "start",
-          }}
-        >
-          <SectionCard title="Need More Help?" icon="life-buoy">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                padding: 14,
-                borderRadius: "var(--tk-r-lg)",
-                background: "var(--tk-info-soft)",
-              }}
-            >
-              <span
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 999,
-                  background: "var(--tk-blue)",
-                  flex: "0 0 auto",
-                  display: "grid",
-                  placeItems: "center",
-                  marginTop: 1,
-                }}
-              >
-                <Icon name="life-buoy" size={13} color="#fff" />
-              </span>
-              <div style={{ display: "grid", gap: 2 }}>
-                <span
-                  style={{
-                    font: "600 14px/20px var(--tk-font-sans)",
-                    color: "var(--tk-blue)",
-                  }}
-                >
-                  We're here to help
-                </span>
-                <span className="tk-meta">
-                  Can't find what you're looking for? Reach out to our support
-                  team.
-                </span>
-              </div>
-            </div>
-          </SectionCard>
-
-          <QuickActionsCard title="Popular Topics" items={quickTopics} />
-        </div>
       </div>
     </>
   );
