@@ -196,7 +196,7 @@ export function Forwarders() {
   return (
     <>
       <PageHeader
-        crumbs={["Partners", "Forwarders"]}
+        crumbs={["Users", "Forwarders"]}
         title="Forwarders"
         description="Manage and monitor all forwarders on the platform."
       />

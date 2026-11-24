@@ -55,7 +55,7 @@ export function FleetManagement() {
   function download() { if (!rows.length) { notify('No trucks to export on this page.'); return; } exportCsv(rows); setMenu(null); showToast('The displayed page has been exported.'); }
   function refresh() { query.refetch(); inspections.refetch(); overview.refetch(); }
   return <div className="fleet-page">
-    <PageHeader crumbs={['Fleet', 'Fleet Management']} title="Fleet Management" description="Monitor and manage all trucks and fleet assets on the platform." actions={<>
+    <PageHeader crumbs={['Fleet', 'Trucks']} title="Trucks" description="Monitor and manage all trucks and fleet assets on the platform." actions={<>
       <Button icon="plus" onClick={() => setAddOpen(true)}>Add Truck</Button>
       <Button variant="outline" icon="download" onClick={() => upload.current?.click()}>Import Trucks</Button>
       <input ref={upload} hidden type="file" accept=".csv,.xlsx" onChange={(event) => { if (event.target.files?.[0]) notify('Bulk import is not available yet. No trucks were imported.'); event.target.value = ''; }} />

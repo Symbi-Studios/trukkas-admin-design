@@ -294,7 +294,7 @@ export function DriverDetail() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--tk-grid-gap)' }}>
       <PageHeader
-        crumbs={['Fleet Management', 'Drivers', d.name]}
+        crumbs={['Users', 'Drivers', d.name]}
         title="Driver Details"
         description="View driver profile, verification status, documents, trip history, maintenance log and compliance information."
         actions={<>

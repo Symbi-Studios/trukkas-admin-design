@@ -48,7 +48,7 @@ export function AdminFleetTruckDetail() {
   </Card>;
   const status = <Badge dot tone={tone[truck.status]}>{truck.status}</Badge>;
   return <div className="truck-detail-page admin-fleet-detail">
-    <PageHeader crumbs={['Fleet', { label: 'Fleet Management', onClick: () => navigate('/fleet') }, truck.plate]} title="Truck Details" description="View vehicle information, assignments, maintenance, trips and compliance records." actions={<>
+    <PageHeader crumbs={['Fleet', { label: 'Trucks', onClick: () => navigate('/fleet') }, truck.plate]} title="Truck Details" description="View vehicle information, assignments, maintenance, trips and compliance records." actions={<>
       <Button variant="outline" icon="arrow-left" onClick={() => navigate('/fleet')}>Back to Trucks</Button>
       <span className="truck-detail-actions"><span><Button iconRight="chevron-down" onClick={() => setMenu(!menu)}>Actions</Button>{menu && <span><DropdownMenu width={225} items={[
         ...fleetReviewItems(truck, openReview), { label: 'Refresh profile', icon: 'rotate-ccw', onClick: () => { refresh(); setMenu(false); } },

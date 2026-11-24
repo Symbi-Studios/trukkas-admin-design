@@ -327,7 +327,7 @@ export function Drivers() {
 
   return <div className="drivers-page">
     <PageHeader
-      crumbs={['Fleet Management', 'Drivers']}
+      crumbs={['Users', 'Drivers']}
       title="Drivers"
       description="Monitor, review and manage all drivers on the Trukkas platform — individual drivers and drivers under trucking companies."
       actions={<>

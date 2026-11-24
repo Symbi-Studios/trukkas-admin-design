@@ -142,7 +142,7 @@ export function AdminDriverDetail() {
 
   return <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
     <PageHeader
-      crumbs={['Fleet Management', { label: 'Drivers', onClick: () => navigate('/drivers') }, id]}
+      crumbs={['Users', { label: 'Drivers', onClick: () => navigate('/drivers') }, id]}
       title="Driver Details"
       description="View the driver profile and license information."
       actions={<>
