@@ -1,6 +1,7 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 import { isPdfAttachment, pdfAttachmentFilename } from '../../api/pdfDownload.js';
+import { addressCity } from '../../api/addressCity.js';
 import { forwarderJobBody } from './forwarderJobContracts.js';
 
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -44,7 +45,7 @@ export function adaptAdminForwarder(dto = {}) {
     statusCode: text(dto.status), status: ['PENDING_PROFILE', 'PENDING_REVIEW'].includes(dto.status) ? 'Pending' : label(dto.status),
     isExporter: dto.type === 'EXPORTER' ? true : dto.type === 'FORWARDER' ? false : dto.exporterLicenseStatus === 'VERIFIED' ? true : null, exporterLicenseStatus: text(dto.exporterLicenseStatus),
     jobs: count(dto.totalJobs), spend: dto.currency === 'NGN' ? nonNegative(dto.totalSpend) : null, currency: text(dto.currency),
-    location: text(dto.location) || '—', joined: forwarderDate(dto.joinedAt), joinedAt: text(dto.joinedAt), verification: forwarderVerification(dto.verificationStatus), kycStatusCode: text(dto.verificationStatus),
+    location: text(dto.location) || '—', city: addressCity(dto.location), joined: forwarderDate(dto.joinedAt), joinedAt: text(dto.joinedAt), verification: forwarderVerification(dto.verificationStatus), kycStatusCode: text(dto.verificationStatus),
   };
 }
 export function adaptAdminForwarderProfile(response) {
