@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { VerificationDetail } from '../../../screens/VerificationDetail.jsx';
+import { VerificationReview } from '../../../screens/verification/VerificationReview.jsx';
 import { staticParamsFor } from '../../../staticParams.js';
 export function generateStaticParams(){ return staticParamsFor('verificationId'); }
 
@@ -14,5 +14,5 @@ export async function generateMetadata({ params }) {
 }
 
 export default function VerificationDetailPage() {
-  return <Suspense fallback={null}><VerificationDetail /></Suspense>;
+  return <Suspense fallback={null}><VerificationReview /></Suspense>;
 }

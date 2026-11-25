@@ -13,7 +13,7 @@ import styles from './SupportInbox.module.css';
 const EMPTY = { subject: '', category: 'General', priority: 'Medium', assignedTo: '', description: '' };
 
 /** Find an existing customer by name or email; the API only opens tickets for existing accounts. */
-function CustomerPicker({ value, onChange, disabled }) {
+export function CustomerPicker({ value, onChange, disabled }) {
   const [term, setTerm] = React.useState('');
   const [debounced, setDebounced] = React.useState('');
   const [active, setActive] = React.useState(0);

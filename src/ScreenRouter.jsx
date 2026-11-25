@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import { Dashboard } from './screens/Dashboard.jsx';
 import { FleetManagement } from './screens/FleetManagement.jsx';
-import { Verification } from './screens/Verification.jsx';
+import { VerificationQueue } from './screens/verification/VerificationQueue.jsx';
 import { Wallets } from './screens/Wallets.jsx';
 import { Announcements } from './screens/Announcements.jsx';
 import { JobsTrips } from './screens/JobsTrips.jsx';
@@ -49,7 +49,7 @@ import { NotFound } from './screens/NotFound.jsx';
 const screens = {
   dashboard: Dashboard,
   fleet: FleetManagement,
-  verification: Verification,
+  verification: VerificationQueue,
   wallets: Wallets,
   pricing: PricingManagement,
   settlements: SettlementsRedirect,
