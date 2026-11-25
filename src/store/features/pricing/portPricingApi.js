@@ -1,4 +1,5 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
+import { hasKoboPrecision } from '../../../lib/money.js';
 
 // Per-port pricing (Agent Brain, section 07). Each port has a ₦/km rate and a minimum fee for
 // every piece of equipment, a fuel surcharge per km and an optional peak multiplier. Terminal
@@ -9,6 +10,8 @@ const number = (value) => (typeof value === 'number' || (typeof value === 'strin
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
 const EQUIPMENT_TYPES = new Set(['CONTAINER_SIZE', 'TRUCK_TYPE']);
+const PRICING_EDITORS = new Set(['SUPER_ADMIN', 'FINANCE_ADMIN']);
+const RATE_FIELDS = ['ratePerKm', 'minimumFee'];
 // Decided (section 06): the bulk-break truck types are Flatbed and Lowbed.
 const BULK_TRUCKS = /flat\s*bed|low\s*bed/i;
 
@@ -27,17 +30,20 @@ function adaptEquipmentRate(value) {
 }
 
 function adaptPortPricing(response, portId) {
-  const dto = record(unwrapApiResponseData(response));
-  const body = text(dto.portId) || text(record(dto.port).id) ? dto : record(dto.pricing);
-  const id = text(body.portId) || text(record(body.port).id);
-  if (id && id !== portId) throw new Error('The pricing response was for a different port. Please refresh.');
+  const body = record(unwrapApiResponseData(response));
+  if (body.portId !== portId || body.port?.id !== portId || body.currency !== 'NGN' || !Array.isArray(body.equipmentRates)) {
+    throw new Error('The pricing for this port could not be confirmed. Please refresh.');
+  }
   const peak = record(body.peak);
+  const fuel = number(body.fuelSurchargePerKm);
   return {
     portId,
-    fuelSurchargePerKm: number(body.fuelSurchargePerKm),
+    fuelSurchargePerKm: fuel,
+    // The API treats an explicitly unset fuel surcharge as zero when quoting.
+    effectiveFuelPerKm: body.fuelSurchargePerKm === null ? 0 : fuel,
     peakEnabled: typeof peak.enabled === 'boolean' ? peak.enabled : null,
     peakMultiplier: number(peak.multiplier),
-    rates: (Array.isArray(body.equipmentRates) ? body.equipmentRates : []).map(adaptEquipmentRate).filter(Boolean),
+    rates: body.equipmentRates.map(adaptEquipmentRate).filter(Boolean),
     updated: when(body.updatedAt),
     updatedBy: text(record(body.updatedBy).name) || text(body.updatedBy),
   };
@@ -55,7 +61,18 @@ export function pricedEquipment(options, rates = []) {
     .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, undefined, { numeric: true }) : a.type === 'CONTAINER_SIZE' ? -1 : 1));
 }
 
-const money = (value) => value != null && Number.isFinite(Number(value)) && Number(value) >= 0;
+const money = (value) => value === null || (hasKoboPrecision(value) && Number(value) >= 0);
+export const validPeakMultiplier = (value) => /^\d+(?:\.\d{1,3})?$/.test(String(value)) && Number(value) >= 1 && Number(value) <= 5;
+const price = (value) => value === null ? null : Number(value);
+
+function matchesSavedPricing(saved, changes) {
+  return ['fuelSurchargePerKm', 'peakEnabled', 'peakMultiplier'].every(
+    (field) => !(field in changes) || saved[field] === changes[field],
+  ) && (changes.equipmentRates ?? []).every((change) => {
+    const rate = saved.rates.find((row) => row.key === equipmentKey(change.equipmentType, change.equipmentId));
+    return rate && RATE_FIELDS.every((field) => !(field in change) || rate[field] === change[field]);
+  });
+}
 
 export const portPricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPortPricing'] }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
@@ -71,29 +88,43 @@ export const portPricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPor
       providesTags: ['AdminTerminalRates'],
     }),
     getAdminPortPricing: builder.query({
-      // PROPOSED: not in the live API yet. See "Backend request: per-port pricing".
       query: (portId) => ({ url: `/admin/pricing/ports/${encodeURIComponent(portId)}` }),
       transformResponse: (response, _meta, portId) => adaptPortPricing(response, portId),
       providesTags: (_result, _error, portId) => [{ type: 'AdminPortPricing', id: portId }],
     }),
     updateAdminPortPricing: builder.mutation({
-      queryFn: async ({ portId, fuelSurchargePerKm, peakEnabled, peakMultiplier, equipmentRates }, _api, _options, baseQuery) => {
+      queryFn: async ({ portId, fuelSurchargePerKm, peakEnabled, peakMultiplier, equipmentRates }, api, _options, baseQuery) => {
         if (!text(portId)) return failure('Choose a port first.');
+        if (!PRICING_EDITORS.has(api.getState().auth.admin?.role)) return failure('Only Super Admins and Finance Admins can change prices.');
         const body = {};
-        if (fuelSurchargePerKm !== undefined) { if (!money(fuelSurchargePerKm)) return failure('Enter a fuel surcharge of ₦0 or more.'); body.fuelSurchargePerKm = Number(fuelSurchargePerKm); }
-        if (peakEnabled !== undefined) body.peakEnabled = Boolean(peakEnabled);
-        if (peakMultiplier !== undefined) { const value = Number(peakMultiplier); if (!(value >= 1 && value <= 5)) return failure('Enter a peak multiplier between 1 and 5.'); body.peakMultiplier = value; }
+        if (fuelSurchargePerKm !== undefined) {
+          if (!money(fuelSurchargePerKm)) return failure('Enter a fuel surcharge of ₦0 or more with up to two decimal places.');
+          body.fuelSurchargePerKm = price(fuelSurchargePerKm);
+        }
+        if (typeof peakEnabled === 'boolean') body.peakEnabled = peakEnabled;
+        if (peakMultiplier !== undefined) {
+          if (peakMultiplier !== null && !validPeakMultiplier(peakMultiplier)) return failure('Enter a peak multiplier between 1 and 5 with up to three decimal places.');
+          body.peakMultiplier = price(peakMultiplier);
+        }
         if (equipmentRates !== undefined) {
-          if (!Array.isArray(equipmentRates) || equipmentRates.some((row) => !EQUIPMENT_TYPES.has(row?.type) || !text(row?.id) || !money(row.ratePerKm) || !money(row.minimumFee))) return failure('Enter a rate per km and a minimum fee of ₦0 or more.');
-          body.equipmentRates = equipmentRates.map((row) => ({ equipmentType: row.type, equipmentId: row.id, ratePerKm: Number(row.ratePerKm), minimumFee: Number(row.minimumFee) }));
+          if (!Array.isArray(equipmentRates) || !equipmentRates.length || equipmentRates.some((row) => !EQUIPMENT_TYPES.has(row?.type) || !text(row.id)
+            || !RATE_FIELDS.some((field) => row[field] !== undefined)
+            || RATE_FIELDS.some((field) => row[field] !== undefined && !money(row[field])))) return failure('Enter rates of ₦0 or more with up to two decimal places.');
+          body.equipmentRates = equipmentRates.map((row) => ({
+            equipmentType: row.type, equipmentId: row.id,
+            ...Object.fromEntries(RATE_FIELDS.filter((field) => row[field] !== undefined).map((field) => [field, price(row[field])])),
+          }));
         }
         if (!Object.keys(body).length) return failure('Nothing to save.');
-        // PROPOSED: not in the live API yet. See "Backend request: per-port pricing".
         const result = await baseQuery({ url: `/admin/pricing/ports/${encodeURIComponent(portId)}`, method: 'PATCH', body });
         if (result.error) return result;
-        try { return { data: adaptPortPricing(result.data, portId) }; } catch { return { data: null }; }
+        try {
+          const saved = adaptPortPricing(result.data, portId);
+          if (matchesSavedPricing(saved, body)) return { data: saved };
+        } catch { /* The response did not identify the saved port pricing. */ }
+        return failure('The saved prices could not be confirmed. Refresh and check before trying again.');
       },
-      invalidatesTags: (_result, error, { portId }) => (error ? [] : [{ type: 'AdminPortPricing', id: portId }, 'AdminPricing']),
+      invalidatesTags: (_result, _error, { portId }) => [{ type: 'AdminPortPricing', id: portId }, 'AdminPricing'],
     }),
   }),
 });
@@ -102,12 +133,13 @@ export const { useGetAdminPricingPortListQuery, useGetAdminPortPricingQuery, use
 
 /**
  * One truck's fare from a port's rates, step by step (section 07):
- * distance × (rate + fuel) → at least the minimum → × peak → rounded to the nearest ₦10,000.
+ * distance × (rate + fuel) → at least the minimum → × peak → rounded to kobo.
  */
 export function fareForTruck({ km, ratePerKm, fuelPerKm, minimumFee, peakMultiplier }) {
   if (![km, ratePerKm, fuelPerKm, minimumFee].every((value) => Number.isFinite(value) && value >= 0)) return null;
   const distanceFee = km * (ratePerKm + fuelPerKm);
   const base = Math.max(distanceFee, minimumFee);
   const peaked = peakMultiplier && peakMultiplier > 1 ? base * peakMultiplier : base;
-  return { distanceFee, base, usedMinimum: minimumFee > distanceFee, peaked, fare: Math.round(peaked / 10000) * 10000 };
+  const fare = Math.round((peaked + peaked * Number.EPSILON) * 100) / 100;
+  return Number.isFinite(fare) ? { distanceFee, base, usedMinimum: minimumFee > distanceFee, peaked, fare } : null;
 }

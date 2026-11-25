@@ -556,11 +556,9 @@ export function Dashboard() {
             />
             <LegendList
               style={{ width: "100%" }}
-              showShare={earningsKnown}
               items={earnings.map((item) => ({
                 ...item,
-                // Share of the breakdown itself, so it matches the donut and sums to 100%.
-                percent: undefined,
+                shareDisplay: item.percent == null ? "—" : `(${item.percent}%)`,
                 display: item.amount == null ? "—" : compactNaira(item.amount),
               }))}
             />

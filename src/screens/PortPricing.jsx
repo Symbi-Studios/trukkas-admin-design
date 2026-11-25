@@ -5,8 +5,9 @@ import { Badge, Banner, Button, DataTable, EmptyState, Icon, Modal, Select, Swit
 import { Money } from "../components/finance/FinanceCells.jsx";
 import { pricingError, useGetAdminPricingServiceFormOptionsQuery, useGetAdminPricingTerminalRatesQuery } from "../store/features/pricing/pricingApi.js";
 import {
-  fareForTruck, pricedEquipment, useGetAdminPortPricingQuery, useGetAdminPricingPortListQuery, useUpdateAdminPortPricingMutation,
+  fareForTruck, pricedEquipment, validPeakMultiplier, useGetAdminPortPricingQuery, useGetAdminPricingPortListQuery, useUpdateAdminPortPricingMutation,
 } from "../store/features/pricing/portPricingApi.js";
+import { hasKoboPrecision } from "../lib/money.js";
 import { RateEditDialog } from "./RateEditDialog.jsx";
 import { DriverTableLoading } from "./DriversLoading.jsx";
 import styles from "./PortPricing.module.css";
@@ -18,23 +19,26 @@ import "../components/finance/finance.css";
 
 const EDITORS = new Set(["SUPER_ADMIN", "FINANCE_ADMIN"]);
 const naira = (value, digits = 0) => (Number.isFinite(value) ? `₦${value.toLocaleString("en-NG", { minimumFractionDigits: digits, maximumFractionDigits: 2 })}` : "—");
-const times = (value) => (Number.isFinite(value) ? `×${value.toLocaleString("en-NG", { maximumFractionDigits: 2 })}` : "—");
-const isMoney = (value) => value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
+const times = (value) => (Number.isFinite(value) ? `×${value.toLocaleString("en-NG", { maximumFractionDigits: 3 })}` : "—");
+const isMoney = (value) => hasKoboPrecision(value) && Number(value) >= 0;
+const inputValue = (value) => value.trim() === "" ? null : Number(value);
 const sum = (a, b) => (Number.isFinite(a) && Number.isFinite(b) ? a + b : null);
 
 /** Edits one or more port values, showing each current value beside the new one. */
-function PortValueDialog({ title, description, fields, onSave, onClose, children, valid = true }) {
+function PortValueDialog({ title, description, fields, onSave, onClose, children, switchChanged = false }) {
   const [values, setValues] = useState(() => Object.fromEntries(fields.map((field) => [field.key, field.value == null ? "" : String(field.value)])));
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const fieldOk = (field) => (field.check ? field.check(values[field.key]) : isMoney(values[field.key]));
-  const changed = fields.some((field) => fieldOk(field) && Number(values[field.key]) !== field.value);
-  const ready = valid && fields.every(fieldOk) && (changed || children);
+  const fieldOk = (field) => values[field.key].trim() === ""
+    ? !field.required
+    : (field.check || isMoney)(values[field.key]);
+  const changedFields = fields.filter((field) => inputValue(values[field.key]) !== field.value);
+  const ready = fields.every(fieldOk) && (changedFields.length > 0 || switchChanged);
 
   async function save() {
     if (!ready || busy) return;
     setBusy(true); setError(null);
-    try { await onSave(Object.fromEntries(fields.map((field) => [field.key, Number(values[field.key])]))); onClose(); }
+    try { await onSave(Object.fromEntries(changedFields.map((field) => [field.key, inputValue(values[field.key])]))); onClose(); }
     catch (failure) { setError(pricingError(failure)); setBusy(false); }
   }
   return (
@@ -44,7 +48,7 @@ function PortValueDialog({ title, description, fields, onSave, onClose, children
         {error && <Banner tone="danger" title="Couldn't save">{error}</Banner>}
         {children}
         {fields.map((field) => {
-          const ok = fieldOk(field), next = Number(values[field.key]);
+          const ok = fieldOk(field), next = inputValue(values[field.key]);
           return (
             <div key={field.key} className={styles.field}>
               <TextField label={field.label} type="number" step="any" min={field.min ?? 0} money={field.money !== false} autoFocus={field === fields[0]}
@@ -99,12 +103,13 @@ function FareCheck({ equipment, fuel, peakOn, multiplier, terminals }) {
   const [terminalId, setTerminalId] = useState(terminals[0]?.terminalId || "");
   const row = priced.find((item) => item.key === pick) || priced[0];
   const terminal = terminals.find((item) => item.terminalId === terminalId) || terminals[0];
-  const distance = Number(km), count = Math.floor(Number(trucks));
-  const fare = row && Number.isFinite(fuel) && distance >= 0 && km.trim() !== ""
+  const distance = Number(km), count = Number(trucks);
+  const validTrucks = Number.isInteger(count) && count >= 1 && count <= 50;
+  const fare = row && km.trim() !== "" && (peakOn === false || peakOn === true && validPeakMultiplier(multiplier))
     ? fareForTruck({ km: distance, ratePerKm: row.ratePerKm, fuelPerKm: fuel, minimumFee: row.minimumFee, peakMultiplier: peakOn ? multiplier : null })
     : null;
-  const validTrucks = count >= 1 && count <= 50;
   const handling = terminal?.value;
+  const tripTotal = fare ? sum(fare.fare * count, handling) : null;
 
   if (!priced.length) return <p className="fin-note">Set a rate for at least one piece of equipment to check a fare.</p>;
   return (
@@ -123,10 +128,10 @@ function FareCheck({ equipment, fuel, peakOn, multiplier, terminals }) {
           <li><span><strong>Distance fee</strong><small>{distance.toLocaleString("en-NG")} km × ({naira(row.ratePerKm)} + {naira(fuel)} fuel)</small></span><Money value={fare.distanceFee} strong={false} /></li>
           <li className={fare.usedMinimum ? undefined : styles.muted}><span><strong>Minimum fee</strong><small>{fare.usedMinimum ? "Applies: the distance fee is below the minimum" : "Not needed: the distance fee is higher"}</small></span><Money value={row.minimumFee} strong={false} /></li>
           {peakOn && Number.isFinite(multiplier) && <li><span><strong>Peak pricing</strong><small>{times(multiplier)} while peak is on</small></span><Money value={fare.peaked} strong={false} /></li>}
-          <li><span><strong>Per truck</strong><small>Rounded to the nearest ₦10,000</small></span><Money value={fare.fare} /></li>
+          <li><span><strong>Per truck</strong><small>Rounded to the nearest kobo</small></span><Money value={fare.fare} /></li>
           {count > 1 && <li><span><strong>× {count} trucks</strong></span><Money value={fare.fare * count} strong={false} /></li>}
           <li><span><strong>Terminal handling fee</strong><small>{terminal ? `${terminal.terminalName}, once per job` : "No terminal at this port"}</small></span><Money value={handling} strong={false} /></li>
-          <li className="total"><span><strong>Trip total</strong><small>Before surcharges, platform fee and VAT</small></span><Money value={sum(fare.fare * count, Number.isFinite(handling) ? handling : 0)} /></li>
+          <li className="total"><span><strong>Trip total</strong><small>Before surcharges, platform fee and VAT</small></span>{tripTotal == null ? "—" : <Money value={tripTotal} />}</li>
         </ul>
       ) : <div className={styles.checkEmpty}><Icon name="calculator" size={20} /><span>Enter a distance and number of trucks to see the fare.</span></div>}
     </div>
@@ -151,6 +156,7 @@ function PortPanel({ port, canEdit, notify }) {
     .filter((row) => row.portId === port.id && row.key === "handlingFee")
     .map((row) => ({ ...row, terminalName: row.description.split(" / ").slice(1).join(" / ") || row.description }));
   const fuel = pricing?.fuelSurchargePerKm ?? null;
+  const effectiveFuel = pricing?.effectiveFuelPerKm;
   const editable = canEdit && Boolean(pricing);
   const patch = (changes) => save({ portId: port.id, ...changes }).unwrap();
 
@@ -160,7 +166,6 @@ function PortPanel({ port, canEdit, notify }) {
       { key: "ratePerKm", label: "Rate per km", suffix: "per km", value: row.ratePerKm, format: (value) => naira(value, 2) },
       { key: "minimumFee", label: "Minimum fee", suffix: "per truck", value: row.minimumFee, format: (value) => naira(value) },
     ],
-    // PROPOSED contract: equipmentRates updates only the rows it lists.
     onSave: (values) => patch({ equipmentRates: [{ type: row.type, id: row.id, ...values }] }).then(() => notify(`${row.name} rates updated for ${port.name}.`)),
   });
   const editFuel = () => setDialog({
@@ -172,7 +177,7 @@ function PortPanel({ port, canEdit, notify }) {
   const columns = [
     { key: "equipment", header: "Equipment", render: (row) => <EquipmentName row={row} /> },
     { key: "rate", header: "Rate per km", align: "right", render: (row) => <Money value={row.ratePerKm} strong={false} /> },
-    { key: "allIn", header: "With fuel", align: "right", render: (row) => sum(row.ratePerKm, fuel) == null ? <Money value={null} /> : <span className={styles.stackRight}><Money value={sum(row.ratePerKm, fuel)} /><small>per km</small></span> },
+    { key: "allIn", header: "With fuel", align: "right", render: (row) => sum(row.ratePerKm, effectiveFuel) == null ? "—" : <span className={styles.stackRight}><Money value={sum(row.ratePerKm, effectiveFuel)} /><small>per km</small></span> },
     { key: "minimum", header: "Minimum fee", align: "right", render: (row) => <Money value={row.minimumFee} strong={false} /> },
     { key: "edit", header: "", width: 80, render: (row) => <Button size="sm" variant="outline" icon="pencil" disabled={!editable} onClick={(event) => { event.stopPropagation(); editRates(row); }}>Edit</Button> },
   ];
@@ -236,7 +241,7 @@ function PortPanel({ port, canEdit, notify }) {
         <div className={styles.blockHead}>
           <div><h4>Check a fare</h4><p>Works a trip through this port's current rates, the same steps a quote follows.</p></div>
         </div>
-        {pricing ? <FareCheck key={port.id} equipment={equipment} fuel={fuel} peakOn={pricing.peakEnabled} multiplier={pricing.peakMultiplier} terminals={terminals.filter((row) => row.status === "Active Terminal")} />
+        {pricing ? <FareCheck key={port.id} equipment={equipment} fuel={effectiveFuel} peakOn={pricing.peakEnabled} multiplier={pricing.peakMultiplier} terminals={terminals.filter((row) => row.status === "Active Terminal")} />
           : <p className="fin-note">Available once this port's rates load.</p>}
       </section>
 
@@ -249,11 +254,13 @@ function PortPanel({ port, canEdit, notify }) {
 
 function PeakDialog({ port, pricing, onSave, onClose }) {
   const [on, setOn] = useState(!pricing.peakEnabled);
+  const switchChanged = on !== pricing.peakEnabled;
   const field = { key: "peakMultiplier", label: "Multiplier", money: false, suffix: "×", min: 1, value: pricing.peakMultiplier, format: times,
-    check: (value) => value.trim() !== "" && Number(value) >= 1 && Number(value) <= 5, error: "Enter a multiplier from 1 to 5." };
+    required: on, check: validPeakMultiplier, error: "Enter a multiplier from 1 to 5." };
   return (
     <PortValueDialog title="Peak pricing" description={`Multiplies every fare from ${port.name} while it's on. Use it for congestion or high demand.`}
-      fields={[field]} onClose={onClose} onSave={(values) => onSave({ peakEnabled: on, peakMultiplier: values.peakMultiplier })}>
+      fields={[field]} switchChanged={switchChanged} onClose={onClose}
+      onSave={(values) => onSave({ ...values, ...(switchChanged ? { peakEnabled: on } : {}) })}>
       <Switch checked={on} onChange={setOn} label={on ? "Peak pricing on" : "Peak pricing off"} hint={on ? "New quotes from this port use the multiplier." : "New quotes use the normal rates. The multiplier is kept for next time."} />
     </PortValueDialog>
   );
