@@ -1,35 +1,8 @@
 'use client';
 import { useState } from 'react';
-import { Banner, Button, Checkbox, Modal, Pagination, SearchField, Skeleton, Textarea } from '../ds.js';
-import { useGetAdminAnnouncementOptionsQuery, useGetAdminAnnouncementUsersQuery } from '../store/features/announcements/announcementsApi.js';
-import { audiences } from '../store/features/announcements/announcementContracts.js';
+import { Banner, Button, Modal, Textarea } from '../ds.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
-export function AnnouncementAudienceDialog({ name, owner, selected = [], onApply, onClose }) {
-  const [ids, setIds] = useState(selected || []), [search, setSearch] = useState(''), [page, setPage] = useState(1);
-  const custom = name === 'Custom Users';
-  const catalog = useGetAdminAnnouncementOptionsQuery({ owner }, { refetchOnMountOrArgChange: true });
-  const users = useGetAdminAnnouncementUsersQuery({ owner, search, page }, { skip: !custom, refetchOnMountOrArgChange: true });
-  const query = custom ? users : catalog;
-  const error = query.error || catalog.error;
-  const loading = query.isFetching || catalog.isFetching;
-  const customUsersMax = catalog.currentData?.limits?.customUsersMax;
-  const options = query.error ? [] : custom ? users.currentData?.users || [] : catalog.currentData?.modes.find((mode) => mode.mode === audiences[name])?.options || [];
-  function toggle(id, checked) {
-    if (checked && custom && customUsersMax != null && ids.length >= customUsersMax) { window.alert('Select no more than ' + customUsersMax + ' users.'); return; }
-    setIds((current) => checked ? [...new Set([...current, id])] : current.filter((value) => value !== id));
-  }
-  return <Modal open title={name} width={580} onClose={onClose} footer={<>
-    <Button variant="outline" onClick={onClose}>Cancel</Button>
-    <Button disabled={!ids.length || loading || Boolean(error) || custom && (!customUsersMax || ids.length > customUsersMax)} onClick={() => onApply(ids)}>Apply</Button>
-  </>}>
-    <div style={{ display: 'grid', gap: 14 }}>
-      {custom && <SearchField value={search} placeholder="Search users..." onChange={(event) => { setSearch(event.target.value); setPage(1); }} />}
-      {error ? <Banner tone="danger">{getApiErrorMessage(error)}</Banner> : query.isLoading || (query.isFetching && !query.currentData) || (catalog.isFetching && !catalog.currentData) ? <Skeleton height={140} /> : options.length ? options.map((option) => <Checkbox key={option.id} label={option.label} checked={ids.includes(option.id)} onChange={(checked) => toggle(option.id, checked)} />) : <span>—</span>}
-      {custom && <Pagination page={page} pageSize={20} total={users.currentData?.total ?? null} pageCount={users.currentData?.pageCount ?? null} onPage={setPage} />}
-    </div>
-  </Modal>;
-}
 export function AnnouncementReasonDialog({ action, announcement, operations, onClose, onSaved }) {
   const [reason, setReason] = useState(''), [error, setError] = useState(null);
   async function submit() {
@@ -38,7 +11,7 @@ export function AnnouncementReasonDialog({ action, announcement, operations, onC
     try { const result = await operations.perform({ action, id: announcement.id, reason }); if (result) { onSaved(result); onClose(); } }
     catch (failure) { setError(getApiErrorMessage(failure)); }
   }
-  return <Modal open title={action === 'archive' ? 'Archive Announcement' : 'Unpublish Announcement'} width={520} onClose={() => { if (!operations.saving) onClose(); }} footer={<>
+  return <Modal open title={action === 'archive' ? 'Archive announcement' : 'Unpublish announcement'} width={520} onClose={() => { if (!operations.saving) onClose(); }} footer={<>
     <Button variant="outline" disabled={operations.saving} onClick={onClose}>Cancel</Button>
     <Button variant="danger" disabled={!reason.trim() || operations.saving} onClick={submit}>{operations.saving ? 'Saving…' : action === 'archive' ? 'Archive' : 'Unpublish'}</Button>
   </>}>
