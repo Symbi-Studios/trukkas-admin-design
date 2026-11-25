@@ -51,7 +51,7 @@
 .documents-table-card { overflow: hidden; }
 .documents-filter-buttons { display: flex; gap: var(--tk-space-3); flex-wrap: wrap; }
 .documents-filter-menu { position: relative; display: inline-flex; }
-.documents-filter-dropdown { position: absolute; top: calc(100% + var(--tk-space-2)); left: 0; z-index: 40; }
+.documents-filter-dropdown { position: absolute; top: calc(100% + var(--tk-space-2)); left: 0; z-index: var(--tk-z-dropdown); }
 .documents-filter-dropdown.is-right { right: 0; left: auto; }
 .documents-job-id { color: var(--tk-blue); }
 .documents-company { display: flex; align-items: center; gap: 8px; font-weight: 600; }
@@ -167,8 +167,8 @@
   width: 54px;
   height: 54px;
   border-radius: 12px;
-  background: var(--tk-success-soft);
-  color: var(--tk-success);
+  background: var(--tk-surface-sunk);
+  color: var(--tk-ink-500);
   display: grid;
   place-items: center;
   flex: none;
@@ -374,7 +374,7 @@
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 100;
+  z-index: var(--tk-z-modal);
   background: var(--tk-ink-900);
   color: #fff;
   padding: 12px 16px;

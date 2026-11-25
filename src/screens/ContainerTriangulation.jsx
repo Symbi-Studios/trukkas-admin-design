@@ -3,7 +3,7 @@
 import { ToastRelay } from '../components/ActionToast.jsx';
 import { useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
-import { DateRangeFilter, EMPTY_RANGE, inRange, isRangeSet } from '../components/DateRangeFilter.jsx';
+import { DateRangeFilter, EMPTY_RANGE } from '../components/DateRangeFilter.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, FilterSelect, DropdownMenu, StatCard, SectionCard, MapPanel,
@@ -64,7 +64,10 @@ export function ContainerTriangulation() {
   const [notice, setNotice] = useState(null);
   const [notifyCompany, { isLoading: notifying }] = useNotifyAdminTriangulationMatchMutation();
   const { currentData: response, isLoading, isFetching, error, refetch } =
-    useGetAdminTriangulationOpportunitiesQuery({ page, limit: PAGE_SIZE, radiusKm, status: reviewStatus || undefined });
+    useGetAdminTriangulationOpportunitiesQuery({
+      page, limit: PAGE_SIZE, radiusKm, status: reviewStatus || undefined,
+      dateFrom: dates.from || undefined, dateTo: dates.to || undefined,
+    });
   const rows = response?.rows || [];
   const summary = response?.summary;
   const loadingRows = isLoading || (isFetching && !response);
@@ -82,9 +85,8 @@ export function ContainerTriangulation() {
     (filters.route === 'All Routes' || row.currentRoute === filters.route) &&
     (filters.container === 'All Container Types' || row.container === filters.container) &&
     (filters.company === 'All Companies' || row.company === filters.company) &&
-    (filters.truck === 'All Truck Types' || row.truckType === filters.truck) &&
-    (!isRangeSet(dates) || inRange(row.identifiedAt, dates))
-  ), [rows, filters, dates]);
+    (filters.truck === 'All Truck Types' || row.truckType === filters.truck)
+  ), [rows, filters]);
   const sorted = useMemo(() => [...filtered].sort((a, b) => sort === 'Highest Revenue'
     ? (b.revenue ?? -1) - (a.revenue ?? -1) : (b.score ?? -1) - (a.score ?? -1)), [filtered, sort]);
   const mapPoints = useMemo(() => rows.flatMap((row) => [
@@ -132,18 +134,18 @@ export function ContainerTriangulation() {
       ].map(([key, allLabel]) => <span key={key} style={{ position: 'relative' }}>
         <FilterSelect label={filters[key]} active={filters[key] !== allLabel}
           onClick={() => setOpenFilter(openFilter === key ? null : key)} />
-        {openFilter === key && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+        {openFilter === key && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu width={210} items={options[key].map((option) => ({
             label: option, icon: option === filters[key] ? 'check' : undefined,
             onClick: () => { setFilters((old) => ({ ...old, [key]: option })); setOpenFilter(null); },
           }))} />
         </span>}
       </span>)}
-      <DateRangeFilter value={dates} onChange={setDates} />
+      <DateRangeFilter value={dates} onChange={(next) => { setDates(next); setPage(1); setSelectedId(null); }} />
       <span style={{ position: 'relative' }}>
         <FilterSelect label={`Radius: ${radiusKm} km`} active={radiusKm !== 150}
           onClick={() => setOpenFilter(openFilter === 'radius' ? null : 'radius')} />
-        {openFilter === 'radius' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+        {openFilter === 'radius' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu width={160} items={[50, 100, 150, 250].map((value) => ({
             label: `${value} km`, icon: value === radiusKm ? 'check' : undefined,
             onClick: () => { setRadiusKm(value); setPage(1); setOpenFilter(null); },
@@ -152,7 +154,7 @@ export function ContainerTriangulation() {
       </span>
       <span style={{ position: 'relative' }}>
         <FilterSelect label={reviewStatus ? `Status: ${reviewStatus}` : 'Active statuses'} active={Boolean(reviewStatus)} onClick={() => setOpenFilter(openFilter === 'reviewStatus' ? null : 'reviewStatus')} />
-        {openFilter === 'reviewStatus' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+        {openFilter === 'reviewStatus' && <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu width={180} items={[['', 'Active statuses'], ['ALL', 'All statuses'], ['OPEN', 'Open'], ['PROPOSED', 'Proposed'], ['REJECTED', 'Rejected']].map(([value, label]) => ({
             label, icon: value === reviewStatus ? 'check' : undefined,
             onClick: () => { setReviewStatus(value); setPage(1); setOpenFilter(null); },
@@ -172,7 +174,7 @@ export function ContainerTriangulation() {
         count={response?.pagination.total ?? filtered.length} pad="none"
         action={<span style={{ position: 'relative' }}>
           <FilterSelect label={`Sort by: ${sort}`} onClick={() => setOpenFilter(openFilter === 'sort' ? null : 'sort')} />
-          {openFilter === 'sort' && <span style={{ position: 'absolute', right: 0, top: 40, zIndex: 30 }}>
+          {openFilter === 'sort' && <span style={{ position: 'absolute', right: 0, top: 40, zIndex: 'var(--tk-z-dropdown)' }}>
             <DropdownMenu width={180} items={['Best Match', 'Highest Revenue'].map((value) => ({
               label: value, icon: value === sort ? 'check' : undefined,
               onClick: () => { setSort(value); setOpenFilter(null); },

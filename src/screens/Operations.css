@@ -51,6 +51,9 @@
 }
 .operations-screen .metric-card .delta {
   font-weight: 600;
+  color: var(--tk-ink-400);
+}
+.operations-screen .metric-card .delta.up {
   color: var(--tk-success);
 }
 .operations-screen .metric-card .delta.down {
@@ -60,11 +63,12 @@
   position: absolute;
   right: 14px;
   top: 16px;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--tk-purple-soft);
-  color: var(--tk-purple);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--tk-r-sm);
+  background: var(--tk-surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--tk-line);
+  color: var(--tk-ink-400);
   display: grid;
   place-items: center;
 }
@@ -525,16 +529,16 @@
 .finance-box {
   padding: 12px;
   border-radius: 8px;
-  background: #f3faf6;
+  background: var(--tk-success-soft);
 }
 .finance-box:nth-child(2) {
-  background: #f2f6ff;
+  background: var(--tk-info-soft);
 }
 .finance-box:nth-child(3) {
-  background: #fff7ef;
+  background: var(--tk-orange-soft);
 }
 .finance-box:nth-child(4) {
-  background: #f8f8fa;
+  background: var(--tk-neutral-soft);
 }
 .finance-box small {
   display: block;
@@ -551,8 +555,8 @@
   margin: 0 14px 14px;
   padding: 12px;
   border-radius: 7px;
-  background: #fff9ed;
-  color: #8b631c;
+  background: var(--tk-warning-soft);
+  color: var(--tk-warning-ink);
   font-size: 11px;
 }
 .status-flow {

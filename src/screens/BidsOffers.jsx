@@ -45,15 +45,15 @@ import "./Operations.css";
 
 const tones = { "Pending Evaluation":"warning", "Bid Accepted":"success", "In Transit":"info", "At Delivery":"orange", "Returning Container":"teal", Bidding:"purple", Completed:"success", Expired:"danger", Cancelled:"neutral" };
 const STATUSES = ["Pending Evaluation","Bid Accepted","In Transit","At Delivery","Returning Container","Bidding","Completed","Expired","Cancelled"];
-function Metric({ label, metric, comparison, icon, color = "#4c16ac" }) {
+function Metric({ label, metric, comparison, icon, color = "var(--tk-purple)" }) {
   return <Card className="metric-card">
     <label>{label}</label><strong>{metric?.value ?? "—"}</strong>
-    <span className={"delta " + (metric?.direction === "DOWN" ? "down" : "")}>
+    <span className={"delta " + (metric?.direction === "DOWN" ? "down" : metric?.direction === "UP" ? "up" : "")}>
       {metric?.direction ? (metric.direction === "DOWN" ? "↓ " : metric.direction === "UP" ? "↑ " : "") + metric.delta : "—"}
     </span>
     <small>{comparison && comparison !== "—" ? "vs " + comparison : "—"}</small>
-    <i className="metric-icon" style={{ color, background: color + "12" }}><Icon name={icon} size={20} /></i>
-    <Sparkline points={metric?.sparkline || []} color={color} />
+    <i className="metric-icon" aria-hidden="true"><Icon name={icon} size={15} /></i>
+    <Sparkline points={metric?.sparkline || []} color="var(--tk-blue)" />
   </Card>;
 }
 function BidScreenMenu({ anchor, items, onClose }) {
@@ -71,7 +71,7 @@ function BidScreenMenu({ anchor, items, onClose }) {
     document.addEventListener("pointerdown",outside); document.addEventListener("keydown",escape);
     return ()=>{window.removeEventListener("scroll",update,true);window.removeEventListener("resize",update);document.removeEventListener("pointerdown",outside);document.removeEventListener("keydown",escape);};
   },[anchor,items.length,onClose]);
-  return <div ref={ref} style={{position:"fixed",zIndex:95,top:position?.top??-10000,left:position?.left??0,visibility:position?"visible":"hidden"}}>
+  return <div ref={ref} style={{position:"fixed",zIndex: 'var(--tk-z-overlay)',top:position?.top??-10000,left:position?.left??0,visibility:position?"visible":"hidden"}}>
     <DropdownMenu width={210} items={items} style={{maxHeight:"calc(100vh - 16px)",overflowY:"auto"}} />
   </div>;
 }
@@ -261,7 +261,7 @@ function BidsOffersContent({owner,role,authenticated}) {
       <PageHeader
         crumbs={["Jobs & Trips", "Bids & Offers"]}
         title="Bids & Offers"
-        description="Manage all bid submissions and counter offers across Trukkas."
+        description="Bids and counter-offers from truckers on open jobs."
       />
 
       {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
@@ -277,22 +277,22 @@ function BidsOffersContent({owner,role,authenticated}) {
         <Metric
           label="Pending Evaluation" metric={analytics?.metrics.pendingBids} comparison={analytics?.comparison}
           icon="hand-coins"
-          color="#f27602"
+          color="var(--tk-warning)"
         />
         <Metric
           label="Counter Offers" metric={analytics?.metrics.counterOffers} comparison={analytics?.comparison}
           icon="users-round"
-          color="#2469e8"
+          color="var(--tk-blue)"
         />
         <Metric
           label="Accepted Bids" metric={analytics?.metrics.acceptedBids} comparison={analytics?.comparison}
           icon="badge-check"
-          color="#12a150"
+          color="var(--tk-viz-2)"
         />
         <Metric
           label="Expired Offers" metric={analytics?.metrics.expiredBids} comparison={analytics?.comparison}
           icon="trophy"
-          color="#e02b22"
+          color="var(--tk-danger-solid)"
         />
         <Metric
           label="Avg. Winning Margin" metric={analytics?.metrics.margin} comparison={analytics?.comparison}
@@ -304,7 +304,7 @@ function BidsOffersContent({owner,role,authenticated}) {
 
       <div className="ops-panel">
           <TableToolbar
-            search={<SearchField placeholder="Search by Job ID, Company, Truck, Driver..." value={q} onChange={(event) => setQ(event.target.value)} />}
+            search={<SearchField placeholder="Search bids…" title="Search by job ID, company, truck or driver" value={q} onChange={(event) => setQ(event.target.value)} />}
             filters={<>
               <FilterSelect prefix="Status" icon="circle-dot" label={statusFilter} active={statusFilter !== 'All Status'} onClick={(event) => openMenu(event, 'status')} onClear={() => setStatusFilter('All Status')} />
               <FilterSelect prefix="Type" icon="layers" label={bidType} active={bidType !== 'All Bids'} onClick={(event) => openMenu(event, 'type')} onClear={() => { setBidType('All Bids'); setStatusFilter('All Status'); }} />

@@ -88,7 +88,7 @@ function ChargeDrawer({ id, onClose }) {
   const footer = r && <div className="fin-actions">
     <span style={{ position: "relative", marginRight: "auto" }}>
       <Button variant="outline" icon="ellipsis" disabled={busy} onClick={() => setMenu((open) => !open)}>More</Button>
-      {menu && <span style={{ position: "absolute", left: 0, bottom: 44, zIndex: 40 }} onMouseLeave={() => setMenu(false)}>
+      {menu && <span style={{ position: "absolute", left: 0, bottom: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setMenu(false)}>
         <DropdownMenu width={220} items={[
           { label: "Record a dispute", icon: "triangle-alert", onClick: () => { setMenu(false); setDetails(""); setModal("dispute"); } },
           { label: "Edit note", icon: "pencil", onClick: () => { setMenu(false); setNote(isMissing(r.noteValue) ? "" : r.noteValue); setModal("note"); } },

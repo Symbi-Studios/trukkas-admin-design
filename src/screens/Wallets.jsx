@@ -131,7 +131,7 @@ function EscrowScreen() {
 
       <SectionCard title="" pad="none" className="fin-table">
         <TableToolbar
-          search={<SearchField placeholder="Search by job, escrow ID, party or reference…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+          search={<SearchField placeholder="Search escrow…" title="Search by job, escrow ID, party or reference" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
             <FilterChip name="Type" icon="layers" value={type} allValue="All Types" options={TYPES} onChange={(v) => { setType(v); setStatus("All Statuses"); setPage(1); }} />
             <FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={statusOptions} onChange={(v) => { setStatus(v); setPage(1); }} />

@@ -18,7 +18,7 @@ import { DriverLoadingNotice, DriverTableLoading } from "./DriversLoading.jsx";
 function RateName({ row }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <span style={{ width: 32, height: 32, borderRadius: "var(--tk-r-sm)", background: "var(--tk-blue-soft)", color: "var(--tk-blue)", display: "grid", placeItems: "center", flex: "0 0 auto" }}>
+      <span style={{ width: 32, height: 32, borderRadius: "var(--tk-r-sm)", background: "var(--tk-surface-sunk)", boxShadow: "inset 0 0 0 1px var(--tk-line)", color: "var(--tk-ink-500)", display: "grid", placeItems: "center", flex: "0 0 auto" }}>
         <Icon name={row.icon || "lock"} size={16} />
       </span>
       <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
@@ -119,7 +119,7 @@ export function PlatformRates() {
               />
             )}
             {current.key === "payment" && holdOverride && (
-              <Banner tone="warning" style={{ margin: "12px var(--tk-card-pad) 0" }}>A test override of {config.holdOverrideMinutes} minutes is currently active for the confirmation hold. Saving the hold in hours replaces it.</Banner>
+              <Banner inline tone="warning" style={{ margin: "12px var(--tk-card-pad) 0" }}>A test override of {config.holdOverrideMinutes} minutes is currently active for the confirmation hold. Saving the hold in hours replaces it.</Banner>
             )}
             {current.key === "payment" && escrowPolicy.length > 0 && (
               <>

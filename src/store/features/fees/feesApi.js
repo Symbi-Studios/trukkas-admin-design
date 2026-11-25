@@ -54,6 +54,8 @@ export const emptyFeeSummary = {
   avgEffectiveRate:'—', avgEffectiveRateDelta:'—',
   totalFeesCollected:null, totalCommissionsPaid:null,
   totalDeductionsCollected:null, netPlatformRevenue:null, avgEffectiveRateLabel:'—',
+  vatOwed:null, vatOwedDelta:'—', vatPercent:null, revenueAfterVat:null, revenueAfterVatDelta:'—',
+  processorCosts:null, processorCostsDelta:'—', revenueAfterCosts:null, revenueAfterCostsDelta:'—',
 };
 // These are the existing chart slots, not invented fee distribution records.
 export const unavailableFeeDistribution = [
@@ -100,6 +102,10 @@ export function adaptFeeSummary(response) {
       totalFeesCollected: amount('feesCollected'), totalCommissionsPaid: amount('commissionsPaid'),
       totalDeductionsCollected: amount('deductions'), netPlatformRevenue: amount('netPlatformRevenue'),
       totalFeesCollectedDelta: delta(record(dto.feesCollected).deltaPercent), netPlatformRevenueDelta: delta(record(dto.netPlatformRevenue).deltaPercent),
+      vatOwed: amount('vatOwed'), vatOwedDelta: delta(record(dto.vatOwed).deltaPercent), vatPercent: ngn ? percent(record(dto.vatOwed).vatPercent) : null,
+      revenueAfterVat: amount('revenueAfterVat'), revenueAfterVatDelta: delta(record(dto.revenueAfterVat).deltaPercent),
+      processorCosts: amount('processorCosts'), processorCostsDelta: delta(record(dto.processorCosts).deltaPercent),
+      revenueAfterCosts: amount('revenueAfterCosts'), revenueAfterCostsDelta: delta(record(dto.revenueAfterCosts).deltaPercent),
       serviceFees: amount('serviceFees'), serviceFeesDelta: delta(record(dto.serviceFees).deltaPercent),
       processingFees: amount('processingFees'), processingFeesDelta: delta(record(dto.processingFees).deltaPercent),
       otherFees: amount('otherFees'), otherFeesDelta: delta(record(dto.otherFees).deltaPercent),

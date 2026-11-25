@@ -56,7 +56,7 @@ export function CargoManagement() {
       </div>
 
       <Card pad="none">
-        <TableToolbar search={<SearchField placeholder="Search by cargo ID, description or job ID..."
+        <TableToolbar search={<SearchField placeholder="Search cargo…" title="Search by cargo ID, description or job ID"
           value={q} onChange={(e) => setQ(e.target.value)} />} />
       </Card>
 

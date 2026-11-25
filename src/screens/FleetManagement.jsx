@@ -76,7 +76,7 @@ export function FleetManagement() {
     {overview.error && <Banner tone="warning" title="Fleet summary unavailable" action={<Button variant="outline" onClick={() => overview.refetch()}>Retry</Button>}>{fleetError(overview.error)}</Banner>}
     {inspections.error && <Banner tone="warning" title="Inspection data unavailable" action={<Button variant="outline" onClick={() => inspections.refetch()}>Retry</Button>}>{fleetError(inspections.error)} Registration records can still be reviewed.</Banner>}
     <Card pad="none"><div className="fleet-toolbar">
-      <SearchField placeholder="Search by truck no., plate number, or company..." value={q} onChange={(event) => setQ(event.target.value)} />
+      <SearchField placeholder="Search trucks…" title="Search by truck number, plate or company" value={q} onChange={(event) => setQ(event.target.value)} />
       <CustomSelect aria-label="Status" disabled title="Operational status is not available yet">{['All Status', ...STATUSES].map((x) => <option key={x}>{x}</option>)}</CustomSelect>
       <CustomSelect aria-label="Truck type" disabled title="Truck type filtering is not available yet">{['All Types', ...TYPES].map((x) => <option key={x}>{x}</option>)}</CustomSelect>
       <CustomSelect aria-label="Company" disabled title="Use the search field to find a company"><option>All Companies</option></CustomSelect>

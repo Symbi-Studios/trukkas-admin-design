@@ -81,7 +81,7 @@ export function UserDetail() {
   const booleanLabel = (value) => value == null ? '—' : value ? 'Enabled' : 'Disabled';
   const amountLabel = (value, unit) => value == null ? '—' : `${value} ${unit}`;
 
-  if (!authenticated || (permitted && (query.isLoading || (query.isFetching && !query.currentData)))) return <DriverDetailLoading />;
+  if (!authenticated || (permitted && (query.isLoading || (query.isFetching && !query.currentData)))) return <DriverDetailLoading label="Loading user details…" />;
 
   if (!u) {
     return (
@@ -99,14 +99,13 @@ export function UserDetail() {
   return (
     <>
       <PageHeader crumbs={['Administration', 'User Management', 'View User']} title="User Profile"
-        description="View detailed information about this user."
         actions={<>
           <Button variant="outline" icon="arrow-left" onClick={() => navigate('/users')}>Back to Users</Button>
           <Button variant="outline" icon="pencil" onClick={() => editUser()}>Edit User</Button>
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
-              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
+              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={260} items={[
                   { label: 'Reset Password', icon: 'rotate-ccw', onClick: () => { setMenu(false); operations.open('password-reset', u); } },
                   { label: 'Force Logout', icon: 'log-out', onClick: () => { setMenu(false); operations.open('force-logout', u); } },

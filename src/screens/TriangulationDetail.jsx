@@ -171,7 +171,7 @@ export function TriangulationDetail() {
     <>
       <PageHeader
         crumbs={['Triangulation', 'Opportunities', o.id]}
-        title="Triangulation Opportunity – Review"
+        title="Review Triangulation Opportunity"
         description="Review the details, analyze the match and coordinate the next steps."
         actions={
           <>
@@ -181,7 +181,7 @@ export function TriangulationDetail() {
             <span style={{ position: 'relative' }}>
               <IconButton icon="ellipsis-vertical" tone="outline" onClick={() => setMoreOpen((v) => !v)} label="More actions" />
               {moreOpen && (
-                <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
+                <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
                   <DropdownMenu
                     width={230}
                     items={[
@@ -203,8 +203,8 @@ export function TriangulationDetail() {
       <EntityHeaderCard
         name={o.id}
         avatar={
-          <span style={{ width: 56, height: 56, borderRadius: 'var(--tk-r-lg)', background: 'var(--tk-blue-soft)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-            <Icon name="truck" size={26} color="var(--tk-blue)" />
+          <span style={{ width: 56, height: 56, borderRadius: 'var(--tk-r-lg)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+            <Icon name="truck" size={26} color="var(--tk-ink-500)" />
           </span>
         }
         badges={<Badge tone={MATCH_LABEL_TONE[o.matchLabel] || 'success'}>{o.matchLabel}</Badge>}
@@ -218,10 +218,10 @@ export function TriangulationDetail() {
       />
 
       <div className="tri-detail-row1">
-        <SectionCard title="Current Segment (Active Job)" action={<Badge tone={STATUS_TONE[o.currentSegment.statusLabel] || 'info'}>{o.currentSegment.statusLabel}</Badge>}>
+        <SectionCard title="Current Segment" action={<Badge tone={STATUS_TONE[o.currentSegment.statusLabel] || 'info'}>{o.currentSegment.statusLabel}</Badge>}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-              <Icon name="truck" size={16} color="var(--tk-blue)" />
+            <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+              <Icon name="truck" size={16} color="var(--tk-ink-500)" />
             </span>
             <div>
               <div className="tk-meta">{o.currentSegment.job}</div>
@@ -249,10 +249,10 @@ export function TriangulationDetail() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Proposed Next Segment (Opportunity)" action={<Badge tone={STATUS_TONE[o.proposedSegment.statusLabel] || 'success'}>{o.proposedSegment.statusLabel}</Badge>}>
+        <SectionCard title="Proposed Next Segment" action={<Badge tone={STATUS_TONE[o.proposedSegment.statusLabel] || 'success'}>{o.proposedSegment.statusLabel}</Badge>}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-orange-soft)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-              <Icon name="package" size={16} color="var(--tk-orange-ink)" />
+            <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+              <Icon name="package" size={16} color="var(--tk-ink-500)" />
             </span>
             <div>
               <div className="tk-meta">{o.proposedSegment.job}</div>

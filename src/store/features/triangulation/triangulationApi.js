@@ -85,7 +85,7 @@ function mapOpportunity(value) {
     currency: text(item.currency, proposed.currency) || 'NGN',
     emptyKmAvoided: number(item.emptyKmAvoided, item.emptyDistanceKm),
     distanceKm: number(item.distanceKm, proposed.distanceKm),
-    identifiedAt: text(item.identifiedAt, item.createdAt),
+    identifiedAt: text(item.identifiedAt),
     position,
     pickupPosition,
     deliveryPosition,
@@ -115,9 +115,9 @@ function mapOpportunities(response, args = {}) {
 export const triangulationApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getAdminTriangulationOpportunities: builder.query({
-      query: ({ page = 1, limit = 20, radiusKm = 150, status } = {}) => ({
+      query: ({ page = 1, limit = 20, radiusKm = 150, status, dateFrom, dateTo } = {}) => ({
         url: '/admin/triangulation/opportunities',
-        params: { radiusKm, page, limit, ...(status ? { status } : {}) },
+        params: { radiusKm, page, limit, status: status || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined },
       }),
       transformResponse: (response, _meta, args) => mapOpportunities(response, args),
       providesTags: ['AdminTriangulation'],

@@ -174,13 +174,7 @@ const BOARD_COLUMNS = [
 
 function AssigneeCell({ job, size = 32, compact = false }) {
   const company = job.truckingCompany || job.truckCompany;
-  if (!company) {
-    if (compact) return <span className="tk-meta">Unassigned</span>;
-    return <span className="tk-cell-person empty">
-      <span className="tk-cell-placeholder"><Icon name="building-2" size={14} /></span>
-      <span><strong>Not assigned</strong></span>
-    </span>;
-  }
+  if (!company) return <span className="tk-meta">Unassigned</span>;
   const trips = job.assignmentDataAvailable === false || job.tripCounts?.required == null
     ? null
     : `${job.tripCounts.assigned} of ${job.tripCounts.required} trip${job.tripCounts.required === 1 ? "" : "s"}`;
@@ -265,7 +259,7 @@ function JobActionMenu({ anchor, items, onClose }) {
   return (
     <div ref={menuRef} onClick={(event) => event.stopPropagation()} style={{
       position: "fixed", top: position?.top ?? -10000, left: position?.left ?? 0,
-      zIndex: 120, width: "max-content", visibility: position ? "visible" : "hidden",
+      zIndex: 'calc(var(--tk-z-modal) + 20)', width: "max-content", visibility: position ? "visible" : "hidden",
     }}>
       <DropdownMenu width={210} items={items} />
     </div>
@@ -393,7 +387,7 @@ function JobsLoading() {
         </div>
         <Skeleton width={318} height={42} radius={10} />
       </div>
-      <div className={styles.loadingNotice} role="status" aria-live="polite">
+      <div className={`${styles.loadingNotice} tk-sr-only`} role="status" aria-live="polite">
         <span className={styles.loadingNoticeDot} aria-hidden="true" />
         Loading jobs…
       </div>
@@ -577,7 +571,7 @@ export function JobsTrips() {
   const statCaption = statsPeriod(statsPeriodKey).vs;
   const card = (key) => statsResponse?.cards[key];
   const statDelta = (key) => card(key)?.changePercent == null ? undefined : `${Math.abs(card(key).changePercent)}%`;
-  const statDirection = (key) => card(key)?.trend === "DOWN" ? "down" : "up";
+  const statDirection = (key) => { const trend = card(key)?.trend; return trend === "DOWN" ? "down" : trend === "UP" ? "up" : null; };
 
   function resetFilters() {
     setTab("All Jobs");
@@ -779,7 +773,7 @@ export function JobsTrips() {
       <PageHeader
         crumbs={["Jobs & Trips", "Jobs"]}
         title="Jobs"
-        description="View, manage and monitor all logistics jobs across Trukkas."
+        description="Every job on Trukkas, from posting to delivery."
       />
       {toast && <ToastRelay message={toast.title} tone={toast.tone} onShown={() => setToast(null)}><Banner tone={toast.tone} title={toast.title} /></ToastRelay>}
       {jobsFetching && jobsResponse && (
@@ -811,6 +805,7 @@ export function JobsTrips() {
           value={card("pendingApproval")?.value ?? "—"}
           delta={statDelta("pendingApproval")}
           direction={statDirection("pendingApproval")}
+          higherIsBetter={false}
           caption={statCaption}
           style={{ minHeight: 92, padding: 13 }}
         />
@@ -841,6 +836,7 @@ export function JobsTrips() {
           value={card("cancelled")?.value ?? "—"}
           delta={statDelta("cancelled")}
           direction={statDirection("cancelled")}
+          higherIsBetter={false}
           caption={statCaption}
           style={{ minHeight: 92, padding: 13 }}
         />
@@ -874,7 +870,7 @@ export function JobsTrips() {
         <div className={styles.toolbar}>
           <div className={styles.toolbarSearch}>
             <SearchField
-              placeholder="Search by job ID, forwarder, route or cargo…"
+              placeholder="Search jobs…" title="Search by job ID, forwarder, route or cargo"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />

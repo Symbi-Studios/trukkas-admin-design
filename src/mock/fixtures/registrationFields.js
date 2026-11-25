@@ -99,7 +99,7 @@ const driverFields = [
   def('driver', 8, "Driver's License Document", 'license_document', 'file', 'documents', { required: true, helpText: 'A clear photo or scan of the front of the license.' }),
 ];
 
-// Forwarder / Exporter: admin create + editable profile (ForwarderForms.jsx) + document slots.
+// Forwarder: admin create + editable profile (ForwarderForms.jsx) + document slots.
 const forwarderFields = [
   def('forwarder', 1, 'First Name', 'first_name', 'text', 'personal', { required: true, system: true }),
   def('forwarder', 2, 'Middle Name', 'middle_name', 'text', 'personal'),
@@ -122,8 +122,6 @@ const forwarderFields = [
   def('forwarder', 19, 'Website', 'website', 'text', 'business', { validation: 'url', enabled: false }),
   def('forwarder', 20, 'Forwarding License No.', 'forwarding_license_number', 'text', 'licenses', { enabled: false }),
   def('forwarder', 21, 'Forwarding License Expiry', 'forwarding_license_expiry', 'date', 'licenses', { validation: 'date_future', enabled: false }),
-  def('forwarder', 22, 'Export License No.', 'export_license_number', 'text', 'licenses', { enabled: false }),
-  def('forwarder', 23, 'Export License Expiry', 'export_license_expiry', 'date', 'licenses', { validation: 'date_future', enabled: false }),
   def('forwarder', 24, 'Services Offered', 'services_offered', 'list', 'services', { helpText: 'One service per line.', enabled: false }),
   def('forwarder', 25, 'Coverage Area', 'coverage_area', 'list', 'services', { enabled: false }),
   def('forwarder', 26, 'Preferred Cargo Types', 'preferred_cargo_types', 'list', 'services'),
@@ -133,7 +131,6 @@ const forwarderFields = [
   def('forwarder', 30, 'Emergency Contact Name', 'emergency_contact_name', 'text', 'emergency'),
   def('forwarder', 31, 'Emergency Contact Phone', 'emergency_contact_phone', 'phone', 'emergency', { validation: 'phone_ng' }),
   def('forwarder', 32, 'Passport Photo', 'passport_photo', 'file', 'documents'),
-  def('forwarder', 33, 'Exporter Licence', 'exporter_licence', 'file', 'documents', { helpText: 'Required for exporter accounts.' }),
   def('forwarder', 34, 'Proof of Address', 'proof_of_address', 'file', 'documents'),
 ];
 

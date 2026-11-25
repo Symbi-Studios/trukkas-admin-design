@@ -34,17 +34,6 @@
   flex: 1 1 auto;
 }
 
-.footnote {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding-top: var(--tk-space-3);
-  border-top: 1px solid var(--tk-line);
-  color: var(--tk-ink-500);
-  font: 400 13px/18px var(--tk-font-sans);
-}
-
 .chartLegend {
   display: flex;
   flex-wrap: wrap;

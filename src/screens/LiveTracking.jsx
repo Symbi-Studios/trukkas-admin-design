@@ -292,7 +292,7 @@ export function LiveTracking() {
           <button className="date-button" style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--tk-line-strong)', borderRadius: 8, height: 34, padding: '0 10px', background: 'var(--tk-surface)', cursor: 'pointer', font: '500 12px var(--tk-font-sans)' }}
             onClick={() => setOpenFilter(openFilter === 'style' ? null : 'style')}>Map style　{mapStyle}<Icon name="chevron-down" size={13} /></button>
           {openFilter === 'style' && (
-            <span style={{ position: 'absolute', left: 0, bottom: 40, zIndex: 30 }}>
+            <span style={{ position: 'absolute', left: 0, bottom: 40, zIndex: 'var(--tk-z-dropdown)' }}>
               <DropdownMenu width={150} items={['Standard', 'Satellite', 'Terrain'].map((s) => ({ label: s, icon: s === mapStyle ? 'check' : undefined, onClick: () => { setMapStyle(s); setOpenFilter(null); } }))} />
             </span>
           )}
@@ -314,7 +314,7 @@ export function LiveTracking() {
           <span style={{ position: 'relative' }}>
             <FilterSelect label={statusFilter === 'All Status' ? 'All Status' : statusFilter} active={statusFilter !== 'All Status'} onClick={() => setOpenFilter(openFilter === 'status' ? null : 'status')} />
             {openFilter === 'status' && (
-              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
+              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
                 <DropdownMenu width={180} items={['All Status', ...STATUSES].map((s) => ({ label: s, icon: s === statusFilter ? 'check' : undefined, onClick: () => { setStatusFilter(s); setOpenFilter(null); } }))} />
               </span>
             )}
@@ -329,7 +329,7 @@ export function LiveTracking() {
           <span style={{ position: 'relative' }}>
             <Button variant="outline" icon="list-filter" iconRight="chevron-down" onClick={() => setOpenFilter(openFilter === 'quick' ? null : 'quick')}>Filters</Button>
             {openFilter === 'quick' && (
-              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }}>
+              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
                 <DropdownMenu width={200} items={[
                   { section: 'QUICK FILTERS' },
                   { label: 'Speeding Trucks', icon: 'gauge', onClick: () => { setQuickFilter('speeding'); setLayer('Trucks'); setShowHeatMap(false); setOpenFilter(null); } },
@@ -350,7 +350,7 @@ export function LiveTracking() {
 
       <div className="lt-main">
         <SectionCard title={statusFilter === 'All Status' && !q ? `Active Trips (${activeCount ?? '—'})` : `Trips (${tripsResponse?.pagination.total ?? '—'})`} pad="tight">
-          <SearchField placeholder="Search trips, truck no. or driver..." value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 12 }} />
+          <SearchField placeholder="Search trips…" title="Search by trip, truck number or driver" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 12 }} />
           <Tabs value={['Delivered', 'Assigned', 'At Delivery'].includes(statusFilter) ? 'All Status' : statusFilter}
             onChange={setStatusFilter}
             items={[{ value: 'All Status', label: 'All' }, { value: 'In Transit', label: 'In Transit', count: count('inTransit') }, { value: 'At Pickup', label: 'At Pickup' }, { value: 'Delayed', label: 'Delayed' }]}
@@ -399,7 +399,7 @@ export function LiveTracking() {
               <div style={{ borderTop: '1px solid var(--tk-line)', marginTop: 4 }}>
                 {[['user', 'Driver', selected.driver, selected.driverPhone], ['truck', 'Truck', selected.truck, selected.truckPhone], ['building-2', 'Company', selected.company, selected.companyPhone]].map(([icon, label, value, phone]) => (
                   <div className="lt-contact-row" key={label} style={{ borderTop: label !== 'Driver' ? '1px solid var(--tk-line)' : 'none' }}>
-                    <span style={{ width: 32, height: 32, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)', color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}><Icon name={icon} size={15} /></span>
+                    <span style={{ width: 32, height: 32, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)', color: 'var(--tk-ink-500)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}><Icon name={icon} size={15} /></span>
                     <div style={{ flex: 1, display: 'grid', gap: 1 }}><span className="tk-meta">{label}</span><strong style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{value}</strong></div>
                     <IconButton icon="phone" tone="outline" disabled={!phone || phone === '—'} onClick={() => {
                       if (/^\+?[\d ()-]{5,30}$/.test(phone)) window.location.assign(`tel:${phone.replace(/[ ()-]/g, '')}`);

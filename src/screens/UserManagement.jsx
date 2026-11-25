@@ -56,7 +56,7 @@ function FilterButton({ value, options, active, onChange }) {
     <span style={{ position: 'relative' }}>
       <FilterSelect label={value} active={active} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setOpen(false)}>
+        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setOpen(false)}>
           <DropdownMenu width={220} items={options.map((o) => ({
             label: o, icon: o === value ? 'check' : undefined,
             onClick: () => { onChange(o); setOpen(false); },
@@ -193,9 +193,9 @@ export function UserManagement() {
         <StatCard icon="shield-check" tint="green" label="Active Users" value={metric(usersSummary.active)}
           delta={usersSummary.activeCaption} direction={usersSummary.activeDirection} />
         <StatCard icon="user-round-x" tint="purple" label="Inactive Users" value={metric(usersSummary.inactive)}
-          delta={usersSummary.inactiveCaption} direction={usersSummary.inactiveDirection} />
+          delta={usersSummary.inactiveCaption} direction={usersSummary.inactiveDirection} higherIsBetter={false} />
         <StatCard icon="lock" tint="red" label="Locked Users" value={metric(usersSummary.locked)}
-          delta={usersSummary.lockedCaption} direction={usersSummary.lockedDirection} />
+          delta={usersSummary.lockedCaption} direction={usersSummary.lockedDirection} higherIsBetter={false} />
         <StatCard icon="user-round-plus" tint="blue" label="New This Month" value={metric(usersSummary.newThisMonth)}
           delta={usersSummary.newThisMonthCaption} direction={usersSummary.newThisMonthDirection} />
       </StatsPanel>
@@ -236,7 +236,7 @@ export function UserManagement() {
                 <span style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
                   <IconButton icon="ellipsis-vertical" onClick={() => setMenuFor(menuFor === r.id ? null : r.id)} />
                   {menuFor === r.id && (
-                    <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
+                    <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setMenuFor(null)}>
                       <DropdownMenu width={210} items={rowMenuItems(r)} />
                     </span>
                   )}

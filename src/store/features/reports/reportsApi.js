@@ -217,7 +217,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
         ]);
         if (forwarders.error || truckers.error) return { error: forwarders.error || truckers.error };
         const rows = [
-          ...forwarders.data.filter((user) => ['EXPORTER', 'FORWARDER'].includes(user.type)).map((user) => ({ id: user.id, name: user.name, entityType: user.type === 'EXPORTER' ? 'Exporter' : 'Forwarder' })),
+          ...forwarders.data.filter((user) => ['EXPORTER', 'FORWARDER'].includes(user.type)).map((user) => ({ id: user.id, name: user.name, entityType: 'Forwarder' })),
           ...truckers.data.filter((user) => user.truckerType === 'COMPANY').map((user) => ({ id: user.id, name: user.name, entityType: 'Truck Company' })),
         ];
         return { data: rows.map((row) => ({ ...row, name: reportText(row.name) || '—' })) };

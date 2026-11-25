@@ -5,7 +5,7 @@ export const DOCUMENT_REQUIREMENTS = {
     { key: 'exit_note', label: 'Exit Note', description: 'Terminal exit note' },
   ],
   Export: [
-    { key: 'indemnity_letter', label: 'Indemnity Letter', description: 'Exporter indemnity letter' },
+    { key: 'indemnity_letter', label: 'Indemnity Letter', description: 'Forwarder indemnity letter' },
     { key: 'confirmation_letter', label: 'Confirmation Letter', description: 'Export confirmation letter' },
   ],
 };
@@ -55,7 +55,7 @@ export function groupDocumentsByJob(jobs, documents) {
         id: job.id,
         job,
         jobType: jobDocumentType(job),
-        company: job.forwarder || job.exporter || '—',
+        company: job.forwarder || '—',
         documents: jobDocuments,
         summary: summarizeDocuments(jobDocuments),
         updatedAt: latest?.updatedAt || job.updatedAt || job.createdAt || '—',

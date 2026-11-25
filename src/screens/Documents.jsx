@@ -192,7 +192,7 @@ export function Documents() {
         </div>
         <TableToolbar
           style={{ padding: "var(--tk-space-4) var(--tk-card-pad-tight)" }}
-          search={<SearchField value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search by job ID, forwarder or route…" />}
+          search={<SearchField value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search documents…" title="Search by job ID, forwarder or route" />}
           filters={
             <span className="documents-filter-menu">
               <FilterSelect prefix="Forwarder" label={forwarder || "All"} active={Boolean(forwarder)} onClick={() => setForwarderOpen((value) => !value)} onClear={() => { setForwarder(null); setPage(1); }} />

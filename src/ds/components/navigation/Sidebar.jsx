@@ -24,8 +24,8 @@ export function Sidebar({ collapsed, children, footer, onCollapse, style }) {
         ...style,
       }}
     >
-      <div style={{ padding: "18px 14px 6px" }}>
-        <Logo showWordmark={!collapsed} size={36} />
+      <div style={{ padding: "16px 16px 8px" }}>
+        <Logo showWordmark={!collapsed} size={28} />
       </div>
       <nav
         style={{

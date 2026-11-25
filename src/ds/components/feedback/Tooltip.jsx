@@ -12,9 +12,9 @@ export function Tooltip({ label, placement = 'top', children, style }) {
       {on && (
         <span role="tooltip" style={{
           position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...pos,
-          background: 'var(--tk-navy)', color: '#fff', padding: '7px 10px',
+          background: 'var(--tk-navy)', color: 'var(--tk-ink-on-navy)', padding: '7px 10px',
           borderRadius: 'var(--tk-r-sm)', font: '400 12px/16px var(--tk-font-sans)',
-          whiteSpace: 'nowrap', zIndex: 40, boxShadow: 'var(--tk-shadow-menu)',
+          whiteSpace: 'nowrap', zIndex: 'var(--tk-z-popover)', boxShadow: 'var(--tk-shadow-menu)',
           animation: 'tk-fade-in var(--tk-dur-fast) var(--tk-ease)',
         }}>{label}</span>
       )}

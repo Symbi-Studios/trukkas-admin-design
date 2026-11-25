@@ -3,121 +3,58 @@ import { Card } from "../core/Card.jsx";
 import { Icon } from "../../assets/icons/Icon.jsx";
 import { shortMoneyValue } from "./ShortMoney.jsx";
 
-const TINT = {
-  blue: ["var(--tk-blue-soft)", "var(--tk-blue)"],
-  green: ["var(--tk-success-soft)", "var(--tk-success)"],
-  amber: ["var(--tk-warning-soft)", "var(--tk-warning)"],
-  red: ["var(--tk-danger-soft)", "var(--tk-danger)"],
-  purple: ["var(--tk-purple-soft)", "var(--tk-purple)"],
-  teal: ["var(--tk-teal-soft)", "var(--tk-teal)"],
-  navy: ["var(--tk-neutral-soft)", "var(--tk-navy)"],
-};
-
 /**
- * The KPI tile that opens every console page: icon tile, label, big figure, delta or caption.
- * Set `labelPosition="bottom"` for the minimal variant — label sits under the value, no caption.
+ * The KPI tile that opens every console page: a quiet label (with an optional muted glyph),
+ * the figure, then the change and a caption. The number carries the card; colour is kept for
+ * the change alone, so it means something when it appears.
+ *  - `tint` is accepted for older call sites and ignored.
+ *  - `labelPosition="bottom"` is the minimal variant: label under the value, no caption.
  */
 export function StatCard({
   icon,
-  tint = "blue",
+  tint: _tint,
   label,
   value,
   delta,
   direction = "up",
+  higherIsBetter = true,
   caption,
   sparkline,
-  layout = "row",
+  layout: _layout,
   labelPosition = "top",
   style,
 }) {
-  const [bg, fg] = TINT[tint] || TINT.blue;
   // Naira amounts are shortened (₦750.6k, ₦25.6m) so tiles fit smaller desktops; the full figure stays on hover.
   const shown = shortMoneyValue(value);
-  const good = direction !== "down";
+  // Colour says whether the change is good, not which way it moved: a rise in cancellations is bad.
+  const flat = direction == null || /^[+-]?0+(\.0+)?\s*(%|pts?)?$/i.test(String(delta ?? "").trim());
+  const good = (direction !== "down") === higherIsBetter;
+  const deltaColor = flat ? "var(--tk-ink-400)" : good ? "var(--tk-success)" : "var(--tk-danger)";
   const labelBelow = labelPosition === "bottom";
+
   const labelEl = (
-    <span
-      style={{
-        font: "600 13px/18px var(--tk-font-sans)",
-        color: "var(--tk-ink-400)",
-        marginTop: labelBelow ? 2 : 0,
-      }}
-    >
-      {label}
+    <span className="tk-stat-label">
+      {icon && !labelBelow && <Icon name={icon} size={14} aria-hidden="true" />}
+      <span>{label}</span>
     </span>
   );
-  const tile = (
-    <span
-      style={{
-        width: 42,
-        height: 42,
-        borderRadius: "var(--tk-r-lg)",
-        background: bg,
-        color: fg,
-        display: "grid",
-        placeItems: "center",
-        flex: "0 0 auto",
-      }}
-    >
-      <Icon name={icon} size={20} />
-    </span>
-  );
+
   return (
-    <Card style={{ display: "grid", gap: 12, minWidth: 0, ...style }}>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: layout === "stack" ? "column" : "row",
-          alignItems: layout === "stack" ? "flex-start" : "start",
-          gap: 16,
-          minWidth: 0,
-        }}
-      >
-        {icon && tile}
-        <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
-          {!labelBelow && labelEl}
-          <span className="tk-metric">{shown}</span>
-          {labelBelow && labelEl}
-          {!labelBelow && (delta || caption) && (
-            <span
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                gap: 5,
-                marginTop: 2,
-                flexWrap: "wrap",
-                minWidth: 0,
-              }}
-            >
-              {delta && (
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 3,
-                    font: "600 12px/16px var(--tk-font-sans)",
-                    flex: "0 0 auto",
-                    color: good ? "var(--tk-success)" : "var(--tk-danger)",
-                  }}
-                >
-                  {direction != null && <Icon name={good ? "arrow-up" : "arrow-down"} size={12} />}
-                  {delta}
-                </span>
-              )}
-              {caption && (
-                <span
-                  style={{
-                    font: "400 13px/15px var(--tk-font-sans)",
-                    color: "var(--tk-ink-400)",
-                  }}
-                >
-                  {caption}
-                </span>
-              )}
+    <Card className="tk-stat-card" style={style}>
+      {!labelBelow && labelEl}
+      <span className="tk-metric tk-stat-value">{shown}</span>
+      {labelBelow && labelEl}
+      {!labelBelow && (delta || caption) && (
+        <span className="tk-stat-foot">
+          {delta && (
+            <span className="tk-stat-delta" style={{ color: deltaColor }}>
+              {direction != null && !flat && <Icon name={direction === "down" ? "arrow-down" : "arrow-up"} size={12} aria-hidden="true" />}
+              {delta}
             </span>
           )}
-        </div>
-      </div>
+          {caption && <span className="tk-stat-caption">{caption}</span>}
+        </span>
+      )}
       {sparkline}
     </Card>
   );

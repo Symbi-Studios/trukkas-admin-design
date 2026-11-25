@@ -16,8 +16,8 @@ function AlertEventRow({ event, onToggle }) {
   return (
     <div className={styles.eventRow} style={{ display: 'grid', alignItems: 'center', gap: 10, padding: '11px 4px', borderBottom: '1px solid var(--tk-line)' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: 26, height: 26, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)',
-                      color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+        <span style={{ width: 26, height: 26, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)',
+                      color: 'var(--tk-ink-500)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
           <Icon name={event.icon} size={13} />
         </span>
         <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{event.label}</span>
@@ -78,7 +78,7 @@ export function SettingsSecurityAlerts() {
           </div>
         </SettingsCard>
 
-        {editor.groupVisible('settingsAlertDelivery') && (<SettingsCard description="Configure how and when you receive security alerts." title="Alert Delivery Settings" save={<SettingsCardSave editor={editor} />}>
+        {editor.groupVisible('settingsAlertDelivery') && (<SettingsCard title="Alert Delivery Settings" save={<SettingsCardSave editor={editor} />}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 14 }}>
             <div style={{ display: 'grid', gap: 6 }}>
               {editor.visible('settingsAlertDelivery', 'emailForSecurityAlerts') && (<TextField label="Email for security alerts" type="email" value={delivery.emailForSecurityAlerts}

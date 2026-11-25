@@ -7,7 +7,7 @@ import { AlertSlotContext, InlineAlertContext } from './AlertSlot.jsx';
 const TONES = {
   info:    ['var(--tk-info-soft)', 'var(--tk-blue)', 'info'],
   success: ['var(--tk-success-soft)', 'var(--tk-success)', 'circle-check'],
-  warning: ['var(--tk-warning-soft)', 'var(--tk-warning)', 'triangle-alert'],
+  warning: ['var(--tk-warning-soft)', 'var(--tk-warning-ink)', 'triangle-alert'],
   danger:  ['var(--tk-danger-soft)', 'var(--tk-danger)', 'circle-alert'],
 };
 const textKey = (value) => typeof value === 'string' || typeof value === 'number' ? String(value) : '';
@@ -16,9 +16,10 @@ const textKey = (value) => typeof value === 'string' || typeof value === 'number
  * Explanatory strip. Says what happened, why, and what may be done next.
  * Page-level `danger` and `warning` banners render as a full-width, dismissible
  * bar under the top bar (see AlertSlot); inside modals and drawers, and every
- * other tone, they stay inline.
+ * other tone, they stay inline. Pass `inline` for a note that belongs to its
+ * card or section (a paused port, a draft rate) rather than to the whole page.
  */
-export function Banner({ tone = 'info', icon, title, children, action, onClose, style }) {
+export function Banner({ tone = 'info', inline: keepInline = false, icon, title, children, action, onClose, style }) {
   const slot = React.useContext(AlertSlotContext);
   const inline = React.useContext(InlineAlertContext);
   const [dismissed, setDismissed] = React.useState(false);
@@ -26,7 +27,7 @@ export function Banner({ tone = 'info', icon, title, children, action, onClose, 
   React.useEffect(() => { setDismissed(false); }, [signature]);
   const [bg, fg, def] = TONES[tone] || TONES.info;
 
-  if ((tone === 'danger' || tone === 'warning') && slot && !inline) {
+  if ((tone === 'danger' || tone === 'warning') && slot && !inline && !keepInline) {
     if (dismissed) return null;
     const dismiss = () => { setDismissed(true); onClose?.(); };
     return createPortal(

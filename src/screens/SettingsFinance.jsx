@@ -17,7 +17,6 @@ const PAYOUT_METHODS = ['Bank Transfer', 'Mobile Money', 'Wallet Credit'];
 const PROCESSING_TIMES = ['Instant (≤ 1 hour)', 'Same Day', 'Next Business Day'];
 const INVOICE_LOGOS = ['Company Logo', 'None'];
 const TAX_CALC = ['Include VAT in price', 'Exclude VAT from price'];
-const ACCOUNTING_INTEGRATIONS = ['None', 'Xero', 'QuickBooks', 'Wave'];
 
 function Field({ children }) { return <div style={{ marginBottom: 14 }}>{children}</div>; }
 
@@ -81,7 +80,7 @@ export function SettingsFinance() {
           <Button variant="outline" icon="sliders-horizontal" onClick={() => navigate('/rates')}>Open Platform Rates</Button>
         </SettingsCard>
 
-        {editor.groupVisible('settingsEscrow') && (<SettingsCard description="Manage how escrow payments are handled." title="Escrow Settings" save={<SettingsCardSave editor={editor} group="settingsEscrow" />}>
+        {editor.groupVisible('settingsEscrow') && (<SettingsCard title="Escrow Settings" save={<SettingsCardSave editor={editor} group="settingsEscrow" />}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             {editor.visible('settingsEscrow', 'escrowHoldPeriodDays') && (<TextField label="Escrow Hold Period (Days)" type="number" value={escrow.escrowHoldPeriodDays}
               hint="Period to hold funds after job completion."
@@ -100,7 +99,7 @@ export function SettingsFinance() {
             onChange={(v) => updateEscrowSettingsForm({ notifyStakeholdersOnEscrowRelease: v })} />) }
         </SettingsCard>) }
 
-        {editor.groupVisible('settingsPayout') && (<SettingsCard description="Manage driver and vendor payouts." title="Payout Settings" save={<SettingsCardSave editor={editor} group="settingsPayout" />}>
+        {editor.groupVisible('settingsPayout') && (<SettingsCard title="Payout Settings" save={<SettingsCardSave editor={editor} group="settingsPayout" />}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             {editor.visible('settingsPayout', 'defaultPayoutMethod') && (<Select label="Default Payout Method" options={PAYOUT_METHODS} value={payout.defaultPayoutMethod}
               onChange={(e) => updatePayoutSettingsForm({ defaultPayoutMethod: e.target.value })} />) }
@@ -119,7 +118,7 @@ export function SettingsFinance() {
             onChange={(v) => updatePayoutSettingsForm({ allowInstantPayouts: v })} />) }
         </SettingsCard>) }
 
-        {editor.groupVisible('settingsInvoicing') && (<SettingsCard description="Configure invoice, receipt, and billing preferences." title="Invoicing & Receipts" save={<SettingsCardSave editor={editor} group="settingsInvoicing" />}>
+        {editor.groupVisible('settingsInvoicing') && (<SettingsCard title="Invoicing & Receipts" save={<SettingsCardSave editor={editor} group="settingsInvoicing" />}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             {editor.visible('settingsInvoicing', 'invoiceNumberFormat') && (<TextField label="Invoice Number Format" value={invoicing.invoiceNumberFormat}
               hint="Example: INV-2026-0001"
@@ -140,7 +139,7 @@ export function SettingsFinance() {
             onChange={(v) => updateInvoicingReceipts({ sendInvoiceViaEmail: v })} />) }
         </SettingsCard>) }
 
-        {editor.groupVisible('settingsAccountingTax') && (<SettingsCard description="Configure tax settings and accounting integration." title="Accounting & Tax" save={<SettingsCardSave editor={editor} group="settingsAccountingTax" />}>
+        {editor.groupVisible('settingsAccountingTax') && (<SettingsCard title="Accounting & Tax" save={<SettingsCardSave editor={editor} group="settingsAccountingTax" />}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 14, marginBottom: 14 }}>
             <div style={{ display: 'grid', gap: 6 }}>
               {editor.visible('settingsAccountingTax', 'taxCalculation') && (<Select label="Tax Calculation" options={TAX_CALC} value={tax.taxCalculation}
@@ -150,15 +149,10 @@ export function SettingsFinance() {
             {editor.visible('settingsAccountingTax', 'taxIdentificationNumber') && (<TextField label="Tax Identification Number (TIN)" value={tax.taxIdentificationNumber}
               hint="Used for tax compliance and invoicing."
               onChange={(e) => updateAccountingTax({ taxIdentificationNumber: e.target.value })} />) }
-            {editor.visible('settingsAccountingTax', 'accountingIntegration') && (<Select label="Accounting Integration" options={ACCOUNTING_INTEGRATIONS} value={tax.accountingIntegration}
-              onChange={(e) => updateAccountingTax({ accountingIntegration: e.target.value })} />) }
           </div>
           {editor.visible('settingsAccountingTax', 'enableTaxReports') && (<Field><Switch checked={tax.enableTaxReports} label="Enable tax reports"
             hint="Generate tax reports for compliance."
             onChange={(v) => updateAccountingTax({ enableTaxReports: v })} /></Field>) }
-          {editor.visible('settingsAccountingTax', 'syncFinancialData') && (<Switch checked={tax.syncFinancialData} label="Sync financial data"
-            hint="Automatically sync transactions to accounting software."
-            onChange={(v) => updateAccountingTax({ syncFinancialData: v })} />) }
         </SettingsCard>) }
       </SettingsGrid>
     </>

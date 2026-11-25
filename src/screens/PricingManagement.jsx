@@ -109,7 +109,7 @@ function RecordDrawer({ row, kind, onClose, onEdit, notify }) {
     title={row.service || row.name}
     meta={<><Badge tone={STATUS_TONE[row.status] || "neutral"} dot>{row.status}</Badge>{row.code && <MiddleId value={row.code} label="code" />}</>}>
     {error && <Banner tone="danger" title={error} />}
-    {unpublished && <Banner tone="warning" title={row.statusCode === "DRAFT" ? "This rate isn't live yet" : "Waiting for activation"}>{row.statusCode === "DRAFT" ? "Publish it to start using it." : "A Super Admin or Finance Admin can publish it."}</Banner>}
+    {unpublished && <Banner inline tone="warning" title={row.statusCode === "DRAFT" ? "This rate isn't live yet" : "Waiting for activation"}>{row.statusCode === "DRAFT" ? "Publish it to start using it." : "A Super Admin or Finance Admin can publish it."}</Banner>}
     {kind === "service" && <>
       <DrawerSection title="Price">
         <div className="fin-hero"><span>Total {String(row.unit || "").toLowerCase()}</span><strong>{row.totalPrice != null ? `₦${row.totalPrice.toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : "Not available"}</strong></div>

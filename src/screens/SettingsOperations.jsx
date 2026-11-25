@@ -74,7 +74,7 @@ export function SettingsOperations() {
       <SettingsReadNotice error={editor.error} />
 
       <SettingsGrid>
-        {editor.groupVisible('settingsJobTrip') && (<SettingsCard description="Configure how jobs and trips behave on the platform." title="Job & Trip Settings" save={<SettingsCardSave editor={editor} group="settingsJobTrip" />}>
+        {editor.groupVisible('settingsJobTrip') && (<SettingsCard title="Job & Trip Settings" save={<SettingsCardSave editor={editor} group="settingsJobTrip" />}>
           {editor.visible('settingsJobTrip', 'defaultJobExpiryHours') && (<Field>
             <TextField
               label="Default Job Expiry (Hours)"
@@ -228,7 +228,7 @@ export function SettingsOperations() {
           />) }
         </SettingsCard>) }
 
-        {editor.groupVisible('settingsDispatchTracking') && (<SettingsCard description="Configure dispatch, trip tracking, and live operations." title="Dispatch & Tracking" save={<SettingsCardSave editor={editor} group="settingsDispatchTracking" />}>
+        {editor.groupVisible('settingsDispatchTracking') && (<SettingsCard title="Dispatch & Tracking" save={<SettingsCardSave editor={editor} group="settingsDispatchTracking" />}>
           {editor.visible('settingsDispatchTracking', 'enableDispatchApproval') && (<Field>
             <Switch
               checked={dispatch.enableDispatchApproval}
@@ -402,7 +402,7 @@ export function SettingsOperations() {
           />) }
         </SettingsCard>) }
 
-        {editor.groupVisible('settingsOperationsCommunication') && (<SettingsCard description="Configure communication settings for operations." title="Communication" save={<SettingsCardSave editor={editor} group="settingsOperationsCommunication" />}>
+        {editor.groupVisible('settingsOperationsCommunication') && (<SettingsCard title="Communication" save={<SettingsCardSave editor={editor} group="settingsOperationsCommunication" />}>
           {editor.visible('settingsOperationsCommunication', 'sendJobAssignmentNotifications') && (<Field>
             <Switch
               checked={comms.sendJobAssignmentNotifications}

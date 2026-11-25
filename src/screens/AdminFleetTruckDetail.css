@@ -31,6 +31,6 @@
   background: var(--tk-ink-900);
   color: white;
   box-shadow: var(--tk-shadow-menu);
-  z-index: 1100;
+  z-index: var(--tk-z-toast);
   font: var(--tk-body-weight) var(--tk-body-size)/var(--tk-body-lh) var(--tk-font-sans);
 }

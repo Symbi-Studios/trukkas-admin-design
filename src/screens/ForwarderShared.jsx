@@ -75,7 +75,7 @@ export function JobStatusFilter({ value, onChange }) {
     <span style={{ position: 'relative' }}>
       <FilterSelect label={current.label} active={value !== 'all'} onClick={() => setOpen((o) => !o)} onClear={value !== 'all' ? () => onChange('all') : undefined} />
       {open && (
-        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }}>
+        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu width={180} items={JOB_FILTERS.map((f) => ({ label: f.label, icon: f.value === value ? 'check' : undefined, onClick: () => { onChange(f.value); setOpen(false); } }))} />
         </span>
       )}

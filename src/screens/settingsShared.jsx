@@ -12,7 +12,6 @@ export const SETTINGS_TABS = [
   { key: "finance", label: "Finance" },
   { key: "notifications", label: "Notifications" },
   { key: "onboarding", label: "Onboarding" },
-  { key: "integrations", label: "Integrations" },
   { key: "security", label: "Security & Privacy" },
 ];
 

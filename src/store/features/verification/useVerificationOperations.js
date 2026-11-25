@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
+import { showToast } from '../../../components/ActionToast.jsx';
 import { useLazyGetAdminVerificationDownloadQuery, saveVerificationDocument, canManageVerification } from './verificationApi.js';
 
 export function useVerificationOperations() {
@@ -18,7 +19,7 @@ export function useVerificationOperations() {
     if (pending.current || !authenticated) return;
     pending.current = true;
     try { const data = await requestDownload({ id, kind, filters, owner, role }).unwrap(); if (active.current && currentScope.current === scope) saveVerificationDocument(data); }
-    catch (error) { if (active.current && currentScope.current === scope) window.alert(getApiErrorMessage(error)); }
+    catch (error) { if (active.current && currentScope.current === scope) showToast(getApiErrorMessage(error), { tone: 'info' }); }
     finally { pending.current = false; }
   }
   return { owner, role, authenticated, canManage: authenticated && canManageVerification(role), download, downloading: downloadState.isFetching };

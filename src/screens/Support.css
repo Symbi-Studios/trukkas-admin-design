@@ -217,6 +217,10 @@
   margin: 0 16px 16px;
   overflow: hidden;
 }
+.reply-box:focus-within {
+  border-color: var(--tk-blue);
+  box-shadow: var(--tk-focus-ring);
+}
 .reply-tabs {
   display: flex;
   border-bottom: 1px solid var(--tk-line);
@@ -350,8 +354,8 @@
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  background: var(--tk-blue-soft);
-  color: var(--tk-blue);
+  background: var(--tk-surface-sunk);
+  color: var(--tk-ink-500);
   display: grid;
   place-items: center;
 }
@@ -630,7 +634,7 @@
   border: 1px solid var(--tk-line-strong);
   border-radius: 8px;
   overflow: hidden;
-  background: #f8faff;
+  background: var(--tk-surface-soft);
   margin: 12px 0 18px;
 }
 .article-shot-top {
@@ -683,7 +687,7 @@
   gap: 10px;
   align-items: center;
   padding: 11px;
-  border: 1px solid #aac4ff;
+  border: 1px solid color-mix(in srgb, var(--tk-blue) 30%, transparent);
   border-radius: 7px;
   background: var(--tk-blue-soft);
   color: var(--tk-ink-700);
@@ -705,7 +709,7 @@
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 100;
+  z-index: var(--tk-z-modal);
   background: var(--tk-ink-900);
   color: #fff;
   border-radius: 9px;

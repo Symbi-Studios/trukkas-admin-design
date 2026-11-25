@@ -169,7 +169,7 @@
   display: grid;
   place-items: center;
   border-radius: var(--tk-r-lg);
-  background: var(--tk-blue-soft);
+  background: var(--tk-surface-sunk);
   flex: 0 0 auto;
 }
 .faq-preview-wrap { padding: 16px var(--tk-card-pad) var(--tk-card-pad); }

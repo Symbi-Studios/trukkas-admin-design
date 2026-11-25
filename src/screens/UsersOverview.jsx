@@ -41,7 +41,7 @@ const TYPES = [
   { key: "forwarders", label: "Forwarders", growthLabel: "Forwarders", icon: "users-round", tint: "purple", color: "var(--tk-purple)", route: "/forwarders" },
 ];
 
-const TYPE_TONE = { Driver: "info", Company: "teal", Individual: "success", Forwarder: "purple", Exporter: "orange" };
+const TYPE_TONE = { Driver: "info", Company: "teal", Individual: "success", Forwarder: "purple" };
 const EXTRA_STATUS_TONE = { "Pending Review": "warning", "Pending Profile": "warning", Suspended: "danger", Rejected: "danger", Banned: "danger" };
 const statusTone = (status) => TK_STATUS[status] || EXTRA_STATUS_TONE[status] || "neutral";
 
@@ -131,7 +131,7 @@ export function UsersOverview() {
   const attention = [
     { icon: "user-round", tint: "amber", title: "Drivers awaiting review", subtitle: "Licence and profile checks", value: drivers?.pendingReview, route: "/drivers" },
     { icon: "building-2", tint: "amber", title: "Companies awaiting review", subtitle: "CAC and business documents", value: companies?.pending, route: "/companies" },
-    { icon: "users-round", tint: "amber", title: "Forwarders awaiting verification", subtitle: "KYC and exporter licences", value: forwarders?.pending, route: "/forwarders" },
+    { icon: "users-round", tint: "amber", title: "Forwarders awaiting verification", subtitle: "KYC and address checks", value: forwarders?.pending, route: "/forwarders" },
     { icon: "file-warning", tint: "red", title: "Expired driver licences", subtitle: "Drivers can’t be dispatched", value: docs?.expired, route: "/drivers" },
     { icon: "calendar-clock", tint: "amber", title: "Licences expiring soon", subtitle: isNum(docs?.withinDays) ? `Within ${docs.withinDays} days` : "Upcoming renewals", value: docs?.expiringSoon, route: "/drivers" },
     { icon: "file-x", tint: "neutral", title: "No licence on file", subtitle: "Drivers missing a licence upload", value: docs?.noLicenseOnFile, route: "/drivers" },
@@ -182,12 +182,6 @@ export function UsersOverview() {
               items={totals.map((type) => ({ label: type.label, value: type.value ?? undefined, color: type.color, display: fmt(type.value) }))}
             />
           </div>
-          {isNum(forwarders?.exporters) && forwarders.exporters > 0 && (
-            <p className={styles.footnote}>
-              <Icon name="box" size={14} />
-              {fmt(forwarders.exporters)} forwarders also hold an exporter licence.
-            </p>
-          )}
         </SectionCard>
 
         <SectionCard title="New Registrations" description="Sign-ups by user type · Truckers include individual truck owners">
@@ -246,7 +240,7 @@ export function UsersOverview() {
           error={forwarderQuery.isError}
           onView={() => navigate("/forwarders")}
           facts={[
-            ["Exporters", fmt(forwarders?.exporters)],
+            ["Avg. spend", isNum(forwarders?.totalSpend) && isNum(forwarders?.total) && forwarders.total > 0 ? formatNaira(Math.round(forwarders.totalSpend / forwarders.total)) : "—"],
             ["Total spend", isNum(forwarders?.totalSpend) ? formatNaira(forwarders.totalSpend) : "—"],
           ]}
         />
@@ -373,7 +367,7 @@ function UsersOverviewLoading() {
   return (
     <div className={styles.page} aria-busy="true">
       <PageHeader crumbs={["Users", "Overview"]} title="Users Overview" description="Growth, verification and activity across drivers, truck companies and forwarders." />
-      <div className={styles.loadingNotice} role="status" aria-live="polite">
+      <div className={`${styles.loadingNotice} tk-sr-only`} role="status" aria-live="polite">
         <span className={styles.loadingNoticeDot} aria-hidden="true" />
         Loading user analytics…
       </div>

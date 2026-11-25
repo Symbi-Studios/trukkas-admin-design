@@ -105,7 +105,7 @@ function ReportsAnalyticsScreen() {
         <FilterSelect label={reportDateLabel(range)} icon="calendar" onClick={() => setDateOpen(true)} />
         <Select label="Compare to" value={compareTo} options={COMPARE_OPTIONS} onChange={(e) => setCompareTo(e.target.value)} style={{ minWidth: 160 }} />
         <Select label="Group By" value={groupBy} options={GROUP_BY_OPTIONS} onChange={(e) => setGroupBy(e.target.value)} style={{ minWidth: 130 }} />
-        <Select label="Entity Type" value={entityTypeFilter} options={['All Types', 'Forwarder', 'Exporter', 'Truck Company']} onChange={(e) => { setEntityTypeFilter(e.target.value); setEntityFilter('All Entities'); }} style={{ minWidth: 150 }} />
+        <Select label="Entity Type" value={entityTypeFilter} options={['All Types', 'Forwarder', 'Truck Company']} onChange={(e) => { setEntityTypeFilter(e.target.value); setEntityFilter('All Entities'); }} style={{ minWidth: 150 }} />
         <Select label="Entity" value={entityFilter} options={entityOptions} onChange={(e) => setEntityFilter(e.target.value)} style={{ minWidth: 190 }} />
         <Button variant="outline" icon="filter" onClick={() => setShowFilters((s) => !s)}>Filters</Button>
         <div style={{ flex: 1 }} />

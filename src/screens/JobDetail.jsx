@@ -124,7 +124,7 @@ function TripActionMenu({ anchor, items, onClose }) {
       document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape);
     };
   }, [anchor, items.length, onClose]);
-  return <div ref={menuRef} onClick={(event) => event.stopPropagation()} style={{ position: "fixed", zIndex: 95, width: "max-content", top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}><DropdownMenu width={205} items={items} /></div>;
+  return <div ref={menuRef} onClick={(event) => event.stopPropagation()} style={{ position: "fixed", zIndex: 'var(--tk-z-overlay)', width: "max-content", top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}><DropdownMenu width={205} items={items} /></div>;
 }
 
 function LoadingDetail() {
@@ -685,7 +685,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
             ]}
           />
           {tripCounts.assigned != null && tripCounts.required != null && tripCounts.assigned < tripCounts.required && (
-            <Banner tone="warning" title={`${tripCounts.required - tripCounts.assigned} assignment${tripCounts.required - tripCounts.assigned === 1 ? "" : "s"} remaining`}>
+            <Banner inline tone="warning" title={`${tripCounts.required - tripCounts.assigned} assignment${tripCounts.required - tripCounts.assigned === 1 ? "" : "s"} remaining`}>
               Every requested truck needs its own eligible driver from {job.truckingCompany || "the same trucking company"} before dispatch is complete.
             </Banner>
           )}
@@ -990,7 +990,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
                             position: "absolute",
                             right: 0,
                             top: 44,
-                            zIndex: 30,
+                            zIndex: 'var(--tk-z-dropdown)',
                           }}
                         >
                           <DropdownMenu

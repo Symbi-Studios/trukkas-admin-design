@@ -19,6 +19,7 @@ import {
   StatsPanel,
 } from "../ds.js";
 import { formatNaira } from "../mock/format.js";
+import { formatNairaShort } from "../lib/money.js";
 import { statusTone } from "./JobDetail.jsx";
 import { useGetAdminOverviewQuery } from "../store/features/overview/overviewApi.js";
 import styles from "./Dashboard.module.css";
@@ -288,7 +289,7 @@ function RecentJobs({ jobs, onSelect }) {
                 </span>
               </span>
               <span className={styles.feedSide}>
-                <strong>{job.value == null ? "—" : formatNaira(job.value)}</strong>
+                {job.value != null && <strong>{formatNaira(job.value)}</strong>}
                 <Badge tone={tone} dot>
                   {job.status}
                 </Badge>
@@ -301,8 +302,6 @@ function RecentJobs({ jobs, onSelect }) {
   );
 }
 
-const TYPE_TONE = { Driver: "info", Company: "teal", Forwarder: "purple", Exporter: "orange" };
-const TYPE_ICON = { Driver: "user-round", Company: "building-2", Forwarder: "users-round", Exporter: "box" };
 const relativeFormat = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 function joinedAgo(row) {
@@ -329,20 +328,16 @@ function RecentRegistrations({ rows, onSelect }) {
   return (
     <ul className={styles.feed}>
       {rows.map((row) => {
-        const typeTone = TYPE_TONE[row.type] || "neutral";
         return (
           <li key={row.id}>
             <button type="button" className={styles.feedRow} onClick={() => onSelect(row)}>
-              <span className={`${styles.avatarWrap} ${styles[`tone_${typeTone}`]}`}>
-                <Avatar name={row.avatar} size={34} />
-                <span className={styles.avatarType}>
-                  <Icon name={TYPE_ICON[row.type] || "user-round"} size={10} />
-                </span>
+              <span className={styles.avatarWrap}>
+                <Avatar name={row.avatar} size={32} />
               </span>
               <span className={styles.feedMain}>
                 <span className={styles.feedTitle}>
                   <span className={styles.personName}>{row.name}</span>
-                  <Badge tone={typeTone}>{row.type}</Badge>
+                  <span className={styles.feedType}>{row.type}</span>
                 </span>
                 <span className={styles.feedMeta}>
                   <span>{row.contact}</span>
@@ -394,6 +389,8 @@ const HEALTH = [
     route: "/settings",
   },
 ];
+
+const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -463,22 +460,8 @@ export function Dashboard() {
   return (
     <div className={styles.dashboard}>
       <PageHeader
-        title={
-          <>
-            Good morning, Super Admin <span aria-hidden="true">👋</span>
-          </>
-        }
-        description={
-          <>Here&apos;s what&apos;s happening on Trukkas overall.</>
-        }
-        actions={
-          <>
-            <blockquote className={styles.motto}>
-              <Icon name="quote" size={20} />
-              “Connecting People. Moving Africa Forward.”
-            </blockquote>
-          </>
-        }
+        title="Dashboard"
+        description={`${DAY_FORMAT.format(new Date())} · Platform-wide activity across Trukkas.`}
       />
       <StatsPanel>
         <StatCard
@@ -502,9 +485,11 @@ export function Dashboard() {
           direction="up"
         />
         <StatCard
-          icon="box"
-          label="Exporters"
-          value={overview?.users.forwarders.exporterCount ?? "—"}
+          icon="briefcase"
+          label="Active Jobs"
+          value={overview?.jobs.active ?? "—"}
+          delta={overview?.jobs.activeTrendPercent != null ? `${Math.abs(overview.jobs.activeTrendPercent)}%` : undefined}
+          direction={(overview?.jobs.activeTrendPercent ?? 0) < 0 ? "down" : "up"}
         />
         <StatCard
           icon="truck"
@@ -568,16 +553,14 @@ export function Dashboard() {
               size={150}
               thickness={20}
               data={earningsKnown ? earnings : []}
-              centerValue={earningsOverview?.earningsBreakdown.totalOrders == null ? "—" : compactNaira(earningsOverview.earningsBreakdown.totalOrders)}
-              centerLabel="Total Orders"
+              centerValue={formatNairaShort(earningsOverview?.earningsBreakdown.totalOrders)}
+              centerLabel="Total earned"
             />
             <LegendList
               style={{ width: "100%" }}
-              showShare={earningsKnown}
               items={earnings.map((item) => ({
                 ...item,
-                // Share of the breakdown itself, so it matches the donut and sums to 100%.
-                percent: undefined,
+                shareDisplay: item.percent == null ? "—" : `(${item.percent}%)`,
                 display: item.amount == null ? "—" : compactNaira(item.amount),
               }))}
             />
@@ -694,7 +677,7 @@ function DashboardLoading() {
     ["user-round", "Total Drivers"],
     ["building-2", "Trucking Companies"],
     ["users-round", "Forwarders"],
-    ["box", "Exporters"],
+    ["briefcase", "Active Jobs"],
     ["truck", "Trucks & Fleet"],
     ["route", "Active Trips"],
     ["circle-check", "Completed Jobs"],
@@ -708,12 +691,9 @@ function DashboardLoading() {
           <Skeleton width={250} height={28} />
           <Skeleton width={330} height={14} />
         </div>
-        <div className={styles.loadingHeaderControls} aria-hidden="true">
-          <Skeleton width={350} height={42} radius={10} />
-        </div>
       </div>
 
-      <div className={styles.loadingNotice} role="status" aria-live="polite">
+      <div className={`${styles.loadingNotice} tk-sr-only`} role="status" aria-live="polite">
         <span className={styles.loadingNoticeDot} aria-hidden="true" />
         Loading dashboard data…
       </div>

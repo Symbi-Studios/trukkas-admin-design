@@ -88,7 +88,7 @@ export function ZoneEditor({ id, onClose, onDone }) {
               </div>
             ))}
             <Button variant="outline" icon="plus" size="sm" disabled={busy} onClick={() => setRates((current) => [...current, blankRate()])} style={{ justifySelf: "start" }}>Add state rate</Button>
-            {rates.some(used) && <p className="fin-note" style={{ color: "var(--tk-warning)" }}>Two rows price the same state and equipment; the most specific one wins.</p>}
+            {rates.some(used) && <p className="fin-note" style={{ color: "var(--tk-warning-ink)" }}>Two rows price the same state and equipment; the most specific one wins.</p>}
           </div>
         </div>
       )}

@@ -44,7 +44,7 @@ export function Maintenance() {
             <span style={{ position: "relative" }}>
               <Button variant="outline" iconRight="chevron-down" onClick={() => setMenu((v) => !v)}>More</Button>
               {menu && (
-                <span style={{ position: "absolute", right: 0, top: 44, zIndex: 30 }}>
+                <span style={{ position: "absolute", right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }}>
                   <DropdownMenu
                     width={220}
                     items={[

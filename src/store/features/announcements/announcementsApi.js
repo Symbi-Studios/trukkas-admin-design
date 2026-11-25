@@ -5,7 +5,6 @@ export const announcementCount = (value) => count(value) == null ? '—' : count
 export const announcementDetailUrl = (id) => '/announcements/detail?announcementId=' + encodeURIComponent(id);
 export const announcementEditUrl = (id) => '/announcements/edit?announcementId=' + encodeURIComponent(id);
 export const announcementCopyUrl = (id) => '/announcements/new?draftId=' + encodeURIComponent(id);
-export const announcementUnavailable = (action) => window.alert(action + ' is not available for this announcement.');
 const failure = (message, status = 'CUSTOM_ERROR', writeSent = false) => ({ error: { status, error: message, data: { message, writeSent } } });
 function guard(api, owner) {
   const actor = api.getState().auth.admin;
@@ -15,7 +14,20 @@ function guard(api, owner) {
 async function readDetail(baseQuery, id, check) {
   const result = await baseQuery({ url: ROOT + '/' + encodeURIComponent(id) }); check();
   if (result.error) return result;
-  try { return { data: unwrapBroadcast(result.data, id) }; } catch (error) { return failure(error.message); }
+  let detail;
+  try { detail = unwrapBroadcast(result.data, id); } catch (error) { return failure(error.message); }
+  if (detail.state.message != null) return { data: detail };
+  // The detail endpoint leaves out the message body; the list includes it, so take it from there.
+  for (let page = 1; page <= 20; page += 1) {
+    const list = await readPage(baseQuery, { page, limit: 100 }, check); if (list.error) return list;
+    const row = list.data.rows.find((dto) => dto?.id === id);
+    if (row && typeof row.message === 'string') {
+      const raw = record(unwrapApiResponseData(result.data));
+      return { data: unwrapBroadcast({ ...(raw.id ? raw : record(raw.broadcast)), message: row.message }, id) };
+    }
+    if (page >= list.data.pages) break;
+  }
+  return { data: detail };
 }
 async function readPage(baseQuery, params, check) {
   const result = await baseQuery({ url: ROOT, params }); check(); if (result.error) return result;
@@ -153,9 +165,19 @@ export const announcementsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminA
     getAdminAnnouncementUsers: builder.query({ async queryFn({ owner, search, page = 1 }, api, _options, baseQuery) { try { const check = guard(api, owner), result = await baseQuery({ url: '/admin/users', params: { search, page, limit: 20 } }); check(); if (result.error) return result;
       const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
       if (!Array.isArray(dto.users) || count(pagination.page) !== page) return failure('The user choices could not be confirmed.', 'CUSTOM_ERROR', true);
-      return { data: { users: dto.users.filter((user) => text(user?.id) && ['FORWARDER', 'TRUCKER', 'DRIVER'].includes(user.role)).map((user) => ({ id: user.id, label: [text(user.firstName), text(user.lastName)].filter(Boolean).join(' ') || text(user.businessName) || user.id })), total: count(pagination.total), pageCount: count(pagination.totalPages) } };
+      return { data: { users: dto.users.filter((user) => text(user?.id) && ['FORWARDER', 'TRUCKER', 'DRIVER'].includes(user.role)).map((user) => { const person = [text(user.firstName), text(user.lastName)].filter(Boolean).join(' '); return { id: user.id, label: text(user.businessName) && user.role === 'TRUCKER' ? user.businessName.trim() : person || text(user.businessName) || user.id, person: person || null, business: text(user.businessName), email: text(user.email), role: user.role }; }), total: count(pagination.total), pageCount: count(pagination.totalPages) } };
     } catch (error) { return failure(error.message); } } }),
+    getAdminAnnouncementRecipients: builder.query({ async queryFn({ owner, id, filter, page = 1 }, api, _options, baseQuery) { try {
+      const check = guard(api, owner);
+      if (!text(id) || filter && !['seen', 'unseen', 'acknowledged', 'pending'].includes(filter)) return failure('Choose a supported recipient filter.');
+      const result = await baseQuery({ url: ROOT + '/' + encodeURIComponent(id) + '/recipients', params: { page, limit: 25, ...(filter ? { filter } : {}) } }); check(); if (result.error) return result;
+      const dto = record(unwrapApiResponseData(result.data)), pagination = record(dto.pagination);
+      if (!Array.isArray(dto.recipients) || count(pagination.page) !== page) return failure('The recipients could not be loaded completely. Please refresh.');
+      return { data: { total: count(pagination.total), pageCount: Math.max(1, count(pagination.totalPages) ?? 1), rows: dto.recipients.filter((row) => text(row?.userId)).map((row) => ({
+        id: row.userId, name: text(row.name) || '—', email: text(row.email), role: text(row.role),
+        deliveredAt: timestamp(row.deliveredAt), seenAt: timestamp(row.seenAt), acknowledgedAt: timestamp(row.acknowledgedAt) })) } };
+    } catch (error) { return failure(error.message); } }, providesTags: ['AdminAnnouncements'] }),
     changeAdminAnnouncement: builder.mutation({ queryFn: (args, api, _options, baseQuery) => runAction(args, api, baseQuery), invalidatesTags: ['AdminAnnouncements', 'AdminAnnouncementStats', 'AdminNotifications', 'AdminAuditLogs'] }),
   }),
 });
-export const { useGetAdminAnnouncementDirectoryQuery, useGetAdminAnnouncementQuery, useGetAdminAnnouncementStatsQuery, useGetAdminAnnouncementOptionsQuery, useGetAdminAnnouncementUsersQuery, useChangeAdminAnnouncementMutation } = announcementsApi;
+export const { useGetAdminAnnouncementDirectoryQuery, useGetAdminAnnouncementQuery, useGetAdminAnnouncementStatsQuery, useGetAdminAnnouncementOptionsQuery, useGetAdminAnnouncementUsersQuery, useGetAdminAnnouncementRecipientsQuery, useChangeAdminAnnouncementMutation } = announcementsApi;

@@ -5,7 +5,7 @@ export const REPORT_TYPES = [
   { id: 'financial', title: 'Financial Summary', description: 'Revenue, payouts, escrows and financial performance summary.', icon: 'wallet', tint: 'purple' },
   { id: 'compliance', title: 'Compliance Report', description: 'Compliance status, document submissions and audit summary.', icon: 'file-check-2', tint: 'blue' },
   { id: 'fleet', title: 'Fleet Performance', description: 'Fleet utilization, trips, distance, fuel and maintenance.', icon: 'truck', tint: 'orange' },
-  { id: 'entity', title: 'Entity Performance', description: 'Performance metrics by forwarders, exporters and other entities.', icon: 'building-2', tint: 'orange' },
+  { id: 'entity', title: 'Entity Performance', description: 'Performance metrics by forwarders, truck companies and other entities.', icon: 'building-2', tint: 'orange' },
   { id: 'audit', title: 'Audit & Activity Log', description: 'System activities, user actions and audit trail report.', icon: 'scroll-text', tint: 'red' },
   { id: 'custom', title: 'Custom Report', description: 'Build a custom report with your selected metrics and dimensions.', icon: 'sliders-horizontal', tint: 'purple' },
 ];
@@ -60,7 +60,7 @@ export const COLUMN_GROUPS = [
   ] },
 ];
 
-export const ENTITY_TYPE_OPTIONS = ['All Types', 'Forwarder', 'Exporter', 'Truck Company'];
+export const ENTITY_TYPE_OPTIONS = ['All Types', 'Forwarder', 'Truck Company'];
 export const STATUS_OPTIONS = ['All Statuses', 'Verified', 'Pending', 'Rejected'];
 export const LOCATION_OPTIONS = ['All Locations', 'Lagos', 'Apapa', 'Port Harcourt', 'Onne', 'Tin Can'];
 

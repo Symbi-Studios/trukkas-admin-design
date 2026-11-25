@@ -7,8 +7,8 @@ import { WorkspaceSearchResults } from './WorkspaceSearchResults.jsx';
 import { ThemeToggle } from './ThemeToggle.jsx';
 
 /** Sticky application bar: menu toggle, global search, system health, notifications, account. */
-export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, companies, exporters...',
-                         health = 'System Health', notifications = 0, user, role, style,
+export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, companies, forwarders...',
+                         health = null, notifications = 0, user, role, style,
                          searchValue, onSearch, onSearchKeyDown, searchResults, searchLoading, searchUnavailable, onSearchSelect, onNotifications, onViewProfile, onLogout }) {
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef(null);
@@ -78,14 +78,14 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
           active={activeResult} onActivate={setActiveResult} onSelect={pick} />}
       </div>
       <div className="tk-topbar-spacer" style={{ flex: 1 }} />
-      <button className="tk-topbar-notifications" type="button" aria-label="Notifications" onClick={onNotifications}
+      <button className="tk-topbar-notifications" type="button" aria-label={notifications > 0 ? `Notifications, ${notifications} unread` : 'Notifications'} onClick={onNotifications}
         style={{ position: 'relative', width: 38, height: 38, display: 'grid', placeItems: 'center',
                  border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--tk-ink-500)' }}>
-        <Icon name="bell" size={20} />
+        <Icon name="bell" size={18} aria-hidden="true" />
         {notifications > 0 && (
-          <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 17, height: 17, padding: '0 4px',
-                         borderRadius: 999, background: 'var(--tk-danger-solid)', color: '#fff',
-                         font: '600 10px/17px var(--tk-font-sans)', textAlign: 'center' }}>{notifications}</span>
+          <span aria-hidden="true" style={{ position: 'absolute', top: 4, right: 2, minWidth: 16, height: 16, padding: '0 4px',
+                         borderRadius: 999, background: 'var(--tk-blue)', color: '#fff', boxShadow: '0 0 0 2px var(--tk-surface)',
+                         font: '600 10px/16px var(--tk-font-sans)', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{notifications > 99 ? '99+' : notifications}</span>
         )}
       </button>
       {health && (
@@ -111,7 +111,7 @@ export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, compa
           <Icon name={accountOpen ? 'chevron-up' : 'chevron-down'} size={16} color="var(--tk-ink-400)" />
         </button>
         {accountOpen && (
-          <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 100 }}>
+          <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 'var(--tk-z-popover)' }}>
             <DropdownMenu width={224} items={[
               { section: 'Account' },
               { label: 'View profile', icon: 'user-round', onClick: () => { setAccountOpen(false); onViewProfile?.(); } },

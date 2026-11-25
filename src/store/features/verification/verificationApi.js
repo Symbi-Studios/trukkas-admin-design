@@ -22,11 +22,20 @@ function scopedQuery(baseQuery, api, args = {}) {
   };
 }
 const STATUS = { PENDING: 'Pending', IN_REVIEW: 'In Review', VERIFIED: 'Verified', REJECTED: 'Rejected', NON_COMPLIANT: 'Non-Compliant', CANCELLED: 'Cancelled' };
-const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', EXPORTER_LICENCE: 'Export License', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
-const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', EXPORTER: 'Exporter', TRUCK: 'Truck' };
-const SOURCES = { TRUCKER: 'truckers', DRIVER: 'drivers', KYB: 'kyb', EXPORTER_LICENSE: 'exporter-licenses', TRUCK: 'trucks', COMPANY_DOCUMENT: 'company-documents' };
-const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER', Forwarder: 'FORWARDER', Driver: 'DRIVER', 'Individual Trucker': 'TRUCKER', Truck: 'TRUCK' }, verificationType: {
-  'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE', 'License Verification': 'LICENSE',
+const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
+const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', FORWARDER: 'Forwarder', TRUCK: 'Truck' };
+/** What the queue groups by: the backend merges these source queues into one list. */
+export const VERIFICATION_KINDS = { ACCOUNT: 'Account', TRUCKER: 'Account', DRIVER: 'Account', KYB: 'Business (KYB)', COMPANY_DOCUMENT: 'Document', TRUCK: 'Truck' };
+const SOURCES = { ACCOUNT: 'accounts', TRUCKER: 'truckers', DRIVER: 'drivers', KYB: 'kyb', TRUCK: 'trucks', COMPANY_DOCUMENT: 'company-documents' };
+// The detail response names the exact approve/reject endpoints for its source record.
+function actionPath(value, verb) {
+  const path = text(value)?.replace(/^\/api\/v1/, '');
+  return path && path.startsWith('/admin/') && path.endsWith('/' + verb) && !path.includes('..') ? path : null;
+}
+const sentence = (v) => { const t = text(v); return t ? t.charAt(0).toUpperCase() + t.slice(1) : null; };
+const docType = (v) => { const t = text(v); if (!t) return null; const words = t.toLowerCase().split('_'); return [words[0].charAt(0).toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' '); };
+const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Forwarder: 'FORWARDER', Driver: 'DRIVER', 'Individual Trucker': 'TRUCKER', Truck: 'TRUCK' }, verificationType: {
+  'Business Verification': 'BUSINESS_VERIFICATION', 'License Verification': 'LICENSE',
   'Company Address Verification': 'ADDRESS', 'Fleet Verification': 'FLEET', 'Tax Identification (TIN)': 'TIN',
   'Insurance Verification': 'INSURANCE', 'Vehicle Documents': 'VEHICLE_DOCUMENTS',
 } };
@@ -49,37 +58,45 @@ function progress(v) {
 export function adaptVerification(value) {
   const dto = record(value);
   const name = display(dto.entityName), assessment = record(dto.assessment);
-  const requirements = Array.isArray(dto.requirements) && dto.requirements.every((r) => r && typeof r === 'object' && !Array.isArray(r)) ? dto.requirements.map((r, i) => ({
-    key: text(r.id) || String(i), name: display(r.name), sub: display(r.description), cat: label(r.category), status: label(r.status),
-    by: person(r.reviewer), on: verificationDate(r.reviewedAt, true), note: display(r.notes), url: verificationDocumentUrl(text(r.document) || record(r.document).url),
-  })) : [];
-  const contact = record(dto.contact);
+  const requirements = Array.isArray(dto.requirements) && dto.requirements.every((r) => r && typeof r === 'object' && !Array.isArray(r)) ? dto.requirements.map((r, i) => {
+    const doc = record(r.document);
+    return {
+      key: text(r.id) || String(i), name: display(r.name), sub: display(r.description), cat: label(r.category), statusCode: text(r.status), status: label(r.status),
+      by: person(r.reviewer), on: verificationDate(r.reviewedAt, true), note: display(r.notes), url: verificationDocumentUrl(text(r.document) || doc.url),
+      documentId: text(doc.id), fileName: text(doc.fileName), expiresAt: verificationDate(r.expiresAt), expiresAtRaw: text(r.expiresAt),
+    };
+  }) : [];
+  const contact = record(dto.contact), submitter = record(dto.submittedBy), actions = record(dto.actions);
+  const signals = Array.isArray(dto.riskSignals) && dto.riskSignals.every((v) => text(v)) ? dto.riskSignals.map(sentence) : [];
+  const flag = (v) => typeof v === 'boolean' ? v : null;
+  const approvePath = actionPath(actions.approve, 'approve'), rejectPath = actionPath(actions.reject, 'reject');
+  const open = ['PENDING', 'IN_REVIEW'].includes(dto.status);
   return {
     key: dto.verificationId, id: dto.verificationId, reviewId: dto.verificationId, caseId: text(dto.caseId), source: text(dto.sourceType), sourceId: text(dto.sourceId), entityId: text(dto.entityId), verificationTypeCode: text(dto.verificationType),
+    kind: VERIFICATION_KINDS[dto.sourceType] || '—', entityTypeCode: text(dto.entityType), documentType: docType(dto.documentType),
     entityName: name, initials: name === '—' ? '—' : name.split(/\s+/).slice(0, 2).map((p) => p[0]).join(''),
     entityType: ENTITIES[dto.entityType] || '—', regNo: display(dto.registrationNumber), type: TYPES[dto.verificationType] || '—',
-    statusCode: text(dto.status), status: STATUS[dto.status] || '—', riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(dto.riskLevel) ? label(dto.riskLevel) : '—',
-    submittedOn: verificationDate(dto.submittedAt, true), submittedBy: person(dto.submittedBy), contactHint: [text(contact.email), text(contact.phone)].filter(Boolean).join(' · ') || '—',
+    statusCode: text(dto.status), status: STATUS[dto.status] || '—', open, riskCode: ['LOW', 'MEDIUM', 'HIGH'].includes(dto.riskLevel) ? dto.riskLevel : null,
+    riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(dto.riskLevel) ? label(dto.riskLevel) : '—', riskSignals: signals,
+    submittedOn: verificationDate(dto.submittedAt, true), submittedAtRaw: text(dto.submittedAt), submittedBy: person(dto.submittedBy), submittedByRole: text(submitter.role),
+    email: text(contact.email), phone: text(contact.phone), address: text(contact.address),
+    contactHint: [text(contact.email), text(contact.phone)].filter(Boolean).join(' · ') || '—',
     assignedTo: display(dto.assignedAdminName), assignedRole: label(dto.assignedAdminRole), assignedAdminId: text(dto.assignedAdminId),
-    dueDate: verificationDate(dto.dueDate, true), dueDateRaw: text(dto.dueDate), priority: label(dto.priority), priorityCode: text(dto.priority),
-    country: display(dto.country), joined: verificationDate(dto.joinedAt), reviewedOn: verificationDate(dto.reviewedAt, true),
-    expiringSoon: typeof dto.expiringSoon === 'boolean' ? dto.expiringSoon : null, version: count(dto.version),
+    dueDate: verificationDate(dto.dueDate, true), dueDateRaw: text(dto.dueDate), overdue: flag(dto.overdue), priority: label(dto.priority), priorityCode: text(dto.priority),
+    country: display(dto.country), joined: verificationDate(dto.joinedAt), reviewedOn: verificationDate(dto.reviewedAt, true), reviewedAtRaw: text(dto.reviewedAt),
+    expiresAt: verificationDate(dto.expiresAt), expiresAtRaw: text(dto.expiresAt), expiringSoon: flag(dto.expiringSoon), expired: flag(dto.expired),
+    reason: text(dto.rejectionReason) || text(dto.outcomeReason), version: count(dto.version),
     progress: progress(dto.progress), requirements, documentCount: count(dto.documentCount), commentCount: count(dto.commentCount),
-    assessment: display(assessment.outcome), assessmentDescription: display(assessment.description),
-    riskDescription: Array.isArray(dto.riskSignals) && dto.riskSignals.every((v) => text(v)) ? dto.riskSignals.join('; ') || '—' : '—',
-    canApprove: Object.keys(record(dto.actions)).length > 0 && ['PENDING', 'IN_REVIEW'].includes(dto.status) && Boolean(SOURCES[dto.sourceType] && text(dto.sourceId)),
+    assessment: label(assessment.outcome), assessmentDescription: display(assessment.description),
+    screeningNote: text(assessment.riskIndicatorsNote),
+    screeningChecked: Array.isArray(assessment.riskIndicators) && assessment.riskIndicators.some((r) => record(r).status && record(r).status !== 'NOT_CHECKED'),
+    riskDescription: signals.length ? signals.join('; ') : '—',
+    approvePath, rejectPath,
+    canApprove: open && Boolean(approvePath), canReject: open && Boolean(rejectPath),
     documentIds: Array.isArray(dto.documentIds) && dto.documentIds.every((v) => text(v)) && new Set(dto.documentIds).size === dto.documentIds.length ? dto.documentIds : null,
   };
 }
 export const verificationDetailUrl = (row) => '/verification/detail?id=' + encodeURIComponent(row.reviewId);
-export function verificationSummary(rows) {
-  const valid = Array.isArray(rows) && rows.every((r) => STATUS[r.statusCode]);
-  const n = (status) => valid ? rows.filter((r) => r.statusCode === status).length : '—';
-  const share = (status) => valid ? (rows.length ? (n(status) / rows.length * 100).toLocaleString('en-US', { maximumFractionDigits: 1 }) : '0') + '%' : '—';
-  return { total: valid ? rows.length : '—', totalCaption: 'All time requests', pending: n('PENDING'), pendingShare: share('PENDING'),
-    inReview: n('IN_REVIEW'), inReviewShare: share('IN_REVIEW'), verified: n('VERIFIED'), verifiedShare: share('VERIFIED'), rejected: n('REJECTED'), rejectedShare: share('REJECTED'),
-    expiringSoon: Array.isArray(rows) && rows.every((r) => typeof r.expiringSoon === 'boolean') ? rows.filter((r) => r.expiringSoon).length : '—', expiringSoonCaption: 'Documents / Licenses' };
-}
 export function adaptVerificationSummary(response) {
   const dto = record(unwrapApiResponseData(response)), total = count(dto.total);
   const keys = { PENDING: 'pending', IN_REVIEW: 'inReview', VERIFIED: 'verified', REJECTED: 'rejected', NON_COMPLIANT: 'nonCompliant', CANCELLED: 'cancelled' };
@@ -141,17 +158,6 @@ async function pages(baseQuery, api, url, select, identity, filters = {}) {
 function historyItems(dto) {
   return Array.isArray(dto.events) && dto.events.every(value => value && typeof value === 'object' && !Array.isArray(value)) ? dto.events : null;
 }
-const EVENTS = ['APPLICATION_SUBMITTED', 'DOCUMENT_REVIEW', 'INFORMATION_VERIFICATION', 'COMPLIANCE_ASSESSMENT', 'FINAL_DECISION'];
-export function verificationTimeline(model, events) {
-  return EVENTS.map((type, i) => {
-    const event = events?.filter((e) => e.stage === type).sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0];
-    return { title: ['Application Submitted', 'Document Review', 'Information Verification', 'Compliance Assessment', 'Final Decision'][i], icon: 'check',
-      state: event ? ['REJECTED', 'NON_COMPLIANT', 'FAILED'].includes(event.outcome) ? 'danger' : ['VERIFIED', 'APPROVED', 'COMPLETED', 'SUBMITTED'].includes(event.outcome) ? 'done' : 'pending' : i === 0 && model.submittedOn !== '—' ? 'done' : 'pending',
-      time: event ? verificationDate(event.timestamp, true) : i === 0 ? model.submittedOn : i === 4 ? model.reviewedOn : '—', description: event ? label(event.outcome) : '—' };
-  });
-}
-export const verificationEntryActivity = (entries) => (entries || []).map((e) => ({ text: display(e.body), actor: person(e.author), time: verificationDate(e.createdAt, true) }));
-export const verificationActivity = (events) => (events || []).map((e) => ({ text: label(e.stage), actor: e.actor?.type === 'SYSTEM' ? 'System' : person(e.actor), time: verificationDate(e.timestamp, true) }));
 async function download(baseQuery, id, kind, filters) {
   if (!['documents', 'report'].includes(kind) || id != null && !text(id) || kind === 'documents' && !text(id)) return failure('Unsupported verification download.');
   const zip = kind === 'documents', format = zip ? 'zip' : 'pdf';
@@ -229,20 +235,22 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
       serializeQueryArgs: serializeVerificationQuery,
       queryFn: (args, api, _options, baseQuery) => download(scopedQuery(baseQuery, api, args), args.id, args.kind, args.filters),
     }),
-    approveAdminVerificationEntity: builder.mutation({
-      async queryFn({ id, owner, role }, api, _options, baseQuery) {
+    decideAdminVerification: builder.mutation({
+      async queryFn({ id, decision, reason, owner, role }, api, _options, baseQuery) {
         baseQuery = scopedQuery(baseQuery, api, { owner, role });
-        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return failure('Your session changed. Reload before approving.');
-        if (!text(id)) return failure('A verification ID is required.');
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return failure('Your session changed. Reload before deciding.');
+        if (!text(id) || !['approve', 'reject'].includes(decision)) return failure('A verification and decision are required.');
+        if (decision === 'reject' && (!text(reason) || reason.trim().length > 500)) return failure('Enter a reason of up to 500 characters.');
         const current = await readDetail(baseQuery, id); if (current.error) return current;
-        const v = current.data;
-        if (owner !== api.getState().auth.admin?.id || api.signal.aborted) return failure('Your session changed. Reload before approving.');
-        if (!canReviewVerification(api.getState().auth.admin?.role, v.source) || !v.canApprove) return failure('This verification cannot be approved by your account in its current state.');
-        const result = await baseQuery({ url: '/admin/' + SOURCES[v.source] + '/' + encodeURIComponent(v.sourceId) + '/approve', method: 'POST' });
+        const v = current.data, path = decision === 'approve' ? v.approvePath : v.rejectPath;
+        if (owner !== api.getState().auth.admin?.id || api.signal.aborted) return failure('Your session changed. Reload before deciding.');
+        if (!canReviewVerification(api.getState().auth.admin?.role, v.source) || !path || !v.open) return failure('This verification can’t be ' + (decision === 'approve' ? 'approved' : 'rejected') + ' by your account in its current state.');
+        const result = await baseQuery({ url: path, method: 'POST', ...(decision === 'reject' ? { body: { reason: reason.trim() } } : {}) });
         if (result.error) return result;
         const confirmed = await readDetail(baseQuery, id);
-        if (confirmed.error || confirmed.data.statusCode !== 'VERIFIED') return failure('Approval was submitted, but its result could not be confirmed. Refresh before trying again.');
-        return { data: { message: 'Verification approved.' } };
+        const expected = decision === 'approve' ? ['VERIFIED'] : ['REJECTED', 'NON_COMPLIANT'];
+        if (confirmed.error || !expected.includes(confirmed.data.statusCode)) return failure('The decision was sent, but its result could not be confirmed. Refresh before trying again.');
+        return { data: { message: decision === 'approve' ? 'Verification approved' : 'Verification rejected' } };
       }, invalidatesTags: invalidations,
     }),
     changeAdminVerification: builder.mutation({
@@ -279,4 +287,4 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
     }),
   }),
 });
-export const { useGetAdminVerificationSummaryQuery, useGetAdminVerificationDirectoryQuery, useGetAdminVerificationDetailQuery, useGetAdminVerificationHistoryQuery, useGetAdminVerificationEntriesQuery, useLazyGetAdminVerificationDownloadQuery, useApproveAdminVerificationEntityMutation, useChangeAdminVerificationMutation } = verificationApi;
+export const { useGetAdminVerificationSummaryQuery, useGetAdminVerificationDirectoryQuery, useGetAdminVerificationDetailQuery, useGetAdminVerificationHistoryQuery, useGetAdminVerificationEntriesQuery, useLazyGetAdminVerificationDownloadQuery, useDecideAdminVerificationMutation, useChangeAdminVerificationMutation } = verificationApi;

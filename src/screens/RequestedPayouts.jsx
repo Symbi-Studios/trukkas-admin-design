@@ -166,7 +166,7 @@ export function RequestedPayouts() {
 
       <SectionCard title="" pad="none" className="fin-table">
         <TableToolbar
-          search={<SearchField placeholder="Search by payout ID, reference, party, job or bank…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+          search={<SearchField placeholder="Search payouts…" title="Search by payout ID, reference, party, job or bank" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
             <FilterChip name="Status" icon="circle-dot" value={status} allValue="All Statuses" options={["All Statuses", "Pending Review", "Approved", "Processing", "Completed", "Rejected"]} onChange={(v) => { setStatus(v); setPage(1); }} />
             <FilterChip name="Party" icon="user" value={party} allValue="All Parties" options={["All Parties", ...partyOptions]} onChange={(v) => { setParty(v); setPage(1); }} />

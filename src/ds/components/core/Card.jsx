@@ -23,7 +23,7 @@ export function Card({ pad = "md", tone = "white", children, style, ...rest }) {
     navy: {
       background: "var(--tk-navy)",
       border: "1px solid transparent",
-      color: "#fff",
+      color: "var(--tk-ink-on-navy)",
     },
   };
   return (

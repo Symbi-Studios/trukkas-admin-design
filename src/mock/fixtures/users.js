@@ -89,7 +89,7 @@ export const users = [
   },
   {
     id: 'USR-2024-00083', name: 'Blessing David', email: 'blessing@blueocean.com',
-    role: 'Verifier', roleTone: ROLE_TONE.Verifier, entity: 'Blue Ocean Exporters',
+    role: 'Verifier', roleTone: ROLE_TONE.Verifier, entity: 'Blue Ocean Logistics',
     status: 'Active', lastActive: 'Today, 11:02 AM', joinedOn: 'Apr 22, 2024',
     phone: '+234 807 456 7891', location: 'Calabar, Nigeria', department: 'Compliance', online: true,
     passwordLastChanged: 'May 18, 2024, 02:15 PM', totalLogins: 61, failedLogins: 1, activeSessions: 1,
@@ -149,7 +149,7 @@ export const users = [
   },
   {
     id: 'USR-2024-00089', name: 'David Okon', email: 'david@blueocean.com',
-    role: 'Verifier', roleTone: ROLE_TONE.Verifier, entity: 'Blue Ocean Exporters',
+    role: 'Verifier', roleTone: ROLE_TONE.Verifier, entity: 'Blue Ocean Logistics',
     status: 'Active', lastActive: 'Today, 06:55 AM', joinedOn: 'Jan 30, 2024',
     phone: '+234 813 012 3457', location: 'Calabar, Nigeria', department: 'Compliance', online: true,
     passwordLastChanged: 'Jan 30, 2024, 09:00 AM', totalLogins: 133, failedLogins: 0, activeSessions: 1,

@@ -82,7 +82,7 @@ function AnnouncementMenuPortal({ anchor, onClose, children }) {
     update(); window.addEventListener('scroll', update, true); window.addEventListener('resize', update); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [anchor, onClose]);
-  return createPortal(<div ref={menuRef} onClick={event => event.stopPropagation()} style={{ position: 'fixed', zIndex: 95, left: position?.left ?? 0, top: position?.top ?? -10000, visibility: position ? 'visible' : 'hidden' }}>{children}</div>, document.body);
+  return createPortal(<div ref={menuRef} onClick={event => event.stopPropagation()} style={{ position: 'fixed', zIndex: 'var(--tk-z-overlay)', left: position?.left ?? 0, top: position?.top ?? -10000, visibility: position ? 'visible' : 'hidden' }}>{children}</div>, document.body);
 }
 
 export function Announcements() {
@@ -104,7 +104,8 @@ export function Announcements() {
   const operations = useAnnouncementOperations();
   const [reasonDialog, setReasonDialog] = useState(null);
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
-  const period = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
+  // The stats endpoint falls back to the current month without a range, so "All time" sends an explicit start.
+  const period = useMemo(() => { const range = statsPeriodRange(statsPeriodKey); return range.dateFrom ? range : { dateFrom: '2020-01-01T00:00:00.000Z', dateTo: new Date().toISOString() }; }, [statsPeriodKey]);
   const directory = useGetAdminAnnouncementDirectoryQuery({ owner }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const countsQuery = useGetAdminAnnouncementStatsQuery({ owner, ...period }, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const tabStatus = tab === 'All Announcements' ? null : ANNOUNCEMENT_STATUSES[tab === 'Drafts' ? 'Draft' : tab];
@@ -166,7 +167,7 @@ export function Announcements() {
       <PageHeader
         crumbs={["Support System", "Announcements"]}
         title="Announcements"
-        description="Create, manage and broadcast important updates to users."
+        description="Updates sent to drivers, companies and forwarders."
         actions={
           <>
             <Button icon="plus" onClick={() => navigate("/announcements/new")}>
@@ -182,7 +183,7 @@ export function Announcements() {
           value={metric(counts?.totalAnnouncements?.value, countsQuery.isFetching)}
           delta={counts?.totalAnnouncements?.delta ?? '—'}
           direction={counts?.totalAnnouncements?.direction ?? null}
-          caption="from last 30 days"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
         <StatCard
           icon="send"
@@ -191,7 +192,7 @@ export function Announcements() {
           value={metric(counts?.publishedCount?.value, countsQuery.isFetching)}
           delta={counts?.publishedCount?.delta ?? '—'}
           direction={counts?.publishedCount?.direction ?? null}
-          caption="from last 30 days"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
         <StatCard
           icon="calendar"
@@ -199,7 +200,7 @@ export function Announcements() {
           value={metric(counts?.scheduledCount?.value, countsQuery.isFetching)}
           delta={counts?.scheduledCount?.delta ?? '—'}
           direction={counts?.scheduledCount?.direction ?? null}
-          caption="from last 30 days"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
         <StatCard
           icon="eye"
@@ -208,7 +209,7 @@ export function Announcements() {
           value={metric(totalViews, countsQuery.isFetching)}
           delta={counts?.totalViews?.delta ?? '—'}
           direction={counts?.totalViews?.direction ?? null}
-          caption="from last 30 days"
+          caption={statsPeriod(statsPeriodKey).vs}
         />
       </StatsPanel>
       <div className="engagement-layout">

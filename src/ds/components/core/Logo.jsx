@@ -9,7 +9,7 @@ export function Logo({
   style,
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, ...style }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, ...style }}>
       <img
         src={trukkasIcon.src || trukkasIcon}
         alt="Trukkas"
@@ -26,20 +26,12 @@ export function Logo({
         <div style={{ lineHeight: 1.1 }}>
           <div
             style={{
-              font: "700 20px/24px var(--tk-font-sans)",
+              font: "700 17px/22px var(--tk-font-sans)",
               letterSpacing: "-0.3px",
               color: onDark ? "#fff" : "var(--tk-ink-900)",
             }}
           >
             Trukkas
-          </div>
-          <div
-            style={{
-              font: "400 12px/16px var(--tk-font-sans)",
-              color: onDark ? "var(--tk-ink-on-navy-dim)" : "var(--tk-ink-400)",
-            }}
-          >
-            Move. Earn. Grow.
           </div>
         </div>
       )}

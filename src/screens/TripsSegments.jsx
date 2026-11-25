@@ -54,16 +54,16 @@ function downloadCsv(csv) {
   document.body.appendChild(link); link.click(); link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-function Metric({ label, card, comparison, icon, color = "#4c16ac", loading = false }) {
+function Metric({ label, card, comparison, icon, color = "var(--tk-purple)", loading = false }) {
   const direction = card?.direction;
   return <Card className="metric-card">
     <label>{label}</label><strong>{loading ? <Skeleton as="span" width={72} height={27} /> : card?.displayValue ?? "—"}</strong>
-    <span className={"delta " + (direction === "DOWN" ? "down" : "")}>
+    <span className={"delta " + (direction === "DOWN" ? "down" : direction === "UP" ? "up" : "")}>
       {loading ? <Skeleton as="span" width={55} height={14} /> : card?.displayChange !== "—" && direction ? (direction === "DOWN" ? "↓ " : direction === "UP" ? "↑ " : "") + card.displayChange : "—"}
     </span>
     <small>{loading ? <Skeleton as="span" width={90} height={12} /> : comparison && comparison !== "—" ? "vs " + comparison : "—"}</small>
-    <i className="metric-icon" style={{ color, background: color + "12" }}><Icon name={icon} size={20} /></i>
-    {!loading && <Sparkline points={card?.sparkline || []} color={color} />}
+    <i className="metric-icon" aria-hidden="true"><Icon name={icon} size={15} /></i>
+    {!loading && <Sparkline points={card?.sparkline || []} color="var(--tk-blue)" />}
   </Card>;
 }
 function FilterChip({ icon, label, value, active, onOpen, onClear }) {
@@ -88,7 +88,7 @@ function TripScreenMenu({ anchor, items, onClose }) {
       document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape);
     };
   }, [anchor, items.length, onClose]);
-  return <div ref={menuRef} onClick={(e) => e.stopPropagation()} style={{ position: "fixed", zIndex: 95, top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}>
+  return <div ref={menuRef} onClick={(e) => e.stopPropagation()} style={{ position: "fixed", zIndex: 'var(--tk-z-overlay)', top: position?.top ?? -10000, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}>
     <DropdownMenu width={220} items={items} style={{ maxHeight: "calc(100vh - 16px)", overflowY: "auto" }} />
   </div>;
 }
@@ -241,36 +241,36 @@ function TripsSegmentsContent({ owner, role, authenticated }) {
           loading={statsLoading}
           label="In Transit" card={stats?.cards.inTransit} comparison={stats?.comparisonLabel}
           icon="route"
-          color="#12a150"
+          color="var(--tk-viz-2)"
         />
         <Metric
           loading={statsLoading}
           label="At Pickup" card={stats?.cards.atPickup} comparison={stats?.comparisonLabel}
           icon="truck"
-          color="#2469e8"
+          color="var(--tk-blue)"
         />
         <Metric
           loading={statsLoading}
           label="At Delivery" card={stats?.cards.atDelivery} comparison={stats?.comparisonLabel}
           icon="clipboard-check"
-          color="#f5a524"
+          color="var(--tk-viz-3)"
         />
         <Metric
           loading={statsLoading}
           label="Returning Container" card={stats?.cards.returningContainer} comparison={stats?.comparisonLabel}
           icon="layers"
-          color="#0e9f9a"
+          color="var(--tk-teal)"
         />
         <Metric
           loading={statsLoading}
           label="Delayed" card={stats?.cards.delayed} comparison={stats?.comparisonLabel}
           icon="clock"
-          color="#e02b22"
+          color="var(--tk-danger-solid)"
         />
       </StatsPanel>
 
       <div className="ops-panel">
-        <TableToolbar search={<SearchField placeholder="Search by Trip ID, Job ID, Container, Truck, Driver..." value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />} filters={<><FilterChip icon="circle-dot" label="Status" value={statusFilter} active={statusFilter !== "All Trips"} onOpen={(e) => openMenu(e, "status")} onClear={() => choose(setStatusFilter, "All Trips")} />
+        <TableToolbar search={<SearchField placeholder="Search trips…" title="Search by trip ID, job ID, container, truck or driver" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} />} filters={<><FilterChip icon="circle-dot" label="Status" value={statusFilter} active={statusFilter !== "All Trips"} onOpen={(e) => openMenu(e, "status")} onClear={() => choose(setStatusFilter, "All Trips")} />
 <FilterChip icon="map-pin" label="Origin" value={originFilter} active={originFilter !== "All Locations"} onOpen={(e) => openMenu(e, "origin")} onClear={() => choose(setOriginFilter, "All Locations")} />
 <FilterChip icon="flag" label="Destination" value={destFilter} active={destFilter !== "All Locations"} onOpen={(e) => openMenu(e, "destination")} onClear={() => choose(setDestFilter, "All Locations")} />
 <FilterChip icon="user" label="Driver" value={driverFilter} active={driverFilter !== "All Drivers"} onOpen={(e) => openMenu(e, "driver")} onClear={() => { setDriverId(null); choose(setDriverFilter, "All Drivers"); }} />

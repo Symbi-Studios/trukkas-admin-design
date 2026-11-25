@@ -218,7 +218,7 @@
   position: absolute;
   left: 0;
   top: calc(100% + 6px);
-  z-index: 50;
+  z-index: var(--tk-z-dropdown);
 }
 .mainGrid {
   display: grid;
@@ -449,7 +449,7 @@
   position: absolute;
   right: 0;
   top: 42px;
-  z-index: 60;
+  z-index: var(--tk-z-dropdown);
 }
 .timelineSection {
   margin-top: 15px;

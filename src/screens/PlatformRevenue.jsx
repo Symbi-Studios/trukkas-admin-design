@@ -67,7 +67,7 @@ export function PlatformRevenue() {
 
       <SectionCard title="" pad="none" className="fin-table">
         <TableToolbar
-          search={<SearchField placeholder="Search by reference, job, payer or fee…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+          search={<SearchField placeholder="Search revenue…" title="Search by reference, job, payer or fee" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
             <FilterChip name="Source" icon="layers" value={category} allValue="" options={CATEGORIES} onChange={(v) => { setCategory(v); setPage(1); }} />
             <DateRangeFilter value={dates} onChange={(next) => { setDates(next); setPage(1); }} />

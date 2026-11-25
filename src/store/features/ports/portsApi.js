@@ -47,10 +47,16 @@ function coordinate(value, limit) {
 /** Validates one terminal row from the form and returns the request fields. */
 export function terminalFields({ name, latitude, longitude, isActive = true }) {
   const lat = coordinate(latitude, 90), lng = coordinate(longitude, 180);
-  if (!text(name)) throw new Error('Give every terminal a name.');
+  if (!text(name) || name.trim().length > 100) throw new Error('Enter a terminal name of 1 to 100 characters.');
   if (lat == null || lng == null) throw new Error('Enter a valid latitude (−90 to 90) and longitude (−180 to 180) for every terminal.');
   return { name: name.trim(), latitude: lat, longitude: lng, isActive: Boolean(isActive) };
 }
+
+const matchesTerminal = (terminal, portId, fields) => Boolean(text(terminal?.id)
+  && terminal.portId === portId && terminal.name === fields.name
+  && number(terminal.latitude) === fields.latitude && number(terminal.longitude) === fields.longitude
+  && terminal.isActive === fields.isActive);
+const unconfirmed = () => failure('The result could not be confirmed. Refresh and check before trying again.');
 
 export const portsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPorts'] }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
@@ -88,14 +94,18 @@ export const portsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPorts'] }
       queryFn: async ({ name, state, terminals }, _api, _options, baseQuery) => {
         let body;
         try {
-          if (!text(name)) throw new Error('Enter a port name.');
+          if (!text(name) || name.trim().length > 100) throw new Error('Enter a port name of 1 to 100 characters.');
           if (!Array.isArray(terminals) || !terminals.length) throw new Error('Add at least one terminal.');
+          if (terminals.length > 50) throw new Error('A port can be created with up to 50 terminals.');
           body = { name: name.trim(), ...(text(state) ? { state: state.trim() } : {}), terminals: terminals.map(terminalFields) };
         } catch (error) { return failure(error.message); }
-        // PROPOSED: not in the live API yet. See "Backend request: per-port pricing".
-        // The live POST takes name and state only; `terminals` (at least one) is proposed (a2).
         const result = await baseQuery({ url: '/admin/reference/ports', method: 'POST', body });
-        return result.error ? result : { data: unwrapApiResponseData(result.data) };
+        if (result.error) return result;
+        const data = unwrapApiResponseData(result.data);
+        const port = data?.port;
+        if (!text(port?.id) || port.name !== body.name || !Array.isArray(port.terminals) || port.terminals.length !== body.terminals.length) return unconfirmed();
+        return body.terminals.every(fields => port.terminals.some(terminal => matchesTerminal(terminal, port.id, fields)))
+          ? { data } : unconfirmed();
       },
       invalidatesTags: ['AdminPorts', 'AdminTerminalRates'],
     }),
@@ -114,9 +124,10 @@ export const portsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPorts'] }
     deleteAdminPort: builder.mutation({
       queryFn: async ({ id }, _api, _options, baseQuery) => {
         if (!text(id)) return failure('This port could not be identified. Refresh and try again.');
-        // PROPOSED: not in the live API yet. See "Backend request: per-port pricing".
         const result = await baseQuery({ url: `/admin/reference/ports/${encodeURIComponent(id)}`, method: 'DELETE' });
-        return result.error ? result : { data: { id, deleted: true } };
+        if (result.error) return result;
+        const data = unwrapApiResponseData(result.data);
+        return data?.id === id && data.deleted === true ? { data } : unconfirmed();
       },
       invalidatesTags: ['AdminPorts', 'AdminTerminalRates'],
     }),
@@ -125,10 +136,10 @@ export const portsApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPorts'] }
         let body;
         try { body = terminalFields(fields); } catch (error) { return failure(error.message); }
         if (!text(portId)) return failure('Choose the port this terminal belongs to.');
-        // PROPOSED: not in the live API yet. See "Backend request: per-port pricing".
-        // The live POST takes `name` only; latitude, longitude and isActive on create are proposed (a5).
         const result = await baseQuery({ url: `/admin/reference/ports/${encodeURIComponent(portId)}/terminals`, method: 'POST', body });
-        return result.error ? result : { data: unwrapApiResponseData(result.data) };
+        if (result.error) return result;
+        const data = unwrapApiResponseData(result.data);
+        return matchesTerminal(data?.terminal, portId, body) ? { data } : unconfirmed();
       },
       invalidatesTags: ['AdminPorts', 'AdminTerminalRates'],
     }),

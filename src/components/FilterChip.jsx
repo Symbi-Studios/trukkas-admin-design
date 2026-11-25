@@ -6,7 +6,7 @@ import { DropdownMenu, FilterSelect } from '../ds.js';
 // The Jobs & Trips table filter: a rounded chip ("Status: Pending ×") that opens a menu.
 // `options` are strings or { value, label }. The chip is active when value !== allValue,
 // and its × resets it to allValue.
-export function FilterChip({ name, icon, value, allValue, options, onChange, menuWidth = 216 }) {
+export function FilterChip({ name, icon: _icon, value, allValue, options, onChange, menuWidth = 216 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const items = options.map((option) => (typeof option === 'string' ? { value: option, label: option } : option));
@@ -22,15 +22,15 @@ export function FilterChip({ name, icon, value, allValue, options, onChange, men
   return (
     <span ref={ref} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
       <FilterSelect
-        icon={icon}
         prefix={name}
+        expanded={open}
         label={current?.label ?? value}
         active={value !== allValue}
         onClick={() => setOpen((next) => !next)}
         onClear={() => { onChange(allValue); setOpen(false); }}
       />
       {open && (
-        <span style={{ position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 50 }}>
+        <span style={{ position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 'var(--tk-z-dropdown)' }}>
           <DropdownMenu
             width={menuWidth}
             style={{ maxHeight: 320, overflowY: 'auto' }}
