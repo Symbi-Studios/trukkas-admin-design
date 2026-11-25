@@ -1,13 +1,13 @@
 // Existing report labels and selectable fields; no backend records.
 export const REPORT_TYPES = [
-  { id: 'verification', title: 'Verification Performance', description: 'Comprehensive verification metrics and performance analysis.', icon: 'shield-check', tint: 'green' },
-  { id: 'operations', title: 'Operations Summary', description: 'Overview of jobs, trips, trucks and operational activities.', icon: 'calendar-days', tint: 'blue' },
-  { id: 'financial', title: 'Financial Summary', description: 'Revenue, payouts, escrows and financial performance summary.', icon: 'wallet', tint: 'purple' },
-  { id: 'compliance', title: 'Compliance Report', description: 'Compliance status, document submissions and audit summary.', icon: 'file-check-2', tint: 'blue' },
-  { id: 'fleet', title: 'Fleet Performance', description: 'Fleet utilization, trips, distance, fuel and maintenance.', icon: 'truck', tint: 'orange' },
-  { id: 'entity', title: 'Entity Performance', description: 'Performance metrics by forwarders, truck companies and other entities.', icon: 'building-2', tint: 'orange' },
-  { id: 'audit', title: 'Audit & Activity Log', description: 'System activities, user actions and audit trail report.', icon: 'scroll-text', tint: 'red' },
-  { id: 'custom', title: 'Custom Report', description: 'Build a custom report with your selected metrics and dimensions.', icon: 'sliders-horizontal', tint: 'purple' },
+  { id: 'verification', title: 'Verifications', row: 'verification', description: 'One row per verification submitted in the date range.', icon: 'shield-check', dated: true },
+  { id: 'operations', title: 'Operations', row: 'job', description: 'One row per job in the date range.', icon: 'package', dated: true },
+  { id: 'financial', title: 'Financial', row: 'wallet', description: 'One row per wallet with transactions in the date range.', icon: 'wallet', dated: true },
+  { id: 'compliance', title: 'Compliance', row: 'entity', description: 'One row per company or forwarder, from its current verification records. Not filtered by date.', icon: 'file-check-2', dated: false },
+  { id: 'fleet', title: 'Fleet', row: 'truck', description: 'One row per truck added in the date range.', icon: 'truck', dated: true },
+  { id: 'entity', title: 'Entities', row: 'entity', description: 'One row per forwarder or truck company. Sign-up date is not filtered.', icon: 'building-2', dated: false },
+  { id: 'audit', title: 'Audit log', row: 'admin action', description: 'One row per admin action in the date range. Super Admin only.', icon: 'scroll-text', dated: true, superAdmin: true },
+  { id: 'custom', title: 'Custom', row: 'entity', description: 'One row per entity, with any columns you choose.', icon: 'sliders-horizontal', dated: false },
 ];
 
 export const COLUMN_GROUPS = [

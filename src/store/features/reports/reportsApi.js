@@ -101,7 +101,7 @@ async function readDirectory(baseQuery, url, params = {}, api) {
 }
 const reportFailure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
 const serializeReportQuery = args => defaultSerializeQueryArgs(args) + ':v2';
-function scopedReportQuery(baseQuery, api, args = {}) {
+export function scopedReportQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
     const next = api.getState().auth;
@@ -113,7 +113,7 @@ function scopedReportQuery(baseQuery, api, args = {}) {
     return current() ? result : reportFailure('Your session changed. Reopen Reports before continuing.');
   };
 }
-const reportTags = ['AdminReportOverview', 'AdminReportTemplates', 'AdminReportSchedules'];
+const reportTags = ['AdminReportOverview', 'AdminReportTemplates', 'AdminReportSchedules', 'AdminReportExports'];
 export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
@@ -158,7 +158,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
         if (result.error) return result;
         try { return { data: adaptReportExport(unwrapApiResponseData(result.data), configuration) }; }
         catch (error) { return reportFailure('The export was submitted, but its result could not be confirmed. ' + error.message); }
-      },
+      }, invalidatesTags: ['AdminReportExports'],
     }),
     saveAdminReportTemplate: builder.mutation({
       async queryFn({ name, configuration, owner, role }, api, _options, baseQuery) {
@@ -182,7 +182,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
         const dto = reportRecord(unwrapApiResponseData(result.data));
         if (!reportText(dto.id) || dto.status !== 'ACTIVE' || dto.reportType !== reportType || dto.frequency !== frequency || dto.timezone !== 'Africa/Lagos' || !Array.isArray(dto.recipients) || recipients.some((email) => !dto.recipients.includes(email))) return reportFailure('The schedule was submitted, but its result could not be confirmed. Refresh before retrying.');
         return { data: { id: dto.id, status: dto.status, nextRunAt: reportText(dto.nextRunAt), runsAt: reportText(dto.runsAt) } };
-      }, invalidatesTags: ['AdminReportSchedules'],
+      }, invalidatesTags: ['AdminReportSchedules', 'AdminReportExports'],
     }),
     downloadAdminReportExport: builder.query({
       serializeQueryArgs: serializeReportQuery,

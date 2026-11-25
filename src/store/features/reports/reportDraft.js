@@ -47,3 +47,37 @@ export function initialReportDraft() {
     fileSettings: { includeCharts: true, includeSummary: true, compressFile: true },
   };
 }
+
+const PRESET_FROM_API = { last_7_days: 'Last 7 days', last_30_days: 'Last 30 days', this_month: 'This Month' };
+const ENTITY_TYPE_FROM_API = { FORWARDER: 'Forwarder', TRUCKING_COMPANY: 'Truck Company' };
+const STATUS_FROM_API = { VERIFIED: 'Verified', PENDING: 'Pending', REJECTED: 'Rejected' };
+
+/**
+ * A builder draft from a saved template's configuration. Values the builder can't represent fall
+ * back to its defaults; `unsupported` lists what was dropped so the screen can say so.
+ */
+export function draftFromConfiguration(configuration = {}, base = initialReportDraft()) {
+  const config = configuration && typeof configuration === 'object' ? configuration : {};
+  const filters = config.filters && typeof config.filters === 'object' ? config.filters : {};
+  const unsupported = [];
+  const draft = { ...base, filters: { ...base.filters } };
+  if (typeof config.reportType === 'string') draft.reportType = config.reportType;
+  const preset = PRESET_FROM_API[config.dateRangePreset];
+  if (preset) Object.assign(draft, { dateRangePreset: preset }, currentReportRange(preset));
+  else if (config.dateRangePreset === 'custom' && validReportDate(config.dateFrom) && validReportDate(config.dateTo)) Object.assign(draft, { dateRangePreset: 'Custom Range', dateFrom: config.dateFrom, dateTo: config.dateTo });
+  else if (config.dateRangePreset) unsupported.push('date range "' + String(config.dateRangePreset).replaceAll('_', ' ') + '"');
+  if (filters.entityType) { if (ENTITY_TYPE_FROM_API[filters.entityType]) draft.filters.entityType = ENTITY_TYPE_FROM_API[filters.entityType]; else unsupported.push('entity type filter'); }
+  if (typeof filters.entityId === 'string' && filters.entityId) draft.filters.entity = filters.entityId;
+  if (filters.status) { if (STATUS_FROM_API[filters.status]) draft.filters.status = STATUS_FROM_API[filters.status]; else unsupported.push('status filter'); }
+  if (typeof filters.location === 'string' && filters.location.trim()) draft.filters.location = filters.location.trim();
+  for (const key of ['minAmount', 'maxAmount']) if (typeof filters[key] === 'number' && Number.isFinite(filters[key])) draft.filters[key] = String(filters[key]);
+  // No saved columns: leave none checked so the builder picks the report type's own defaults.
+  const keys = new Set(Array.isArray(config.columns) ? config.columns : []);
+  draft.columnGroups = base.columnGroups.map((group) => ({ ...group, columns: group.columns.map((column) => ({ ...column, checked: keys.has(column.key) })) }));
+  if (typeof config.format === 'string' && ['xlsx', 'csv', 'pdf', 'json'].includes(config.format.toLowerCase())) draft.format = config.format.toLowerCase();
+  if (config.delivery?.method === 'EMAIL') draft.delivery = 'email';
+  if (config.schedule?.frequency) { draft.delivery = 'schedule'; draft.scheduleFrequency = config.schedule.frequency[0] + config.schedule.frequency.slice(1).toLowerCase(); }
+  const settings = config.fileSettings && typeof config.fileSettings === 'object' ? config.fileSettings : {};
+  draft.fileSettings = { ...base.fileSettings, ...Object.fromEntries(['includeCharts', 'includeSummary', 'compressFile'].filter((k) => typeof settings[k] === 'boolean').map((k) => [k, settings[k]])) };
+  return { draft, unsupported };
+}

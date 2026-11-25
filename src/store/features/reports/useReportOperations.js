@@ -52,6 +52,7 @@ export function useReportOperations(draft) {
       const result = reportConfiguration(draft, admin, 'template');
       if (result.error) throw new Error(result.error);
       await saveTemplate({ owner, role, name, configuration: result.configuration }).unwrap();
+      if (current()) showToast('Template saved.');
     });
   }
   function exportReport(preview) {
