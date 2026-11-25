@@ -303,7 +303,7 @@ export const forwardersApi = baseApi.injectEndpoints({
     }),
     requestAdminForwarderVerification: builder.mutation({
       async queryFn({ id, checkType, reason }, api, _options, baseQuery) {
-        if (!text(id) || !['NATIONAL_ID', 'ADDRESS', 'EXPORT_LICENSE'].includes(checkType) || !text(reason)) return failure('Select a supported verification check and enter a reason.');
+        if (!text(id) || !['NATIONAL_ID', 'ADDRESS', 'EXPORT_LICENSE', 'PASSPORT_PHOTO', 'BANK_ACCOUNT'].includes(checkType) || !text(reason)) return failure('Select a supported verification check and enter a reason.');
         return writeForwarder(baseQuery, api, { url: userPath(id) + '/verification-requests', method: 'POST', body: { checkType, reason: reason.trim() } }, dto => text(dto?.id) && dto.userId === id && dto.checkType === checkType && dto.status === 'REQUESTED' && dto.reason === reason.trim() && text(dto.caseId) && timestamp(dto.createdAt));
       }, invalidatesTags: ['AdminForwarders'],
     }),

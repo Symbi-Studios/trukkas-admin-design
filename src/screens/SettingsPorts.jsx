@@ -169,7 +169,7 @@ function PortDrawer({ port, onClose, onDialog }) {
                     </span>
                   </div>
                   <IconButton icon="pencil" label={`Edit ${t.name}`}
-                    onClick={() => onDialog({ type: 'terminal', port, terminal: t, lastActive: t.isActive === true && activeCount === 1 })} />
+                    onClick={() => onDialog({ type: 'terminal', port, terminal: t, lastActive: port.isActive === true && t.isActive === true && activeCount === 1 })} />
                 </div>
               );
             })}

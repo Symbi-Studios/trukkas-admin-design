@@ -3,7 +3,7 @@
 import { ToastRelay } from '../components/ActionToast.jsx';
 import { useMemo, useState } from 'react';
 import { useNavigate } from '../router.js';
-import { DateRangeFilter, EMPTY_RANGE, inRange, isRangeSet } from '../components/DateRangeFilter.jsx';
+import { DateRangeFilter, EMPTY_RANGE } from '../components/DateRangeFilter.jsx';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import {
   PageHeader, FilterSelect, DropdownMenu, StatCard, SectionCard, MapPanel,
@@ -64,7 +64,10 @@ export function ContainerTriangulation() {
   const [notice, setNotice] = useState(null);
   const [notifyCompany, { isLoading: notifying }] = useNotifyAdminTriangulationMatchMutation();
   const { currentData: response, isLoading, isFetching, error, refetch } =
-    useGetAdminTriangulationOpportunitiesQuery({ page, limit: PAGE_SIZE, radiusKm, status: reviewStatus || undefined });
+    useGetAdminTriangulationOpportunitiesQuery({
+      page, limit: PAGE_SIZE, radiusKm, status: reviewStatus || undefined,
+      dateFrom: dates.from || undefined, dateTo: dates.to || undefined,
+    });
   const rows = response?.rows || [];
   const summary = response?.summary;
   const loadingRows = isLoading || (isFetching && !response);
@@ -82,9 +85,8 @@ export function ContainerTriangulation() {
     (filters.route === 'All Routes' || row.currentRoute === filters.route) &&
     (filters.container === 'All Container Types' || row.container === filters.container) &&
     (filters.company === 'All Companies' || row.company === filters.company) &&
-    (filters.truck === 'All Truck Types' || row.truckType === filters.truck) &&
-    (!isRangeSet(dates) || inRange(row.identifiedAt, dates))
-  ), [rows, filters, dates]);
+    (filters.truck === 'All Truck Types' || row.truckType === filters.truck)
+  ), [rows, filters]);
   const sorted = useMemo(() => [...filtered].sort((a, b) => sort === 'Highest Revenue'
     ? (b.revenue ?? -1) - (a.revenue ?? -1) : (b.score ?? -1) - (a.score ?? -1)), [filtered, sort]);
   const mapPoints = useMemo(() => rows.flatMap((row) => [
@@ -139,7 +141,7 @@ export function ContainerTriangulation() {
           }))} />
         </span>}
       </span>)}
-      <DateRangeFilter value={dates} onChange={setDates} />
+      <DateRangeFilter value={dates} onChange={(next) => { setDates(next); setPage(1); setSelectedId(null); }} />
       <span style={{ position: 'relative' }}>
         <FilterSelect label={`Radius: ${radiusKm} km`} active={radiusKm !== 150}
           onClick={() => setOpenFilter(openFilter === 'radius' ? null : 'radius')} />
