@@ -12,6 +12,8 @@ export function useReportDraft() {
     toggleReportColumn: (group, key) => dispatch(reportActions.toggleReportColumn({ group, key })),
     setReportColumnGroup: (group, checked) => dispatch(reportActions.setReportColumnGroup({ group, checked })),
     setAllReportColumns: (checked) => dispatch(reportActions.setAllReportColumns(checked)),
+    setReportColumns: (keys) => dispatch(reportActions.setReportColumns(keys)),
+    loadReportDraft: (next) => dispatch(reportActions.loadReportDraft(next)),
   };
 }
 export function useReportEntities(entityType) {

@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
-import { FeedbackDetail } from '../../../screens/FeedbackDetail.jsx';
+import { FeedbackPage } from '../../../screens/feedback/FeedbackPage.jsx';
 import { DriverDetailLoading } from '../../../screens/DriversLoading.jsx';
 
-export const metadata = { title: 'Feedback Details' };
+export const metadata = { title: 'Feedback' };
 export default function FeedbackDetailPage() {
-  return <Suspense fallback={<DriverDetailLoading label="Loading feedback…" />}><FeedbackDetail /></Suspense>;
+  return <Suspense fallback={<DriverDetailLoading label="Loading feedback…" />}><FeedbackPage /></Suspense>;
 }

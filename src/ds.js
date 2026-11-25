@@ -27,6 +27,10 @@ export { ProgressBar } from './ds/components/data/ProgressBar.jsx';
 export { RankBarList } from './ds/components/data/RankBarList.jsx';
 export { Sparkline } from './ds/components/data/Sparkline.jsx';
 export { StatCard } from './ds/components/data/StatCard.jsx';
+export { TrendChart } from './ds/components/data/TrendChart.jsx';
+export { MetricStrip } from './ds/components/data/MetricStrip.jsx';
+export { Leaderboard } from './ds/components/data/Leaderboard.jsx';
+export { BreakdownBar } from './ds/components/data/BreakdownBar.jsx';
 export { ShortMoney, shortMoneyValue } from './ds/components/data/ShortMoney.jsx';
 export { TableToolbar } from './ds/components/data/TableToolbar.jsx';
 

@@ -32,25 +32,32 @@ export const unavailableReportPreview = {
 export function emptyReportOverview() {
   return {
     dashboardSummary: Object.fromEntries(['totalJobs', 'completedJobs', 'totalRevenue', 'totalPayouts', 'activeUsers', 'complianceRate'].flatMap((key) => [[key, null], [key + 'Delta', '—'], [key + 'Trend', []]])),
-    operationsOverview: { labels: [], series: [
+    operationsOverview: { labels: [], dates: [], series: [
       { name: 'Created', color: 'var(--tk-viz-1)', points: [] },
-      { name: 'In Progress', color: 'var(--tk-viz-3)', points: [] },
+      { name: 'Accepted', color: 'var(--tk-viz-3)', points: [] },
       { name: 'Completed', color: 'var(--tk-viz-2)', points: [] },
       { name: 'Cancelled', color: 'var(--tk-viz-4)', points: [] },
     ] },
     jobsByStatus: [
       { label: 'Completed', count: null, pct: '—', tone: 'success', color: 'var(--tk-viz-2)' },
-      { label: 'In Progress', count: null, pct: '—', tone: 'info', color: 'var(--tk-viz-3)' },
+      { label: 'In progress', count: null, pct: '—', tone: 'info', color: 'var(--tk-viz-3)' },
       { label: 'Pending', count: null, pct: '—', tone: 'warning', color: 'var(--tk-viz-1)' },
       { label: 'Cancelled', count: null, pct: '—', tone: 'danger', color: 'var(--tk-viz-4)' },
     ],
-    jobsByType: ['Import', 'Export', 'Local Delivery', 'Haulage', 'Others'].map((label, index) => ({ label, count: null, pct: '—', color: ['var(--tk-viz-1)', 'var(--tk-viz-2)', 'var(--tk-viz-3)', 'var(--tk-viz-5)', 'var(--tk-ink-300)'][index] })),
-    geographicalDistribution: ['Lagos', 'Apapa', 'Port Harcourt', 'Onne', 'Tin Can', 'Others'].map((label) => ({ label, count: null, pct: '—' })),
-    topPerformingEntities: [], trendData: { labels: [], revenue: [], payouts: [] },
-    financialSummary: Object.fromEntries(['totalRevenue', 'totalPayouts', 'outstandingPayments', 'escrowBalance'].flatMap((key) => [[key, null], [key + 'Delta', '—']])),
-    userEngagement: Object.fromEntries(['activeUsers', 'newUsers', 'userSessions'].flatMap((key) => [[key, null], [key + 'Delta', '—']])),
+    // Breakdowns stay empty until the API returns rows; no placeholder labels.
+    jobsByType: [],
+    geographicalDistribution: [],
+    topPerformingEntities: [], trendData: { labels: [], dates: [], revenue: [], payouts: [] },
+    financialSummary: Object.fromEntries(['totalRevenue', 'grossJobValue', 'totalPayouts', 'outstandingPayments', 'escrowBalance'].flatMap((key) => [[key, null], [key + 'Delta', null], [key + 'Direction', null], [key + 'Definition', null]])),
+    userEngagement: Object.fromEntries(['activeUsers', 'newUsers', 'userSessions'].flatMap((key) => [[key, null], [key + 'Delta', null], [key + 'Direction', null], [key + 'Definition', null]])),
     complianceOverview: { totalVerifications: '—', verified: '—', pending: '—', rejected: '—', verifiedPct: '—', pendingPct: '—', rejectedPct: '—' },
-    alertsExceptions: ['Jobs Delayed', 'Payments Overdue', 'Verification Pending', 'Compliance Issues'].map((label) => ({ label, count: '—' })),
+    alertsExceptions: [
+      { key: 'jobsDelayed', label: 'Jobs delayed', to: '/demurrage' },
+      { key: 'paymentsOverdue', label: 'Payments overdue', to: '/payouts' },
+      { key: 'verificationPending', label: 'Verifications pending', to: '/verification' },
+      { key: 'complianceIssues', label: 'Compliance issues', to: '/verification' },
+    ].map((alert) => ({ ...alert, count: null, definition: null })),
+    definitions: {}, notes: { operations: null, compliance: null }, deltaValues: {}, groupBy: null,
   };
 }
 function adaptReportJobStats(response) {
@@ -94,7 +101,7 @@ async function readDirectory(baseQuery, url, params = {}, api) {
 }
 const reportFailure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
 const serializeReportQuery = args => defaultSerializeQueryArgs(args) + ':v2';
-function scopedReportQuery(baseQuery, api, args = {}) {
+export function scopedReportQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
     const next = api.getState().auth;
@@ -106,7 +113,7 @@ function scopedReportQuery(baseQuery, api, args = {}) {
     return current() ? result : reportFailure('Your session changed. Reopen Reports before continuing.');
   };
 }
-const reportTags = ['AdminReportOverview', 'AdminReportTemplates', 'AdminReportSchedules'];
+const reportTags = ['AdminReportOverview', 'AdminReportTemplates', 'AdminReportSchedules', 'AdminReportExports'];
 export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).injectEndpoints({
   overrideExisting: process.env.NODE_ENV === 'development',
   endpoints: (builder) => ({
@@ -151,7 +158,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
         if (result.error) return result;
         try { return { data: adaptReportExport(unwrapApiResponseData(result.data), configuration) }; }
         catch (error) { return reportFailure('The export was submitted, but its result could not be confirmed. ' + error.message); }
-      },
+      }, invalidatesTags: ['AdminReportExports'],
     }),
     saveAdminReportTemplate: builder.mutation({
       async queryFn({ name, configuration, owner, role }, api, _options, baseQuery) {
@@ -175,7 +182,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
         const dto = reportRecord(unwrapApiResponseData(result.data));
         if (!reportText(dto.id) || dto.status !== 'ACTIVE' || dto.reportType !== reportType || dto.frequency !== frequency || dto.timezone !== 'Africa/Lagos' || !Array.isArray(dto.recipients) || recipients.some((email) => !dto.recipients.includes(email))) return reportFailure('The schedule was submitted, but its result could not be confirmed. Refresh before retrying.');
         return { data: { id: dto.id, status: dto.status, nextRunAt: reportText(dto.nextRunAt), runsAt: reportText(dto.runsAt) } };
-      }, invalidatesTags: ['AdminReportSchedules'],
+      }, invalidatesTags: ['AdminReportSchedules', 'AdminReportExports'],
     }),
     downloadAdminReportExport: builder.query({
       serializeQueryArgs: serializeReportQuery,

@@ -43,7 +43,7 @@ export function reportConfiguration(draft, admin, mode = 'preview') {
     if (!['Verified', 'Pending', 'Rejected'].includes(source.status)) return { error: 'Select a supported verification status.' };
     filters.status = source.status.toUpperCase();
   }
-  if (source.location !== 'All Locations') { if (!reportText(source.location)) return { error: 'Select a valid location.' }; filters.location = source.location; }
+  if (source.location !== 'All Locations' && reportText(source.location)) filters.location = reportText(source.location);
   for (const key of ['minAmount', 'maxAmount']) if (source[key] !== '' && source[key] != null) {
     const value = number(source[key]); if (value == null || value < 0) return { error: 'Amounts must be non-negative NGN values.' }; filters[key] = value;
   }

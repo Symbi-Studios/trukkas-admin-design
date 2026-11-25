@@ -30,8 +30,8 @@ import { OperationsOverview } from './screens/OperationsOverview.jsx';
 import { UsersOverview } from './screens/UsersOverview.jsx';
 import { RolesPermissions } from './screens/RolesPermissions.jsx';
 import { SupportInbox } from './screens/support/SupportInbox.jsx';
-import { KnowledgeBase } from './screens/KnowledgeBase.jsx';
-import { Feedback } from './screens/Feedback.jsx';
+import { HelpArticles } from './screens/help/HelpArticles.jsx';
+import { FeedbackInbox } from './screens/feedback/FeedbackInbox.jsx';
 import { RatingsReviews } from './screens/RatingsReviews.jsx';
 import { FinanceOverview } from './screens/FinanceOverview.jsx';
 import { UserWallets } from './screens/UserWallets.jsx';
@@ -78,8 +78,8 @@ const screens = {
   'users-overview': UsersOverview,
   roles: RolesPermissions,
   tickets: SupportInbox,
-  'knowledge-base': KnowledgeBase,
-  feedback: Feedback,
+  'knowledge-base': HelpArticles,
+  feedback: FeedbackInbox,
   reviews: RatingsReviews,
   'finance-overview': FinanceOverview,
   'user-wallets': UserWallets,

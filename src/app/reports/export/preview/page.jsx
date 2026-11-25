@@ -1,8 +1,8 @@
 import { ExportReportPreview } from '../../../../screens/ExportReportPreview.jsx';
 
 export const metadata = {
-  title: 'Preview & Export Report',
-  description: 'Review your report before exporting.',
+  title: 'New report',
+  description: 'Choose what goes in a report, preview it and export or schedule it.',
 };
 
 export default function ExportReportPreviewPage() {
