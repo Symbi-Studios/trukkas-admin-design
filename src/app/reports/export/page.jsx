@@ -1,8 +1,8 @@
 import { ExportReport } from '../../../screens/ExportReport.jsx';
 
 export const metadata = {
-  title: 'Export Report',
-  description: 'Configure your report preferences and export data in your preferred format.',
+  title: 'New report',
+  description: 'Choose what goes in a report, preview it and export or schedule it.',
 };
 
 export default function ExportReportPage() {

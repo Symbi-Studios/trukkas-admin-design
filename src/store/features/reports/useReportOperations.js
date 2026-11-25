@@ -5,6 +5,7 @@ import { useSelector } from 'react-redux';
 import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 import { reportConfiguration, reportEmails, reportTimestamp, validReportEmails } from './reportContracts.js';
 import { REPORT_TYPES } from './reportsConfig.js';
+import { showToast } from '../../../components/ActionToast.jsx';
 import { useCreateAdminReportExportMutation, useSaveAdminReportTemplateMutation, useScheduleAdminReportMutation, useLazyDownloadAdminReportExportQuery, saveReportFile } from './reportsApi.js';
 
 export function useReportSession() {
@@ -31,7 +32,7 @@ export function useReportOperations(draft) {
     if (pending.current || !authenticated) return false;
     pending.current = true; setError(null);
     try { await action(); return current(); }
-    catch (requestError) { if (current()) { const message = getApiErrorMessage(requestError); setError({ scope: session.key, message }); window.alert(message); } return false; }
+    catch (requestError) { if (current()) { const message = getApiErrorMessage(requestError); setError({ scope: session.key, message }); } return false; }
     finally { pending.current = false; }
   }
   async function schedule(form, configuration) {
@@ -41,7 +42,7 @@ export function useReportOperations(draft) {
     if (!type) throw new Error('Choose a supported report type.');
     if (form.reportType === 'audit' && admin?.role !== 'SUPER_ADMIN') throw new Error('Audit reports require Super Admin access.');
     const data = await createSchedule({ owner, role, name: type.title + ' — ' + form.frequency, reportType: form.reportType, frequency, recipients, configuration }).unwrap();
-    if (current()) window.alert(data.runsAt || (data.nextRunAt ? 'Next report: ' + reportTimestamp(data.nextRunAt) : 'Report schedule created.'));
+    if (current()) showToast(data.runsAt || (data.nextRunAt ? 'Report scheduled. Next report: ' + reportTimestamp(data.nextRunAt) : 'Report scheduled.'));
   }
   function scheduleDashboard(form, filters) {
     return run(() => schedule(form, { filters, format: 'XLSX', fileSettings: { includeCharts: true, includeSummary: true, compressFile: false } }));
@@ -51,6 +52,7 @@ export function useReportOperations(draft) {
       const result = reportConfiguration(draft, admin, 'template');
       if (result.error) throw new Error(result.error);
       await saveTemplate({ owner, role, name, configuration: result.configuration }).unwrap();
+      if (current()) showToast('Template saved.');
     });
   }
   function exportReport(preview) {
@@ -76,7 +78,7 @@ export function useReportOperations(draft) {
       if (configuration.fileSettings.compressFile && !file.contentType?.includes('zip') && !file.filename?.toLowerCase().endsWith('.zip')) throw new Error('The requested ZIP file could not be confirmed. Check the report before trying again.');
       if (draft.delivery === 'email') {
         if (file.deliveryStatus !== 'SENT' || !Array.isArray(file.deliveredTo) || configuration.delivery.recipients.some((email) => !file.deliveredTo.includes(email))) throw new Error(file.deliveryError || 'The report was generated, but email delivery is ' + (file.deliveryStatus || 'unconfirmed') + '.');
-        if (current()) window.alert('Report link sent to your email.');
+        if (current()) showToast('Report link sent to your email.');
       } else {
         try {
           const data = await download({ owner, role, file }).unwrap();

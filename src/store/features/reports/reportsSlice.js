@@ -19,6 +19,15 @@ const reportsSlice = createSlice({
       const columns = state.columnGroups.find((item) => item.group === group)?.columns || [];
       columns.forEach((column) => { column.checked = checked === true; });
     },
+    // Check exactly these column keys (used when a report type supports a different set).
+    setReportColumns(state, { payload }) {
+      const keys = new Set(payload);
+      state.columnGroups.forEach((group) => group.columns.forEach((column) => { column.checked = keys.has(column.key); }));
+    },
+    // Replace the whole draft, e.g. when opening a saved template or a starter report.
+    loadReportDraft(_state, { payload }) {
+      return payload;
+    },
     setAllReportColumns(state, { payload }) {
       state.columnGroups.forEach((group) => group.columns.forEach((column) => { column.checked = payload === true; }));
     },
