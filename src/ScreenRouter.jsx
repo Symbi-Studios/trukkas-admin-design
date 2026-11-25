@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import { Dashboard } from './screens/Dashboard.jsx';
 import { FleetManagement } from './screens/FleetManagement.jsx';
-import { Verification } from './screens/Verification.jsx';
+import { VerificationQueue } from './screens/verification/VerificationQueue.jsx';
 import { Wallets } from './screens/Wallets.jsx';
 import { Announcements } from './screens/Announcements.jsx';
 import { JobsTrips } from './screens/JobsTrips.jsx';
@@ -29,7 +29,7 @@ import { UserManagement } from './screens/UserManagement.jsx';
 import { OperationsOverview } from './screens/OperationsOverview.jsx';
 import { UsersOverview } from './screens/UsersOverview.jsx';
 import { RolesPermissions } from './screens/RolesPermissions.jsx';
-import { SupportTickets } from './screens/SupportTickets.jsx';
+import { SupportInbox } from './screens/support/SupportInbox.jsx';
 import { KnowledgeBase } from './screens/KnowledgeBase.jsx';
 import { Feedback } from './screens/Feedback.jsx';
 import { RatingsReviews } from './screens/RatingsReviews.jsx';
@@ -49,7 +49,7 @@ import { NotFound } from './screens/NotFound.jsx';
 const screens = {
   dashboard: Dashboard,
   fleet: FleetManagement,
-  verification: Verification,
+  verification: VerificationQueue,
   wallets: Wallets,
   pricing: PricingManagement,
   settlements: SettlementsRedirect,
@@ -77,7 +77,7 @@ const screens = {
   'operations-overview': OperationsOverview,
   'users-overview': UsersOverview,
   roles: RolesPermissions,
-  tickets: SupportTickets,
+  tickets: SupportInbox,
   'knowledge-base': KnowledgeBase,
   feedback: Feedback,
   reviews: RatingsReviews,
