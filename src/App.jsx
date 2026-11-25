@@ -48,7 +48,9 @@ function AdminShellContent({ children }) {
   );
   const router = useRouter();
   const pathname = usePathname();
-  const activeId = pathname.split("/")[1] || "dashboard";
+  // FAQs live inside the help center, so /faq highlights its nav item.
+  const segment = pathname.split("/")[1] || "dashboard";
+  const activeId = segment === "faq" ? "knowledge-base" : segment;
   const requestedSearch = pageSearch.query.trim();
   React.useEffect(() => {
     const timer = setTimeout(() => setSearchTerm(requestedSearch), 300);
@@ -152,7 +154,7 @@ function AdminShellContent({ children }) {
         <TopBar
           onMenu={toggleNavigation}
           notifications={notificationData?.unreadCount ?? 0}
-          searchPlaceholder={SEARCH_PLACEHOLDER[activeId]}
+          searchPlaceholder={SEARCH_PLACEHOLDER[segment] ?? SEARCH_PLACEHOLDER[activeId]}
           searchValue={pageSearch.query}
           onSearch={(event) => pageSearch.change(event.target.value)}
           searchResults={searchTerm === requestedSearch ? search.currentData?.groups : []}

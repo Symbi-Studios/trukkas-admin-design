@@ -49,6 +49,7 @@ export function adaptFeedback(dto) {
     tags: Array.isArray(dto.tags) && dto.tags.every((tag) => feedbackText(tag)) && new Set(dto.tags).size === dto.tags.length ? dto.tags : null,
     note: typeof note.text === 'string' ? note.text : null, noteKnown: dto.note === null || typeof note.text === 'string',
     noteAuthor: feedbackText(feedbackObject(note.author).name) || '—', noteAt: feedbackDate(note.updatedAt), sourceData: dto,
+    submittedAtTs: feedbackTimestamp(dto.submittedAt), statusCode: feedbackText(dto.status), roleCode: role, resolutionText: feedbackText(dto.resolution),
   };
 }
 // Collection keys and numeric pagination are defined by the deployed response examples.

@@ -1,8 +1,8 @@
 import { baseApi, unwrapApiResponseData } from '../../api/baseApi.js';
 import { adaptKnowledgeAnalytics, KNOWLEDGE_ANALYTICS_INTERVALS, KNOWLEDGE_ANALYTICS_PERIODS } from './knowledgeAnalyticsContracts.js';
 
-// Existing UI taxonomy, without the fixture counts.
-export const KNOWLEDGE_CATEGORIES = ['Trips & Jobs', 'Container Triangulation', 'Provisional Release', 'Fleet Management', 'Finance', 'Live Tracking', 'Pricing', 'General'];
+// The seven topics the apps file help articles under (see GET /help/categories).
+export const KNOWLEDGE_CATEGORIES = ['Account & Login', 'Jobs & Bookings', 'Payments & Wallet', 'Truck & Fleet', 'Driver Management', 'Documents & Compliance', 'Technical'];
 export const ARTICLE_STATUS_CODES = { Draft: 'DRAFT', Published: 'PUBLISHED', Archived: 'ARCHIVED' };
 const STATUS_LABELS = { DRAFT: 'Draft', PUBLISHED: 'Published', ARCHIVED: 'Archived' };
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;

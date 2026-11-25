@@ -4,9 +4,9 @@ import { usePageSearchState } from '../components/PageSearch.jsx';
 
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { HelpCenterHeader } from "./help/HelpCenterHeader.jsx";
 import { useNavigate } from "../router.js";
 import {
-  PageHeader,
   Button,
   Card,
   SectionCard,
@@ -102,12 +102,7 @@ export function FAQ() {
 
   return (
     <>
-      <PageHeader
-        crumbs={["Support System", "FAQ"]}
-        actions={<Button icon="plus" onClick={() => navigate("/faq/new")}>Add FAQ</Button>}
-        title="FAQ"
-        description="Find answers to frequently asked questions about the Trukkas platform."
-      />
+      <HelpCenterHeader tab="faq" actions={<Button icon="plus" onClick={() => navigate("/faq/new")}>Add FAQ</Button>} />
 
       <Card pad="none">
         <Tabs

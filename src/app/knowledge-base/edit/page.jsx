@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
-import { KnowledgeArticleForm } from '../../../screens/KnowledgeArticleForm.jsx';
+import { ArticleEditor } from '../../../screens/help/ArticleEditor.jsx';
 
 export default function EditKnowledgeArticlePage() {
-  return <Suspense fallback={null}><KnowledgeArticleForm editing /></Suspense>;
+  return <Suspense fallback={null}><ArticleEditor /></Suspense>;
 }
