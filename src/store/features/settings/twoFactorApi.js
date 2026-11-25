@@ -5,9 +5,9 @@ const path = '/admin/security/2fa';
 const failure = (message, uncertain = false) => ({ error: { status: 'CUSTOM_ERROR', error: message, data: { message, saveUnconfirmed: uncertain } } });
 function guard(api, owner) {
   const actor = api.getState().auth.admin;
-  if (!actor?.id || actor.id !== owner || !api.getState().auth.accessToken) throw new Error('Please sign in again before configuring two-factor authentication.');
+  if (!actor?.id || actor.id !== owner || !api.getState().auth.signedIn) throw new Error('Please sign in again before configuring two-factor authentication.');
   return () => {
-    if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.accessToken) throw new Error('The admin session changed. Reopen two-factor settings before continuing.');
+    if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.signedIn) throw new Error('The admin session changed. Reopen two-factor settings before continuing.');
   };
 }
 export const twoFactorApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminTwoFactor', 'AdminSettingsEvents', 'AdminAuditLogs'] }).injectEndpoints({

@@ -7,10 +7,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Button, Card, Logo, TextField } from '../ds.js';
 import {
   useForgotAdminPasswordMutation,
-  useLoginAdminMutation,
   useResetAdminPasswordMutation,
 } from '../store/features/auth/authApi.js';
-import { clearSession } from '../store/features/auth/authSlice.js';
+import { clearSession, setCredentials } from '../store/features/auth/authSlice.js';
+import { loginAction } from '../lib/auth/actions';
 import { baseApi } from '../store/api/baseApi.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import styles from './AuthScreens.module.css';
@@ -61,23 +61,32 @@ export function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
-  const [loginAdmin, { isLoading: busy }] = useLoginAdminMutation();
+  const dispatch = useDispatch();
+  const [busy, setBusy] = React.useState(false);
   const [challenge, setChallenge] = React.useState(null);
-  const pendingLogin = React.useRef(false), loginRequest = React.useRef(null);
-  React.useEffect(() => () => { loginRequest.current?.abort(); }, []);
+  const pendingLogin = React.useRef(false);
+  const expiredHandled = React.useRef(false);
   const admin = useSelector((state) => state.auth.admin);
   const [error, setError] = React.useState('');
   const [notice, setNotice] = React.useState('');
 
   React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // The Next.js server ended this session. Forget it here too, or this page would send the admin straight back in.
+    if (params.get('expired') === '1' && !expiredHandled.current) {
+      expiredHandled.current = true;
+      dispatch(clearSession());
+      setNotice('Your session ended. Sign in again.');
+      return;
+    }
     if (admin) {
       router.replace(destinationAfterLogin());
       return;
     }
-    if (new URLSearchParams(window.location.search).get('reset') === '1') {
+    if (params.get('reset') === '1') {
       setNotice('Password updated. Sign in with your new password.');
     }
-  }, [admin, router]);
+  }, [admin, router, dispatch]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -88,14 +97,26 @@ export function LoginScreen() {
       return;
     }
     pendingLogin.current = true;
-    const task = loginAdmin({ email: email.trim(), password });
-    loginRequest.current = task;
+    setBusy(true);
     try {
-      const result = await task.unwrap();
-      if (result.twoFactorRequired) { setPassword(''); setChallenge(result.challenge); }
-    } catch (requestError) {
-      setError(getApiErrorMessage(requestError));
-    } finally { task.reset(); pendingLogin.current = false; loginRequest.current = null; }
+      // runs on the Next.js server: the tokens go into httpOnly cookies and never come back here
+      const result = await loginAction({ email: email.trim(), password });
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      if (result.twoFactorRequired) {
+        setPassword('');
+        setChallenge(result.challenge);
+        return;
+      }
+      dispatch(setCredentials({ admin: result.admin })); // the effect above then redirects
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      pendingLogin.current = false;
+      setBusy(false);
+    }
   }
 
   return (

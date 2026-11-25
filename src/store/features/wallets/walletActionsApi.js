@@ -22,7 +22,7 @@ export function walletActionError(error) {
 }
 function inSession(api, args) {
   const auth = api.getState().auth;
-  return !api.signal.aborted && Boolean(auth.accessToken && text(args.owner)) && auth.admin?.id === args.owner && auth.admin?.role === args.role && adminRoles.includes(args.role);
+  return !api.signal.aborted && Boolean(auth.signedIn && text(args.owner)) && auth.admin?.id === args.owner && auth.admin?.role === args.role && adminRoles.includes(args.role);
 }
 function transport(api, baseQuery, args) {
   return async request => {

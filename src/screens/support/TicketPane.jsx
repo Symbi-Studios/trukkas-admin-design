@@ -149,7 +149,7 @@ function Fact({ label, children }) {
 export function TicketPane({ ticketId, layout = 'split', siblings = [], onSelect }) {
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const query = useGetAdminSupportTicketDetailQuery(ticketId, { skip: !authenticated || !ticketId, refetchOnMountOrArgChange: true });
   const agentsQuery = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated });
   const templatesQuery = useGetAdminSupportTemplatesQuery(undefined, { skip: !authenticated });

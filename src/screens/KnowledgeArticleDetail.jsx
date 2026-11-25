@@ -11,7 +11,7 @@ import './Support.css';
 
 function downloadArticle(a){const blob=new Blob([`${a.title}\n\n${a.summary}\n\n${a.content}`],{type:'text/plain'});const u=URL.createObjectURL(blob);const x=document.createElement('a');x.href=u;x.download=a.id+'.txt';x.click();URL.revokeObjectURL(u)}
 export function KnowledgeArticleDetail(){
- const params=useParams();const search=useSearchParams();const articleId=search.get('articleId')||params.articleId;const navigate=useNavigate();const authenticated=useSelector(state=>Boolean(state.auth.accessToken));
+ const params=useParams();const search=useSearchParams();const articleId=search.get('articleId')||params.articleId;const navigate=useNavigate();const authenticated=useSelector(state=>Boolean(state.auth.signedIn));
  const detail=useGetAdminKnowledgeArticleDetailQuery(articleId,{skip:!authenticated||!articleId});const article=authenticated&&!detail.error?detail.currentData||emptyKnowledgeArticle:emptyKnowledgeArticle;
  const [createArticle,{isLoading:duplicating}]=useCreateAdminKnowledgeArticleMutation();const duplicateLock=useRef(false);const [menu,setMenu]=useState(false);const [toast,setToast]=useState('');function notify(x){setToast(x);setTimeout(()=>setToast(''),1800)}
  const loading=authenticated&&detail.isFetching;const ready=authenticated&&Boolean(detail.currentData)&&!detail.error&&!loading;const value=content=>loading?<Skeleton as="span" width={80} height={14}/>:content;

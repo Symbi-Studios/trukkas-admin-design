@@ -43,13 +43,13 @@ export function CompanyDetail() {
   const id = search.get('id') || params.companyId || '';
   const owner = useSelector(state => state.auth.admin?.id);
   const role = useSelector(state => state.auth.admin?.role);
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   return <CompanyScreen key={id+':'+String(owner)+':'+String(role)+':'+authenticated} />;
 }
 function CompanyScreen() {
   const navigate = useNavigate(), params = useParams(), search = useSearchParams();
   const id = search.get('id') || params.companyId || '';
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const owner = useSelector(state => state.auth.admin?.id);
   const adminRole = useSelector((state) => state.auth.admin?.role);
 

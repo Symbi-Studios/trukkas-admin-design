@@ -234,7 +234,7 @@ async function transactionPdf(baseQuery, args, kind) {
 }
 async function transactionReportPdf(baseQuery, api, { from, to, owner } = {}) {
   const admin = api.getState().auth.admin;
-  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && admin?.id === owner && api.getState().auth.admin?.id === owner;
+  const sameSession = () => !api.signal.aborted && api.getState().auth.signedIn && admin?.id === owner && api.getState().auth.admin?.id === owner;
   if (!owner || !sameSession()) return actionError('Sign in before downloading a transaction report.');
   // Omitted dates default to 30 days on this endpoint. Require explicit bounds
   // so an All Dates/open-ended summary never downloads a different period.
@@ -263,10 +263,10 @@ const actionError = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
 
 async function paymentActionContext(baseQuery, api, id, action, amount) {
   const admin = api.getState().auth.admin;
-  if (!text(id) || !text(admin?.id) || !api.getState().auth.accessToken) return actionError('Sign in and select a transaction before continuing.');
+  if (!text(id) || !text(admin?.id) || !api.getState().auth.signedIn) return actionError('Sign in and select a transaction before continuing.');
   if (action === 'reverse' && admin.role !== 'SUPER_ADMIN') return actionError('Reversing transactions requires Super Admin access.');
   if (action === 'refund' && !['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(admin.role)) return actionError('Refunding transactions requires Finance or Super Admin access.');
-  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  const sameSession = () => !api.signal.aborted && api.getState().auth.signedIn && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
   const result = await baseQuery({ url: '/admin/payments/transactions/' + encodeURIComponent(id) });
   if (result.error) return { error: result.error };
   const row = adaptAdminTransaction(unwrapApiResponseData(result.data));

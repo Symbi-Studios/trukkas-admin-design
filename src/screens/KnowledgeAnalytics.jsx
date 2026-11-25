@@ -16,7 +16,7 @@ const chartCount = value => value.toLocaleString('en-NG', { maximumFractionDigit
 
 export function KnowledgeAnalytics() {
   const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn && state.auth.admin?.id));
   return <KnowledgeAnalyticsScreen key={[owner, role, authenticated].join(':')} owner={owner} role={role} authenticated={authenticated} />;
 }
 

@@ -1,33 +1,16 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { clearSession, setCredentials } from '../features/auth/authSlice.js';
+import { clearSession } from '../features/auth/authSlice.js';
 
-const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://trukkas-backend.onrender.com/api/v1';
-const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
+// Every call goes to this Next.js route (src/app/api/backend), NOT straight to the Trukkas backend.
+// The Next.js server adds the token from the httpOnly cookie, refreshes it when needed and forwards the call,
+// so no token exists in the browser. The backend address is set on the server (API_BASE_URL).
+const baseUrl = '/api/backend';
 const apiLoggingDisabled = String(process.env.NEXT_PUBLIC_API_LOGGING ?? '').trim().toLowerCase() === 'false';
 const apiLoggingEnabled = process.env.NODE_ENV !== 'production' && !apiLoggingDisabled;
-const publicEndpoints = new Set(['loginAdmin', 'verifyAdminTwoFactor', 'refreshAdmin', 'forgotAdminPassword', 'resetAdminPassword']);
-const reauthExcludedPaths = new Set([
-  '/admin/auth/login',
-  '/admin/auth/2fa/verify',
-  '/admin/auth/refresh',
-  '/admin/auth/forgot-password',
-  '/admin/auth/reset-password',
-]);
-// Report preview uses POST for read-only configuration evaluation.
-const retryableAfterRefresh = new Set(['markAdminNotificationsRead', 'markAllAdminNotificationsRead', 'previewAdminReport']);
+// Public calls: a 401 here is a wrong answer, not an ended session.
+const publicPaths = new Set(['/admin/auth/forgot-password', '/admin/auth/reset-password']);
 
-const rawBaseQuery = fetchBaseQuery({
-  baseUrl,
-  prepareHeaders(headers, { endpoint, getState }) {
-    const token = getState().auth.accessToken;
-    if (token && !publicEndpoints.has(endpoint)) headers.set('authorization', `Bearer ${token}`);
-    return headers;
-  },
-});
-
-// A refresh request must not carry an expired access token.
-const refreshBaseQuery = fetchBaseQuery({ baseUrl });
-let activeRefresh = null;
+const rawBaseQuery = fetchBaseQuery({ baseUrl });
 
 async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.endpoint) {
   const startedAt = Date.now();
@@ -55,17 +38,6 @@ async function runLoggedBaseQuery(query, args, api, extraOptions, label = api.en
   console.groupEnd();
   return result;
 }
-function isTerminalRefreshError(error) {
-  const status = error?.status === 'PARSING_ERROR' ? error.originalStatus : error?.status;
-  return [400, 401, 403, 422].includes(status);
-}
-
-function clearExpiredSession(api, expectedRefreshToken) {
-  if (expectedRefreshToken && api.getState().auth.refreshToken !== expectedRefreshToken) return;
-  api.dispatch(clearSession());
-  api.dispatch(baseApi.util.resetApiState());
-}
-
 export function unwrapApiResponseData(response) {
   let data = response;
   while (
@@ -77,76 +49,22 @@ export function unwrapApiResponseData(response) {
   return data;
 }
 
-async function performRefresh(refreshToken, api, extraOptions) {
-  const result = await runLoggedBaseQuery(refreshBaseQuery, {
-    url: '/admin/auth/refresh',
-    method: 'POST',
-    body: { refreshToken },
-  }, api, extraOptions, 'refreshAdmin');
-
-  // A logout or newer login may have happened while the request was in flight.
-  if (api.getState().auth.refreshToken !== refreshToken) return { status: 'stale' };
-  if (result.error) {
-    if (isTerminalRefreshError(result.error)) clearExpiredSession(api, refreshToken);
-    return { status: 'failed', error: result.error };
-  }
-  const data = unwrapApiResponseData(result.data);
-  if (!data?.accessToken) {
-    clearExpiredSession(api, refreshToken);
-    return { status: 'failed', error: { status: 'CUSTOM_ERROR', error: 'The refresh response is missing session details.' } };
-  }
-
-  api.dispatch(setCredentials({
-    accessToken: data.accessToken,
-    refreshToken: data.refreshToken || refreshToken,
-    admin: data.admin,
-  }));
-  return { status: 'success' };
+function endSession(api) {
+  api.dispatch(clearSession());
+  api.dispatch(baseApi.util.resetApiState());
 }
 
-export function refreshSession(api, extraOptions) {
-  const refreshToken = api.getState().auth.refreshToken;
-  if (!refreshToken) return Promise.resolve({ status: 'failed', error: { status: 401, data: { message: 'Please sign in again.' } } });
-
-  if (!activeRefresh || activeRefresh.refreshToken !== refreshToken) {
-    const entry = { refreshToken, promise: performRefresh(refreshToken, api, extraOptions) };
-    activeRefresh = entry;
-    void entry.promise.finally(() => {
-      if (activeRefresh === entry) activeRefresh = null;
-    });
-  }
-  return activeRefresh.promise;
-}
-
-async function baseQueryWithReauth(args, api, extraOptions) {
-  const requestToken = api.getState().auth.accessToken;
-  let result = await runLoggedBaseQuery(rawBaseQuery, args, api, extraOptions);
+// The forwarding route has already tried to refresh the session. A 401 that still reaches us means it is over.
+async function baseQueryWithSession(args, api, extraOptions) {
+  const result = await runLoggedBaseQuery(rawBaseQuery, args, api, extraOptions);
   const path = (typeof args === 'string' ? args : args.url).split('?')[0];
-  const method = (typeof args === 'string' ? 'GET' : args.method || 'GET').toUpperCase();
-  const safeToRetry = ['GET', 'HEAD', 'OPTIONS'].includes(method) || retryableAfterRefresh.has(api.endpoint);
-
-  if (result.error?.status !== 401 || reauthExcludedPaths.has(path)) return result;
-
-  const currentToken = api.getState().auth.accessToken;
-  if (safeToRetry && currentToken && currentToken !== requestToken) {
-    return runLoggedBaseQuery(rawBaseQuery, args, api, extraOptions, `${api.endpoint} (retry)`);
-  }
-  if (!api.getState().auth.refreshToken) {
-    clearExpiredSession(api);
-    return result;
-  }
-
-  const refresh = await refreshSession(api, extraOptions);
-  if (refresh.status === 'success' && safeToRetry) {
-    result = await runLoggedBaseQuery(rawBaseQuery, args, api, extraOptions, `${api.endpoint} (retry)`);
-    if (result.error?.status === 401) clearExpiredSession(api);
-  }
+  if (result.error?.status === 401 && !publicPaths.has(path)) endSession(api);
   return result;
 }
 
 export const baseApi = createApi({
   reducerPath: 'baseApi',
-  baseQuery: baseQueryWithReauth,
+  baseQuery: baseQueryWithSession,
   tagTypes: ['AdminNotifications', 'AdminNotificationSettings', 'AdminJobs', 'AdminBids', 'AdminBidAnalytics', 'AdminTrips', 'AdminDocReviewStats', 'AdminDocReviewQueue', 'AdminDocReviewDetail', 'ContainerReviewQueue', 'ContainerReviewJob', 'AdminTriangulation', 'AdminFleet', 'AdminDrivers', 'AdminDriverStats', 'AdminCompanies', 'AdminForwarders', 'AdminPricingConfig', 'AdminTerminalRates'],
   endpoints: () => ({}),
 });

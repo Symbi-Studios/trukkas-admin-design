@@ -366,7 +366,7 @@ export const tripsApi = baseApi.injectEndpoints({
         const failure = (error) => ({ error: { status: 'CUSTOM_ERROR', error } });
         if (!text(id) || !text(driverId) || !text(message) || message.trim().length > 2000) return failure('Select a driver and enter a message within the allowed length.');
         const account = api.getState().auth.admin;
-        const sameSession = () => Boolean(account?.id) && !api.signal.aborted && Boolean(api.getState().auth.accessToken) && api.getState().auth.admin === account;
+        const sameSession = () => Boolean(account?.id) && !api.signal.aborted && Boolean(api.getState().auth.signedIn) && api.getState().auth.admin === account;
         if (!sameSession()) return failure('An active admin session is required to message the driver.');
         const current = await baseQuery({ url: `/admin/trips/${encodeURIComponent(id)}` });
         if (!sameSession()) return failure('The admin session changed. Refresh before continuing.');

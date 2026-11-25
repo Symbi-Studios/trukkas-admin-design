@@ -266,8 +266,8 @@ async function payoutDetail(baseQuery, api, args) {
 
 async function reviewWithdrawal(baseQuery, api, args, decision) {
   const admin = api.getState().auth.admin;
-  if (!text(admin?.id) || !api.getState().auth.accessToken) return apiError('Sign in before reviewing this payout.');
-  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  if (!text(admin?.id) || !api.getState().auth.signedIn) return apiError('Sign in before reviewing this payout.');
+  const sameSession = () => !api.signal.aborted && api.getState().auth.signedIn && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
   const fresh = await readPayout(baseQuery, args);
   if (fresh.error) return fresh;
   const payout = adaptAdminPayout(fresh.data);
@@ -286,8 +286,8 @@ async function reviewWithdrawal(baseQuery, api, args, decision) {
 async function changePayout(baseQuery, api, args, action) {
   const target = payoutArgs(args), admin = api.getState().auth.admin;
   const content = action === 'notes' && typeof args.note === 'string' ? args.note.trim() : text(action === 'request-info' ? args.message : args.note);
-  if (!target || content == null || !text(admin?.id) || !api.getState().auth.accessToken) return apiError('Select a payout and enter the requested text.');
-  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  if (!target || content == null || !text(admin?.id) || !api.getState().auth.signedIn) return apiError('Select a payout and enter the requested text.');
+  const sameSession = () => !api.signal.aborted && api.getState().auth.signedIn && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
   const fresh = await readPayout(baseQuery, target);
   if (fresh.error) return fresh;
   if (!sameSession()) return apiError('The session changed. Refresh before continuing.');

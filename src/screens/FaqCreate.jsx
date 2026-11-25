@@ -52,7 +52,7 @@ function FieldLabel({ htmlFor, children, required, optional }) {
 
 export function FaqCreate() {
   const navigate = useNavigate();
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const owner = useSelector(state => state.auth.admin?.id);
   const { data: existing } = useGetAdminFaqCategoriesQuery({ owner }, { skip: !authenticated || !owner, refetchOnMountOrArgChange: true });
   const [createFaq, { isLoading }] = useCreateAdminFaqMutation();

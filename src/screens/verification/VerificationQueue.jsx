@@ -19,7 +19,7 @@ const PAGE_SIZE = 25;
 
 export function VerificationQueue() {
   // Remount on account switch so no rows from another admin linger.
-  const scope = useSelector((state) => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  const scope = useSelector((state) => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.signedIn)].join(':'));
   return <QueueScreen key={scope} />;
 }
 

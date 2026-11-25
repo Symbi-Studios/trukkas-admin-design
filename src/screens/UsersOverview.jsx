@@ -52,7 +52,7 @@ function statusRows(rows) {
 
 export function UsersOverview() {
   const navigate = useNavigate();
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const owner = useSelector((state) => state.auth.admin?.id);
 
   const overviewQuery = useGetAdminOverviewQuery(undefined, { refetchOnMountOrArgChange: true });

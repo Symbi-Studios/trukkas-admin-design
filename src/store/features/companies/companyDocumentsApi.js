@@ -38,7 +38,7 @@ export const companyDocumentsApi = baseApi.enhanceEndpoints({ addTagTypes: tags 
   endpoints: builder => ({
     getAdminCompanyDocuments: builder.query({
       async queryFn({ id, owner }, api, _options, baseQuery) {
-        const current = () => !api.signal.aborted && owner && api.getState().auth.accessToken && api.getState().auth.admin?.id === owner;
+        const current = () => !api.signal.aborted && owner && api.getState().auth.signedIn && api.getState().auth.admin?.id === owner;
         if (!text(id) || !current()) return fail('Sign in and select a company.');
         const result = await baseQuery({ url: path(id) });
         if (!current()) return fail('Your session changed. Reopen the company.');
@@ -51,7 +51,7 @@ export const companyDocumentsApi = baseApi.enhanceEndpoints({ addTagTypes: tags 
       async queryFn(args, api, options) {
         const { owner, companyId, id, url } = args;
         const resource = previewResource(args);
-        const current = () => !resource.closed && !api.signal.aborted && owner && api.getState().auth.accessToken && api.getState().auth.admin?.id === owner;
+        const current = () => !resource.closed && !api.signal.aborted && owner && api.getState().auth.signedIn && api.getState().auth.admin?.id === owner;
         if (!text(companyId) || !fileUrl(url) || !current()) return fail('Sign in and reopen the document.');
         const result = await storageQuery({ url, responseHandler: response => response.ok ? response.blob() : null }, api, options);
         if (!current()) return fail('Your session changed. Reopen the document.');
@@ -76,7 +76,7 @@ export const companyDocumentsApi = baseApi.enhanceEndpoints({ addTagTypes: tags 
     }),
     reviewAdminCompanyDocument: builder.mutation({
       async queryFn({ companyId, document, decision, reason, owner, role }, api, _options, baseQuery) {
-        const current = () => !api.signal.aborted && owner && api.getState().auth.accessToken && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const current = () => !api.signal.aborted && owner && api.getState().auth.signedIn && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
         if (!text(companyId) || !text(document?.id) || !['approve', 'reject'].includes(decision) || !reviewRoles.has(role) || !current()) return fail('Your account cannot review this company document.');
         if (decision === 'reject' && (!text(reason) || reason.trim().length > 500)) return fail('Enter a rejection reason of up to 500 characters.');
         const before = await baseQuery({ url: path(companyId) });

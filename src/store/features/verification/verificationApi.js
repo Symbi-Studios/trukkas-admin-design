@@ -13,7 +13,7 @@ function scopedQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
     const next = api.getState().auth;
-    return !api.signal.aborted && Boolean(next.accessToken && owner) && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
+    return !api.signal.aborted && Boolean(next.signedIn && owner) && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
   };
   return async request => {
     if (!current()) return failure('Your session changed. Reopen Verification before continuing.');
@@ -238,7 +238,7 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
     decideAdminVerification: builder.mutation({
       async queryFn({ id, decision, reason, owner, role }, api, _options, baseQuery) {
         baseQuery = scopedQuery(baseQuery, api, { owner, role });
-        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return failure('Your session changed. Reload before deciding.');
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return failure('Your session changed. Reload before deciding.');
         if (!text(id) || !['approve', 'reject'].includes(decision)) return failure('A verification and decision are required.');
         if (decision === 'reject' && (!text(reason) || reason.trim().length > 500)) return failure('Enter a reason of up to 500 characters.');
         const current = await readDetail(baseQuery, id); if (current.error) return current;
@@ -256,7 +256,7 @@ export const verificationApi = baseApi.enhanceEndpoints({ addTagTypes: tags }).i
     changeAdminVerification: builder.mutation({
       async queryFn({ action, id, body, owner, role }, api, _options, baseQuery) {
         baseQuery = scopedQuery(baseQuery, api, { owner, role });
-        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return failure('Your session changed. Reload before saving.');
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return failure('Your session changed. Reload before saving.');
         if (!canManageVerification(api.getState().auth.admin?.role)) return failure('Your account cannot manage verifications.');
         if (['edit', 'reassign', 'information', 'cancel'].includes(action) && !['SUPER_ADMIN', 'OPS_ADMIN'].includes(api.getState().auth.admin?.role)) return failure('Only Super Admins and Operations Admins can perform this verification action.');
         const config = { create: ['POST', ''], edit: ['PATCH', ''], reassign: ['POST', '/reassign'], information: ['POST', '/request-information'], noncompliant: ['POST', '/mark-non-compliant'], cancel: ['POST', '/cancel'], comment: ['POST', '/comments'], note: ['POST', '/notes'] }[action];

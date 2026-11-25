@@ -39,7 +39,7 @@ function pageData(dto, key, page, limit) {
   return { rows, pagination: { page, limit, total: p.total, totalPages: Math.max(1, p.totalPages) } };
 }
 function scopedQuery(baseQuery, api, args, superOnly = false) {
-  const current = () => !api.signal.aborted && args.owner && api.getState().auth.accessToken
+  const current = () => !api.signal.aborted && args.owner && api.getState().auth.signedIn
     && api.getState().auth.admin?.id === args.owner && (!superOnly || args.role === 'SUPER_ADMIN' && api.getState().auth.admin?.role === args.role);
   return async request => {
     if (!current()) return { error: { status: 403, data: { message: superOnly ? 'Only Super Admins can view the fee audit log.' : 'Sign in before loading fee records.' } } };

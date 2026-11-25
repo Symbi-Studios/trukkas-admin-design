@@ -11,7 +11,7 @@ import {
 export function useFeeOperations() {
   const owner = useSelector((state) => state.auth.admin?.id);
   const role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const canManage = authenticated && ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(role);
   const [setStatus, statusState] = useSetAdminFeeRuleStatusMutation();
   const [exportRules, rulesExportState] = useLazyGetAdminFeeRulesExportQuery();

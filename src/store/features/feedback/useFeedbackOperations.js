@@ -5,7 +5,7 @@ import { useChangeAdminFeedbackMutation, useLazyDownloadAdminFeedbackQuery, save
 
 export function useFeedbackOperations(id = '') {
   const owner = useSelector((state) => state.auth.admin?.id), role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const [change, mutation] = useChangeAdminFeedbackMutation(), [requestDownload, downloadState] = useLazyDownloadAdminFeedbackQuery();
   const lock = useRef(false), keys = useRef(new Map()), currentScope = useRef(null);
   const scope = [owner || '', role || '', id].join(':');

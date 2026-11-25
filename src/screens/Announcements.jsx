@@ -90,7 +90,7 @@ export function Announcements() {
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const tab = 'All Announcements',
     [q, setQ] = usePageSearchState("", () => setPage(1)),
     [status, setStatus] = useState("All"),

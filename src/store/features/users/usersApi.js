@@ -388,7 +388,7 @@ function secureEndpoints(definitions) {
     if (!handler) continue;
     definition.queryFn = async (args, api, options, baseQuery) => {
       const account = api.getState().auth.admin;
-      const current = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken) && api.getState().auth.admin?.id === account?.id && api.getState().auth.admin?.role === account?.role && (!args?.owner || args.owner === account?.id);
+      const current = () => !api.signal.aborted && Boolean(api.getState().auth.signedIn) && api.getState().auth.admin?.id === account?.id && api.getState().auth.admin?.role === account?.role && (!args?.owner || args.owner === account?.id);
       if (!current()) return failure('The admin session changed. Sign in again.', 403);
       const guarded = async request => {
         if (!current()) return failure('The admin session changed.', 403);
@@ -396,7 +396,7 @@ function secureEndpoints(definitions) {
         return current() ? result : failure('The admin session changed.', 403);
       };
       const result = await handler(args, api, options, guarded);
-      return current() || result.data?.authUpdated === true && api.getState().auth.accessToken && api.getState().auth.admin?.id === account?.id ? result : failure('The admin session changed.', 403);
+      return current() || result.data?.authUpdated === true && api.getState().auth.signedIn && api.getState().auth.admin?.id === account?.id ? result : failure('The admin session changed.', 403);
     };
   }
   return definitions;

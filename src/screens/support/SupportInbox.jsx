@@ -82,7 +82,7 @@ export function SupportInbox() {
   const navigate = useNavigate();
   const params = useSearchParams();
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const queue = QUEUE_IDS.includes(params.get('queue')) ? params.get('queue') : LEGACY_ASSIGNED[params.get('assignedTo')] || DEFAULT_QUEUE;
   const selected = params.get('ticket') || '';
   const [sort, setSort] = React.useState('recent');

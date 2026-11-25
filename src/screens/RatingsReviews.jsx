@@ -79,7 +79,7 @@ function Person({ person, sub, avatar = true }) {
 
 export function RatingsReviews() {
   const navigate = useNavigate();
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const isSuperAdmin = useSelector((state) => state.auth.admin?.role) === "SUPER_ADMIN";
 
   const [tab, setTab] = useState("feedback");

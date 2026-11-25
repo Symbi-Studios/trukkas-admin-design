@@ -6,8 +6,8 @@ const text = (value) => typeof value === 'string' && value.trim() ? value.trim()
 const profilePath = '/admin/profile';
 const guard = (api, owner) => {
   const admin = api.getState().auth.admin;
-  if (!owner || admin?.id !== owner || !api.getState().auth.accessToken) return null;
-  return () => !api.signal.aborted && api.getState().auth.admin === admin && Boolean(api.getState().auth.accessToken);
+  if (!owner || admin?.id !== owner || !api.getState().auth.signedIn) return null;
+  return () => !api.signal.aborted && api.getState().auth.admin === admin && Boolean(api.getState().auth.signedIn);
 };
 const personalQuery = (suffix) => ({
   async queryFn({ owner }, api, _options, baseQuery) {

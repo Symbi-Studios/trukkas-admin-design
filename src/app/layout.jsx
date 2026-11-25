@@ -3,6 +3,7 @@ import { AdminShell } from '../App.jsx';
 import { StoreProvider } from '../store/StoreProvider.jsx';
 import { DesktopOnlyNotice } from '../components/DesktopOnlyNotice.jsx';
 import screenStyles from '../components/DesktopOnlyNotice.module.css';
+import { getAdmin } from '../lib/auth/session';
 
 export const metadata = {
   title: {
@@ -12,7 +13,11 @@ export const metadata = {
   description: 'Operations console for jobs, trips, bids, fleet, finance, and compliance.',
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  // Runs on the Next.js server: reads the admin from the httpOnly cookie, so a reload keeps the admin signed in
+  // without any token in the browser.
+  const admin = await getAdmin();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -27,7 +32,7 @@ export default function RootLayout({ children }) {
       </head>
       <body style={{ margin: 0 }}>
         <div className={screenStyles.experience}>
-          <StoreProvider><AdminShell>{children}</AdminShell></StoreProvider>
+          <StoreProvider initialAdmin={admin}><AdminShell>{children}</AdminShell></StoreProvider>
         </div>
         <DesktopOnlyNotice />
       </body>

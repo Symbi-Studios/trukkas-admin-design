@@ -179,7 +179,7 @@ function accessTransition(action, target) {
 function UserAccessDialog({ dialog, onClose, onReload, onPendingChange }) {
   const { action, target, owner, loading, blocked } = dialog;
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const copy = ACCESS_COPY[action], transition = accessTransition(action, target);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
