@@ -10,7 +10,6 @@ function mapUserCount(group) {
     todayDelta: numberOrNull(group?.todayDelta),
     weekDelta: numberOrNull(group?.weekDelta),
     monthDelta: numberOrNull(group?.monthDelta),
-    exporterCount: numberOrNull(group?.exporterCount),
   };
 }
 
@@ -84,7 +83,7 @@ function mapAdminOverviewResponse(response) {
   return {
     range: data.range ? {
       from: data.range.from, to: data.range.to,
-      registrations: Object.fromEntries(['drivers', 'truckers', 'forwarders', 'exporters'].map((key) => [key, numberOrNull(data.range.registrations?.[key])])),
+      registrations: Object.fromEntries(['drivers', 'truckers', 'forwarders'].map((key) => [key, numberOrNull(data.range.registrations?.[key])])),
       jobs: Object.fromEntries(['completed', 'completedTrendPercent', 'containersMoved', 'containersMovedTrendPercent'].map((key) => [key, numberOrNull(data.range.jobs?.[key])])),
     } : null,
     jobs: {
@@ -173,11 +172,6 @@ function mapAdminOverviewResponse(response) {
       forwarders: mapRegistrations(
         data.recentRegistrations?.forwarders,
         'Forwarder',
-        '/forwarders',
-      ),
-      exporters: mapRegistrations(
-        data.recentRegistrations?.exporters,
-        'Exporter',
         '/forwarders',
       ),
     },

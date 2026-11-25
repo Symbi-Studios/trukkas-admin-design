@@ -22,7 +22,7 @@ const ROLE_LABELS = {
   OPS_ADMIN: 'Operations Admin',
   FINANCE_ADMIN: 'Finance Admin',
   FORWARDER: 'Forwarder',
-  EXPORTER: 'Exporter',
+  EXPORTER: 'Forwarder',
   TRUCKER: 'Trucker',
   TRUCKING_COMPANY: 'Trucking company',
   DRIVER: 'Driver'

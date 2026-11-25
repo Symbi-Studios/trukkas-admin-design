@@ -17,7 +17,6 @@ const PAYOUT_METHODS = ['Bank Transfer', 'Mobile Money', 'Wallet Credit'];
 const PROCESSING_TIMES = ['Instant (≤ 1 hour)', 'Same Day', 'Next Business Day'];
 const INVOICE_LOGOS = ['Company Logo', 'None'];
 const TAX_CALC = ['Include VAT in price', 'Exclude VAT from price'];
-const ACCOUNTING_INTEGRATIONS = ['None', 'Xero', 'QuickBooks', 'Wave'];
 
 function Field({ children }) { return <div style={{ marginBottom: 14 }}>{children}</div>; }
 
@@ -150,15 +149,10 @@ export function SettingsFinance() {
             {editor.visible('settingsAccountingTax', 'taxIdentificationNumber') && (<TextField label="Tax Identification Number (TIN)" value={tax.taxIdentificationNumber}
               hint="Used for tax compliance and invoicing."
               onChange={(e) => updateAccountingTax({ taxIdentificationNumber: e.target.value })} />) }
-            {editor.visible('settingsAccountingTax', 'accountingIntegration') && (<Select label="Accounting Integration" options={ACCOUNTING_INTEGRATIONS} value={tax.accountingIntegration}
-              onChange={(e) => updateAccountingTax({ accountingIntegration: e.target.value })} />) }
           </div>
           {editor.visible('settingsAccountingTax', 'enableTaxReports') && (<Field><Switch checked={tax.enableTaxReports} label="Enable tax reports"
             hint="Generate tax reports for compliance."
             onChange={(v) => updateAccountingTax({ enableTaxReports: v })} /></Field>) }
-          {editor.visible('settingsAccountingTax', 'syncFinancialData') && (<Switch checked={tax.syncFinancialData} label="Sync financial data"
-            hint="Automatically sync transactions to accounting software."
-            onChange={(v) => updateAccountingTax({ syncFinancialData: v })} />) }
         </SettingsCard>) }
       </SettingsGrid>
     </>

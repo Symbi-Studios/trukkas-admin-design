@@ -240,8 +240,8 @@ const serviceStatusKeys = { Database: 'neon', 'Payment Services': 'embedly', 'SM
 const statusCardKeys = {
   general: { 'Web Application': 'web-application', 'Map & Location Services': 'map-location' },
   operations: { 'Job Processing': 'job-processing', 'Bidding System': 'bidding-system', Dispatch: 'dispatch', 'Trip Tracking': 'trip-tracking', 'Document Verification': 'document-verification', 'Auto Notifications': 'auto-notifications' },
-  finance: { 'Currency Configuration': 'currency-configuration', 'Platform Fees': 'platform-fees', 'Escrow Rules': 'escrow-rules', 'Payout Settings': 'payout-settings', 'Invoicing & Receipts': 'invoicing-receipts', 'Tax Compliance': 'tax-compliance', 'Accounting Integration': 'accounting-integration' },
-  fleet: { 'Fleet Management': 'fleet-management', 'Maintenance Rules': 'maintenance-rules', 'Tracking & Telematics': 'tracking-telematics', 'Fuel & Cost Settings': 'fuel-cost', 'Document Management': 'document-management', 'Compliance & Inspections': 'compliance-inspections', 'Driver Assignment': 'driver-assignment', Integrations: 'integrations' },
+  finance: { 'Currency Configuration': 'currency-configuration', 'Platform Fees': 'platform-fees', 'Escrow Rules': 'escrow-rules', 'Payout Settings': 'payout-settings', 'Invoicing & Receipts': 'invoicing-receipts', 'Tax Compliance': 'tax-compliance' },
+  fleet: { 'Fleet Management': 'fleet-management', 'Maintenance Rules': 'maintenance-rules', 'Tracking & Telematics': 'tracking-telematics', 'Fuel & Cost Settings': 'fuel-cost', 'Document Management': 'document-management', 'Compliance & Inspections': 'compliance-inspections', 'Driver Assignment': 'driver-assignment' },
 };
 export function statusForTemplate(status, template) {
   const card = (key) => {
@@ -260,16 +260,6 @@ export function statusForTemplate(status, template) {
   if (statusCardKeys[status?.page]) return { headline: grouped?.headline || '—', caption: grouped?.caption || '—', lastChecked: grouped?.lastChecked && grouped.lastChecked !== '—' ? grouped.lastChecked : status?.lastChecked || '—', items };
   const applicable = items.length === 0 || items.some(item => item.status !== '—');
   return { headline: applicable ? status?.headline || '—' : '—', caption: applicable ? status?.caption || '—' : '—', lastChecked: applicable ? status?.lastChecked || '—' : '—', items };
-}
-export function adaptIntegrations(response) {
-  const dto = record(unwrapApiResponseData(response)), rows = dto.integrations;
-  if (!Array.isArray(rows) || rows.some(row => !text(row?.id)) || new Set(rows.map(row => row.id)).size !== rows.length) throw new Error('The integrations response is missing a valid integrations collection.');
-  return rows.map(row => ({ id: row.id, name: text(row.name) || '—', category: text(row.category), purpose: text(row.purpose) || '—',
-    status: ['CONNECTED', 'NOT_CONFIGURED'].includes(row.status) ? row.status : null,
-    statusLabel: row.status === 'CONNECTED' ? 'Connected' : row.status === 'NOT_CONFIGURED' ? 'Not configured' : '—',
-    statusTone: row.status === 'CONNECTED' ? 'success' : 'neutral',
-    configured: typeof row.configured === 'boolean' ? row.configured : null,
-  }));
 }
 export function collection(response, key) {
   const dto = record(unwrapApiResponseData(response));

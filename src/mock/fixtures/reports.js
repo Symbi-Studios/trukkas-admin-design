@@ -68,7 +68,7 @@ export const geographicalDistribution = [
 
 export const topPerformingEntities = [
   { rank: 1, entity: 'Atlantic Logistics Ltd', entityType: 'Forwarder', jobs: 32, revenue: 24600000, growth: '22.4%' },
-  { rank: 2, entity: 'Blue Ocean Exporters', entityType: 'Exporter', jobs: 28, revenue: 18300000, growth: '18.7%' },
+  { rank: 2, entity: 'Blue Ocean Logistics', entityType: 'Forwarder', jobs: 28, revenue: 18300000, growth: '18.7%' },
   { rank: 3, entity: 'Prime Cargo Services', entityType: 'Forwarder', jobs: 24, revenue: 15800000, growth: '14.2%' },
   { rank: 4, entity: 'Swift Haulage Ltd', entityType: 'Truck Company', jobs: 21, revenue: 12900000, growth: '11.3%' },
   { rank: 5, entity: 'Greenline Logistics', entityType: 'Truck Company', jobs: 18, revenue: 10700000, growth: '9.8%' },
@@ -109,7 +109,7 @@ export const REPORT_TYPES = [
   { id: 'financial', title: 'Financial Summary', description: 'Revenue, payouts, escrows and financial performance summary.', icon: 'wallet', tint: 'purple' },
   { id: 'compliance', title: 'Compliance Report', description: 'Compliance status, document submissions and audit summary.', icon: 'file-check-2', tint: 'blue' },
   { id: 'fleet', title: 'Fleet Performance', description: 'Fleet utilization, trips, distance, fuel and maintenance.', icon: 'truck', tint: 'orange' },
-  { id: 'entity', title: 'Entity Performance', description: 'Performance metrics by forwarders, exporters and other entities.', icon: 'building-2', tint: 'orange' },
+  { id: 'entity', title: 'Entity Performance', description: 'Performance metrics by forwarders, truck companies and other entities.', icon: 'building-2', tint: 'orange' },
   { id: 'audit', title: 'Audit & Activity Log', description: 'System activities, user actions and audit trail report.', icon: 'scroll-text', tint: 'red' },
   { id: 'custom', title: 'Custom Report', description: 'Build a custom report with your selected metrics and dimensions.', icon: 'sliders-horizontal', tint: 'purple' },
 ];
@@ -164,7 +164,7 @@ export const COLUMN_GROUPS = [
   ] },
 ];
 
-export const ENTITY_TYPE_OPTIONS = ['All Types', 'Forwarder', 'Exporter', 'Truck Company'];
+export const ENTITY_TYPE_OPTIONS = ['All Types', 'Forwarder', 'Truck Company'];
 export const STATUS_OPTIONS = ['All Statuses', 'Verified', 'Pending', 'Rejected'];
 export const LOCATION_OPTIONS = ['All Locations', 'Lagos', 'Apapa', 'Port Harcourt', 'Onne', 'Tin Can'];
 
@@ -174,29 +174,29 @@ const e = (rank, entity, entityType, total, verified, pending, rejected, success
 
 export const verificationPerformanceRows = [
   e(1, 'Atlantic Logistics Ltd', 'Forwarder', 24, 16, 6, 2, '95.8%', '2h 15m', '93.2%'),
-  e(2, 'Blue Ocean Exporters', 'Exporter', 18, 12, 4, 2, '93.3%', '2h 45m', '92.1%'),
+  e(2, 'Blue Ocean Logistics', 'Forwarder', 18, 12, 4, 2, '93.3%', '2h 45m', '92.1%'),
   e(3, 'Prime Cargo Services', 'Forwarder', 16, 9, 5, 2, '90.0%', '2h 10m', '90.5%'),
   e(4, 'Swift Haulage Ltd', 'Truck Company', 14, 8, 4, 2, '88.9%', '1h 55m', '88.7%'),
   e(5, 'Greenline Logistics', 'Truck Company', 12, 7, 4, 1, '91.7%', '2h 05m', '91.0%'),
   e(6, 'Oceanic Transport', 'Forwarder', 10, 6, 3, 1, '90.0%', '2h 20m', '89.8%'),
   e(7, 'Global Freight Ltd', 'Forwarder', 9, 6, 2, 1, '88.9%', '1h 50m', '87.3%'),
-  e(8, 'Westport Exporters', 'Exporter', 8, 5, 2, 1, '87.5%', '2h 30m', '86.2%'),
+  e(8, 'Westport Freight', 'Forwarder', 8, 5, 2, 1, '87.5%', '2h 30m', '86.2%'),
   e(9, 'Haulage Masters', 'Truck Company', 7, 4, 2, 1, '85.7%', '2h 05m', '84.5%'),
   e(10, 'Transglobal Logistics', 'Forwarder', 6, 4, 1, 1, '83.3%', '1h 45m', '82.0%'),
-  e(11, 'Coastal Exporters Ltd', 'Exporter', 6, 4, 1, 1, '83.3%', '2h 00m', '81.6%'),
+  e(11, 'Coastal Freight Ltd', 'Forwarder', 6, 4, 1, 1, '83.3%', '2h 00m', '81.6%'),
   e(12, 'Ironbridge Haulage', 'Truck Company', 6, 3, 2, 1, '80.0%', '2h 40m', '80.9%'),
   e(13, 'Nimbus Forwarding', 'Forwarder', 5, 3, 1, 1, '80.0%', '1h 40m', '79.8%'),
   e(14, 'Delta Cargo Movers', 'Truck Company', 5, 3, 1, 1, '80.0%', '2h 15m', '79.1%'),
-  e(15, 'Harborline Exporters', 'Exporter', 5, 3, 1, 1, '80.0%', '2h 05m', '78.6%'),
+  e(15, 'Harborline Logistics', 'Forwarder', 5, 3, 1, 1, '80.0%', '2h 05m', '78.6%'),
   e(16, 'Continental Forwarders', 'Forwarder', 4, 2, 1, 1, '75.0%', '1h 55m', '77.4%'),
   e(17, 'Westbay Logistics', 'Truck Company', 4, 2, 1, 1, '75.0%', '2h 25m', '76.9%'),
-  e(18, 'Northgate Exporters', 'Exporter', 4, 2, 1, 1, '75.0%', '2h 10m', '76.2%'),
+  e(18, 'Northgate Freight', 'Forwarder', 4, 2, 1, 1, '75.0%', '2h 10m', '76.2%'),
   e(19, 'Cargo Bridge Ltd', 'Forwarder', 3, 2, 1, 0, '100.0%', '1h 35m', '75.8%'),
   e(20, 'Steelroute Haulage', 'Truck Company', 3, 2, 1, 0, '100.0%', '2h 00m', '75.1%'),
-  e(21, 'Palmgrove Exporters', 'Exporter', 3, 1, 1, 1, '66.7%', '2h 20m', '74.5%'),
+  e(21, 'Palmgrove Logistics', 'Forwarder', 3, 1, 1, 1, '66.7%', '2h 20m', '74.5%'),
   e(22, 'Everline Forwarders', 'Forwarder', 3, 1, 1, 1, '66.7%', '1h 50m', '73.9%'),
   e(23, 'Riverside Cargo Co.', 'Truck Company', 2, 1, 1, 0, '100.0%', '2h 10m', '73.2%'),
-  e(24, 'Sunrise Exporters', 'Exporter', 2, 1, 0, 1, '50.0%', '2h 35m', '72.6%'),
+  e(24, 'Sunrise Freight', 'Forwarder', 2, 1, 0, 1, '50.0%', '2h 35m', '72.6%'),
   e(25, 'Pinnacle Logistics', 'Forwarder', 2, 1, 1, 0, '100.0%', '1h 45m', '72.0%'),
 ];
 

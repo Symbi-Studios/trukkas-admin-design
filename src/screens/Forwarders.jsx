@@ -35,7 +35,7 @@ import {
   StatsPanel,
 } from "../ds.js";
 
-import { forwarderMoney, forwarderError, useGetAdminForwarderDirectoryQuery, useGetAdminForwarderStatsQuery, useGetAdminForwarderJobsQuery, useGetAdminPendingExporterLicensesQuery } from '../store/features/forwarders/forwardersApi.js';
+import { forwarderMoney, forwarderError, useGetAdminForwarderDirectoryQuery, useGetAdminForwarderStatsQuery, useGetAdminForwarderJobsQuery } from '../store/features/forwarders/forwardersApi.js';
 import { cityOptions, sameCity } from '../store/api/addressCity.js';
 import { ForwardersLoading } from './ForwardersLoading.jsx';
 import { DriverLoadingNotice } from './DriversLoading.jsx';
@@ -70,8 +70,6 @@ function ForwarderCell({ f }) {
 
 function ForwarderDrawer({ forwarder: f, owner, authenticated, onClose, onOpen, onAction, onAnnounce }) {
   const jobsQuery = useGetAdminForwarderJobsQuery({ id: f.id, owner, tab: 'all', page: 1, limit: 4 }, { skip: !authenticated, refetchOnMountOrArgChange: true });
-  const pendingQuery = useGetAdminPendingExporterLicensesQuery(owner, { skip: !authenticated });
-  const pendingLicense = pendingQuery.error ? null : pendingQuery.currentData?.rows.find((row) => row.id === f.id);
   const jobs = jobsQuery.error ? [] : jobsQuery.currentData?.rows || [];
   const suspended = f.statusCode === 'SUSPENDED';
   return (
@@ -86,7 +84,6 @@ function ForwarderDrawer({ forwarder: f, owner, authenticated, onClose, onOpen, 
       </>}
       headerActions={<IconButton icon="maximize-2" label="Open full page" onClick={onOpen} />}
       footer={<>
-        {pendingLicense && <div className="tk-drawer-footer-row"><Button icon="badge-check" onClick={() => onAction({ kind: 'review', forwarder: { ...pendingLicense, name: f.name } })}>Review License</Button></div>}
         <div className="tk-drawer-footer-row">
           <Button variant="outline" icon="megaphone" onClick={onAnnounce}>Message</Button>
           {suspended

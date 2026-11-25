@@ -1,35 +1,32 @@
 "use client";
 import { useRef, useState } from 'react';
 import { Avatar, Banner, Button, Icon, Modal, TextField, Textarea } from '../ds.js';
-import { forwarderError, useReviewAdminForwarderExporterLicenseMutation, useSuspendAdminForwarderMutation, useActivateAdminForwarderMutation, useSendAdminForwarderAnnouncementMutation } from '../store/features/forwarders/forwardersApi.js';
+import { forwarderError, useSuspendAdminForwarderMutation, useActivateAdminForwarderMutation, useSendAdminForwarderAnnouncementMutation } from '../store/features/forwarders/forwardersApi.js';
 
 export function ForwarderActionModal({ action, onClose, onDone }) {
   const [reason, setReason] = useState(''), [error, setError] = useState(null);
-  const [review, reviewState] = useReviewAdminForwarderExporterLicenseMutation();
   const [suspend, suspendState] = useSuspendAdminForwarderMutation();
   const [activate, activateState] = useActivateAdminForwarderMutation();
-  const busy = reviewState.isLoading || suspendState.isLoading || activateState.isLoading;
-  const isReview = action.kind === 'review', row = action.forwarder;
+  const busy = suspendState.isLoading || activateState.isLoading;
+  const row = action.forwarder;
   const submitting = useRef(false);
-  async function submit(decision) {
+  async function submit() {
     if (submitting.current || busy) return;
     submitting.current = true; setError(null);
     try {
-      if (isReview) await review({ id: row.id, decision, reason }).unwrap();
-      else if (action.kind === 'suspend') await suspend({ id: row.id, reason }).unwrap();
+      if (action.kind === 'suspend') await suspend({ id: row.id, reason }).unwrap();
       else await activate(row.id).unwrap();
-      onDone?.(isReview ? `Exporter license ${decision === 'approve' ? 'approved' : 'rejected'}.` : `Forwarder ${action.kind === 'suspend' ? 'suspended' : 'reactivated'}.`);
+      onDone?.(`Forwarder ${action.kind === 'suspend' ? 'suspended' : 'reactivated'}.`);
       onClose();
     } catch (requestError) { setError(forwarderError(requestError)); }
     finally { submitting.current = false; }
   }
-  return <Modal open title={isReview ? 'Review exporter license' : action.kind === 'suspend' ? 'Suspend forwarder' : 'Reactivate forwarder'} description={row.name} onClose={() => { if (!busy) onClose(); }} footer={<>
+  return <Modal open title={action.kind === 'suspend' ? 'Suspend forwarder' : 'Reactivate forwarder'} description={row.name} onClose={() => { if (!busy) onClose(); }} footer={<>
     <Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-    {isReview ? <><Button variant="outline" disabled={busy || !row.url} onClick={() => submit('reject')}>Reject</Button><Button disabled={busy || !row.url} onClick={() => submit('approve')}>{busy ? 'Saving…' : 'Approve'}</Button></> : <Button disabled={busy || (action.kind === 'suspend' && !reason.trim())} onClick={() => submit()}>{busy ? 'Saving…' : action.kind === 'suspend' ? 'Suspend' : 'Reactivate'}</Button>}
+    <Button disabled={busy || (action.kind === 'suspend' && !reason.trim())} onClick={() => submit()}>{busy ? 'Saving…' : action.kind === 'suspend' ? 'Suspend' : 'Reactivate'}</Button>
   </>}>
     {error && <Banner tone="danger" title="Unable to save">{error}</Banner>}
-    {isReview && <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}><span className="tk-meta">Submitted: {row.submitted || '—'}</span>{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer">Open exporter license ↗</a> : <Banner tone="warning">The license document is unavailable. Review is disabled until it can be opened.</Banner>}</div>}
-    {action.kind !== 'activate' && <Textarea label={isReview ? 'Reason for rejection (optional)' : 'Reason for suspension'} value={reason} onChange={(event) => setReason(event.target.value)} rows={4} disabled={busy} />}
+    {action.kind !== 'activate' && <Textarea label="Reason for suspension" value={reason} onChange={(event) => setReason(event.target.value)} rows={4} disabled={busy} />}
   </Modal>;
 }
 const CHANNELS = [

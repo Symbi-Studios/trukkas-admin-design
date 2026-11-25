@@ -1,5 +1,5 @@
 // View rules for the verification review queue. The backend merges several source queues
-// (accounts, KYB, company documents, trucks, exporter licences) into one list; these helpers
+// (accounts, KYB, company documents, trucks) into one list; these helpers
 // turn that into queues an admin can work through.
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -13,7 +13,7 @@ export const QUEUES = [
 ];
 export const DEFAULT_QUEUE = 'review';
 
-export const KINDS = ['Account', 'Business (KYB)', 'Document', 'Truck', 'Exporter licence'];
+export const KINDS = ['Account', 'Business (KYB)', 'Document', 'Truck'];
 
 export const isExpiryFlagged = (row) => row.expired === true || row.expiringSoon === true;
 
@@ -97,7 +97,7 @@ export function profileUrl(row) {
   if (row.source === 'TRUCK') return row.sourceId ? { label: 'Truck', url: `/fleet/detail?id=${encodeURIComponent(row.sourceId)}` } : null;
   if (row.entityTypeCode === 'DRIVER') return { label: 'Driver profile', url: `/drivers/detail?id=${id}` };
   if (row.entityTypeCode === 'TRUCKING_COMPANY' || row.entityTypeCode === 'TRUCKER') return { label: 'Company profile', url: `/companies/detail?id=${id}` };
-  if (row.entityTypeCode === 'EXPORTER' || row.entityTypeCode === 'FORWARDER') return { label: 'Forwarder profile', url: `/forwarders/detail?id=${id}` };
+  if (row.entityTypeCode === 'FORWARDER') return { label: 'Forwarder profile', url: `/forwarders/detail?id=${id}` };
   return null;
 }
 
@@ -107,7 +107,6 @@ export const PRIORITY_OPTIONS = [
 export const CASE_TYPES = [
   { value: 'ACCOUNT_REVIEW', label: 'Account verification' },
   { value: 'BUSINESS_VERIFICATION', label: 'Business verification (KYB)' },
-  { value: 'EXPORTER_LICENCE', label: 'Exporter licence' },
   { value: 'TRUCK_REGISTRATION', label: 'Truck registration' },
   { value: 'COMPANY_DOCUMENT', label: 'Company document' },
 ];

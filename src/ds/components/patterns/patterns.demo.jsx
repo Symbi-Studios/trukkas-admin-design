@@ -24,7 +24,7 @@ function Demo() {
             count={8} action={<Button size="sm" variant="outline">Review</Button>} />
           <AlertRow icon="wrench" tone="amber" title="Trucks due for maintenance" description="Within 7 days"
             count={12} action={<Button size="sm" variant="outline">View</Button>} />
-          <AlertRow icon="shield-check" tone="blue" title="Exporter verifications" description="Documents pending review"
+          <AlertRow icon="shield-check" tone="blue" title="Forwarder verifications" description="Documents pending review"
             count={7} action={<Button size="sm" variant="outline">Review</Button>} />
         </SectionCard>
         <QuickActionsCard items={[

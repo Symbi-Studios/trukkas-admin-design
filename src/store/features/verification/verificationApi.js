@@ -22,11 +22,11 @@ function scopedQuery(baseQuery, api, args = {}) {
   };
 }
 const STATUS = { PENDING: 'Pending', IN_REVIEW: 'In Review', VERIFIED: 'Verified', REJECTED: 'Rejected', NON_COMPLIANT: 'Non-Compliant', CANCELLED: 'Cancelled' };
-const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', EXPORTER_LICENCE: 'Export License', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
-const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', EXPORTER: 'Exporter', FORWARDER: 'Forwarder', TRUCK: 'Truck' };
+const TYPES = { ACCOUNT_REVIEW: 'Account Verification', BUSINESS_VERIFICATION: 'Business Verification', TRUCK_REGISTRATION: 'Truck Registration', COMPANY_DOCUMENT: 'Company Document' };
+const ENTITIES = { TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company', DRIVER: 'Driver', FORWARDER: 'Forwarder', TRUCK: 'Truck' };
 /** What the queue groups by: the backend merges these source queues into one list. */
-export const VERIFICATION_KINDS = { ACCOUNT: 'Account', TRUCKER: 'Account', DRIVER: 'Account', KYB: 'Business (KYB)', COMPANY_DOCUMENT: 'Document', TRUCK: 'Truck', EXPORTER_LICENSE: 'Exporter licence' };
-const SOURCES = { ACCOUNT: 'accounts', TRUCKER: 'truckers', DRIVER: 'drivers', KYB: 'kyb', EXPORTER_LICENSE: 'exporter-licenses', TRUCK: 'trucks', COMPANY_DOCUMENT: 'company-documents' };
+export const VERIFICATION_KINDS = { ACCOUNT: 'Account', TRUCKER: 'Account', DRIVER: 'Account', KYB: 'Business (KYB)', COMPANY_DOCUMENT: 'Document', TRUCK: 'Truck' };
+const SOURCES = { ACCOUNT: 'accounts', TRUCKER: 'truckers', DRIVER: 'drivers', KYB: 'kyb', TRUCK: 'trucks', COMPANY_DOCUMENT: 'company-documents' };
 // The detail response names the exact approve/reject endpoints for its source record.
 function actionPath(value, verb) {
   const path = text(value)?.replace(/^\/api\/v1/, '');
@@ -34,8 +34,8 @@ function actionPath(value, verb) {
 }
 const sentence = (v) => { const t = text(v); return t ? t.charAt(0).toUpperCase() + t.slice(1) : null; };
 const docType = (v) => { const t = text(v); if (!t) return null; const words = t.toLowerCase().split('_'); return [words[0].charAt(0).toUpperCase() + words[0].slice(1), ...words.slice(1)].join(' '); };
-const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Exporter: 'EXPORTER', Forwarder: 'FORWARDER', Driver: 'DRIVER', 'Individual Trucker': 'TRUCKER', Truck: 'TRUCK' }, verificationType: {
-  'Business Verification': 'BUSINESS_VERIFICATION', 'Export License': 'EXPORTER_LICENCE', 'License Verification': 'LICENSE',
+const FILTERS = { entityType: { 'Truck Company': 'TRUCKING_COMPANY', Forwarder: 'FORWARDER', Driver: 'DRIVER', 'Individual Trucker': 'TRUCKER', Truck: 'TRUCK' }, verificationType: {
+  'Business Verification': 'BUSINESS_VERIFICATION', 'License Verification': 'LICENSE',
   'Company Address Verification': 'ADDRESS', 'Fleet Verification': 'FLEET', 'Tax Identification (TIN)': 'TIN',
   'Insurance Verification': 'INSURANCE', 'Vehicle Documents': 'VEHICLE_DOCUMENTS',
 } };

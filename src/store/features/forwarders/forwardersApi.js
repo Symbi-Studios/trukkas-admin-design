@@ -43,7 +43,6 @@ export function adaptAdminForwarder(dto = {}) {
   return {
     id: text(dto.id), customerId: text(dto.id), name: text(dto.name) || '—', email: text(dto.email) || '—', phone: text(dto.phone) || '—',
     statusCode: text(dto.status), status: ['PENDING_PROFILE', 'PENDING_REVIEW'].includes(dto.status) ? 'Pending' : label(dto.status),
-    isExporter: dto.type === 'EXPORTER' ? true : dto.type === 'FORWARDER' ? false : dto.exporterLicenseStatus === 'VERIFIED' ? true : null, exporterLicenseStatus: text(dto.exporterLicenseStatus),
     jobs: count(dto.totalJobs), spend: dto.currency === 'NGN' ? nonNegative(dto.totalSpend) : null, currency: text(dto.currency),
     location: text(dto.location) || '—', city: addressCity(dto.location), joined: forwarderDate(dto.joinedAt), joinedAt: text(dto.joinedAt), verification: forwarderVerification(dto.verificationStatus), kycStatusCode: text(dto.verificationStatus),
   };
@@ -51,14 +50,12 @@ export function adaptAdminForwarder(dto = {}) {
 export function adaptAdminForwarderProfile(response) {
   const dto = unwrapApiResponseData(response);
   if (!dto || typeof dto !== 'object' || Array.isArray(dto)) return null;
-  const account = dto.details?.account || {}, personal = dto.details?.personal || {}, exporter = dto.details?.exporterLicense || {}, stats = dto.stats || {};
+  const account = dto.details?.account || {}, personal = dto.details?.personal || {}, stats = dto.stats || {};
   const business = dto.business || {}, financial = dto.financial || {}, performance = dto.performance || {}, verification = dto.verification || {};
   const rating = performance.partnerRating || {}, scale = nonNegative(rating.scale), average = nonNegative(rating.average);
   const kycStatus = text(dto.kycStatus) || text(verification.kycStatus);
   return {
     ...adaptAdminForwarder({ ...dto, status: dto.status || account.accountStatus, phone: text(dto.phone) || text(personal.phone) }), role: text(dto.role), version: timestamp(dto.version), editable: editableProfile(dto),
-    isExporter: typeof exporter.isExporter === 'boolean' ? exporter.isExporter : account.accountType === 'Exporter' ? true : account.accountType === 'Forwarder' ? false : adaptAdminForwarder(dto).isExporter,
-    exporterLicenseStatus: text(exporter.status) || text(dto.exporterLicenseStatus), exporterLicenseUrl: forwarderLink(exporter.url),
     jobs: count(stats.totalJobs?.count), balance: number(stats.walletBalance?.amount),
     spend: financial.currency === 'NGN' ? nonNegative(financial.totalSpend) : null, currency: text(financial.currency),
     joined: forwarderDate(dto.joinedAt || account.dateJoined), memberSince: forwarderDate(dto.joinedAt || account.dateJoined),
@@ -66,7 +63,6 @@ export function adaptAdminForwarderProfile(response) {
     dob: forwarderDate(personal.dateOfBirth), gender: gender(personal.gender) || '—', nationality: text(personal.nationality) || '—', nin: text(personal.nin) || '—',
     altPhone: text(personal.alternatePhone) || '—', address: text(personal.address) || '—', languages: joinedStrings(personal.languages), yearsExperience: count(business.yearsExperience) ?? '—',
     license: text(business.forwardingLicense?.number) || '—', licenseExpiry: forwarderDate(business.forwardingLicense?.expiresAt),
-    exportLicense: text(business.exportLicense?.number) || '—', exportLicenseExpiry: forwarderDate(business.exportLicense?.expiresAt),
     services: strings(business.servicesOffered), coverage: joinedStrings(business.coverageArea), cargoTypes: joinedStrings(business.preferredCargoTypes),
     routes: joinedStrings(business.preferredRoutes), network: joinedStrings(business.partnerNetwork), other: text(business.otherInformation) || '—',
     emergencyContact: text(dto.emergencyContact?.name) || '—', emergencyPhone: text(dto.emergencyContact?.phone) || '—',
@@ -76,7 +72,7 @@ export function adaptAdminForwarderProfile(response) {
     outstandingCount: count(financial.outstandingInvoices?.count) ?? '—', outstandingAmount: financial.outstandingInvoices?.currency === 'NGN' ? nonNegative(financial.outstandingInvoices.amount) : null,
     onTimeDelivery: percentage(performance.onTimeDelivery?.percentage), paymentReliability: percentage(performance.paymentReliability?.percentage),
     partnerRating: scale != null && scale > 0 && average != null && average <= scale ? { average, scale, count: count(rating.count) } : null,
-    verificationChecks: Object.fromEntries(['nationalId', 'forwardingLicense', 'exportLicense', 'bankAccount', 'address', 'backgroundCheck'].map(key => [key, checkStatus(verification[key])])),
+    verificationChecks: Object.fromEntries(['nationalId', 'forwardingLicense', 'bankAccount', 'address', 'backgroundCheck'].map(key => [key, checkStatus(verification[key])])),
   };
 }
 function adaptForwarderStats(response) {
@@ -89,11 +85,11 @@ function adaptForwarderStats(response) {
     return [{ label, value: rows.every(item => count(item.count) != null) ? rows.reduce((sum, item) => sum + item.count, 0) : null,
       share: rows.every(item => percentage(item.share) != null) ? percentage(rows.reduce((sum, item) => sum + item.share, 0)) : null }];
   });
-  return { total: count(dto.total), active: count(dto.active), exporters: count(dto.exporters), pending: count(dto.pendingVerification), suspended: count(dto.suspended),
+  return { total: count(dto.total), active: count(dto.active), pending: count(dto.pendingVerification), suspended: count(dto.suspended),
     totalSpend: dto.currency === 'NGN' ? nonNegative(dto.totalSpend) : null, overview };
 }
 const timestamp = value => typeof value === 'string' && value.includes('T') && forwarderDate(value) !== '—' ? value : null;
-const editableForwarderFields = ['firstName', 'middleName', 'lastName', 'dateOfBirth', 'businessName', 'businessAddress', 'cacNumber', 'taxId', 'website', 'businessType', 'gender', 'nationality', 'alternatePhone', 'languages', 'yearsExperience', 'forwardingLicenseNumber', 'forwardingLicenseExpiry', 'exportLicenseNumber', 'exportLicenseExpiry', 'servicesOffered', 'coverageArea', 'preferredCargoTypes', 'preferredRoutes', 'partnerNetwork', 'otherInformation', 'emergencyContactName', 'emergencyContactPhone'];
+const editableForwarderFields = ['firstName', 'middleName', 'lastName', 'dateOfBirth', 'businessName', 'businessAddress', 'cacNumber', 'taxId', 'website', 'businessType', 'gender', 'nationality', 'alternatePhone', 'languages', 'yearsExperience', 'forwardingLicenseNumber', 'forwardingLicenseExpiry', 'servicesOffered', 'coverageArea', 'preferredCargoTypes', 'preferredRoutes', 'partnerNetwork', 'otherInformation', 'emergencyContactName', 'emergencyContactPhone'];
 const arrayForwarderFields = new Set(['languages', 'servicesOffered', 'coverageArea', 'preferredCargoTypes', 'preferredRoutes', 'partnerNetwork']);
 function editableProfile(dto) {
   const p = dto.details?.personal || {}, b = dto.business || {};
@@ -101,7 +97,6 @@ function editableProfile(dto) {
     businessName: text(b.businessName), businessAddress: text(b.address), cacNumber: text(b.cacNumber), taxId: text(b.taxId), website: text(b.website), businessType: text(b.businessType),
     gender: gender(p.gender), nationality: text(p.nationality), alternatePhone: text(p.alternatePhone), languages: strings(p.languages), yearsExperience: count(b.yearsExperience),
     forwardingLicenseNumber: text(b.forwardingLicense?.number), forwardingLicenseExpiry: forwarderDate(b.forwardingLicense?.expiresAt) === '—' ? null : b.forwardingLicense.expiresAt.slice(0, 10),
-    exportLicenseNumber: text(b.exportLicense?.number), exportLicenseExpiry: forwarderDate(b.exportLicense?.expiresAt) === '—' ? null : b.exportLicense.expiresAt.slice(0, 10),
     servicesOffered: strings(b.servicesOffered), coverageArea: strings(b.coverageArea), preferredCargoTypes: strings(b.preferredCargoTypes), preferredRoutes: strings(b.preferredRoutes), partnerNetwork: strings(b.partnerNetwork),
     otherInformation: text(b.otherInformation), emergencyContactName: text(dto.emergencyContact?.name), emergencyContactPhone: text(dto.emergencyContact?.phone) };
 }
@@ -109,7 +104,6 @@ const profileFieldPaths = {
   ...Object.fromEntries(['firstName', 'middleName', 'lastName', 'dateOfBirth', 'gender', 'nationality', 'alternatePhone', 'languages'].map(key => [key, ['details', 'personal', key]])),
   ...Object.fromEntries(['businessName', 'cacNumber', 'taxId', 'website', 'businessType', 'yearsExperience', 'servicesOffered', 'coverageArea', 'preferredCargoTypes', 'preferredRoutes', 'partnerNetwork', 'otherInformation'].map(key => [key, ['business', key]])),
   businessAddress: ['business', 'address'], forwardingLicenseNumber: ['business', 'forwardingLicense', 'number'], forwardingLicenseExpiry: ['business', 'forwardingLicense', 'expiresAt'],
-  exportLicenseNumber: ['business', 'exportLicense', 'number'], exportLicenseExpiry: ['business', 'exportLicense', 'expiresAt'],
   emergencyContactName: ['emergencyContact', 'name'], emergencyContactPhone: ['emergencyContact', 'phone'],
 };
 function confirmedProfileUpdate(dto, id, changes, expectedVersion) {
@@ -220,7 +214,7 @@ export const forwardersApi = baseApi.injectEndpoints({
         const result = await readAllPages(baseQuery, '/admin/user-management/' + encodeURIComponent(id) + '/documents', 'documents', { accountType: 'user' }, api.signal);
         if (result.error) return result;
         const slots = {};
-        for (const [slot, type] of Object.entries({ passport: 'PASSPORT_PHOTO', exportLicense: 'EXPORTER_LICENCE', address: 'PROOF_OF_ADDRESS' })) {
+        for (const [slot, type] of Object.entries({ passport: 'PASSPORT_PHOTO', address: 'PROOF_OF_ADDRESS' })) {
           const matches = result.data.filter(item => item.type === type);
           const ordered = matches.length > 1 && matches.every(item => timestamp(item.uploadedAt)) ? [...matches].sort((a, b) => Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt)) : [];
           const item = matches.length === 1 ? matches[0] : ordered.length && Date.parse(ordered[0].uploadedAt) !== Date.parse(ordered[1].uploadedAt) ? ordered[0] : null;
@@ -303,7 +297,7 @@ export const forwardersApi = baseApi.injectEndpoints({
     }),
     requestAdminForwarderVerification: builder.mutation({
       async queryFn({ id, checkType, reason }, api, _options, baseQuery) {
-        if (!text(id) || !['NATIONAL_ID', 'ADDRESS', 'EXPORT_LICENSE', 'PASSPORT_PHOTO', 'BANK_ACCOUNT'].includes(checkType) || !text(reason)) return failure('Select a supported verification check and enter a reason.');
+        if (!text(id) || !['NATIONAL_ID', 'ADDRESS', 'PASSPORT_PHOTO', 'BANK_ACCOUNT'].includes(checkType) || !text(reason)) return failure('Select a supported verification check and enter a reason.');
         return writeForwarder(baseQuery, api, { url: userPath(id) + '/verification-requests', method: 'POST', body: { checkType, reason: reason.trim() } }, dto => text(dto?.id) && dto.userId === id && dto.checkType === checkType && dto.status === 'REQUESTED' && dto.reason === reason.trim() && text(dto.caseId) && timestamp(dto.createdAt));
       }, invalidatesTags: ['AdminForwarders'],
     }),
@@ -339,7 +333,6 @@ export const forwardersApi = baseApi.injectEndpoints({
         const dto = unwrapApiResponseData(profile.data);
         if (api.getState().auth.admin?.id !== owner) return failure('The session changed. Reopen the form.');
         if (dto?.id !== body.forwarderId || dto.role !== 'FORWARDER' || dto.status !== 'ACTIVE') return failure('Jobs can only be created for an active forwarder.');
-        if (body.movementType === 'EXPORT' && dto.details?.exporterLicense?.status !== 'VERIFIED' && dto.exporterLicenseStatus !== 'VERIFIED') return failure('Export jobs require an approved exporter license.');
         return writeForwarder(baseQuery, api, { url: '/admin/jobs', method: 'POST', body }, saved => text(saved?.id) && text(saved.jobNumber) && text(saved.status)
           && saved.forwarderId === body.forwarderId && saved.createdByAdminId === owner && saved.job?.id === saved.id && saved.job.jobNumber === saved.jobNumber && saved.job.status === saved.status);
       }, invalidatesTags: ['AdminForwarders', 'AdminJobs'],
@@ -350,15 +343,6 @@ export const forwardersApi = baseApi.injectEndpoints({
         const profile = adaptAdminForwarderProfile(response);
         if (!profile || profile.id !== id) throw new Error('The user profile could not be loaded. Please refresh.');
         return profile;
-      }, providesTags: ['AdminForwarders'],
-    }),
-    getAdminPendingExporterLicenses: builder.query({
-      query: () => ({ url: '/admin/exporter-licenses/pending' }),
-      transformResponse: (response) => {
-        const dto = unwrapApiResponseData(response) || {};
-        if (!Array.isArray(dto.users)) throw new Error('The exporter license response is missing its pending list.');
-        if (dto.users.some(user => !text(user?.id)) || new Set(dto.users.map(user => user.id)).size !== dto.users.length || count(dto.count) == null || dto.count !== dto.users.length) throw new Error('The exporter license list contains invalid records or an incomplete count.');
-        return { count: count(dto.count), rows: dto.users.map((user) => ({ id: text(user.id), name: text(user.businessName) || text(user.email) || '—', email: text(user.email) || '—', phone: text(user.phone) || '—', url: forwarderLink(user.exporterLicenseUrl), submitted: forwarderDate(user.exporterLicenseSubmittedAt), status: 'IN_REVIEW' })) };
       }, providesTags: ['AdminForwarders'],
     }),
     getAdminForwarderDestinations: builder.query({
@@ -403,17 +387,6 @@ export const forwardersApi = baseApi.injectEndpoints({
         return result.error ? result : { data: result.data.filter((row) => row.entityId === id).map((row) => ({ title: text(row.action), description: [text(row.admin?.name), label(row.result), text(row.note)].filter(Boolean).join(' · '), time: forwarderDate(row.createdAt), state: row.result === 'SUCCESS' ? 'done' : row.result === 'FAILED' ? 'danger' : 'pending', icon: 'user' })) };
       }, providesTags: ['AdminForwarders'],
     }),
-    reviewAdminForwarderExporterLicense: builder.mutation({
-      query: ({ id, decision, reason }) => {
-        if (!text(id) || !['approve', 'reject'].includes(decision)) throw new Error('Invalid exporter license decision.');
-        return { url: '/admin/exporter-licenses/' + encodeURIComponent(id) + '/' + decision, method: 'POST', ...(decision === 'reject' ? { body: text(reason) ? { reason: reason.trim() } : {} } : {}) };
-      },
-      transformResponse: (response, _meta, { id, decision }) => {
-        const dto = unwrapApiResponseData(response);
-        if (dto?.user?.id !== id || dto.user.exporterLicenseStatus !== (decision === 'approve' ? 'VERIFIED' : 'REJECTED')) throw new Error('The license review was accepted, but its result could not be confirmed. Refresh before trying again.');
-        return { reviewed: true };
-      }, invalidatesTags: ['AdminForwarders'],
-    }),
     suspendAdminForwarder: builder.mutation({
       query: ({ id, reason }) => {
         if (!text(id) || !text(reason)) throw new Error('A forwarder and suspension reason are required.');
@@ -451,4 +424,4 @@ export const forwardersApi = baseApi.injectEndpoints({
     }),
   }),
 });
-export const { useGetAdminForwarderDirectoryQuery, useGetAdminForwarderJobOptionsQuery, useGetAdminForwarderJobTerminalsQuery, useCreateAdminForwarderJobMutation, useGetAdminForwarderRankingsQuery, useGetAdminForwarderNotesQuery, useAddAdminForwarderNoteMutation, useCreateAdminForwarderMutation, useUpdateAdminForwarderMutation, useVerifyAdminForwardersMutation, useRequestAdminForwarderVerificationMutation, useGetAdminForwarderStatsQuery, useGetAdminForwarderDocumentsQuery, useLazyDownloadAdminForwarderReportQuery, useGetAdminForwarderProfileQuery, useGetAdminPendingExporterLicensesQuery, useGetAdminForwarderDestinationsQuery, useGetAdminForwarderJobsQuery, useGetAdminForwarderTransactionsQuery, useGetAdminForwarderActivityQuery, useReviewAdminForwarderExporterLicenseMutation, useSuspendAdminForwarderMutation, useActivateAdminForwarderMutation, useSendAdminForwarderAnnouncementMutation } = forwardersApi;
+export const { useGetAdminForwarderDirectoryQuery, useGetAdminForwarderJobOptionsQuery, useGetAdminForwarderJobTerminalsQuery, useCreateAdminForwarderJobMutation, useGetAdminForwarderRankingsQuery, useGetAdminForwarderNotesQuery, useAddAdminForwarderNoteMutation, useCreateAdminForwarderMutation, useUpdateAdminForwarderMutation, useVerifyAdminForwardersMutation, useRequestAdminForwarderVerificationMutation, useGetAdminForwarderStatsQuery, useGetAdminForwarderDocumentsQuery, useLazyDownloadAdminForwarderReportQuery, useGetAdminForwarderProfileQuery, useGetAdminForwarderDestinationsQuery, useGetAdminForwarderJobsQuery, useGetAdminForwarderTransactionsQuery, useGetAdminForwarderActivityQuery, useSuspendAdminForwarderMutation, useActivateAdminForwarderMutation, useSendAdminForwarderAnnouncementMutation } = forwardersApi;

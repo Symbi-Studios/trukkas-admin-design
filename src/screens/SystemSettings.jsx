@@ -11,7 +11,6 @@ import { SettingsFleet } from './SettingsFleet.jsx';
 import { SettingsPorts } from './SettingsPorts.jsx';
 import { SettingsFinance } from './SettingsFinance.jsx';
 import { SettingsNotifications } from './SettingsNotifications.jsx';
-import { SettingsIntegrations } from './SettingsIntegrations.jsx';
 import { SettingsSecurity } from './SettingsSecurity.jsx';
 import { SettingsPasswords } from './SettingsPasswords.jsx';
 import { SettingsSecurityAlerts } from './SettingsSecurityAlerts.jsx';
@@ -25,7 +24,6 @@ const TAB_SECTIONS = {
   finance: [SettingsFinance],
   notifications: [SettingsNotifications],
   onboarding: [SettingsFieldsRegistration],
-  integrations: [SettingsIntegrations],
   security: [SettingsSecurity, SettingsPasswords, SettingsSecurityAlerts, SettingsDataProtection],
 };
 
@@ -40,7 +38,7 @@ function SettingsTabs() {
       <PageHeader
         crumbs={[{ label: 'System Settings', onClick: () => select('general') }, label]}
         title="System Settings"
-        description="Platform-wide rules, integrations and security." />
+        description="Platform-wide rules and security." />
       <div className="tk-settings-layout">
         <SettingsNav active={active} onChange={select} />
         <div className="tk-settings-content">

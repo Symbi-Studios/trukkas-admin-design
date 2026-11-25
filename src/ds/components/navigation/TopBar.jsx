@@ -7,7 +7,7 @@ import { WorkspaceSearchResults } from './WorkspaceSearchResults.jsx';
 import { ThemeToggle } from './ThemeToggle.jsx';
 
 /** Sticky application bar: menu toggle, global search, system health, notifications, account. */
-export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, companies, exporters...',
+export function TopBar({ onMenu, searchPlaceholder = 'Search jobs, trucks, companies, forwarders...',
                          health = null, notifications = 0, user, role, style,
                          searchValue, onSearch, onSearchKeyDown, searchResults, searchLoading, searchUnavailable, onSearchSelect, onNotifications, onViewProfile, onLogout }) {
   const [accountOpen, setAccountOpen] = React.useState(false);

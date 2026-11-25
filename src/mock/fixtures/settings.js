@@ -123,7 +123,7 @@ export const invoicingReceipts = {
 
 export const accountingTax = {
   taxCalculation: 'Include VAT in price', taxIdentificationNumber: '12345678-0001',
-  accountingIntegration: 'None', enableTaxReports: true, syncFinancialData: false,
+  enableTaxReports: true,
 };
 
 export const financeStatus = {
@@ -135,7 +135,6 @@ export const financeStatus = {
     { label: 'Payout Settings', status: 'Active' },
     { label: 'Invoicing & Receipts', status: 'Active' },
     { label: 'Tax Compliance', status: 'Active' },
-    { label: 'Accounting Integration', status: 'Active' },
   ],
 };
 
@@ -243,7 +242,7 @@ export const COMPANY_COUNTRIES = ['Nigeria', 'Ghana', 'Kenya', 'South Africa'];
 export const COMPANY_STATES = ['Lagos', 'Abuja', 'Rivers', 'Kano'];
 
 // ---- Fleet Settings ---------------------------------------------------------
-export const FLEET_TABS = ['General', 'Maintenance', 'Tracking & Telematics', 'Fuel & Costs', 'Documents', 'Compliance', 'Drivers', 'Integrations'];
+export const FLEET_TABS = ['General', 'Maintenance', 'Tracking & Telematics', 'Fuel & Costs', 'Documents', 'Compliance', 'Drivers'];
 
 export const fleetPreferences = {
   defaultTruckStatus: 'Active', defaultOwnershipType: 'Company Owned',
@@ -283,7 +282,6 @@ export const fleetStatus = {
     { label: 'Document Management', status: 'Active' },
     { label: 'Compliance & Inspections', status: 'Active' },
     { label: 'Driver Assignment', status: 'Active' },
-    { label: 'Integrations', status: 'Active' },
   ],
 };
 
@@ -291,7 +289,6 @@ export const fleetQuickActions = [
   { icon: 'layers', label: 'Manage Asset Categories', hint: 'Configure truck, trailer, and equipment types.' },
   { icon: 'clipboard-list', label: 'Set Maintenance Templates', hint: 'Create reusable maintenance schedules.' },
   { icon: 'list-checks', label: 'Configure Inspection Checklists', hint: 'Set default compliance checklists.' },
-  { icon: 'plug-zap', label: 'Manage Integrations', hint: 'Connect GPS and telematics providers.' },
 ];
 
 export const TRUCK_STATUSES = ['Active', 'Inactive', 'In Maintenance'];

@@ -11,7 +11,7 @@ import {
 } from '../ds.js';
 import './ForwarderDetail.css';
 
-import { forwarderMoney, forwarderError, forwarderVerification, useGetAdminForwarderProfileQuery, useGetAdminForwarderDestinationsQuery, useGetAdminForwarderDocumentsQuery, useGetAdminPendingExporterLicensesQuery, useGetAdminForwarderJobsQuery, useGetAdminForwarderTransactionsQuery, useGetAdminForwarderActivityQuery } from '../store/features/forwarders/forwardersApi.js';
+import { forwarderMoney, forwarderError, useGetAdminForwarderProfileQuery, useGetAdminForwarderDestinationsQuery, useGetAdminForwarderDocumentsQuery, useGetAdminForwarderJobsQuery, useGetAdminForwarderTransactionsQuery, useGetAdminForwarderActivityQuery } from '../store/features/forwarders/forwardersApi.js';
 import { ForwarderDetailLoading } from './ForwardersLoading.jsx';
 import { DriverLoadingNotice, DriverTableLoading } from './DriversLoading.jsx';
 import { ForwarderActionModal, ForwarderAnnouncementModal, downloadForwarderCsv } from './ForwarderActions.jsx';
@@ -63,11 +63,7 @@ export function ForwarderDetail() {
   const profileQuery = useGetAdminForwarderProfileQuery({ id, owner }, { skip: !authenticated || !id, refetchOnMountOrArgChange: true });
   const FORWARDER = profileQuery.error ? null : profileQuery.currentData;
   const valid = FORWARDER?.role === 'FORWARDER';
-  const pendingQuery = useGetAdminPendingExporterLicensesQuery(owner, { skip: !authenticated || !valid || tab !== 'KYC' });
   const documentsQuery = useGetAdminForwarderDocumentsQuery({ id, owner }, { skip: !authenticated || !valid || tab !== 'KYC' });
-  const pendingLicense = !pendingQuery.error ? pendingQuery.currentData?.rows.find((row) => row.id === id) : null;
-  const licenseStatus = pendingLicense?.status || FORWARDER?.exporterLicenseStatus || (FORWARDER?.isExporter ? 'VERIFIED' : null);
-  const licenseUrl = pendingLicense?.url || FORWARDER?.exporterLicenseUrl;
   const onJobs = tab === 'Jobs';
   const jobsQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: onJobs ? jobTab : 'all', page: onJobs ? page : 1, limit: onJobs ? 10 : 6 }, { skip: !authenticated || !valid || !['Overview', 'Jobs'].includes(tab) });
   const completedQuery = useGetAdminForwarderJobsQuery({ id, owner, tab: 'completed', page: 1, limit: 1 }, { skip: !authenticated || !valid });
@@ -94,14 +90,13 @@ export function ForwarderDetail() {
   if (!id || profileQuery.error || !valid) return <SectionCard title="Forwarder Details">{profileQuery.error ? <QueryError query={profileQuery} title="Unable to load forwarder" /> : <EmptyState title={!id ? 'Select a forwarder' : 'Forwarder not found'} description="Choose a forwarder from the directory." />}<Button variant="outline" onClick={() => navigate('/forwarders')}>Back to Forwarders</Button></SectionCard>;
 
   const suspended = FORWARDER.statusCode === 'SUSPENDED';
-  const licenseSubmitted = present(FORWARDER.license) || Boolean(licenseUrl) || present(docs.exportLicense?.status);
-  const licenseState = docs.exportLicense?.status && docs.exportLicense.status !== '—' ? docs.exportLicense.status : licenseStatus ? forwarderVerification(licenseStatus) : checkStatus('forwardingLicense') || (licenseSubmitted ? '—' : 'Not submitted');
+  const licenseState = checkStatus('forwardingLicense') || (present(FORWARDER.license) ? '—' : 'Not submitted');
   const KYC_ITEMS = [
     { key: 'nin', icon: 'id-card', title: 'National ID (NIN)', detail: present(FORWARDER.nin) ? FORWARDER.nin : 'No NIN on file', status: checkStatus('nationalId') || (present(FORWARDER.nin) ? '—' : 'Not submitted') },
     { key: 'passport', icon: 'image', title: 'Passport Photograph', detail: docs.passport ? `Expires ${docs.passport.validity}` : 'Photo of the account holder', status: docs.passport?.status && docs.passport.status !== '—' ? docs.passport.status : documentsQuery.currentData ? 'Not submitted' : '—', url: docs.passport?.url },
     { key: 'address', icon: 'map-pin', title: 'Proof of Address', detail: present(FORWARDER.address) ? FORWARDER.address : 'Utility bill or bank statement', status: docs.address?.status && docs.address.status !== '—' ? docs.address.status : checkStatus('address') || (documentsQuery.currentData ? 'Not submitted' : '—'), url: docs.address?.url },
     { key: 'bank', icon: 'landmark', title: 'Bank Account', detail: 'Payout account verification', status: checkStatus('bankAccount') || '—' },
-    { key: 'license', icon: 'file-badge', title: 'Forwarding License', optional: true, detail: present(FORWARDER.license) ? `License no. ${FORWARDER.license}` : 'Not required to use Trukkas', status: licenseState, url: docs.exportLicense?.url || licenseUrl, action: pendingLicense && <Button size="sm" variant="outline" disabled={pendingQuery.isFetching} onClick={() => setAction({ kind: 'review', forwarder: { ...pendingLicense, name: FORWARDER.name } })}>Review</Button> },
+    { key: 'license', icon: 'file-badge', title: 'Forwarding License', optional: true, detail: present(FORWARDER.license) ? `License no. ${FORWARDER.license}` : 'Not required to use Trukkas', status: licenseState },
   ];
 
   return (
@@ -206,14 +201,13 @@ export function ForwarderDetail() {
 
       {tab === 'KYC' && (
         <SectionCard title="KYC" icon="shield-check" action={<Button size="sm" variant="outline" icon="shield-check" onClick={() => setVerificationOpen({})}>Request Verification</Button>}>
-          {(pendingQuery.isFetching || documentsQuery.isFetching) && <DriverLoadingNotice>Loading KYC records…</DriverLoadingNotice>}
-          {pendingQuery.error && <QueryError query={pendingQuery} title="Unable to load license review requests" />}
+          {documentsQuery.isFetching && <DriverLoadingNotice>Loading KYC records…</DriverLoadingNotice>}
           {documentsQuery.error && <QueryError query={documentsQuery} title="Unable to load documents" />}
           <div className="fd-kyc-summary">
             <span className="tk-meta">Overall KYC status</span>
             <Badge tone={VERIFICATION_TONE[FORWARDER.verification] || 'neutral'}>{FORWARDER.verification}</Badge>
           </div>
-          {KYC_ITEMS.map(({ key, ...item }) => <KycRow key={key} {...item} onRequest={['nin', 'address', 'license'].includes(key) ? () => setVerificationOpen({ key }) : undefined} />)}
+          {KYC_ITEMS.map(({ key, ...item }) => <KycRow key={key} {...item} onRequest={['nin', 'address'].includes(key) ? () => setVerificationOpen({ key }) : undefined} />)}
         </SectionCard>
       )}
 

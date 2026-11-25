@@ -20,7 +20,7 @@ function periodLabel(v) {
 }
 export function reportEntityScope(filters = {}) {
   const params = {}, type = filters.entityType, id = filters.entity;
-  const types = { Forwarder: 'FORWARDER', Exporter: 'EXPORTER', 'Truck Company': 'TRUCKING_COMPANY' };
+  const types = { Forwarder: 'FORWARDER', 'Truck Company': 'TRUCKING_COMPANY' };
   if (type && type !== 'All Types') {
     if (!types[type]) return { error: 'Reports are not available for this entity type.' };
     params.entityType = types[type];
