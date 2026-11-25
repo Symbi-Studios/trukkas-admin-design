@@ -36,10 +36,14 @@ export function adaptReportOverview(value, empty, metric) {
     empty.dashboardSummary[key + 'Delta'] = comparison.text;
     empty.dashboardSummary[key + 'Trend'] = key === 'complianceRate' ? [] : metricSparkline(source.sparkline, parse);
     empty.definitions[key] = definition(source);
+    empty.dashboardSummary[key + 'Previous'] = parse(source.previous);
+    const sparkDates = orderedPoints(source.sparkline);
+    empty.dashboardSummary[key + 'TrendDates'] = sparkDates && empty.dashboardSummary[key + 'Trend'].length ? sparkDates.map(row => row.date) : [];
   }
   const operations = orderedPoints(dto.operations), operationKeys = { Created: 'created', Accepted: 'inProgress', Completed: 'completed', Cancelled: 'cancelled' };
   if (operations && (dto.metric == null || dto.metric === metric)) {
     empty.operationsOverview.labels = operations.map(row => metricBucketLabel(row.date));
+    empty.operationsOverview.dates = operations.map(row => row.date);
     for (const series of empty.operationsOverview.series) {
       const parse = metric === 'revenue' ? metricNumber : metricCount;
       const values = operations.map(row => parse(row[operationKeys[series.name]]));
@@ -71,6 +75,7 @@ export function adaptReportOverview(value, empty, metric) {
   const trend = orderedPoints(dto.revenueTrend);
   if (trend) {
     empty.trendData.labels = trend.map(row => metricBucketLabel(row.date));
+    empty.trendData.dates = trend.map(row => row.date);
     for (const key of ['revenue', 'payouts']) {
       const points = trend.map(row => metricNumber(row[key]));
       empty.trendData[key] = points.every(point => point != null) ? points : [];
@@ -80,7 +85,7 @@ export function adaptReportOverview(value, empty, metric) {
   const types = { FORWARDER: 'Forwarder', EXPORTER: 'Forwarder', TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company' };
   empty.topPerformingEntities = entities.filter(row => row && typeof row === 'object' && !Array.isArray(row)).map((row, index) => ({
     _key: reportText(row.entityId) || String(index), rank: metricCount(row.rank) ?? '—', entity: reportText(row.entityName) || '—', entityType: types[row.entityType] || humanReportCode(row.entityType),
-    jobs: formattedCount(row.jobs), revenue: metricNumber(row.revenue), growth: metricNumber(row.growth),
+    jobs: formattedCount(row.jobs), jobsCount: metricCount(row.jobs), entityId: reportText(row.entityId), revenue: metricNumber(row.revenue), growth: metricNumber(row.growth),
   }));
   const financial = reportRecord(dto.financial);
   for (const [key, field] of [['totalRevenue', 'revenue'], ['grossJobValue', 'grossJobValue'], ['totalPayouts', 'payouts'], ['outstandingPayments', 'outstandingPayments'], ['escrowBalance', 'escrowBalance']]) {

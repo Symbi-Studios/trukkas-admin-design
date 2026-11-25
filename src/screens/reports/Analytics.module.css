@@ -1,0 +1,263 @@
+.hub {
+  display: grid;
+  gap: var(--tk-space-5);
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-bottom: -8px;
+}
+
+.toolbarCaption {
+  color: var(--tk-ink-400);
+  font: 400 13px/18px var(--tk-font-sans);
+}
+
+.toolbarCaption strong {
+  color: var(--tk-ink-700);
+  font-weight: 500;
+}
+
+.stack {
+  display: grid;
+  gap: var(--tk-grid-gap);
+  min-width: 0;
+}
+
+/* Metric strip with the chart it drives, as one block. */
+.hero {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--tk-line);
+  border-radius: var(--tk-r-lg);
+  background: var(--tk-surface);
+  overflow: hidden;
+}
+
+.hero > :first-child {
+  border: 0;
+  border-bottom: 1px solid var(--tk-line);
+  border-radius: 0;
+}
+
+.heroChart {
+  padding: 20px 20px 12px;
+  min-width: 0;
+}
+
+.grid2,
+.grid3 {
+  display: grid;
+  gap: var(--tk-grid-gap);
+  min-width: 0;
+  align-items: stretch;
+}
+
+.grid2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .grid3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .grid2,
+  .grid3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--tk-line);
+  border-radius: var(--tk-r-lg);
+  background: var(--tk-surface);
+}
+
+.panelHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 0;
+}
+
+.panelTitle {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.panelTitle h3 {
+  margin: 0;
+  color: var(--tk-ink-900);
+  font: 600 14px/20px var(--tk-font-sans);
+}
+
+.panelTitle p {
+  margin: 0;
+  color: var(--tk-ink-400);
+  font: 400 12px/16px var(--tk-font-sans);
+}
+
+.panelAction {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.panelBody {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 20px 18px;
+}
+
+.panelBodyFlush {
+  flex: 1;
+  min-width: 0;
+}
+
+.textLink {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tk-ink-500);
+  font: 500 12px/16px var(--tk-font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.textLink:hover {
+  color: var(--tk-ink-900);
+}
+
+.textLink:focus-visible {
+  outline: 2px solid var(--tk-blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.quiet {
+  margin: 0;
+  padding: 18px 0;
+  color: var(--tk-ink-400);
+  font: 400 13px/18px var(--tk-font-sans);
+}
+
+.placeholder {
+  height: 120px;
+  border-radius: var(--tk-r-sm);
+  background: var(--tk-viz-track);
+  opacity: 0.5;
+  animation: pulse 1.4s var(--tk-ease) infinite;
+}
+
+.valuePlaceholder {
+  display: inline-block;
+  width: 64px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--tk-viz-track);
+  vertical-align: middle;
+  animation: pulse 1.4s var(--tk-ease) infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.note {
+  margin: 12px 0 0;
+  color: var(--tk-ink-400);
+  font: 400 12px/16px var(--tk-font-sans);
+}
+
+.figures {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+
+.figures dt {
+  color: var(--tk-ink-400);
+  font: 500 12px/16px var(--tk-font-sans);
+}
+
+.figures dd {
+  margin: 0;
+}
+
+.figures .note {
+  margin-top: 2px;
+}
+
+.figureValue {
+  color: var(--tk-ink-900);
+  font: 600 18px/24px var(--tk-font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.funnel {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.funnel li {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 56px 40px;
+  align-items: center;
+  gap: 12px;
+  color: var(--tk-ink-500);
+  font: 400 13px/18px var(--tk-font-sans);
+}
+
+.funnel strong {
+  color: var(--tk-ink-900);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnelLabel {
+  white-space: nowrap;
+}
+
+.funnelTrack {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--tk-viz-track);
+  overflow: hidden;
+}
+
+.funnelTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--tk-viz-1);
+}
+
+.funnelRate {
+  color: var(--tk-ink-400);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

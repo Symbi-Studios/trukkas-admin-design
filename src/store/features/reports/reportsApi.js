@@ -32,7 +32,7 @@ export const unavailableReportPreview = {
 export function emptyReportOverview() {
   return {
     dashboardSummary: Object.fromEntries(['totalJobs', 'completedJobs', 'totalRevenue', 'totalPayouts', 'activeUsers', 'complianceRate'].flatMap((key) => [[key, null], [key + 'Delta', '—'], [key + 'Trend', []]])),
-    operationsOverview: { labels: [], series: [
+    operationsOverview: { labels: [], dates: [], series: [
       { name: 'Created', color: 'var(--tk-viz-1)', points: [] },
       { name: 'Accepted', color: 'var(--tk-viz-3)', points: [] },
       { name: 'Completed', color: 'var(--tk-viz-2)', points: [] },
@@ -47,7 +47,7 @@ export function emptyReportOverview() {
     // Breakdowns stay empty until the API returns rows; no placeholder labels.
     jobsByType: [],
     geographicalDistribution: [],
-    topPerformingEntities: [], trendData: { labels: [], revenue: [], payouts: [] },
+    topPerformingEntities: [], trendData: { labels: [], dates: [], revenue: [], payouts: [] },
     financialSummary: Object.fromEntries(['totalRevenue', 'grossJobValue', 'totalPayouts', 'outstandingPayments', 'escrowBalance'].flatMap((key) => [[key, null], [key + 'Delta', null], [key + 'Direction', null], [key + 'Definition', null]])),
     userEngagement: Object.fromEntries(['activeUsers', 'newUsers', 'userSessions'].flatMap((key) => [[key, null], [key + 'Delta', null], [key + 'Direction', null], [key + 'Definition', null]])),
     complianceOverview: { totalVerifications: '—', verified: '—', pending: '—', rejected: '—', verifiedPct: '—', pendingPct: '—', rejectedPct: '—' },
