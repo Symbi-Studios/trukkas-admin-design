@@ -167,7 +167,7 @@ export function useSettingsEditor(page) {
     finally { busy.current = false; }
   }
   function quickActions(items, handlers = {}) {
-    const destinations = { 'Set Default Pricing Rules': '/pricing', 'Configure Notifications': '/settings?tab=notifications', 'Manage Integrations': '/settings?tab=integrations', 'Manage User Roles': '/roles', 'Review Active Sessions': '/settings?tab=security', 'View Audit Logs': '/audit' };
+    const destinations = { 'Set Default Pricing Rules': '/pricing', 'Configure Notifications': '/settings?tab=notifications', 'Manage User Roles': '/roles', 'Review Active Sessions': '/settings?tab=security', 'View Audit Logs': '/audit' };
     // Show only actions with working navigation or an implemented handler.
     const available = items.filter((item) => typeof handlers[item.label] === 'function' || Object.hasOwn(destinations, item.label) || item.label === 'Test Notification');
     return available.map((item) => ({ ...item, onClick: () => {
