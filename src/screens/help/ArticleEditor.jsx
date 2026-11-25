@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Badge, Banner, Button, Card, DropdownMenu, Icon, Switch } from '../../ds.js';
+import { Badge, Banner, Button, Card, DropdownMenu, Icon, Select, Switch } from '../../ds.js';
 import { Link, useNavigate, useParams } from '../../router.js';
 import {
   useCreateAdminKnowledgeArticleMutation, useGetAdminKnowledgeArticleDetailQuery, useUpdateAdminKnowledgeArticleMutation,
@@ -10,7 +10,7 @@ import {
 import { getApiErrorMessage } from '../../store/api/getApiErrorMessage.js';
 import { showToast } from '../../components/ActionToast.jsx';
 import { DriverDetailLoading } from '../DriversLoading.jsx';
-import { Markdown } from './Markdown.jsx';
+import { RichTextEditor } from './RichTextEditor.jsx';
 import { AUDIENCES, HELP_TOPICS, STATUS_TONE, articleEditUrl, audienceLabel, isKnownTopic } from './helpCenter.js';
 import styles from './Help.module.css';
 
@@ -24,7 +24,7 @@ function fromArticle(a) {
   };
 }
 
-/** Write or edit a help article, with a live preview of how the apps show it. */
+/** Write or edit a help article in a rich-text editor; it's saved as the Markdown the apps render. */
 export function ArticleEditor() {
   const navigate = useNavigate();
   const params = useParams();
@@ -103,72 +103,29 @@ export function ArticleEditor() {
 
   return (
     <div className={styles.page}>
-      <div>
+      <div className={styles.editorHead}>
         <nav className={styles.crumbs} aria-label="Breadcrumb">
           <Link to="/knowledge-base">Help center</Link><Icon name="chevron-right" size={12} aria-hidden="true" /><span>{article ? 'Edit article' : 'New article'}</span>
         </nav>
-        <div className={styles.editorHead} style={{ marginTop: 6 }}>
-          <h1 className="tk-display" style={{ margin: 0 }}>{article ? form.title || 'Untitled article' : 'New article'}</h1>
-          {article && <span style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--tk-ink-400)', font: '400 13px/18px var(--tk-font-sans)' }}>
-            <Badge tone={STATUS_TONE[article.status] || 'neutral'} dot>{article.status}</Badge>
-            {article.views != null && <span>{article.views.toLocaleString('en-NG')} views</span>}
-            {article.helpful != null && <span>· {Math.round(article.helpful)}% found it helpful</span>}
-          </span>}
-        </div>
+        {article && <span className={styles.statusLine}>
+          <Badge tone={STATUS_TONE[article.status] || 'neutral'} dot>{article.status}</Badge>
+          {article.views != null && <span>{article.views.toLocaleString('en-NG')} views</span>}
+          {article.helpful != null && <span>{Math.round(article.helpful)}% found it helpful</span>}
+        </span>}
       </div>
 
       {error && <Banner inline tone="danger" title="Couldn’t save the article">{error}</Banner>}
 
       <div className={styles.editor}>
-        <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)', minWidth: 0 }}>
+        <div className={styles.doc}>
           <section className={styles.card}>
-            <div className={styles.cardBody}>
-              <label className={styles.field}>
-                <span className={styles.labelRow}><span className={styles.label}>Title</span><span className={styles.counter}>{form.title.length}/150</span></span>
-                <input className={`${styles.input} ${styles.titleInput}`} value={form.title} maxLength={150} disabled={saving} placeholder="How to add a truck to your fleet"
-                  onChange={(event) => set('title', event.target.value)} autoFocus={!id} />
-              </label>
-              <label className={styles.field}>
-                <span className={styles.labelRow}><span className={styles.label}>Summary (optional)</span><span className={styles.counter}>{form.summary.length}/500</span></span>
-                <textarea className={styles.textarea} rows={2} maxLength={500} value={form.summary} disabled={saving} placeholder="One or two sentences shown in the list of guides."
-                  onChange={(event) => set('summary', event.target.value)} />
-                <p className={styles.hint}>Left empty, the apps show the first 160 characters of the article.</p>
-              </label>
-              <div className={styles.row2}>
-                <label className={styles.field}>
-                  <span className={styles.label}>Topic</span>
-                  <select className={styles.select} value={form.category} disabled={saving} onChange={(event) => set('category', event.target.value)}>
-                    <option value="" disabled>Choose a topic</option>
-                    {HELP_TOPICS.map((t) => <option key={t.slug} value={t.value}>{t.value}</option>)}
-                    {!topicKnown && <option value={form.category}>{form.category} (old category)</option>}
-                  </select>
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.label}>Who can read it</span>
-                  <select className={styles.select} value={form.visibility} disabled={saving} onChange={(event) => set('visibility', event.target.value)}>
-                    {AUDIENCES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-                  </select>
-                </label>
-              </div>
-              {!topicKnown && <p className={styles.hint} style={{ color: 'var(--tk-warning-ink)' }}>“{form.category}” isn’t one of the app topics. Pick one so it shows in the right place.</p>}
-            </div>
-          </section>
-
-          <section className={styles.card}>
-            <div className={styles.cardHead}><h2>Article</h2><span>Markdown · {readMinutes(form.body)} min read</span></div>
-            <div className={styles.cardBody}>
-              <textarea className={`${styles.textarea} ${styles.body}`} value={form.body} disabled={saving} aria-label="Article body"
-                placeholder={'## Before you start\nYou need an approved company account.\n\n## Steps\n1. Open **Fleet** and choose **Add vehicle**.\n2. Enter the plate number and upload the documents.\n3. Submit for review.'}
-                onChange={(event) => set('body', event.target.value)} />
-              <p className={styles.hint}>Use <code>##</code> for headings, <code>**bold**</code>, <code>1.</code> or <code>-</code> for lists and <code>[text](https://…)</code> for links.</p>
+            <div className={styles.docBody}>
+              <textarea className={styles.docTitle} rows={1} value={form.title} maxLength={150} disabled={saving} placeholder="Article title" aria-label="Title"
+                onChange={(event) => set('title', event.target.value.replace(/\n/g, ' '))} autoFocus={!id}
+                onInput={(event) => { event.currentTarget.style.height = 'auto'; event.currentTarget.style.height = event.currentTarget.scrollHeight + 'px'; }} />
+              <RichTextEditor value={form.body} resetKey={loadedVersion || 'new'} disabled={saving} onChange={(body) => set('body', body)}
+                placeholder="Start writing. Use the toolbar for headings, lists and links." />
               {article?.guide && <p className={styles.hint}><Icon name="info" size={12} aria-hidden="true" /> This article also has a step-by-step guide layout. It isn’t edited here and is kept as it is.</p>}
-            </div>
-          </section>
-
-          <section className={styles.card}>
-            <div className={`${styles.cardBody} ${styles.toggles}`}>
-              <Switch checked={form.featured} disabled={saving} onChange={(v) => set('featured', v)} label="Feature it" hint="Featured articles appear first and on the Support home." />
-              <Switch checked={form.feedback} disabled={saving} onChange={(v) => set('feedback', v)} label="Ask “Was this helpful?”" hint="Readers can vote, and you’ll see the helpful rate here." />
             </div>
           </section>
 
@@ -193,18 +150,29 @@ export function ArticleEditor() {
           </div>
         </div>
 
-        <aside className={styles.previewWrap}>
-          <section className={styles.card} aria-label="Preview">
-            <div className={styles.cardHead}><h2>Preview</h2><span>As a guide in the apps</span></div>
-            <div className={styles.preview}>
-              <div className={styles.previewMeta}>
-                <span>{[form.category, `${readMinutes(form.body)} min read`, audienceLabel(form.visibility)].filter(Boolean).join(' · ')}</span>
-              </div>
-              <h1 className={styles.previewTitle}>{form.title || 'Article title'}</h1>
-              {form.summary.trim() && <p className={styles.previewSummary}>{form.summary}</p>}
-              {form.body.trim() ? <Markdown source={form.body} className={styles.md} /> : <p className={styles.hint}>Start writing to see the preview.</p>}
+        <aside className={styles.settings}>
+          <section className={styles.card} aria-label="Article settings">
+            <div className={styles.cardBody}>
+              <Select label="Topic" placeholder="Choose a topic" value={form.category} disabled={saving}
+                options={[...HELP_TOPICS.map((t) => ({ value: t.value, label: t.value })), ...(!topicKnown ? [{ value: form.category, label: `${form.category} (old category)` }] : [])]}
+                onChange={(event) => set('category', event.target.value)} />
+              {!topicKnown && <p className={styles.hint} style={{ color: 'var(--tk-warning-ink)', marginTop: -8 }}>Not one of the app topics. Pick one so it shows in the right place.</p>}
+              <Select label="Who can read it" value={form.visibility} disabled={saving} options={AUDIENCES} onChange={(event) => set('visibility', event.target.value)} />
+              <label className={styles.field}>
+                <span className={styles.labelRow}><span className={styles.label}>Summary</span><span className={styles.counter}>{form.summary.length}/500</span></span>
+                <textarea className={styles.textarea} rows={3} maxLength={500} value={form.summary} disabled={saving} placeholder="Shown in the list of guides. Optional."
+                  onChange={(event) => set('summary', event.target.value)} />
+                <p className={styles.hint}>Left empty, the apps use the first 160 characters.</p>
+              </label>
             </div>
           </section>
+          <section className={styles.card}>
+            <div className={`${styles.cardBody} ${styles.toggles}`}>
+              <Switch checked={form.featured} disabled={saving} onChange={(v) => set('featured', v)} label="Feature it" hint="Shown first and on the Support home." />
+              <Switch checked={form.feedback} disabled={saving} onChange={(v) => set('feedback', v)} label="Ask “Was this helpful?”" hint="Readers can vote; you see the rate here." />
+            </div>
+          </section>
+          <p className={styles.hint} style={{ padding: '0 4px' }}>{readMinutes(form.body)} min read · {audienceLabel(form.visibility)}{form.category ? ` · ${form.category}` : ''}</p>
         </aside>
       </div>
     </div>

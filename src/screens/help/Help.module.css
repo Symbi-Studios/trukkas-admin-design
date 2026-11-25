@@ -70,8 +70,43 @@
 .crumbs a { color: inherit; text-decoration: none; }
 .crumbs a:hover { color: var(--tk-ink-900); }
 .editorHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--tk-grid-gap); align-items: start; }
-@media (max-width: 1180px) { .editor { grid-template-columns: minmax(0, 1fr); } }
+.editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--tk-grid-gap); align-items: start; }
+@media (max-width: 1100px) { .editor { grid-template-columns: minmax(0, 1fr); } }
+.doc { display: grid; gap: var(--tk-grid-gap); min-width: 0; }
+.docBody { display: grid; gap: 12px; padding: 22px 26px 26px; }
+.docTitle {
+  width: 100%; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent;
+  color: var(--tk-ink-900); font: 600 26px/34px var(--tk-font-sans); letter-spacing: -.015em;
+}
+.docTitle::placeholder { color: var(--tk-ink-300); }
+.settings { position: sticky; top: 16px; display: grid; gap: var(--tk-grid-gap); }
+.statusLine { display: flex; gap: 12px; align-items: center; color: var(--tk-ink-400); font: 400 13px/18px var(--tk-font-sans); }
+
+/* Rich-text editor */
+.rte { display: grid; gap: 0; border: 1px solid var(--tk-line); border-radius: var(--tk-r-md); }
+.rte:focus-within { border-color: var(--tk-blue); box-shadow: var(--tk-focus-ring); }
+.toolbar {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 6px;
+  border-bottom: 1px solid var(--tk-line); border-radius: var(--tk-r-md) var(--tk-r-md) 0 0; background: var(--tk-surface);
+}
+.blockPicker { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--tk-r-sm); background: var(--tk-surface-sunk); }
+.blockPicker button { height: 26px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: var(--tk-ink-500); font: 500 12.5px/1 var(--tk-font-sans); cursor: pointer; }
+.blockPicker button[aria-pressed="true"] { background: var(--tk-surface); color: var(--tk-ink-900); box-shadow: 0 0 0 1px var(--tk-line); }
+.tool { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: var(--tk-r-sm); background: transparent; color: var(--tk-ink-500); cursor: pointer; }
+.tool:hover:not(:disabled) { background: var(--tk-surface-sunk); color: var(--tk-ink-900); }
+.tool[aria-pressed="true"] { background: var(--tk-surface-sunk); color: var(--tk-ink-900); }
+.tool:focus-visible, .blockPicker button:focus-visible { outline: 2px solid var(--tk-blue); outline-offset: 1px; }
+.toolSep { width: 1px; height: 18px; margin: 0 4px; background: var(--tk-line); }
+.linkBar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--tk-line); background: var(--tk-surface-page); color: var(--tk-ink-400); }
+.linkBar input { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--tk-line); border-radius: var(--tk-r-sm); outline: 0; font: 400 13px/1 var(--tk-font-sans); color: var(--tk-ink-900); }
+.linkBar input:focus { border-color: var(--tk-blue); }
+.linkBar button { height: 28px; padding: 0 10px; border: 0; border-radius: var(--tk-r-sm); background: transparent; color: var(--tk-ink-700); font: 500 12.5px/1 var(--tk-font-sans); cursor: pointer; }
+.linkBar button[type="submit"] { background: var(--tk-ink-900); color: var(--tk-surface); }
+.surface { position: relative; }
+.content { min-height: 380px; padding: 16px 18px 24px; outline: 0; }
+.content > :first-child { margin-top: 0; }
+.placeholder { position: absolute; top: 16px; left: 18px; color: var(--tk-ink-300); font: 400 14px/23px var(--tk-font-sans); pointer-events: none; }
+.rte[data-disabled] .content { color: var(--tk-ink-500); }
 .card { border: 1px solid var(--tk-line); border-radius: var(--tk-r-lg); background: var(--tk-surface); }
 .cardBody { display: grid; gap: 16px; padding: 16px 18px 18px; }
 .cardHead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 18px 0; }
