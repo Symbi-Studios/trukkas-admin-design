@@ -4,7 +4,7 @@ import * as React from 'react';
  */
 export interface SectionCardProps {
   title: React.ReactNode;
-  description: React.ReactNode;
+  description?: React.ReactNode;
   /** Lucide glyph shown before the title */
   icon?: string;
   /** Hover explanation shown from an info glyph beside the title */

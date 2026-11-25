@@ -3,17 +3,32 @@
 import { useNavigate } from '../router.js';
 import { DocumentProgress } from '../components/DocumentProgress.jsx';
 import { Badge, Button, EmptyState, Icon, SectionCard, Skeleton } from '../ds.js';
-import { DOC_STATUS, REVIEW_STATUS_META, countDocuments, docLabel, docStatusLabel, docStatusTone, unitNoun } from '../domain/containerReview.js';
-import { formatTdoDate, formatWhen } from './DocumentReview.jsx';
+import { DOC_STATUS, REVIEW_STATUS_META, countDocuments, docLabel, docStatusLabel, docStatusTone, unitNoun } from '@/domain/containerReview';
+import type { ApiError } from '@/types/api';
+import type { ReviewDocument, ReviewJob } from '@/types/docReview';
+import { formatTdoDate, formatWhen } from './DocumentReview';
 import './JobContainerDocuments.css';
 
-const STATUS_ICON = { PENDING: 'clock', APPROVED: 'circle-check', REJECTED: 'circle-x' };
+const STATUS_ICON = { PENDING: 'clock', APPROVED: 'circle-check', REJECTED: 'circle-x', MISSING: 'file-question' } as const;
+
+function docNote(doc: ReviewDocument): string {
+  if (doc.status === DOC_STATUS.MISSING) return 'Not uploaded yet';
+  if (doc.status === DOC_STATUS.APPROVED) return `Approved ${formatWhen(doc.reviewedAt)}`;
+  if (doc.version > 1) return `Resubmitted ${formatWhen(doc.uploadedAt)}`;
+  return `Uploaded ${formatWhen(doc.uploadedAt)}`;
+}
 
 /** Job Details → Documents tab: read-only overview, grouped by container or rack. */
-export function JobContainerDocuments({ review, loading, error, onRetry, jobRef }) {
-  const navigate = useNavigate();
-  const reviewUrl = (docId) => `/documents/review?jobId=${encodeURIComponent(review.id)}${jobRef ? '&ref=' + encodeURIComponent(jobRef) : ''}${docId ? '&doc=' + encodeURIComponent(docId) : ''}`;
+interface JobContainerDocumentsProps {
+  review: ReviewJob | null;
+  loading: boolean;
+  error: ApiError | null;
+  onRetry: () => void;
+  jobRef?: string;
+}
 
+export function JobContainerDocuments({ review, loading, error, onRetry, jobRef }: JobContainerDocumentsProps) {
+  const navigate = useNavigate();
   if (loading && !review) {
     return (
       <section className="jd-tab-stack" aria-busy="true">
@@ -23,9 +38,10 @@ export function JobContainerDocuments({ review, loading, error, onRetry, jobRef 
     );
   }
   if (!review) {
-    return <EmptyState icon="file-text" title="Documents couldn’t be loaded" description={error ? 'Check your connection and try again.' : 'This job has no documents yet.'} action={error ? <Button variant="outline" onClick={onRetry}>Retry</Button> : null} />;
+    return <EmptyState icon="file-text" title="Documents couldn’t be loaded" description={error ? (error.message || 'Check your connection and try again.') : 'This job has no documents yet.'} action={error ? <Button variant="outline" onClick={onRetry}>Retry</Button> : null} />;
   }
 
+  const reviewUrl = (docId?: string) => `/documents/review?jobId=${encodeURIComponent(review.id)}${jobRef ? '&ref=' + encodeURIComponent(jobRef) : ''}${docId ? '&doc=' + encodeURIComponent(docId) : ''}`;
   const counts = countDocuments(review.units);
   const meta = REVIEW_STATUS_META[review.reviewStatus];
   const kind = review.unitKind;
@@ -44,7 +60,7 @@ export function JobContainerDocuments({ review, loading, error, onRetry, jobRef 
           <div className="jcd-fact"><span>TDO date</span><strong>{formatTdoDate(review.tdoDate)}</strong></div>
           <div className="jcd-fact jcd-fact-progress"><span>Progress</span><DocumentProgress counts={counts} /></div>
           {review.locked ? (
-            <span className="jcd-locked"><Icon name="lock" size={14} />Locked {formatWhen(review.validatedAt)}</span>
+            <span className="jcd-locked"><Icon name="lock" size={14} />Locked</span>
           ) : (
             <Button icon="file-check-2" variant={counts.pending ? 'primary' : 'outline'} onClick={() => navigate(reviewUrl())}>
               {counts.pending ? `Review documents (${counts.pending} left)` : 'Open review'}
@@ -73,8 +89,8 @@ export function JobContainerDocuments({ review, loading, error, onRetry, jobRef 
                       <span className="jcd-doc-body">
                         <strong>{docLabel(doc.type)}{doc.version > 1 && <small> · v{doc.version}</small>}</strong>
                         {doc.status === DOC_STATUS.REJECTED
-                          ? <small className="jcd-reason" title={doc.rejectionReason}>{doc.rejectionReason}</small>
-                          : <small>{doc.status === DOC_STATUS.APPROVED ? `Approved ${formatWhen(doc.reviewedAt)}` : doc.version > 1 ? `Resubmitted ${formatWhen(doc.uploadedAt)}` : `Uploaded ${formatWhen(doc.uploadedAt)}`}</small>}
+                          ? <small className="jcd-reason" title={doc.rejectionReason ?? undefined}>{doc.rejectionReason}</small>
+                          : <small>{docNote(doc)}</small>}
                       </span>
                       <Badge tone={docStatusTone(doc.status)}>{docStatusLabel(doc.status)}</Badge>
                     </button>
