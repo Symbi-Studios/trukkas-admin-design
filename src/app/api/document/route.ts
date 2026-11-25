@@ -24,7 +24,7 @@ const EXTENSION: Record<string, string> = {
 };
 
 // The backend gives us links and names without an extension, so we read the first bytes of the file itself.
-export function sniffType(bytes: Uint8Array): string | null {
+function sniffType(bytes: Uint8Array): string | null {
   const startsWith = (text: string, offset = 0) => [...text].every((char, index) => bytes[offset + index] === char.charCodeAt(0));
   if (startsWith('%PDF-')) return 'application/pdf';
   if (bytes[0] === 0x89 && startsWith('PNG', 1)) return 'image/png';
