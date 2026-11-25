@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from '../router.js';
 import {
-  PageHeader, Button, StatCard, SectionCard, Card, Select, FilterSelect,
-  DataTable, DonutChart, LegendList, LineChart, BarChart, Sparkline, RankBarList, Tabs,
+  PageHeader, Button, StatCard, StatsPanel, SectionCard, Card, Select, FilterSelect,
+  DataTable, DonutChart, LegendList, LineChart, BarChart, RankBarList, EmptyState,
   Icon, Modal, TextField, Banner, Skeleton,
 } from '../ds.js';
 import { useReportDraft, useReportEntities } from '../store/features/reports/useReportDraft.js';
@@ -16,13 +16,63 @@ import { ReportDateDialog } from './ReportDialogs.jsx';
 import { useReportOperations, useReportSession } from '../store/features/reports/useReportOperations.js';
 import { reportEntityScope } from '../store/features/reports/reportContracts.js';
 import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
-import { DriverTableLoading } from './DriversLoading.jsx';
 import styles from './ReportsAnalytics.module.css';
 
-const COMPARE_OPTIONS = ['Previous 7 days', 'Previous Period', 'Previous Month', 'Previous Year'];
-const GROUP_BY_OPTIONS = ['Daily', 'Weekly', 'Monthly'];
-const OVERVIEW_METRICS = ['Jobs', 'Trips', 'Revenue'];
-const SORT_OPTIONS = ['By Revenue', 'By Jobs', 'By Growth'];
+// Values match reportComparisonRange; labels say what each one compares against.
+const COMPARE_OPTIONS = [
+  { value: 'Previous Period', label: 'Previous period' },
+  { value: 'Previous Month', label: 'Same dates last month' },
+  { value: 'Previous Year', label: 'Same dates last year' },
+];
+// Auto lets the API pick: daily up to 31 days, weekly up to 92, monthly beyond.
+const GROUP_BY_OPTIONS = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'day', label: 'Daily' },
+  { value: 'week', label: 'Weekly' },
+  { value: 'month', label: 'Monthly' },
+];
+const BUCKET_NOUN = { day: 'day', week: 'week', month: 'month' };
+const OVERVIEW_METRICS = [
+  { value: 'jobs', label: 'Jobs' },
+  { value: 'trips', label: 'Trips' },
+  { value: 'revenue', label: 'Revenue' },
+];
+const SORT_OPTIONS = [
+  { value: 'revenue', label: 'By job value' },
+  { value: 'jobs', label: 'By jobs' },
+  { value: 'growth', label: 'By growth' },
+];
+const ENTITY_TYPES = ['All Types', 'Forwarder', 'Truck Company'];
+
+/** "Nov 11 – 17", "Oct 28 – Nov 3", or with years when the range crosses one. */
+function shortRange(range) {
+  if (!reportRangeQuery(range)) return '—';
+  const from = new Date(range.dateFrom + 'T00:00:00Z'), to = new Date(range.dateTo + 'T00:00:00Z');
+  const sameYear = from.getUTCFullYear() === to.getUTCFullYear();
+  const thisYear = sameYear && from.getUTCFullYear() === new Date().getUTCFullYear();
+  const fmt = (date, options) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...options }).format(date);
+  const year = thisYear ? {} : { year: 'numeric' };
+  if (range.dateFrom === range.dateTo) return fmt(from, { month: 'short', day: 'numeric', ...year });
+  const start = fmt(from, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
+  const end = from.getUTCMonth() === to.getUTCMonth() && sameYear ? fmt(to, { day: 'numeric', ...year }) : fmt(to, { month: 'short', day: 'numeric', ...year });
+  return start + ' – ' + end;
+}
+
+/** Charts print every label; keep about eight so long ranges stay readable. */
+function sparseLabels(labels) {
+  const every = Math.max(1, Math.ceil(labels.length / 8));
+  return labels.map((label, index) => (index % every === 0 || index === labels.length - 1 ? label : ''));
+}
+
+function signedPercent(delta) {
+  if (typeof delta !== 'number' || !Number.isFinite(delta)) return null;
+  return (delta > 0 ? '+' : delta < 0 ? '−' : '') + reportPercent(Math.abs(delta));
+}
+
+/** Label with its backend definition on hover (dotted underline marks it). */
+function Defined({ text, definition }) {
+  return definition ? <span className={styles.defined} title={definition}>{text}</span> : text;
+}
 
 export function ReportsAnalytics() {
   const session = useReportSession();
@@ -39,48 +89,63 @@ function ReportsAnalyticsScreen() {
 
   const [entityTypeFilter, setEntityTypeFilter] = useState('All Types');
   const [entityFilter, setEntityFilter] = useState('All Entities');
-  const [compareTo, setCompareTo] = useState(COMPARE_OPTIONS[0]);
-  const [groupBy, setGroupBy] = useState('Daily');
-  const [showFilters, setShowFilters] = useState(false);
-  const [overviewMetric, setOverviewMetric] = useState('Jobs');
-  const [sortEntities, setSortEntities] = useState('By Revenue');
+  const [compareTo, setCompareTo] = useState(COMPARE_OPTIONS[0].value);
+  const [groupBy, setGroupBy] = useState('auto');
+  const [overviewMetric, setOverviewMetric] = useState('jobs');
+  const [sortEntities, setSortEntities] = useState('revenue');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({ reportType: 'operations', frequency: 'Weekly', recipients: '' });
   const busy = operations.busy;
   useEffect(() => { setScheduleOpen(false); setDateOpen(false); setEntityFilter('All Entities'); setScheduleForm({ reportType: 'operations', frequency: 'Weekly', recipients: '' }); }, [operations.owner]);
   const { options: entityOptions } = useReportEntities(entityTypeFilter);
-  const filtersActive = entityTypeFilter !== 'All Types' || entityFilter !== 'All Entities';
+  const filtersActive = entityTypeFilter !== 'All Types' || entityFilter !== 'All Entities' || compareTo !== COMPARE_OPTIONS[0].value || groupBy !== 'auto';
+  const scoped = entityTypeFilter !== 'All Types' || entityFilter !== 'All Entities';
   const comparison = reportComparisonRange(range, compareTo);
   const args = reportRangeQuery(range);
-  const compareArgs = reportRangeQuery(comparison);
+  const compareArgs = comparison ? reportRangeQuery(comparison) : null;
   const scope = reportEntityScope({ entityType: entityTypeFilter, entity: entityFilter });
-  const overviewArgs = args && compareArgs ? { ...args, compareFrom: compareArgs.dateFrom, compareTo: compareArgs.dateTo, ...scope.params,
-    groupBy: { Daily: 'day', Weekly: 'week', Monthly: 'month' }[groupBy], metric: overviewMetric.toLowerCase(), sortBy: { 'By Jobs': 'jobs', 'By Revenue': 'revenue', 'By Growth': 'growth' }[sortEntities], owner: operations.owner, role: operations.role } : null;
+  const overviewArgs = args && compareArgs ? {
+    ...args, compareFrom: compareArgs.dateFrom, compareTo: compareArgs.dateTo, ...scope.params,
+    ...(groupBy === 'auto' ? {} : { groupBy }), metric: overviewMetric, sortBy: sortEntities, owner: operations.owner, role: operations.role,
+  } : null;
   const reports = useGetAdminReportOverviewQuery(overviewArgs, { skip: !authenticated || Boolean(scope.error) || !overviewArgs, refetchOnMountOrArgChange: true });
   const overview = authenticated && !scope.error && !reports.error && reports.currentData ? reports.currentData : emptyReportOverview();
-  const dashboardSummary = overview.dashboardSummary;
-  const { operationsOverview, jobsByStatus, jobsByType, geographicalDistribution,
+  const { dashboardSummary: summary, definitions, notes, operationsOverview, jobsByStatus, jobsByType, geographicalDistribution,
     topPerformingEntities, financialSummary, userEngagement, complianceOverview, alertsExceptions, trendData } = overview;
-  const filteredEntities = topPerformingEntities;
-  const totalChange = overview.deltaValues?.totalJobs ?? null;
-  const completedChange = overview.deltaValues?.completedJobs ?? null;
-  const comparisonCaption = 'vs ' + reportDateLabel(comparison);
   const loading = reports.isFetching && !scope.error;
+  const failed = Boolean(scope.error || reports.error);
+  const comparisonCaption = 'vs ' + shortRange(comparison);
   const value = (content) => loading ? <Skeleton as="span" width={90} height={23} /> : content;
   const banner = scope.error || operations.error || (authenticated && reports.error ? getApiErrorMessage(reports.error) : null);
   const amount = (v) => typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('en-NG', { maximumFractionDigits: 2 }) : '—';
-  const statusChartData = jobsByStatus.every((status) => status.count != null)
-    && jobsByStatus.reduce((total, status) => total + status.count, 0) === dashboardSummary.totalJobs
-    ? jobsByStatus.map((status) => ({ label: status.label, value: status.count, color: status.color })) : [];
+  const bucket = BUCKET_NOUN[overview.groupBy || groupBy];
+  const metricLabel = OVERVIEW_METRICS.find((m) => m.value === overviewMetric)?.label || 'Jobs';
+  const totalJobs = summary.totalJobs;
+  // Donuts only draw when every slice is known and the slices add up to the total.
+  const donut = (rows) => rows.length && totalJobs > 0 && rows.every((row) => row.count != null) && rows.reduce((sum, row) => sum + row.count, 0) === totalJobs
+    ? rows.map((row) => ({ label: row.label, value: row.count, color: row.color })) : [];
+  const statusRows = jobsByStatus;
+  const entitiesTarget = ['Truck Company'].includes(entityTypeFilter) ? { to: '/companies', label: 'View truck companies' } : { to: '/forwarders', label: 'View forwarders' };
+  const trendSeries = [
+    { name: 'Revenue', color: 'var(--tk-viz-1)', points: trendData.revenue },
+    { name: 'Payouts', color: 'var(--tk-viz-2)', points: trendData.payouts },
+  ];
+  const trendEmpty = !trendSeries.some((series) => series.points.some((point) => Number.isFinite(point) && point !== 0));
+
+  function delta(key) {
+    const change = overview.deltaValues?.[key];
+    if (change == null) return {};
+    return { delta: reportPercent(Math.abs(change)), direction: change < 0 ? 'down' : 'up' };
+  }
 
   async function scheduleReport() {
-    if (scope.error) { window.alert(scope.error); return; }
+    if (scope.error) return;
     if (await operations.scheduleDashboard(scheduleForm, scope.params)) setScheduleOpen(false);
   }
 
   function clearAll() {
     setEntityTypeFilter('All Types'); setEntityFilter('All Entities');
-    setCompareTo(COMPARE_OPTIONS[0]); setGroupBy('Daily'); setShowFilters(false);
+    setCompareTo(COMPARE_OPTIONS[0].value); setGroupBy('auto');
   }
 
   function goExport(reportType) {
@@ -88,208 +153,227 @@ function ReportsAnalyticsScreen() {
     navigate('/reports/export');
   }
 
+  const link = (label, to) => <button type="button" className={styles.linkButton} onClick={() => navigate(to)}>{label}</button>;
+  const empty = (title, description, icon = 'chart-column') => (
+    loading ? <Skeleton height={120} /> : failed ? <EmptyState icon={icon} title="Couldn’t load this section" description="Check the message above and try again." /> : <EmptyState icon={icon} title={title} description={description} />
+  );
 
   return (
     <>
       <PageHeader crumbs={['Intelligence', 'Reports & Analytics']} title="Reports & Analytics"
-        description="Holistic insights across operations, performance, finance, compliance and users."
+        description="How jobs, money, users and compliance are moving on Trukkas."
         actions={<>
-          <Button variant="outline" icon="calendar-clock" onClick={() => setScheduleOpen(true)}>Schedule Reports</Button>
-          <Button variant="outline" icon="download" onClick={() => goExport(draft.reportType)}>Export Report</Button>
-          <Button icon="plus" onClick={() => goExport('custom')}>Custom Report</Button>
+          <Button variant="outline" icon="calendar-clock" onClick={() => setScheduleOpen(true)}>Schedule reports</Button>
+          <Button variant="outline" icon="download" onClick={() => goExport(draft.reportType)}>Export report</Button>
+          <Button icon="plus" onClick={() => goExport('custom')}>Custom report</Button>
         </>} />
 
       {banner && <Banner tone="error" title={banner} />}
 
-      <Card style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
+      <Card className={styles.filters}>
         <FilterSelect label={reportDateLabel(range)} icon="calendar" onClick={() => setDateOpen(true)} />
-        <Select label="Compare to" value={compareTo} options={COMPARE_OPTIONS} onChange={(e) => setCompareTo(e.target.value)} style={{ minWidth: 160 }} />
-        <Select label="Group By" value={groupBy} options={GROUP_BY_OPTIONS} onChange={(e) => setGroupBy(e.target.value)} style={{ minWidth: 130 }} />
-        <Select label="Entity Type" value={entityTypeFilter} options={['All Types', 'Forwarder', 'Truck Company']} onChange={(e) => { setEntityTypeFilter(e.target.value); setEntityFilter('All Entities'); }} style={{ minWidth: 150 }} />
-        <Select label="Entity" value={entityFilter} options={entityOptions} onChange={(e) => setEntityFilter(e.target.value)} style={{ minWidth: 190 }} />
-        <Button variant="outline" icon="filter" onClick={() => setShowFilters((s) => !s)}>Filters</Button>
-        <div style={{ flex: 1 }} />
-        {(filtersActive || showFilters) && (
-          <a href="#" onClick={(e) => { e.preventDefault(); clearAll(); }}
-            style={{ font: '600 13px/1 var(--tk-font-sans)', color: 'var(--tk-orange)', paddingBottom: 10 }}>Clear All</a>
+        <Select label="Compare to" value={compareTo} options={COMPARE_OPTIONS} onChange={(e) => setCompareTo(e.target.value)} style={{ minWidth: 180 }} />
+        <Select label="Group by" value={groupBy} options={GROUP_BY_OPTIONS} onChange={(e) => setGroupBy(e.target.value)} style={{ minWidth: 120 }} />
+        <Select label="Entity type" value={entityTypeFilter} options={ENTITY_TYPES.map((type) => ({ value: type, label: type === 'All Types' ? 'All types' : type }))}
+          onChange={(e) => { setEntityTypeFilter(e.target.value); setEntityFilter('All Entities'); }} style={{ minWidth: 150 }} />
+        <Select label="Entity" value={entityFilter} options={entityOptions.map((option) => option.value === 'All Entities' ? { ...option, label: 'All entities' } : option)}
+          onChange={(e) => setEntityFilter(e.target.value)} style={{ minWidth: 190 }} />
+        <span className={styles.filtersSpacer} />
+        {filtersActive && <button type="button" className={styles.linkButton} onClick={clearAll}>Clear filters</button>}
+        {scoped && (
+          <p className={styles.scopeNote}>
+            <Icon name="info" size={13} aria-hidden="true" />
+            Entity filters apply to job figures, top entities and escrow balance. Revenue, users, compliance and most alerts stay platform-wide.
+          </p>
         )}
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--tk-space-4)' }}>
-        <StatCard icon="calendar-days" tint="navy" label="Total Jobs" value={value(reportCount(dashboardSummary.totalJobs))} delta={reportPercent(totalChange)} direction={totalChange == null ? null : totalChange < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalJobsTrend} color="var(--tk-viz-1)" />} />
-        <StatCard icon="circle-check" tint="green" label="Completed Jobs" value={value(reportCount(dashboardSummary.completedJobs))} delta={reportPercent(completedChange)} direction={completedChange == null ? null : completedChange < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.completedJobsTrend} color="var(--tk-viz-2)" />} />
-        <StatCard icon="banknote" tint="purple" label="Total Revenue" value={value(formatNaira(dashboardSummary.totalRevenue))} delta={dashboardSummary.totalRevenueDelta} direction={overview.deltaValues?.totalRevenue == null ? null : overview.deltaValues.totalRevenue < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalRevenueTrend} color="var(--tk-viz-5)" />} />
-        <StatCard icon="wallet" tint="amber" label="Total Payouts" value={value(formatNaira(dashboardSummary.totalPayouts))} delta={dashboardSummary.totalPayoutsDelta} direction={overview.deltaValues?.totalPayouts == null ? null : overview.deltaValues.totalPayouts < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.totalPayoutsTrend} color="var(--tk-viz-3)" />} />
-        <StatCard icon="users" tint="teal" label="Active Users" value={value(reportCount(dashboardSummary.activeUsers))} delta={dashboardSummary.activeUsersDelta} direction={overview.deltaValues?.activeUsers == null ? null : overview.deltaValues.activeUsers < 0 ? 'down' : 'up'} caption={comparisonCaption} sparkline={<Sparkline points={dashboardSummary.activeUsersTrend} color="var(--tk-viz-6)" />} />
-        <StatCard icon="shield-check" tint="blue" label="Compliance Rate" value={value(reportPercent(dashboardSummary.complianceRate))} delta={dashboardSummary.complianceRateDelta} direction={null} caption={'—'} sparkline={<Sparkline points={dashboardSummary.complianceRateTrend} color="var(--tk-viz-2)" />} />
-      </div>
+      <StatsPanel title="Summary">
+        <StatCard label={<Defined text="Jobs created" definition={definitions.totalJobs} />} value={value(reportCount(summary.totalJobs))} {...delta('totalJobs')} caption={comparisonCaption} />
+        <StatCard label={<Defined text="Jobs completed" definition={definitions.completedJobs} />} value={value(reportCount(summary.completedJobs))} {...delta('completedJobs')} caption={comparisonCaption} />
+        <StatCard label={<Defined text="Platform revenue" definition={definitions.totalRevenue} />} value={value(formatNaira(summary.totalRevenue))} {...delta('totalRevenue')} caption={comparisonCaption} />
+        <StatCard label={<Defined text="Payouts" definition={definitions.totalPayouts} />} value={value(formatNaira(summary.totalPayouts))} {...delta('totalPayouts')} caption={comparisonCaption} />
+        <StatCard label={<Defined text="Active users" definition={definitions.activeUsers} />} value={value(reportCount(summary.activeUsers))} {...delta('activeUsers')} caption={comparisonCaption} />
+        <StatCard label={<Defined text="Approval rate" definition={definitions.complianceRate || 'Verified ÷ decided verifications (verified + rejected), all time.'} />}
+          value={value(reportPercent(summary.complianceRate))} direction={null} caption="Of decided verifications, all time" />
+      </StatsPanel>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.1fr 0.9fr', gap: 'var(--tk-grid-gap)', alignItems: 'start' }}>
-        <SectionCard title="Operations Overview" action={
+      <div className={styles.chartGrid}>
+        <SectionCard title="Operations" tooltip={notes.operations || undefined}
+          description={metricLabel + ' per ' + (bucket || 'period') + ', counted on the date each job was created, accepted, completed or cancelled'} action={
           <Select value={overviewMetric} options={OVERVIEW_METRICS} onChange={(e) => setOverviewMetric(e.target.value)} style={{ minWidth: 110 }} />
         }>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div className={styles.legend}>
             {operationsOverview.series.map((s) => (
-              <span key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 6, font: '400 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 999, background: s.color }} />{s.name}
-              </span>
+              <span key={s.name}><span className={styles.legendDot} style={{ background: s.color }} />{s.name}</span>
             ))}
           </div>
-          <LineChart height={220} labels={operationsOverview.labels}
-            series={operationsOverview.series} format={overviewMetric === 'Revenue' ? amount : reportCount} />
+          {loading ? <Skeleton height={220} /> : (
+            <LineChart height={220} labels={sparseLabels(operationsOverview.labels)} series={operationsOverview.series}
+              format={overviewMetric === 'revenue' ? amount : reportCount} />
+          )}
         </SectionCard>
 
-        <SectionCard title="Revenue & Payouts Trend">
-          <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, font: '400 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--tk-viz-1)' }} />Revenue (₦)
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, font: '400 12px/16px var(--tk-font-sans)', color: 'var(--tk-ink-500)' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--tk-viz-2)' }} />Payouts (₦)
-            </span>
+        <SectionCard title="Revenue and payouts" description={'Platform revenue and payouts per ' + (bucket || 'period')}>
+          <div className={styles.legend}>
+            {trendSeries.map((s) => (
+              <span key={s.name}><span className={styles.legendDot} style={{ background: s.color }} />{s.name} (₦)</span>
+            ))}
           </div>
-          <BarChart height={190} labels={trendData.labels} format={amount}
-            series={[
-              { name: 'Revenue', color: 'var(--tk-viz-1)', points: trendData.revenue },
-              { name: 'Payouts', color: 'var(--tk-viz-2)', points: trendData.payouts },
-            ]} />
-          <Tabs value={groupBy} onChange={setGroupBy} items={GROUP_BY_OPTIONS} style={{ marginTop: 10, gap: 16 }} />
+          {loading ? <Skeleton height={190} /> : trendEmpty
+            ? <LineChart height={190} labels={sparseLabels(trendData.labels)} series={trendSeries} emptyLabel="No revenue or payouts in this period" />
+            : <BarChart height={190} labels={sparseLabels(trendData.labels)} format={amount} series={trendSeries} />}
         </SectionCard>
 
-        <SectionCard title="Jobs by Status" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
-          <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-            <DonutChart size={150} thickness={20} centerValue={loading ? '—' : reportCount(dashboardSummary.totalJobs)} centerLabel="Total"
-              data={statusChartData} />
-            <LegendList style={{ width: '100%' }}
-              items={jobsByStatus.map((s) => ({ label: s.label, value: s.count, display: `${reportCount(s.count)} (${s.pct})`, color: s.color }))}
-              showShare={false} />
-          </div>
+        <SectionCard title="Jobs by status" description="Jobs created in this period, by where they are now" action={link('View jobs', '/jobs')}>
+          {!loading && !failed && totalJobs === 0 ? empty('No jobs created in this period', 'Try a wider date range.', 'package') : (
+            <div className={styles.donut}>
+              <DonutChart size={150} thickness={20} centerValue={loading ? '—' : reportCount(totalJobs)} centerLabel="Jobs" data={donut(statusRows)} />
+              <LegendList style={{ width: '100%' }} showShare={false}
+                items={statusRows.map((s) => ({ label: s.label, value: s.count, display: s.count == null ? '—' : `${reportCount(s.count)} (${s.pct})`, color: s.color }))} />
+            </div>
+          )}
         </SectionCard>
       </div>
 
       <div className={styles.reportGrid}>
-        <SectionCard title="Top Performing Entities" action={
-          <Select value={sortEntities} options={SORT_OPTIONS} onChange={(e) => setSortEntities(e.target.value)} style={{ minWidth: 130 }} />
-        } footer={<Button variant="outline" fullWidth onClick={() => navigate('/forwarders')}>View All Entities</Button>}>
-          <DataTable rows={loading ? [] : filteredEntities} rowKey={(r) => r._key}
-            columns={[
-              { key: 'rank', header: 'Rank', width: 50 },
-              { key: 'entity', header: 'Entity', render: (r) => (
-                <span style={{ display: 'grid', gap: 2 }}>
-                  <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.entity}</span>
-                  <span className="tk-meta">{r.entityType}</span>
-                </span>) },
-              { key: 'jobs', header: 'Jobs', align: 'right' },
-              { key: 'revenue', header: 'Revenue (₦)', align: 'right', render: (r) => amount(r.revenue) },
-              { key: 'growth', header: 'Growth', align: 'right', render: (r) => (
-                <span style={{ color: 'var(--tk-success)', font: '600 13px/18px var(--tk-font-sans)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Icon name="arrow-up" size={12} />{r.growth}
-                </span>) },
-            ]} />
-          {loading && <DriverTableLoading columns={5} label="Loading report entities" />}
+        <SectionCard title="Top entities"
+          description={(entityTypeFilter === 'Truck Company' ? 'Truck companies' : 'Forwarders') + ' with jobs accepted in this period. Job value is the agreed price, not platform revenue.'}
+          action={<>
+            <Select value={sortEntities} options={SORT_OPTIONS} onChange={(e) => setSortEntities(e.target.value)} style={{ minWidth: 130 }} />
+            {link(entitiesTarget.label, entitiesTarget.to)}
+          </>}>
+          {loading || failed || topPerformingEntities.length === 0
+            ? empty('No entity activity in this period', 'Entities appear here once a job of theirs is accepted within the selected dates.', 'building-2')
+            : (
+              <DataTable rows={topPerformingEntities} rowKey={(r) => r._key}
+                columns={[
+                  { key: 'rank', header: '#', width: 40 },
+                  { key: 'entity', header: 'Entity', render: (r) => (
+                    <span style={{ display: 'grid', gap: 2 }}>
+                      <span style={{ font: '600 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{r.entity}</span>
+                      <span className="tk-meta">{r.entityType}</span>
+                    </span>) },
+                  { key: 'jobs', header: 'Jobs', align: 'right' },
+                  { key: 'revenue', header: 'Job value (₦)', align: 'right', render: (r) => amount(r.revenue) },
+                  { key: 'growth', header: 'Growth', align: 'right', render: (r) => (
+                    <span className={styles.growth} data-tone={r.growth == null || r.growth === 0 ? 'flat' : r.growth > 0 ? 'up' : 'down'}>
+                      {signedPercent(r.growth) ?? '—'}
+                    </span>) },
+                ]} />
+            )}
         </SectionCard>
 
-        <SectionCard className={styles.legendCard} title="Jobs by Type" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
-          <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-            <DonutChart size={150} thickness={20} centerValue={loading ? '—' : reportCount(dashboardSummary.totalJobs)} centerLabel="Total"
-              data={jobsByType.every((s) => s.count != null) && jobsByType.reduce((sum, s) => sum + s.count, 0) === dashboardSummary.totalJobs ? jobsByType.map((s) => ({ label: s.label, value: s.count, color: s.color })) : []} />
-            <LegendList style={{ width: '100%' }}
-              items={jobsByType.map((s) => ({ label: s.label, value: s.count, display: `${reportCount(s.count)} (${s.pct})`, color: s.color }))}
-              showShare={false} />
-          </div>
+        <SectionCard className={styles.legendCard} title="Jobs by type" description="Jobs created in this period, by movement and cargo">
+          {loading || failed || jobsByType.length === 0 ? empty('No jobs created in this period', 'Try a wider date range.', 'package') : (
+            <div className={styles.donut}>
+              <DonutChart size={150} thickness={20} centerValue={reportCount(totalJobs)} centerLabel="Jobs" data={donut(jobsByType)} />
+              <LegendList style={{ width: '100%' }} showShare={false}
+                items={jobsByType.map((s) => ({ label: s.label, value: s.count, display: s.count == null ? '—' : `${reportCount(s.count)} (${s.pct})`, color: s.color }))} />
+            </div>
+          )}
         </SectionCard>
 
-        <SectionCard title="Geographical Distribution" footer={<Button variant="outline" fullWidth onClick={() => navigate('/jobs')}>View Full Report</Button>}>
-          <RankBarList numbered={false}
-            items={geographicalDistribution.map((g) => ({ label: g.label, value: g.count, display: `${reportCount(g.count)} (${g.pct})` }))} />
+        <SectionCard title="Destinations" description="Jobs created in this period, by destination state">
+          {loading || failed || geographicalDistribution.length === 0 ? empty('No jobs created in this period', 'Try a wider date range.', 'map-pin') : (
+            <RankBarList numbered={false}
+              items={geographicalDistribution.map((g) => ({ label: g.label, value: g.count ?? 0, display: g.count == null ? '—' : `${reportCount(g.count)} (${g.pct})` }))} />
+          )}
         </SectionCard>
       </div>
 
       <div className={styles.summaryGrid}>
-        <SectionCard icon="banknote" title="Financial Summary" footer={<Button variant="outline" fullWidth onClick={() => goExport('financial')}>View Financial Report</Button>}>
-          <div className={styles.financialGrid}>
-            <div>
-              <div className="tk-meta">Total Revenue</div>
-              <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.totalRevenue)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{financialSummary.totalRevenueDelta}</div>
-            </div>
-            <div>
-              <div className="tk-meta">Total Payouts</div>
-              <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.totalPayouts)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{financialSummary.totalPayoutsDelta}</div>
-            </div>
-            <div>
-              <div className="tk-meta">Outstanding Payments</div>
-              <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.outstandingPayments)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-danger)' }}>{financialSummary.outstandingPaymentsDelta}</div>
-            </div>
-            <div>
-              <div className="tk-meta">Escrow Balance</div>
-              <div style={{ font: '700 18px/24px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{formatNaira(financialSummary.escrowBalance)}</div>
-              <div style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{financialSummary.escrowBalanceDelta}</div>
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard icon="users" title="User Engagement" footer={<Button variant="outline" fullWidth onClick={() => goExport('audit')}>View User Report</Button>}>
-          <div style={{ display: 'grid', gap: 12 }}>
+        <SectionCard title="Money" description="Revenue, job value and payouts for this period; balances right now" action={link('Open finance', '/finance-overview')}>
+          <dl className={styles.figures}>
             {[
-              { label: 'Active Users', value: reportCount(userEngagement.activeUsers), delta: userEngagement.activeUsersDelta },
-              { label: 'New Users', value: reportCount(userEngagement.newUsers), delta: userEngagement.newUsersDelta },
-              { label: 'User Sessions', value: reportCount(userEngagement.userSessions), delta: userEngagement.userSessionsDelta },
-            ].map((s) => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <span className="tk-meta">{s.label}</span>
-                <span>
-                  <b style={{ font: '700 15px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)', marginRight: 8 }}>{s.value}</b>
-                  <span style={{ font: '600 12px/16px var(--tk-font-sans)', color: 'var(--tk-success)' }}>{s.delta}</span>
-                </span>
-              </div>
-            ))}
-          </div>
+              { key: 'totalRevenue', label: 'Platform revenue' },
+              { key: 'grossJobValue', label: 'Gross job value' },
+              { key: 'totalPayouts', label: 'Payouts' },
+              { key: 'outstandingPayments', label: 'Outstanding payments', now: true },
+              { key: 'escrowBalance', label: 'Escrow balance', now: true },
+            ].map((item) => {
+              const change = signedPercent(financialSummary[item.key + 'Delta']);
+              return (
+                <div key={item.key} className={styles.figure}>
+                  <dt>{item.label}</dt>
+                  <dd>
+                    <span className={styles.figureValue}>{loading ? <Skeleton as="span" width={80} height={18} /> : formatNaira(financialSummary[item.key])}</span>
+                    {item.now ? <span className={styles.figureMeta}>Right now</span>
+                      : change && <span className={styles.figureMeta}>{change} {comparisonCaption}</span>}
+                  </dd>
+                  {financialSummary[item.key + 'Definition'] && <dd className={styles.figureNote}>{financialSummary[item.key + 'Definition']}</dd>}
+                </div>
+              );
+            })}
+          </dl>
         </SectionCard>
 
-        <SectionCard icon="shield-check" title="Compliance Overview" footer={<Button variant="outline" fullWidth onClick={() => goExport('compliance')}>View Compliance Report</Button>}>
-          <div style={{ display: 'grid', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <span className="tk-meta">Total Verifications</span>
-              <b style={{ font: '700 15px/20px var(--tk-font-sans)', color: 'var(--tk-ink-900)' }}>{complianceOverview.totalVerifications}</b>
-            </div>
+        <SectionCard title="Users" description="Platform-wide for this period" action={link('Open users', '/users-overview')}>
+          <dl className={styles.figures}>
+            {[
+              { key: 'activeUsers', label: 'Active users' },
+              { key: 'newUsers', label: 'New users' },
+              // Sessions aren't tracked yet; the row appears once the API returns a value.
+              ...(userEngagement.userSessions != null ? [{ key: 'userSessions', label: 'Sessions' }] : []),
+            ].map((item) => {
+              const change = signedPercent(userEngagement[item.key + 'Delta']);
+              return (
+                <div key={item.key} className={styles.figure}>
+                  <dt>{item.label}</dt>
+                  <dd>
+                    <span className={styles.figureValue}>{loading ? <Skeleton as="span" width={40} height={18} /> : reportCount(userEngagement[item.key])}</span>
+                    {change && <span className={styles.figureMeta}>{change} {comparisonCaption}</span>}
+                  </dd>
+                  {userEngagement[item.key + 'Definition'] && <dd className={styles.figureNote}>{userEngagement[item.key + 'Definition']}</dd>}
+                </div>
+              );
+            })}
+          </dl>
+        </SectionCard>
+
+        <SectionCard title="Verifications" description={notes.compliance ? notes.compliance + '. Not filtered by date.' : 'Current state, not filtered by date.'} action={link('Open queue', '/verification')}>
+          <ul className={styles.rows}>
+            <li><span>Total</span><strong>{complianceOverview.totalVerifications}</strong></li>
             {[
               { label: 'Verified', value: complianceOverview.verified, pct: complianceOverview.verifiedPct, color: 'var(--tk-success)' },
               { label: 'Pending', value: complianceOverview.pending, pct: complianceOverview.pendingPct, color: 'var(--tk-warning)' },
               { label: 'Rejected', value: complianceOverview.rejected, pct: complianceOverview.rejectedPct, color: 'var(--tk-danger)' },
             ].map((s) => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <span className="tk-meta">{s.label}</span>
-                <span><b style={{ font: '600 13px/18px var(--tk-font-sans)', color: s.color, marginRight: 6 }}>{s.value}</b><span className="tk-meta">({s.pct})</span></span>
-              </div>
+              <li key={s.label}>
+                <span><span className={styles.legendDot} style={{ background: s.color }} />{s.label}</span>
+                <span><strong>{s.value}</strong> <span className="tk-meta">{s.pct}</span></span>
+              </li>
             ))}
-          </div>
+          </ul>
         </SectionCard>
 
-        <SectionCard icon="triangle-alert" title="Alerts & Exceptions" footer={<Button variant="outline" fullWidth onClick={() => goExport('audit')}>View All Alerts</Button>}>
-          <div style={{ display: 'grid', gap: 10 }}>
+        <SectionCard title="Needs attention" description="Right now, not filtered by date">
+          <ul className={styles.rows}>
             {alertsExceptions.map((a) => (
-              <div key={a.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ font: '500 13px/18px var(--tk-font-sans)', color: 'var(--tk-ink-700)' }}>{a.label}</span>
-                <span style={{ minWidth: 26, textAlign: 'center', padding: '2px 8px', borderRadius: 'var(--tk-r-xs)',
-                               background: 'var(--tk-danger-soft)', color: 'var(--tk-danger)',
-                               font: '700 12px/18px var(--tk-font-sans)' }}>{a.count}</span>
-              </div>
+              <li key={a.key}>
+                <button type="button" className={styles.alertRow} onClick={() => navigate(a.to)}>
+                  <span className={styles.alertText}>
+                    <span>{a.label}</span>
+                    {a.definition && <span className="tk-meta">{a.definition}</span>}
+                  </span>
+                  <strong data-tone={a.count > 0 ? 'alert' : undefined}>{a.count == null ? '—' : reportCount(a.count)}</strong>
+                  <Icon name="chevron-right" size={14} aria-hidden="true" />
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </SectionCard>
       </div>
 
-      <Modal open={scheduleOpen} onClose={() => { if (!busy) setScheduleOpen(false); }} title="Schedule Reports"
-        description="Automatically generate and deliver a report on a recurring basis."
+      <Modal open={scheduleOpen} onClose={() => { if (!busy) setScheduleOpen(false); }} title="Schedule reports"
+        description="Generate a report on a schedule and email it to the people you list."
         footer={<>
-          <Button variant="outline" onClick={() => setScheduleOpen(false)}>Cancel</Button>
-          <Button disabled={!REPORT_CAPABILITIES.schedule || busy || !authenticated || !scheduleForm.recipients.trim()} onClick={scheduleReport}>{busy ? 'Scheduling…' : 'Schedule'}</Button>
+          <Button variant="outline" disabled={busy} onClick={() => setScheduleOpen(false)}>Cancel</Button>
+          <Button disabled={!REPORT_CAPABILITIES.schedule || busy || !authenticated || Boolean(scope.error) || !scheduleForm.recipients.trim()} onClick={scheduleReport}>{busy ? 'Scheduling…' : 'Schedule'}</Button>
         </>}>
         <div style={{ display: 'grid', gap: 14 }}>
-          <Select label="Report Type" value={scheduleForm.reportType}
+          {(scope.error || operations.error) && <Banner tone="error" title={scope.error || operations.error} />}
+          <Select label="Report type" value={scheduleForm.reportType}
             options={REPORT_TYPES.map((r) => ({ value: r.id, label: r.title }))}
             onChange={(e) => setScheduleForm((f) => ({ ...f, reportType: e.target.value }))} />
           <Select label="Frequency" value={scheduleForm.frequency} options={['Daily', 'Weekly', 'Monthly']}
