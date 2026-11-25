@@ -64,8 +64,7 @@ export const NAV = [
     section: "Support System",
     items: [
       { id: "tickets", icon: "ticket", label: "Support Tickets" },
-      { id: "knowledge-base", icon: "book-open", label: "Knowledge Base" },
-      { id: "faq", icon: "circle-help", label: "FAQ" },
+      { id: "knowledge-base", icon: "book-open", label: "Help center" },
       { id: "announcements", icon: "megaphone", label: "Announcements" },
       { id: "feedback", icon: "message-square", label: "Feedback" },
       { id: "reviews", icon: "star", label: "Ratings & Reviews" },
@@ -116,7 +115,7 @@ export const SEARCH_PLACEHOLDER = {
   roles: "Search roles and permissions...",
   settings: "Search settings...",
   tickets: "Search tickets, customers, subjects...",
-  "knowledge-base": "Search knowledge base articles...",
+  "knowledge-base": "Search help articles...",
   faq: "Search FAQ...",
   announcements: "Search tickets, articles, announcements...",
   feedback: "Search feedback submissions...",

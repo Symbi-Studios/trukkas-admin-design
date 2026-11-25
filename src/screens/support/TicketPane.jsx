@@ -27,7 +27,7 @@ const STATUS_DOT = { Open: 'var(--tk-blue)', 'In Progress': 'var(--tk-purple)', 
 const ACTIVITY_ICON = { CREATED: 'circle-plus', STATUS: 'circle-dot', STATUS_CHANGED: 'circle-dot', ASSIGNED: 'user-round', ASSIGNMENT: 'user-round', PRIORITY: 'flag', PRIORITY_CHANGED: 'flag', MERGED: 'git-merge', MERGE: 'git-merge', EDITED: 'pencil', EDIT: 'pencil' };
 
 /** Compact property chip (status, priority, assignee, category) with a menu of choices. */
-function PropertyPicker({ label, value, display, dot, icon, options, disabled, onChange, width = 200 }) {
+export function PropertyPicker({ label, value, display, dot, icon, options, disabled, onChange, width = 200 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
   React.useEffect(() => {

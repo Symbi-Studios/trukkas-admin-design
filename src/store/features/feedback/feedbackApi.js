@@ -71,6 +71,13 @@ export const feedbackApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminFeedba
         return result.error ? result : { data: { ...result.data, rows: result.data.rows.map(adaptFeedback) } };
       }), providesTags: ['AdminFeedback'],
     }),
+    getAdminFeedbackDirectory: builder.query({
+      // Every feedback item, for the inbox queues and counts (worked out client-side).
+      queryFn: guarded(async (_args, baseQuery, active) => {
+        const result = await readDirectory(ROOT, 'feedback', baseQuery, active);
+        return result.error ? result : { data: result.data.rows.map(adaptFeedback) };
+      }), providesTags: ['AdminFeedback'],
+    }),
     getAdminFeedbackSummary: builder.query({
       queryFn: guarded(async ({ period = '30d' }, baseQuery) => {
         if (!['7d', '30d', '90d'].includes(period)) return failure('Select a supported summary period.');
@@ -224,7 +231,7 @@ export function saveFeedbackCsv(download) {
   anchor.href = url; anchor.download = download.filename || 'feedback.csv'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 export const {
-  useGetAdminFeedbackPageQuery, useGetAdminFeedbackSummaryQuery, useGetAdminFeedbackDetailQuery,
+  useGetAdminFeedbackPageQuery, useGetAdminFeedbackDirectoryQuery, useGetAdminFeedbackSummaryQuery, useGetAdminFeedbackDetailQuery,
   useGetAdminFeedbackAssigneesQuery, useGetAdminFeedbackHistoryQuery, useGetAdminRelatedFeedbackQuery,
   useGetAdminFeedbackSettingsQuery, useLazyDownloadAdminFeedbackQuery, useChangeAdminFeedbackMutation,
 } = feedbackApi;
