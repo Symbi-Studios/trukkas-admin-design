@@ -1,5 +1,5 @@
-/* Satoshi (Fontshare) is the Trukkas typeface, confirmed by the team.
-   IBM Plex Mono carries machine facts — IDs, references, timestamps.
-   If you self-host Satoshi, drop the files in assets/fonts/ and replace the @import. */
-@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap");
+/* Satoshi (Fontshare) is the Trukkas typeface, confirmed by the team; IBM Plex Mono
+   carries machine facts — IDs, references, timestamps.
+   The font stylesheets are linked in app/layout.jsx, not @imported here: once Tailwind
+   bundles this file the @import lands after other rules, and browsers ignore it there.
+   Satoshi loads as the variable font (300–900) so the 600 semibold is a real weight. */

@@ -101,8 +101,8 @@ function ExportReportPreviewScreen() {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--tk-grid-gap)' }}>
           <Card style={{ display: 'grid', gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ width: 44, height: 44, borderRadius: 'var(--tk-r-lg)', background: 'var(--tk-purple-soft)',
-                             color: 'var(--tk-purple)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+              <span style={{ width: 44, height: 44, borderRadius: 'var(--tk-r-lg)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)',
+                             color: 'var(--tk-ink-500)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
                 <Icon name={reportType.icon} size={20} />
               </span>
               <div style={{ flex: 1, minWidth: 200 }}>

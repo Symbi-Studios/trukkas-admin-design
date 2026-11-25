@@ -4,5 +4,5 @@ import { DriverDetailLoading } from '../../../screens/DriversLoading.jsx';
 
 export const metadata = { title: 'Edit Announcement' };
 export default function EditAnnouncementPage() {
-  return <Suspense fallback={<DriverDetailLoading />}><AnnouncementForm editing /></Suspense>;
+  return <Suspense fallback={<DriverDetailLoading label="Loading announcement…" />}><AnnouncementForm editing /></Suspense>;
 }

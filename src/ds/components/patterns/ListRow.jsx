@@ -1,17 +1,14 @@
 import React from 'react';
 import { Icon } from '../../assets/icons/Icon.jsx';
 
-const TINT = { blue: ['var(--tk-blue-soft)', 'var(--tk-blue)'],
-               green: ['var(--tk-success-soft)', 'var(--tk-success)'],
-               amber: ['var(--tk-warning-soft)', 'var(--tk-warning)'],
-               red: ['var(--tk-danger-soft)', 'var(--tk-danger)'],
-               purple: ['var(--tk-purple-soft)', 'var(--tk-purple)'],
-               neutral: ['var(--tk-surface-sunk)', 'var(--tk-ink-400)'] };
+// One quiet tile for every row: the title says what it is, and the value carries any urgency.
+// `iconTint` is accepted for older call sites and ignored.
+const TILE = ['var(--tk-surface-sunk)', 'var(--tk-ink-500)'];
 
-/** Rail list row: tinted icon tile, title + sub-line, trailing value, optional chevron. */
+/** Rail list row: neutral icon tile, title + sub-line, trailing value, optional chevron. */
 export function ListRow({ icon, iconTint = 'blue', avatar, title, subtitle, value, valueTone,
                           caption, trailing, chevron, onClick, style }) {
-  const [bg, fg] = TINT[iconTint] || TINT.blue;
+  const [bg, fg] = TILE;
   const [hot, setHot] = React.useState(false);
   return (
     <div onClick={onClick} onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)}
@@ -20,7 +17,7 @@ export function ListRow({ icon, iconTint = 'blue', avatar, title, subtitle, valu
                background: hot && onClick ? 'var(--tk-surface-sunk)' : 'transparent',
                transition: 'var(--tk-transition)', ...style }}>
       {avatar || (icon && (
-        <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: bg, color: fg,
+        <span style={{ width: 34, height: 34, borderRadius: 'var(--tk-r-sm)', background: bg, color: fg, boxShadow: 'inset 0 0 0 1px var(--tk-line)',
                        display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
           <Icon name={icon} size={17} />
         </span>

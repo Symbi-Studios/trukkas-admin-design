@@ -3,7 +3,10 @@
   --tk-dur-fast: 120ms;
   --tk-dur: 160ms;
   --tk-dur-slow: 240ms;
-  --tk-transition: all var(--tk-dur) var(--tk-ease);
+  /* Named properties only: "all" also animated layout and every theme colour on a theme switch. */
+  --tk-transition: background-color var(--tk-dur) var(--tk-ease), border-color var(--tk-dur) var(--tk-ease),
+    color var(--tk-dur) var(--tk-ease), box-shadow var(--tk-dur) var(--tk-ease), opacity var(--tk-dur) var(--tk-ease),
+    transform var(--tk-dur) var(--tk-ease);
 }
 @keyframes tk-spin {
   to {

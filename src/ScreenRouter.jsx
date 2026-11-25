@@ -44,8 +44,7 @@ import { SystemSettings } from './screens/SystemSettings.jsx';
 import { FAQ } from './screens/FAQ.jsx';
 import { AdminProfile } from './screens/AdminProfile.jsx';
 import { SignedOut } from './screens/SignedOut.jsx';
-import { ScreenPlaceholder } from './screens/ScreenPlaceholder.jsx';
-import { NAV } from './nav.js';
+import { NotFound } from './screens/NotFound.jsx';
 
 const screens = {
   dashboard: Dashboard,
@@ -98,6 +97,5 @@ export function ScreenRouter({ screen }) {
   const Screen = screens[screen];
   // Every screen can read search params (deep links), which needs a Suspense boundary.
   if (Screen) return <Suspense fallback={null}><Screen /></Suspense>;
-  const item = NAV.flatMap((group) => group.items).find((entry) => entry.id === screen);
-  return <ScreenPlaceholder label={item?.label || screen} />;
+  return <NotFound />;
 }

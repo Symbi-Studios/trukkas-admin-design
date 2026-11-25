@@ -56,7 +56,7 @@ function FilterButton({ value, options, active, onChange }) {
     <span style={{ position: 'relative' }}>
       <FilterSelect label={value} active={active} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setOpen(false)}>
+        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setOpen(false)}>
           <DropdownMenu width={210} items={options.map((o) => ({
             label: o, icon: o === value ? 'check' : undefined,
             onClick: () => { onChange(o); setOpen(false); },
@@ -152,7 +152,7 @@ function VerificationScreen() {
 
       <SectionCard title="" pad="none" style={{ paddingTop: 4 }}>
         <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
-          search={<SearchField placeholder="Search by company, entity, verification ID..." value={q}
+          search={<SearchField placeholder="Search verifications…" title="Search by company, entity or verification ID" value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
           filters={<>
             <FilterButton value={entityType} options={['All Types', ...ENTITY_TYPES]} active={entityType !== 'All Types'}
@@ -209,7 +209,7 @@ function VerificationScreen() {
                 <span style={{ position: 'relative' }}>
                   <IconButton icon="ellipsis-vertical" onClick={() => setMenuFor(menuFor === r.key ? null : r.key)} />
                   {menuFor === r.key && (
-                    <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
+                    <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setMenuFor(null)}>
                       <DropdownMenu width={210} items={[
                         { label: 'View Verification', icon: 'eye', onClick: () => { setMenuFor(null); navigate(verificationDetailUrl(r)); } },
                         { label: 'Reassign', icon: 'users', onClick: () => { openDialog('reassign', r); } },

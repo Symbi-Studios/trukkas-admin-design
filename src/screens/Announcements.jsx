@@ -82,7 +82,7 @@ function AnnouncementMenuPortal({ anchor, onClose, children }) {
     update(); window.addEventListener('scroll', update, true); window.addEventListener('resize', update); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [anchor, onClose]);
-  return createPortal(<div ref={menuRef} onClick={event => event.stopPropagation()} style={{ position: 'fixed', zIndex: 95, left: position?.left ?? 0, top: position?.top ?? -10000, visibility: position ? 'visible' : 'hidden' }}>{children}</div>, document.body);
+  return createPortal(<div ref={menuRef} onClick={event => event.stopPropagation()} style={{ position: 'fixed', zIndex: 'var(--tk-z-overlay)', left: position?.left ?? 0, top: position?.top ?? -10000, visibility: position ? 'visible' : 'hidden' }}>{children}</div>, document.body);
 }
 
 export function Announcements() {
@@ -166,7 +166,7 @@ export function Announcements() {
       <PageHeader
         crumbs={["Support System", "Announcements"]}
         title="Announcements"
-        description="Create, manage and broadcast important updates to users."
+        description="Updates sent to drivers, companies and forwarders."
         actions={
           <>
             <Button icon="plus" onClick={() => navigate("/announcements/new")}>

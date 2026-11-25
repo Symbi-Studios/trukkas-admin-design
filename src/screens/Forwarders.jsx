@@ -182,7 +182,7 @@ export function Forwarders() {
       <PageHeader
         crumbs={["Users", "Forwarders"]}
         title="Forwarders"
-        description="Manage and monitor all forwarders on the platform."
+        description="Freight forwarders who post jobs on Trukkas."
       />
 
       {notice && <ToastRelay message={notice.text} tone={notice.tone} onShown={() => setNotice(null)}><Banner tone={notice.tone} action={<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>{notice.text}</Banner></ToastRelay>}
@@ -201,7 +201,7 @@ export function Forwarders() {
         <TableToolbar viewControl={<ViewToggle hideEmpty={hideEmptyColumns} onHideEmptyChange={setHideEmptyColumns} value={tableView} onChange={setTableView} />}
           search={
             <SearchField
-              placeholder="Search by name, forwarder ID, email, phone..."
+              placeholder="Search forwarders…" title="Search by name, forwarder ID, email or phone"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -222,7 +222,7 @@ export function Forwarders() {
                       position: "absolute",
                       left: 0,
                       top: 44,
-                      zIndex: 30,
+                      zIndex: 'var(--tk-z-dropdown)',
                     }}
                   >
                     <DropdownMenu
@@ -253,7 +253,7 @@ export function Forwarders() {
                       position: "absolute",
                       left: 0,
                       top: 44,
-                      zIndex: 30,
+                      zIndex: 'var(--tk-z-dropdown)',
                     }}
                   >
                     <DropdownMenu
@@ -286,7 +286,7 @@ export function Forwarders() {
                       position: "absolute",
                       left: 0,
                       top: 44,
-                      zIndex: 30,
+                      zIndex: 'var(--tk-z-dropdown)',
                     }}
                   >
                     <DropdownMenu

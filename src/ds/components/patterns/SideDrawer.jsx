@@ -2,6 +2,7 @@
 import React from 'react';
 import { IconButton } from '../core/IconButton.jsx';
 import { InlineAlerts } from '../feedback/AlertSlot.jsx';
+import { useDialogFocus } from '../feedback/useDialogFocus.js';
 
 /**
  * Right-hand detail drawer that slides in below the top bar, over a light scrim.
@@ -11,15 +12,12 @@ import { InlineAlerts } from '../feedback/AlertSlot.jsx';
  *  - footer: pinned action area
  */
 export function SideDrawer({ label, eyebrow, title, meta, headerActions, footer, onClose, width = 520, children }) {
-  React.useEffect(() => {
-    const close = (event) => { if (event.key === 'Escape') onClose?.(); };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [onClose]);
+  const panelRef = React.useRef(null);
+  useDialogFocus(panelRef, { onClose });
   return (
     <InlineAlerts>
       <button type="button" className="tk-drawer-scrim" aria-label={'Close ' + (label || 'details')} onClick={onClose} />
-      <aside className="tk-drawer" role="dialog" aria-modal="true" aria-label={label} style={{ width: `min(${width}px, calc(100vw - 24px))` }}>
+      <aside ref={panelRef} className="tk-drawer" role="dialog" aria-modal="true" aria-label={label} style={{ width: `min(${width}px, calc(100vw - 24px))` }}>
         <header className="tk-drawer-header">
           <div className="tk-drawer-heading">
             {eyebrow && <span className="tk-meta">{eyebrow}</span>}

@@ -306,7 +306,7 @@ export function Transactions() {
 
 
           <TableToolbar
-            search={<SearchField placeholder="Search by reference, job, party or description…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+            search={<SearchField placeholder="Search transactions…" title="Search by reference, job, party or description" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
             filters={<>
               <FilterChip name="Type" icon="receipt" value={applied.type} allValue="All Types" options={TYPE_OPTIONS} onChange={setFilter("type")} />
               <FilterChip name="Status" icon="circle-dot" value={applied.status} allValue="All Statuses" options={STATUS_OPTIONS} onChange={setFilter("status")} />

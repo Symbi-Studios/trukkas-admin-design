@@ -4,5 +4,5 @@ import { DriverDetailLoading } from '../../../screens/DriversLoading.jsx';
 
 export const metadata = { title: 'Feedback Details' };
 export default function FeedbackDetailPage() {
-  return <Suspense fallback={<DriverDetailLoading />}><FeedbackDetail /></Suspense>;
+  return <Suspense fallback={<DriverDetailLoading label="Loading feedback…" />}><FeedbackDetail /></Suspense>;
 }

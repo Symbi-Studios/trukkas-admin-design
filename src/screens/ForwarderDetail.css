@@ -87,7 +87,7 @@
 .fd-perf-item { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 0 16px; border-left: 1px solid var(--tk-line); }
 .fd-perf-item:first-child { padding-left: 0; border-left: none; }
 .fd-perf-item strong { font: 700 16px/22px var(--tk-font-sans); color: var(--tk-ink-900); overflow-wrap: anywhere; }
-.fd-perf-icon { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--tk-r-sm); background: var(--tk-blue-soft); color: var(--tk-blue); }
+.fd-perf-icon { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--tk-r-sm); background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
 @media (max-width: 1200px) {
   .fd-perf { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 16px; }
   .fd-perf-item:nth-child(3n + 1) { padding-left: 0; border-left: none; }
@@ -146,7 +146,7 @@
 /* Send message / announcement modal */
 .fa-recipient { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--tk-line); border-radius: 10px; background: var(--tk-surface-sunk); min-width: 0; }
 .fa-recipient strong { font: 600 14px/20px var(--tk-font-sans); color: var(--tk-ink-900); overflow-wrap: anywhere; }
-.fa-recipient-icon { width: 36px; height: 36px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 999px; background: var(--tk-blue-soft); color: var(--tk-blue); }
+.fa-recipient-icon { width: 36px; height: 36px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 999px; background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
 .fa-recipient-email { margin-left: auto; overflow-wrap: anywhere; text-align: right; }
 .fa-channels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .fa-channel { position: relative; display: grid; justify-items: start; gap: 4px; padding: 12px; text-align: left; border: 1px solid var(--tk-line); border-radius: 10px; background: var(--tk-surface); color: var(--tk-ink-400); cursor: pointer; font: inherit; transition: var(--tk-transition); }
@@ -166,7 +166,7 @@
 /* Saved addresses tab */
 .fd-addresses { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
 .fd-address { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 12px; row-gap: 10px; padding: 14px; border: 1px solid var(--tk-line); border-radius: 12px; background: var(--tk-surface); }
-.fd-address-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--tk-blue-soft); color: var(--tk-blue); }
+.fd-address-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
 .fd-address-text { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .fd-address-text strong { font: 600 13px/18px var(--tk-font-sans); color: var(--tk-ink-900); }
 .fd-address-text span { font: 400 13px/19px var(--tk-font-sans); color: var(--tk-ink-500, var(--tk-ink-400)); }

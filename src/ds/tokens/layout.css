@@ -28,9 +28,23 @@
   height: 8px;
 }
 .tk-scroll::-webkit-scrollbar-thumb {
-  background: #d9dee9;
+  background: var(--tk-line-strong);
   border-radius: 999px;
 }
 .tk-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ---- Layers ----------------------------------------------------------- */
+/* One scale for everything that floats. Use these instead of raw numbers;
+   small values (1–5) for stacking inside a single card are fine as-is. */
+:root {
+  --tk-z-sticky: 20;    /* sticky table headers, toolbars */
+  --tk-z-dropdown: 30;  /* in-flow menus anchored to a control */
+  --tk-z-drawer: 80;    /* side drawer (scrim sits one below) */
+  --tk-z-sidebar: 90;   /* mobile nav over the drawer */
+  --tk-z-overlay: 95;   /* document preview */
+  --tk-z-modal: 100;    /* modal dialogs */
+  --tk-z-popover: 1000; /* portalled menus, selects, tooltips: above any dialog */
+  --tk-z-toast: 1100;   /* toasts: above everything the user is working in */
 }

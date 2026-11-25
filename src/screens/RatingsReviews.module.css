@@ -303,11 +303,11 @@
   width: 32px;
   height: 32px;
   border-radius: var(--tk-r-sm);
-  background: var(--tk-blue-soft);
-  color: var(--tk-blue);
+  background: var(--tk-surface-sunk);
+  color: var(--tk-ink-500);
 }
-.quickIcon[data-tint="red"] { background: var(--tk-danger-soft); color: var(--tk-danger); }
-.quickIcon[data-tint="purple"] { background: var(--tk-purple-soft); color: var(--tk-purple); }
+.quickIcon[data-tint="red"] { background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
+.quickIcon[data-tint="purple"] { background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
 .quickText {
   display: grid;
   gap: 2px;

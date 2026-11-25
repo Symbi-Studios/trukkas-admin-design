@@ -137,14 +137,13 @@ export function AdminDriverDetail() {
   };
   const activitySection = activitySections[tab];
 
-  if (!id) return <Card><Banner tone="warning" title="No driver selected">Open a driver from the Drivers list to view their details.</Banner><Button onClick={() => navigate('/drivers')}>Back to Drivers</Button></Card>;
+  if (!id) return <Card><Banner inline tone="warning" title="No driver selected">Open a driver from the Drivers list to view their details.</Banner><Button onClick={() => navigate('/drivers')}>Back to Drivers</Button></Card>;
   if (!profile && (profileQuery.isLoading || profileQuery.isFetching)) return <DriverDetailLoading />;
 
   return <div style={{ display: 'grid', gap: 'var(--tk-grid-gap)' }}>
     <PageHeader
       crumbs={['Users', { label: 'Drivers', onClick: () => navigate('/drivers') }, id]}
       title="Driver Details"
-      description="View the driver profile and license information."
       actions={<>
         <Button variant="outline" icon="arrow-left" onClick={() => navigate('/drivers')}>Back to Drivers</Button>
         {profile?.canReview && <>

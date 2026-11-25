@@ -70,7 +70,7 @@ function CategoryFilter({ entity, fields, value, onChange, available }) {
     <span style={{ position: 'relative' }}>
       <FilterSelect icon="layout-grid" label={value === ALL ? 'Category' : current?.label} active={value !== ALL} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setOpen(false)}>
+        <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setOpen(false)}>
           <DropdownMenu width={230} items={items.map((c) => ({
             label: `${c.label} (${c.count})`, icon: c.value === value ? 'check' : undefined,
             onClick: () => { onChange(c.value); setOpen(false); },
@@ -88,7 +88,7 @@ function RowMenu({ field, isFirst, isLast, onEdit, onDuplicate, onMove, onDelete
     <span style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
       <IconButton icon="ellipsis" tone="outline" size={28} label={`Actions for ${field.label}`} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setOpen(false)}>
+        <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setOpen(false)}>
           <DropdownMenu width={190} items={[
             { label: 'Edit Field', icon: 'pencil', onClick: close(onEdit) },
             ...(field.system ? [] : [{ label: 'Duplicate', icon: 'copy', onClick: close(onDuplicate) }]),
@@ -333,7 +333,7 @@ export function SettingsFieldsRegistration() {
                 <span style={{ position: 'relative' }}>
                   <FilterSelect icon="filter" label={filter ? filter.label : 'Filter'} active={Boolean(filter)} onClick={() => setFilterOpen((o) => !o)} />
                   {filterOpen && (
-                    <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setFilterOpen(false)}>
+                    <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setFilterOpen(false)}>
                       <DropdownMenu width={200} items={[
                         ...FILTERS.map((f) => (f.key ? {
                           label: f.label, icon: filter?.label === f.label ? 'check' : undefined,

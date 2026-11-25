@@ -282,7 +282,7 @@
   position: absolute;
   right: 0;
   top: 38px;
-  z-index: 30;
+  z-index: var(--tk-z-dropdown);
 }
 .jd-trip-selector {
   display: grid;

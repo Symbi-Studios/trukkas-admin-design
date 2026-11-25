@@ -3,7 +3,7 @@ import React from "react";
 const TONES = {
   success: ["var(--tk-success-soft)", "var(--tk-success)"],
   info: ["var(--tk-info-soft)", "var(--tk-blue)"],
-  warning: ["var(--tk-warning-soft)", "var(--tk-warning)"],
+  warning: ["var(--tk-warning-soft)", "var(--tk-warning-ink)"],
   danger: ["var(--tk-danger-soft)", "var(--tk-danger)"],
   neutral: ["var(--tk-neutral-soft)", "var(--tk-neutral)"],
   purple: ["var(--tk-purple-soft)", "var(--tk-purple)"],

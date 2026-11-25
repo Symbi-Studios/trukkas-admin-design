@@ -52,7 +52,7 @@ export function SettingsDataProtection() {
       <SettingsReadNotice error={editor.error} />
 
       <SettingsGrid>
-        {editor.groupVisible('settingsDataPrivacyConsent') && (<SettingsCard description="Manage user consent and data collection preferences." title="Data Privacy & Consent" save={<SettingsCardSave editor={editor} group="settingsDataPrivacyConsent" />}>
+        {editor.groupVisible('settingsDataPrivacyConsent') && (<SettingsCard title="Data Privacy & Consent" save={<SettingsCardSave editor={editor} group="settingsDataPrivacyConsent" />}>
           {editor.visible('settingsDataPrivacyConsent', 'collectOnlyNecessaryData') && (<Field><Switch checked={consent.collectOnlyNecessaryData} label="Collect only necessary data"
             hint="Limit data collection to what is required for platform operation."
             onChange={(v) => updateDataPrivacyConsent({ collectOnlyNecessaryData: v })} /></Field>) }
@@ -75,19 +75,19 @@ export function SettingsDataProtection() {
             value={retention.supportTickets} onChange={(e) => updateDataRetentionSecurity({ supportTickets: e.target.value })} />) }
         </SettingsCard>) }
 
-        {editor.groupVisible('settingsDataDeletion') && (<SettingsCard description="Manage how data is deleted and handled." title="Data Deletion" save={<SettingsCardSave editor={editor} group="settingsDataDeletion" />}>
+        {editor.groupVisible('settingsDataDeletion') && (<SettingsCard title="Data Deletion" save={<SettingsCardSave editor={editor} group="settingsDataDeletion" />}>
           {editor.visible('settingsDataDeletion', 'allowAccountDeletion') && (<Field><Switch checked={deletion.allowAccountDeletion} label="Allow account deletion"
             hint="Let users permanently delete their account."
             onChange={(v) => updateDataDeletion({ allowAccountDeletion: v })} /></Field>) }
           {editor.visible('settingsDataDeletion', 'anonymizeDataAfterDeletion') && (<Field><Switch checked={deletion.anonymizeDataAfterDeletion} label="Anonymize data after deletion"
             hint="Anonymize data instead of immediate deletion where required."
             onChange={(v) => updateDataDeletion({ anonymizeDataAfterDeletion: v })} /></Field>) }
-          <Banner tone="warning">
+          <Banner inline tone="warning">
             Some data may be retained longer due to legal, financial, or regulatory obligations.
           </Banner>
         </SettingsCard>) }
         
-        {editor.groupVisible('settingsDataEncryption') && (<SettingsCard description="Ensure your data is encrypted both in transit and at rest." title="Data Encryption" save={<SettingsCardSave editor={editor} group="settingsDataEncryption" />}>
+        {editor.groupVisible('settingsDataEncryption') && (<SettingsCard title="Data Encryption" save={<SettingsCardSave editor={editor} group="settingsDataEncryption" />}>
           {editor.visible('settingsDataEncryption', 'encryptDataInTransit') && (<Field><Switch checked={encryption.encryptDataInTransit} label="Encrypt data in transit (TLS)"
             hint="Use TLS 1.2+ for all data transmissions."
             onChange={(v) => updateDataEncryption({ encryptDataInTransit: v })} /></Field>) }
@@ -115,7 +115,7 @@ export function SettingsDataProtection() {
         </SettingsCard>) }
         
 
-        {false && (<SettingsCard description="Manage compliance with data protection regulations." title="Compliance & Standards">
+        {false && (<SettingsCard title="Compliance & Standards">
           <div style={{ display: 'grid', gap: 14, marginBottom: 14 }}>
             {complianceStandards.map((c) => (
               <div key={c.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -133,15 +133,15 @@ export function SettingsDataProtection() {
           </div>
         </SettingsCard>) }
 
-        <SettingsCard description="Manage third-party services that process your data." title="Third-Party Data Processors">
+        <SettingsCard title="Third-Party Data Processors">
           <div style={{ display: 'grid' }}>
             {thirdPartyProcessors.map((p, i) => (
               <div key={p.id}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 2px', border: 0,
                          borderTop: i ? '1px solid var(--tk-line)' : 'none', background: 'transparent',
                          textAlign: 'left' }}>
-                <span style={{ width: 30, height: 30, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-blue-soft)',
-                              color: 'var(--tk-blue)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+                <span style={{ width: 30, height: 30, borderRadius: 'var(--tk-r-sm)', background: 'var(--tk-surface-sunk)', boxShadow: 'inset 0 0 0 1px var(--tk-line)',
+                              color: 'var(--tk-ink-500)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
                   <Icon name={p.icon} size={15} />
                 </span>
                 <span style={{ flex: 1, display: 'grid', gap: 1 }}>

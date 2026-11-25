@@ -1,15 +1,14 @@
-/* Admin action toast: Trukkas blue, top centre, drops in from above. */
+/* Admin action toast: a compact inverted chip, bottom right, newest nearest the edge. */
 .tk-toast-stack {
   position: fixed;
-  top: 18px;
-  left: 50%;
-  z-index: 200;
+  right: 20px;
+  bottom: 20px;
+  z-index: var(--tk-z-toast);
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: min(520px, calc(100vw - 32px));
-  transform: translateX(-50%);
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
   pointer-events: none;
 }
 
@@ -17,67 +16,49 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: min(340px, 100%);
+  gap: 10px;
   max-width: 100%;
-  padding: 12px 12px 12px 12px;
+  padding: 10px 8px 10px 14px;
   overflow: hidden;
-  border-radius: 14px;
-  background: var(--tk-blue);
-  color: #fff;
-  box-shadow:
-    0 18px 40px -14px rgba(13, 52, 196, 0.6),
-    0 6px 14px -6px rgba(0, 8, 36, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  border-radius: var(--tk-r-md);
+  background: var(--tk-navy);
+  color: var(--tk-ink-on-navy);
+  box-shadow: var(--tk-shadow-menu);
   pointer-events: auto;
-  transform-origin: 50% 0;
-  animation: tk-toast-in 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: tk-toast-in 180ms var(--tk-ease) both;
 }
-.tk-toast.leaving { animation: tk-toast-out 300ms cubic-bezier(0.55, 0, 0.75, 0.2) both; }
+.tk-toast.leaving { animation: tk-toast-out 140ms ease-in both; }
 
-.tk-toast-icon {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
-  animation: tk-toast-icon-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) 200ms both;
-}
+.tk-toast-icon { flex: 0 0 auto; display: grid; place-items: center; color: var(--tk-success); }
+.tk-toast[data-tone="info"] .tk-toast-icon { color: var(--tk-blue-light); }
 .tk-toast-message {
   flex: 1;
   min-width: 0;
-  font: 600 14px/20px var(--tk-font-sans);
-  letter-spacing: -0.005em;
+  font: 500 13px/18px var(--tk-font-sans);
   overflow-wrap: anywhere;
 }
 .tk-toast-close {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--tk-r-sm);
   background: transparent;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--tk-ink-on-navy-dim);
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background-color var(--tk-dur-fast) var(--tk-ease), color var(--tk-dur-fast) var(--tk-ease);
 }
-.tk-toast-close:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
-.tk-toast-close:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.tk-toast-close:hover { background: color-mix(in srgb, var(--tk-ink-on-navy) 12%, transparent); color: var(--tk-ink-on-navy); }
+.tk-toast-close:focus-visible { outline: 2px solid var(--tk-blue-light); outline-offset: 1px; }
 
-/* Time-left bar; pauses while hovered. When it finishes, the toast leaves. */
+/* Invisible time-left track: it times the auto-dismiss and pauses while hovered or focused. */
 .tk-toast-timer {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.5);
-  transform-origin: 0 50%;
+  inset: auto 0 0;
+  height: 2px;
+  opacity: 0;
   animation-name: tk-toast-timer;
   animation-timing-function: linear;
   animation-fill-mode: both;
@@ -86,18 +67,11 @@
 .tk-toast:focus-within .tk-toast-timer { animation-play-state: paused; }
 
 @keyframes tk-toast-in {
-  0%   { opacity: 0; transform: translateY(-130%) scale(0.9); filter: blur(6px); }
-  55%  { opacity: 1; transform: translateY(10px) scale(1.02); filter: blur(0); }
-  78%  { transform: translateY(-3px) scale(0.995); }
-  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }
 @keyframes tk-toast-out {
-  0%   { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-120%) scale(0.94); }
-}
-@keyframes tk-toast-icon-pop {
-  0%   { transform: scale(0) rotate(-30deg); }
-  100% { transform: scale(1) rotate(0); }
+  to { opacity: 0; transform: translateY(4px); }
 }
 @keyframes tk-toast-timer {
   from { transform: scaleX(1); }
@@ -105,8 +79,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tk-toast { animation: tk-fade-in 160ms ease both; }
-  .tk-toast.leaving { animation: tk-toast-fade-out 160ms ease both; }
-  .tk-toast-icon { animation: none; }
+  .tk-toast { animation: tk-fade-in 120ms ease both; }
+  .tk-toast.leaving { animation: tk-toast-fade-out 120ms ease both; }
 }
 @keyframes tk-toast-fade-out { to { opacity: 0; } }
+
+@media (max-width: 639px) {
+  .tk-toast-stack { right: 16px; left: 16px; bottom: 16px; width: auto; align-items: stretch; }
+}
+/* The inverted chip is light in dark mode: use the light-theme greens/blues there. */
+:root[data-theme="dark"] .tk-toast-icon { color: #0f7a35; }
+:root[data-theme="dark"] .tk-toast[data-tone="info"] .tk-toast-icon { color: #0241e8; }

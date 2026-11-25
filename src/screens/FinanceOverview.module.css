@@ -229,8 +229,8 @@
   height: 34px;
   border-radius: var(--tk-r-sm);
 }
-.flowIcon[data-tone="in"] { background: var(--tk-success-soft); color: var(--tk-success); }
-.flowIcon[data-tone="out"] { background: var(--tk-danger-soft); color: var(--tk-danger); }
+.flowIcon[data-tone="in"] { background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
+.flowIcon[data-tone="out"] { background: var(--tk-surface-sunk); color: var(--tk-ink-500); }
 .flowNet {
   display: flex;
   justify-content: space-between;

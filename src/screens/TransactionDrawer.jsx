@@ -51,7 +51,7 @@ export function TransactionDrawer({ id, row, onClose }) {
   const footer = r && <div className="fin-actions">
     <span style={{ position: "relative", marginRight: "auto" }}>
       <Button variant="outline" icon="ellipsis" disabled={busy} onClick={() => setMenu((open) => !open)}>More</Button>
-      {menu && <span style={{ position: "absolute", left: 0, bottom: 44, zIndex: 40 }} onMouseLeave={() => setMenu(false)}>
+      {menu && <span style={{ position: "absolute", left: 0, bottom: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setMenu(false)}>
         <DropdownMenu width={220} items={[
           { label: "Download statement", icon: "file-text", onClick: () => pdf(readStatement) },
           { label: "Report an issue", icon: "flag", onClick: () => { setMenu(false); setModal("issue"); } },

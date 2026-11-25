@@ -39,7 +39,7 @@ function FilterButton({ value, options, active, onChange }) {
     <span style={{ position: 'relative' }}>
       <FilterSelect label={value} active={active} onClick={() => setOpen((o) => !o)} />
       {open && (
-        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setOpen(false)}>
+        <span style={{ position: 'absolute', left: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setOpen(false)}>
           <DropdownMenu width={180} items={options.map((o) => ({
             label: o, icon: o === value ? 'check' : undefined,
             onClick: () => { onChange(o); setOpen(false); },
@@ -139,7 +139,7 @@ export function RolesPermissions() {
   return (
     <>
       <PageHeader crumbs={['Administration', 'Roles & Permissions']} title="Roles & Permissions"
-        description="Create, manage and configure roles and their permissions."
+        description="Who can see and do what in this console."
         actions={<>
           <Button variant="outline" icon="grid-2x2" disabled={!catalog || catalogQuery.isFetching} onClick={() => setMatrixOpen(true)}>Permissions Matrix</Button>
           <Button icon="plus" disabled={!operations.canManage} onClick={() => navigate('/roles/new')}>Create New Role</Button>
@@ -179,7 +179,7 @@ export function RolesPermissions() {
                 <span style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
                   <IconButton icon="ellipsis-vertical" onClick={() => setMenuFor(menuFor === r.id ? null : r.id)} />
                   {menuFor === r.id && (
-                    <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 30 }} onMouseLeave={() => setMenuFor(null)}>
+                    <span style={{ position: 'absolute', right: 0, top: 34, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setMenuFor(null)}>
                       <DropdownMenu width={200} items={[
                         { label: 'View Role', icon: 'eye', onClick: () => { setSelectedId(r.id); setPanelTab('Permissions'); setPermQ(''); setMenuFor(null); roleDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
                         { label: 'Edit Role', icon: 'pencil', disabled: !operations.canManage || operations.saving, onClick: () => { setMenuFor(null); setEditId(r.id); } },

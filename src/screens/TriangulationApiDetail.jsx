@@ -109,7 +109,7 @@ export function TriangulationApiDetail() {
 
   return <>
     <PageHeader crumbs={['Triangulation', 'Opportunities', opportunity.jobNumber || opportunity.id]}
-      title="Triangulation Opportunity – Review"
+      title="Review Triangulation Opportunity"
       description="Review the match and coordinate the next steps."
       actions={<>
         <Button variant="outline" icon="arrow-left" onClick={() => navigate('/triangulation')}>Back to Opportunities</Button>
@@ -128,7 +128,7 @@ export function TriangulationApiDetail() {
       ]} />
 
     <div className="tri-detail-row1">
-      <SectionCard title="Current Segment (Active Job)">
+      <SectionCard title="Current Segment">
         <LabelValue label="Job" value={text(opportunity.currentJobNumber || opportunity.currentJobId)} />
         <LabelValue label="Current Route" value={text(opportunity.currentRoute)} />
         <LabelValue label="Truck" value={text(opportunity.truckPlate)} />
@@ -138,7 +138,7 @@ export function TriangulationApiDetail() {
         <LabelValue label="Current Location" value={text(opportunity.currentLocation)} />
         <LabelValue label="ETA (Destination)" value={text(opportunity.currentEta)} />
       </SectionCard>
-      <SectionCard title="Proposed Next Segment (Opportunity)">
+      <SectionCard title="Proposed Next Segment">
         <LabelValue label="Job" value={text(opportunity.jobNumber || opportunity.jobId)} />
         <LabelValue label="Route" value={text(opportunity.proposedRoute)} />
         <LabelValue label="Forwarder" value={text(opportunity.forwarder)} />

@@ -322,7 +322,7 @@ function OperationsOverviewLoading() {
   return (
     <div className={styles.page} aria-busy="true">
       <PageHeader crumbs={["Operations", "Overview"]} title="Operations Overview" description="Job flow, live trips, bidding and document review across the platform." />
-      <div className={styles.loadingNotice} role="status" aria-live="polite">
+      <div className={`${styles.loadingNotice} tk-sr-only`} role="status" aria-live="polite">
         <span className={styles.loadingNoticeDot} aria-hidden="true" />
         Loading operations data…
       </div>

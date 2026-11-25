@@ -74,7 +74,7 @@ function VerificationDetailScreen() {
     finally { submitting.current = false; }
   }
 
-  if (query.isLoading || (query.isFetching && !query.currentData)) return <DriverDetailLoading />;
+  if (query.isLoading || (query.isFetching && !query.currentData)) return <DriverDetailLoading label="Loading verification…" />;
 
   if (!v) {
     return (
@@ -111,7 +111,7 @@ function VerificationDetailScreen() {
           <span style={{ position: 'relative' }}>
             <Button variant="secondary" iconRight="ellipsis-vertical" onClick={() => setMenu((m) => !m)}>More Actions</Button>
             {menu && (
-              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 30 }} onMouseLeave={() => setMenu(false)}>
+              <span style={{ position: 'absolute', right: 0, top: 44, zIndex: 'var(--tk-z-dropdown)' }} onMouseLeave={() => setMenu(false)}>
                 <DropdownMenu width={250} items={[
                   { label: 'Edit Verification Details', icon: 'pencil', onClick: () => openDialog('edit') },
                   { label: 'Reassign Verification', icon: 'users', onClick: () => openDialog('reassign') },

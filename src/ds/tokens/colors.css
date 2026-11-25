@@ -11,7 +11,7 @@
   --tk-orange: #fd5301; /* accent CTA + active nav on the navy shell */
   --tk-orange-hover: #e04600;
   --tk-orange-soft: #fef4eb;
-  --tk-orange-ink: #e53510;
+  --tk-orange-ink: #c2410c;
 
   --tk-navy: #000822; /* display headings, tooltips, the wallet card */
   --tk-account-avatar: #000822;
@@ -22,7 +22,7 @@
   --tk-ink-700: #0f1a3b; /* body strong */
   --tk-ink-500: #2b3955; /* body */
   --tk-ink-400: #5d6384; /* secondary / captions */
-  --tk-ink-300: #8a90a8; /* placeholder, disabled ink */
+  --tk-ink-300: #767c94; /* placeholder, disabled ink — 4.1:1 on white, so placeholders stay readable */
   --tk-ink-on-navy: #ffffff;
   --tk-ink-on-navy-dim: #9aa2be; /* on the navy wallet card and tooltips */
 
@@ -39,9 +39,10 @@
   --tk-line-navy: rgba(255, 255, 255, 0.1); /* hairline on a navy surface */
 
   /* ---- Status --------------------------------------------------------- */
-  --tk-success: #12833b;
+  --tk-success: #0f7a35; /* 4.85:1 on success-soft */
   --tk-success-soft: #e3f6ee;
-  --tk-warning: #f27602;
+  --tk-warning: #f27602; /* fills, dots, charts — too light for text */
+  --tk-warning-ink: #a14b05; /* warning text and icons on warning-soft: 5.5:1 */
   --tk-warning-soft: #fff5d8;
   --tk-danger: #cb0611;
   --tk-danger-solid: #e02b22;
@@ -52,7 +53,7 @@
   --tk-neutral-soft: #f1f2f6;
   --tk-purple: #4c16ac;
   --tk-purple-soft: #f1edfd;
-  --tk-teal: #0e7c86;
+  --tk-teal: #0b6c75;
   --tk-teal-soft: #e2f5f6;
 
   /* ---- Data viz (donuts, lines, bars — in series order) ---------------- */
@@ -96,6 +97,8 @@ a:hover {
   --tk-blue-ink: #a9c0ff;
   --tk-blue-light: #3a5bb8;
   --tk-orange-soft: rgba(253, 83, 1, 0.16);
+  --tk-orange-ink: #ff8a4c;
+  --tk-danger-solid: #d9362e;
 
   --tk-navy: #e9edf7;
   --tk-account-avatar: linear-gradient(135deg, #2f6bff, #0241e8);
@@ -122,6 +125,7 @@ a:hover {
   --tk-success: #3fcf7c;
   --tk-success-soft: rgba(63, 207, 124, 0.14);
   --tk-warning: #ffb347;
+  --tk-warning-ink: #ffb347;
   --tk-warning-soft: rgba(255, 179, 71, 0.14);
   --tk-danger: #ff6b6b;
   --tk-danger-soft: rgba(255, 107, 107, 0.14);

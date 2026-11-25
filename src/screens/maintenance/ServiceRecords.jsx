@@ -105,7 +105,7 @@ export function ServiceRecords({ owner, authenticated, canWrite, notify }) {
   return (
     <SectionCard title="" pad="none">
       <TableToolbar
-        search={<SearchField className="search" style={{ flex: 1 }} placeholder="Search by company, plate, maintenance ID, or description..." value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
+        search={<SearchField className="search" style={{ flex: 1 }} placeholder="Search records…" title="Search by company, plate, maintenance ID or description" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />}
         filters={<>
           {select(status, setStatus, STATUSES)}
           {select(priority, setPriority, PRIORITIES)}
@@ -155,7 +155,7 @@ export function ServiceRecords({ owner, authenticated, canWrite, notify }) {
               <span style={{ display: "flex", gap: 4, position: "relative" }}>
                 <Button variant="outline" size="sm" icon="ellipsis-vertical" aria-label={`Actions for ${r.reference}`} onClick={(e) => { e.stopPropagation(); setMenu(menu === r.id ? null : r.id); }} />
                 {menu === r.id && (
-                  <span style={{ position: "absolute", right: 0, top: 34, zIndex: 30 }} onClick={(e) => e.stopPropagation()}>
+                  <span style={{ position: "absolute", right: 0, top: 34, zIndex: 'var(--tk-z-dropdown)' }} onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu
                       width={210}
                       items={[

@@ -6,6 +6,7 @@ import { Button } from '../core/Button.jsx';
 import { IconButton } from '../core/IconButton.jsx';
 import { Skeleton } from '../feedback/Skeleton.jsx';
 import { InlineAlerts } from '../feedback/AlertSlot.jsx';
+import { useDialogFocus } from '../feedback/useDialogFocus.js';
 import { NotAvailable, isMissing } from '../core/NotAvailable.jsx';
 
 const STATUS_TONE = { Approved: 'success', Rejected: 'danger', Pending: 'warning', 'Pending Review': 'warning', 'Re-upload requested': 'danger' };
@@ -38,10 +39,11 @@ export function documentTitle(value) {
 export function DocumentPreview({ open, onClose, title, subtitle, documents = [], selectedId, onSelect, preview = {}, onApprove, onRequestReupload, canReview = () => false, busy = false, variant = 'modal', titleActions, loading = false }) {
   const index = Math.max(0, documents.findIndex((d) => d.id === selectedId));
   const doc = documents[index] || null;
+  const panelRef = React.useRef(null);
+  useDialogFocus(panelRef, { active: open, onClose });
   React.useEffect(() => {
     if (!open) return undefined;
     const key = (event) => {
-      if (event.key === 'Escape') onClose?.();
       if (event.target instanceof HTMLElement && ['INPUT', 'TEXTAREA'].includes(event.target.tagName)) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowRight') { event.preventDefault(); const next = documents[index + 1]; if (next) onSelect?.(next.id); }
       if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') { event.preventDefault(); const prev = documents[index - 1]; if (prev) onSelect?.(prev.id); }
@@ -55,7 +57,7 @@ export function DocumentPreview({ open, onClose, title, subtitle, documents = []
   return (
     <InlineAlerts>
     <div className={'tk-preview-scrim' + (variant === 'drawer' ? ' drawer' : '')} role="presentation" onClick={onClose}>
-      <div className={'tk-preview' + (variant === 'drawer' ? ' drawer' : '')} role="dialog" aria-modal="true" aria-label={title || 'Document preview'} onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} className={'tk-preview' + (variant === 'drawer' ? ' drawer' : '')} role="dialog" aria-modal="true" aria-label={title || 'Document preview'} onClick={(e) => e.stopPropagation()}>
         <header className="tk-preview-titlebar">
           <div className="tk-preview-title">
             <strong>{title}</strong>

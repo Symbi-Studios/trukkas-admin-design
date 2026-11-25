@@ -214,7 +214,7 @@ function ExportReportScreen() {
 function SummaryRow({ icon, tint, label, value }) {
   const TINT = {
     blue: ['var(--tk-blue-soft)', 'var(--tk-blue)'], green: ['var(--tk-success-soft)', 'var(--tk-success)'],
-    amber: ['var(--tk-warning-soft)', 'var(--tk-warning)'], purple: ['var(--tk-purple-soft)', 'var(--tk-purple)'],
+    amber: ['var(--tk-warning-soft)', 'var(--tk-warning-ink)'], purple: ['var(--tk-purple-soft)', 'var(--tk-purple)'],
     orange: ['var(--tk-orange-soft)', 'var(--tk-orange-ink)'], red: ['var(--tk-danger-soft)', 'var(--tk-danger)'],
   };
   const [bg, fg] = TINT[tint] || TINT.blue;

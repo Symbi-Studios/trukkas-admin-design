@@ -373,7 +373,7 @@ function UsersOverviewLoading() {
   return (
     <div className={styles.page} aria-busy="true">
       <PageHeader crumbs={["Users", "Overview"]} title="Users Overview" description="Growth, verification and activity across drivers, truck companies and forwarders." />
-      <div className={styles.loadingNotice} role="status" aria-live="polite">
+      <div className={`${styles.loadingNotice} tk-sr-only`} role="status" aria-live="polite">
         <span className={styles.loadingNoticeDot} aria-hidden="true" />
         Loading user analytics…
       </div>

@@ -1,6 +1,8 @@
 import * as React from 'react';
 export interface BannerProps {
   tone?: 'info' | 'success' | 'warning' | 'danger';
+  /** keep a warning/danger note in place instead of lifting it into the page-level bar */
+  inline?: boolean;
   /** override the default glyph for the tone */
   icon?: string;
   title?: React.ReactNode;

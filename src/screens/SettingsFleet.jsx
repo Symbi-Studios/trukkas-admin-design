@@ -81,7 +81,7 @@ export function SettingsFleet() {
             </div>
           </SettingsCard>) }
 
-          {editor.groupVisible('settingsAssetNumbering') && (<SettingsCard description="Configure how trucks and equipment are identified." title="Asset Numbering" save={<SettingsCardSave editor={editor} group="settingsAssetNumbering" />}>
+          {editor.groupVisible('settingsAssetNumbering') && (<SettingsCard title="Asset Numbering" save={<SettingsCardSave editor={editor} group="settingsAssetNumbering" />}>
             {editor.visible('settingsAssetNumbering', 'truckIdFormat') && (<Field><TextField label="Truck ID Format" value={numbering.truckIdFormat} hint="Example: TRK-00001"
               onChange={(e) => updateAssetNumbering({ truckIdFormat: e.target.value })} /></Field>) }
             {editor.visible('settingsAssetNumbering', 'trailerIdFormat') && (<Field><TextField label="Trailer ID Format" value={numbering.trailerIdFormat} hint="Example: TRL-00001"
@@ -135,7 +135,7 @@ export function SettingsFleet() {
               onChange={(v) => updateFleetVisibility({ restrictSensitiveInformation: v })} />) }
           </SettingsCard>) }
 
-          {editor.groupVisible('settingsDeletionArchiving') && (<SettingsCard description="Manage how fleet assets are archived or deleted." title="Deletion & Archiving" save={<SettingsCardSave editor={editor} group="settingsDeletionArchiving" />}>
+          {editor.groupVisible('settingsDeletionArchiving') && (<SettingsCard title="Deletion & Archiving" save={<SettingsCardSave editor={editor} group="settingsDeletionArchiving" />}>
             {editor.visible('settingsDeletionArchiving', 'allowArchivingInactiveAssets') && (<Field><Switch checked={deletion.allowArchivingInactiveAssets} label="Allow archiving of inactive assets"
               hint="Keep historical records for inactive trucks."
               onChange={(v) => updateDeletionArchiving({ allowArchivingInactiveAssets: v })} /></Field>) }

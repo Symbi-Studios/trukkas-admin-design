@@ -91,7 +91,7 @@ function OverviewTab({ user, notify, canEdit }) {
           <div className="tk-profile-role-heading">
             <span className="tk-profile-icon-tile"><Icon name="key-round" size={20} /></span>
             <div>
-              <Badge tone="purple">{user.role}</Badge>
+              <Badge tone="neutral">{user.role}</Badge>
               <p className="tk-profile-role-copy">{user.permissionsCaption}</p>
             </div>
           </div>
@@ -236,7 +236,7 @@ export function AdminProfile() {
   const [tab, setTab] = useState('overview');
   const [notice, setNotice] = useState('');
 
-  if (authenticated && (query.isLoading || (query.isFetching && !query.currentData))) return <DriverDetailLoading />;
+  if (authenticated && (query.isLoading || (query.isFetching && !query.currentData))) return <DriverDetailLoading label="Loading profile…" />;
   if (authenticated && query.error) return <Card><DriverLoadingNotice>{getApiErrorMessage(query.error)}</DriverLoadingNotice></Card>;
 
   function notify(message) {
@@ -246,18 +246,18 @@ export function AdminProfile() {
 
   return (
     <>
-      <PageHeader crumbs={['Account', 'My profile']} title="My profile"
+      <PageHeader crumbs={['Account', 'My Profile']} title="My Profile"
         description="Manage your personal details, access, and account security." />
       <Notice>{notice}</Notice>
 
-      <Card className="tk-profile-hero" tone="navy" pad="none">
-        <div className="tk-profile-hero-accent" />
+      <Card className="tk-profile-hero" pad="none">
+
         <div className="tk-profile-identity">
-          <Avatar name={user.name} size={76} square tone="var(--tk-blue)" style={{ border: '3px solid rgba(255,255,255,.18)' }} />
+          <Avatar name={user.name} size={64} square />
           <div className="tk-profile-identity-copy">
             <div className="tk-profile-name-line">
               <h2>{user.name}</h2>
-              <Badge tone="purple">{user.role}</Badge>
+              <Badge tone="neutral">{user.role}</Badge>
             </div>
             <span>{user.email}</span>
             <div className="tk-profile-meta-line">

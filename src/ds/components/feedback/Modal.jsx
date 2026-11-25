@@ -2,25 +2,23 @@
 import React from 'react';
 import { Icon } from '../../assets/icons/Icon.jsx';
 import { InlineAlerts } from './AlertSlot.jsx';
+import { useDialogFocus } from './useDialogFocus.js';
 
 /** Centered dialog over a scrim. Controlled — mount only what's `open`.
- *  Closes on scrim click, the × button, and Escape. */
+ *  Closes on scrim click, the × button, and Escape. Focus stays inside while open
+ *  and returns to the opener on close; the page behind stops scrolling. */
 export function Modal({ open, onClose, title, description, width = 480, footer, children, style }) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  const panelRef = React.useRef(null);
+  useDialogFocus(panelRef, { active: open, onClose });
 
   if (!open) return null;
   return (
     <InlineAlerts>
     <div className="tk-modal-scrim" role="presentation" onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'var(--tk-scrim)', zIndex: 100,
+      style={{ position: 'fixed', inset: 0, background: 'var(--tk-scrim)', zIndex: 'var(--tk-z-modal)',
                display: 'grid', placeItems: 'center', padding: 24,
                animation: 'tk-fade-in var(--tk-dur) var(--tk-ease)' }}>
-      <div className="tk-modal" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}
+      <div ref={panelRef} className="tk-modal" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}
         onClick={(e) => e.stopPropagation()}
         style={{ width, maxWidth: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column',
                  background: 'var(--tk-surface)', borderRadius: 'var(--tk-r-2xl)',

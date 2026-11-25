@@ -1,21 +1,18 @@
 import React from 'react';
 import { Icon } from '../../assets/icons/Icon.jsx';
 
-const TINT = { blue: ['var(--tk-blue-soft)', 'var(--tk-blue)'],
-               orange: ['var(--tk-orange-soft)', 'var(--tk-orange)'],
-               green: ['var(--tk-success-soft)', 'var(--tk-success)'],
-               purple: ['var(--tk-purple-soft)', 'var(--tk-purple)'],
-               red: ['var(--tk-danger-soft)', 'var(--tk-danger)'] };
+// Neutral glyph tile; `tone` is accepted for older call sites and ignored.
+const TILE = ['var(--tk-surface-sunk)', 'var(--tk-ink-500)'];
 
 /** Notification / announcement row: typed glyph, title, preview, meta, unread marker. */
 export function NotificationItem({ icon = 'bell', tone = 'blue', title, preview, meta,
                                    badge, unread, onClick, style }) {
-  const [bg, fg] = TINT[tone] || TINT.blue;
+  const [bg, fg] = TILE;
   return (
     <div onClick={onClick} style={{ display: 'flex', gap: 12, padding: '14px 0',
                                     borderBottom: '1px solid var(--tk-line)',
                                     cursor: onClick ? 'pointer' : 'default', ...style }}>
-      <span style={{ width: 32, height: 32, borderRadius: 'var(--tk-r-sm)', background: bg, color: fg,
+      <span style={{ width: 32, height: 32, borderRadius: 'var(--tk-r-sm)', background: bg, color: fg, boxShadow: 'inset 0 0 0 1px var(--tk-line)',
                      display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
         <Icon name={icon} size={16} />
       </span>
