@@ -25,7 +25,25 @@ export function StatsPeriodToggle({ value, onChange, periods = STATS_PERIODS, di
  *  - fixedLabel: no switch; say what the numbers cover instead ("All time", "This month")
  *  - stack: children are already laid out (e.g. two rows of cards); just stack them
  */
-export function StatsPanel({ title = 'Overview', period, onPeriodChange, periods, fixedLabel, fixedHint, columns, stack = false, children, style }) {
+
+
+/**
+ * @param {{
+ *   title?: string,
+ *   period?: any,
+ *   onPeriodChange?: (value: any) => void,
+ *   periods?: any,
+ *   fixedLabel?: string,
+ *   fixedHint?: string,
+ *   columns?: any,
+ *   stack?: boolean,
+ *   children?: import('react').ReactNode,
+ *   style?: import('react').CSSProperties,
+ * }} props
+ */
+
+
+export function StatsPanel({ title = 'Overview', period = undefined, onPeriodChange = undefined, periods = undefined, fixedLabel = undefined, fixedHint = undefined, columns = undefined, stack = false, children, style = undefined }) {
   const p = period ? statsPeriod(period) : null;
   const caption = p ? (p.compare ? `${p.summary}, compared with ${p.compare}` : 'All time') : fixedLabel;
   return (

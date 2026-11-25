@@ -31,9 +31,9 @@ import {
   shortMoneyValue,
 } from "../ds.js";
 import { useGetAdminJobScreenQuery, useGetAdminJobScreenTripQuery, useChangeAdminJobScreenMutation, useGetAdminJobBidActionDetailQuery, usePerformAdminJobActionMutation, jobScreenUrl } from "../store/features/jobs/jobDetailApi.js";
-import { useGetContainerReviewJobQuery } from "../store/features/documents/containerReviewApi.js";
-import { countDocuments } from "../domain/containerReview.js";
-import { JobContainerDocuments } from "./JobContainerDocuments.jsx";
+import { getJobDocumentsAction } from "../lib/doc-review/actions";
+import { countDocuments } from "../domain/containerReview";
+import { JobContainerDocuments } from "./JobContainerDocuments";
 import { getApiErrorMessage } from "../store/api/getApiErrorMessage.js";
 import { DriverLoadingNotice } from "./DriversLoading.jsx";
 import { JobDetailMap } from "./JobDetailMap.jsx";
@@ -177,11 +177,24 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
   const [mapOpen, setMapOpen] = useState(false);
   const [acceptBidFor, setAcceptBidFor] = useState(null);
   const bidActionQuery = useGetAdminJobBidActionDetailQuery({ id: acceptBidFor?.id, jobId: job?.apiId, owner, role }, { skip: !authenticated || !acceptBidFor?.id || !job?.apiId, refetchOnMountOrArgChange: true });
-  const containerReview = useGetContainerReviewJobQuery(
-    { jobId: job?.apiId, hint: { jobNumber: job?.id, forwarder: job?.forwarder, origin: job?.origin, destination: job?.destination, stage: job?.canApprove ? 'review' : 'past' } },
-    { skip: !job?.apiId, refetchOnMountOrArgChange: true },
-  );
-  const review = containerReview.currentData;
+  // The Next.js server loads the documents (server action), not the browser.
+  const [docs, setDocs] = useState({ review: null, loading: false, error: null });
+  const [docsVersion, setDocsVersion] = useState(0);
+  useEffect(() => {
+    if (!job?.apiId) return undefined;
+    let cancelled = false;
+    setDocs((current) => ({ ...current, loading: true, error: null }));
+    getJobDocumentsAction(job.apiId)
+      .then((result) => {
+        if (cancelled) return;
+        // 404 = this job has no documents (for example a draft): show the empty message, not an error
+        if (result.ok) setDocs({ review: result.data, loading: false, error: null });
+        else setDocs({ review: null, loading: false, error: result.error.status === 404 ? null : result.error });
+      })
+      .catch(() => { if (!cancelled) setDocs({ review: null, loading: false, error: { status: 0, message: 'Documents couldn’t be loaded.' } }); });
+    return () => { cancelled = true; };
+  }, [job?.apiId, docsVersion]);
+  const review = docs.review;
   const reviewCounts = review ? countDocuments(review.units) : null;
   const [toast, setToast] = useState(null);
 
@@ -882,7 +895,7 @@ function JobDetailContent({ jobId, owner, role, authenticated }) {
               )}</section>)}
 
       {tab === "Documents" && (
-        <JobContainerDocuments review={review} loading={containerReview.isFetching} error={containerReview.error} onRetry={containerReview.refetch} jobRef={job.id} />
+        <JobContainerDocuments review={review} loading={docs.loading} error={docs.error} onRetry={() => setDocsVersion((v) => v + 1)} jobRef={job.id} />
       )}
 
       {tab === "Financials" && (<section className="jd-tab-stack"><JobTabHeading title="Financials" description="Payments, costs and payouts for this job." /><InfoStrip items={[{label:'Job value',value:naira(job.jobValue)},{label:'Platform fee',value:naira(fee),caption:percentage(job.platformFeePct)},{label:'Company payment',value:naira(driverPayment)},{label:'Net platform earnings',value:naira(netEarnings)}]} /><div className="jd-finance-layout"><div className="jd-tab-stack"><SectionCard title="Transactions" pad="none">

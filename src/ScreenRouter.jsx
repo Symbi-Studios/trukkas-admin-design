@@ -10,7 +10,7 @@ import { JobsTrips } from './screens/JobsTrips.jsx';
 import { TripsSegments } from './screens/TripsSegments.jsx';
 import { BidsOffers } from './screens/BidsOffers.jsx';
 import { DispatchCenter } from './screens/DispatchCenter.jsx';
-import { Documents } from './screens/Documents.jsx';
+import { Documents } from './screens/Documents';
 import { ContainerTriangulation } from './screens/ContainerTriangulation.jsx';
 import { Drivers } from './screens/Drivers.jsx';
 import { TruckCompanies } from './screens/TruckCompanies.jsx';

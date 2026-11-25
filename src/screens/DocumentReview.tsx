@@ -1,15 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useNavigate } from '../router.js';
 import { showToast } from '../components/ActionToast.jsx';
 import { DocumentProgress } from '../components/DocumentProgress.jsx';
-import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
+import { approveDocumentAction, rejectDocumentAction } from '@/lib/doc-review/actions';
+import type { ApiError } from '@/types/api';
+import type { ReviewJob } from '@/types/docReview';
 import { Badge, Banner, Button, EmptyState, Icon, IconButton, Modal, Skeleton } from '../ds.js';
 import {
   DOC_STATUS,
-  JOB_REVIEW_STATUS,
   REJECTION_PRESETS,
   REVIEW_STATUS_META,
   countDocuments,
@@ -21,51 +22,54 @@ import {
   nextPendingAfter,
   rejectionPrefix,
   unitNoun,
-} from '../domain/containerReview.js';
-import {
-  useApproveContainerDocumentMutation,
-  useGetContainerReviewJobQuery,
-  useGetContainerReviewJobsQuery,
-  useRejectContainerDocumentMutation,
-  useSimulateForwarderReplacementMutation,
-} from '../store/features/documents/containerReviewApi.js';
+  type FlatDocument,
+} from '@/domain/containerReview';
 import './DocumentReview.css';
 
-const STATUS_ICON = { PENDING: 'clock', APPROVED: 'circle-check', REJECTED: 'circle-x' };
+const STATUS_ICON = { PENDING: 'clock', APPROVED: 'circle-check', REJECTED: 'circle-x', MISSING: 'file-question' } as const;
 
-export function formatTdoDate(value) {
+export function formatTdoDate(value?: string | null): string {
   if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return '—';
   const [y, m, d] = value.slice(0, 10).split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export function formatWhen(value) {
+export function formatWhen(value?: string | null): string {
   if (!value || !Number.isFinite(Date.parse(value))) return '—';
   return new Intl.DateTimeFormat('en-NG', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
-function fileSize(bytes) {
-  if (!Number.isFinite(bytes)) return null;
+function fileSize(bytes?: number | null): string | null {
+  if (bytes == null || !Number.isFinite(bytes)) return null;
   return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
 }
 
-function isTyping(target) {
+// Files go through our own server so the browser shows them in the page instead of downloading them.
+function fileLink(url: string, fileName: string | null, download = false): string {
+  return `/api/document?url=${encodeURIComponent(url)}&name=${encodeURIComponent(fileName ?? '')}${download ? '&download=1' : ''}`;
+}
+
+function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
 }
 
-export function DocumentReview() {
-  const navigate = useNavigate();
-  const params = useSearchParams();
-  const jobId = params.get('jobId');
-  const requestedDoc = params.get('doc');
-  const hint = params.get('ref') ? { jobNumber: params.get('ref') } : undefined;
+/**
+ * The data comes from the Next.js server (app/documents/review/page.jsx).
+ * Approve and reject are server actions: after each one the server sends back a fresh `job`.
+ */
+interface DocumentReviewProps {
+  job: ReviewJob | null;
+  error: ApiError | null;
+  jobId: string;
+  requestedDoc: string | null;
+  nextJob: { id: string; jobNumber: string } | null;
+}
 
-  const { currentData: job, isLoading, error, refetch } = useGetContainerReviewJobQuery({ jobId, hint }, { skip: !jobId, refetchOnMountOrArgChange: true });
-  const { currentData: queue } = useGetContainerReviewJobsQuery();
-  const [approve, approveState] = useApproveContainerDocumentMutation();
-  const [reject, rejectState] = useRejectContainerDocumentMutation();
-  const [simulate, simulateState] = useSimulateForwarderReplacementMutation();
-  const busy = approveState.isLoading || rejectState.isLoading || simulateState.isLoading;
+export function DocumentReview({ job, error, jobId, requestedDoc, nextJob }: DocumentReviewProps) {
+  const navigate = useNavigate();
+  const router = useRouter();
+
+  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
 
   const units = useMemo(() => job?.units || [], [job]);
   const docs = useMemo(() => flattenDocuments(units), [units]);
@@ -73,16 +77,16 @@ export function DocumentReview() {
   const locked = Boolean(job?.locked);
   const kind = job?.unitKind || 'container';
 
-  const [selectedId, setSelectedId] = useState(null);
-  const [filter, setFilter] = useState(null); // 'todo' | 'all'; null until the job loads
-  const [collapsed, setCollapsed] = useState(() => new Set());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'todo' | 'all' | null>(null); // null until the job loads
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
-  const [confirmFinal, setConfirmFinal] = useState(null);
-  const [viewVersion, setViewVersion] = useState(null);
-  const [actionError, setActionError] = useState(null);
-  const reasonRef = useRef(null);
-  const railRef = useRef(null);
+  const [confirmFinal, setConfirmFinal] = useState<FlatDocument | null>(null);
+  const [viewVersion, setViewVersion] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const railRef = useRef<HTMLDivElement>(null);
 
   // First load: open the requested document, else the first one to review.
   useEffect(() => {
@@ -104,7 +108,7 @@ export function DocumentReview() {
   const hiddenUnits = units.length - visibleUnits.length;
   const navOrder = visibleUnits.flatMap((u) => (collapsed.has(u.id) ? [] : u.shown));
 
-  const select = useCallback((id) => {
+  const select = useCallback((id: string) => {
     setSelectedId(id);
     setRejecting(false);
     setReason('');
@@ -118,58 +122,72 @@ export function DocumentReview() {
     railRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [selectedId]);
 
-  const advanceFrom = useCallback((doc) => {
+  const advanceFrom = useCallback((doc: FlatDocument) => {
     const next = nextPendingAfter(units, doc.id);
     if (next) select(next.id);
   }, [units, select]);
 
-  const failed = (err) => {
-    const message = err?.data?.code === 'DOCUMENTS_LOCKED'
+  // A failed action means the screen may be out of date: show the reason and ask the server for fresh data.
+  const failed = (problem?: ApiError | null) => {
+    setActionError(problem?.code === 'DOCUMENTS_LOCKED'
       ? 'These documents are locked because the job is already validated.'
-      : getApiErrorMessage(err, 'The review couldn’t be saved. Try again.');
-    setActionError(message);
-    refetch();
+      : problem?.message || 'The review couldn’t be saved. Try again.');
+    router.refresh();
   };
 
-  const doApprove = async (doc, { confirmed = false } = {}) => {
-    if (!doc || doc.status !== DOC_STATUS.PENDING || locked || busy) return;
+  const doApprove = async (doc: FlatDocument | null, { confirmed = false }: { confirmed?: boolean } = {}) => {
+    if (!doc || !job || doc.status !== DOC_STATUS.PENDING || !doc.canReview || locked || busy) return;
     if (viewVersion != null) { setViewVersion(null); return; } // never approve while an old version is on screen
-    const isFinal = counts.pending === 1 && counts.rejected === 0;
+    const isFinal = counts.pending === 1 && counts.rejected === 0 && counts.missing === 0;
     if (isFinal && !confirmed) { setConfirmFinal(doc); return; }
+    setBusy('approve');
     try {
-      const result = await approve({ jobId: job.id, documentId: doc.id }).unwrap();
+      const result = await approveDocumentAction({ jobId: job.id, documentId: doc.id });
       setConfirmFinal(null);
-      if (result.job.reviewStatus === JOB_REVIEW_STATUS.VALIDATED) {
+      if (!result.ok) { failed(result.error); return; }
+      if (isFinal) {
+        // the backend validates the job by itself when the last required document is approved
         showToast(`${job.jobNumber} validated. Documents are locked and the job is open to bids.`);
       } else {
         showToast(`${rejectionPrefix(doc)} approved`);
         advanceFrom(doc);
       }
-    } catch (err) { setConfirmFinal(null); failed(err); }
+    } catch {
+      setConfirmFinal(null);
+      failed(null);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const fullReason = selected ? `${rejectionPrefix(selected)}: ${reason.trim()}` : '';
   const doReject = async () => {
-    if (!selected || !reason.trim() || busy) return;
+    if (!selected || !job || !selected.canReview || !reason.trim() || busy) return;
+    const doc = selected;
+    setBusy('reject');
     try {
-      await reject({ jobId: job.id, documentId: selected.id, reason: fullReason }).unwrap();
-      showToast(`${rejectionPrefix(selected)} rejected. The forwarder will see your reason.`, { tone: 'info' });
-      const doc = selected;
+      const result = await rejectDocumentAction({ jobId: job.id, documentId: doc.id, reason: fullReason });
+      if (!result.ok) { failed(result.error); return; }
+      showToast(`${rejectionPrefix(doc)} rejected. The forwarder will see your reason.`, { tone: 'info' });
       setRejecting(false);
       setReason('');
       advanceFrom(doc);
-    } catch (err) { failed(err); }
+    } catch {
+      failed(null);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const openReject = () => {
-    if (!selected || selected.status !== DOC_STATUS.PENDING || locked) return;
+    if (!selected || selected.status !== DOC_STATUS.PENDING || !selected.canReview || locked) return;
     setRejecting(true);
     setTimeout(() => reasonRef.current?.focus(), 0);
   };
 
   // Keyboard: A approve · R reject · ↑/↓ or J/K move · Esc closes the reject panel.
   useEffect(() => {
-    const onKey = (event) => {
+    const onKey = (event: KeyboardEvent) => {
       if (confirmFinal || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === 'Escape' && rejecting) { setRejecting(false); return; }
       if (isTyping(event.target)) return;
@@ -184,22 +202,21 @@ export function DocumentReview() {
   });
 
   if (!jobId) return <div className="dr-screen"><EmptyState icon="file-question" title="No job selected" description="Open a job from the Documents queue to review it." action={<Button onClick={() => navigate('/documents')}>Go to Documents</Button>} /></div>;
-  if (isLoading || (!job && !error)) return <ReviewSkeleton />;
-  if (error && !job) {
+  if (!job) {
     return (
       <div className="dr-screen">
-        <EmptyState icon="file-x" title={error.status === 404 ? 'Job not found' : 'Documents couldn’t be loaded'} description={error.status === 404 ? 'This job has no documents to review.' : 'Check your connection and try again.'}
-          action={<span style={{ display: 'flex', gap: 8 }}><Button variant="outline" onClick={() => navigate('/documents')}>Back to Documents</Button>{error.status !== 404 && <Button onClick={refetch}>Retry</Button>}</span>} />
+        <EmptyState icon="file-x" title={error?.status === 404 ? 'Job not found' : 'Documents couldn’t be loaded'} description={error?.status === 404 ? 'This job has no documents to review.' : error?.message || 'Check your connection and try again.'}
+          action={<span style={{ display: 'flex', gap: 8 }}><Button variant="outline" onClick={() => navigate('/documents')}>Back to Documents</Button>{error?.status !== 404 && <Button onClick={() => router.refresh()}>Retry</Button>}</span>} />
       </div>
     );
   }
 
   const meta = REVIEW_STATUS_META[job.reviewStatus];
-  const nextJob = (queue || []).filter((j) => j.reviewStatus === JOB_REVIEW_STATUS.NEEDS_REVIEW && j.id !== job.id)
-    .sort((a, b) => String(a.oldestPendingAt).localeCompare(String(b.oldestPendingAt)))[0];
   const previous = selected?.history?.[selected.history.length - 1] || null;
   const showing = viewVersion != null && selected ? selected.history.find((h) => h.version === viewVersion) || selected : selected;
-  const isFinalApproval = selected?.status === DOC_STATUS.PENDING && counts.pending === 1 && counts.rejected === 0;
+  const isFinalApproval = selected?.status === DOC_STATUS.PENDING && counts.pending === 1 && counts.rejected === 0 && counts.missing === 0;
+  const shownSize = showing?.fileSize || fileSize(showing?.sizeBytes);
+  const canAct = Boolean(selected?.canReview) && selected?.status === DOC_STATUS.PENDING && !locked;
 
   return (
     <div className="dr-screen">
@@ -211,7 +228,7 @@ export function DocumentReview() {
             <div className="dr-jobbar-heading">
               <h1>{job.jobNumber}</h1>
               <Badge tone={meta.tone} dot>{meta.label}</Badge>
-              {job.jobType === 'Bulk break' && <Badge tone="purple">Bulk break</Badge>}
+              {job.movement && <Badge tone={kind === 'rack' ? 'purple' : 'neutral'}>{job.movement}</Badge>}
             </div>
             <p>{job.forwarder} · {job.route?.pickup} → {job.route?.delivery} · {units.length} {unitNoun(kind, units.length)}</p>
           </div>
@@ -228,6 +245,7 @@ export function DocumentReview() {
             <small className="dr-fact-legend">
               <span className="is-pending">{counts.pending} pending</span>
               <span className="is-rejected">{counts.rejected} rejected</span>
+              {counts.missing > 0 && <span className="is-rejected">{counts.missing} not uploaded</span>}
             </small>
           </div>
           <Button variant="outline" size="sm" iconRight="arrow-up-right" onClick={() => navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`)}>Open job</Button>
@@ -239,19 +257,19 @@ export function DocumentReview() {
         <div className="dr-callout is-success" role="status">
           <Icon name="lock" size={18} />
           <div><strong>All {counts.total} documents approved. Documents are locked.</strong>
-            <span>Validated {formatWhen(job.validatedAt)}{job.validatedBy ? ` by ${job.validatedBy}` : ''}. The job is open to bids and the forwarder can no longer replace files.</span></div>
+            <span>{job.validatedAt ? `Validated ${formatWhen(job.validatedAt)}${job.validatedBy ? ` by ${job.validatedBy}` : ''}. ` : ''}The job is open to bids and the forwarder can no longer replace files.</span></div>
           {nextJob && <Button size="sm" iconRight="arrow-right" onClick={() => navigate(`/documents/review?jobId=${encodeURIComponent(nextJob.id)}`)}>Next job · {nextJob.jobNumber}</Button>}
         </div>
       ) : counts.pending === 0 ? (
         <div className="dr-callout is-waiting" role="status">
           <Icon name="hourglass" size={18} />
           <div><strong>You’re done for now. Waiting on the forwarder.</strong>
-            <span>{counts.rejected} rejected {counts.rejected === 1 ? 'document needs' : 'documents need'} replacing. When the forwarder uploads a new file, the job comes back to your queue.</span></div>
+            <span>{counts.rejected + counts.missing} {counts.rejected + counts.missing === 1 ? 'document needs' : 'documents need'} the forwarder: {counts.rejected} to replace, {counts.missing} not uploaded. When the forwarder uploads a file, the job comes back to your queue.</span></div>
           {nextJob ? <Button size="sm" iconRight="arrow-right" onClick={() => navigate(`/documents/review?jobId=${encodeURIComponent(nextJob.id)}`)}>Next job · {nextJob.jobNumber}</Button>
             : <Button size="sm" variant="outline" onClick={() => navigate('/documents')}>Back to queue</Button>}
         </div>
       ) : null}
-      {actionError && <Banner tone="danger" title={actionError} onClose={() => setActionError(null)} />}
+      {actionError && <Banner tone="danger" title={actionError} />}
 
       <div className="dr-workspace">
         {/* ── Rail ──────────────────────────────────────────────────── */}
@@ -318,7 +336,7 @@ export function DocumentReview() {
                 {selected.version > 1 && <span className="dr-pill">v{selected.version}</span>}
                 <Badge tone={docStatusTone(selected.status)} dot>{docStatusLabel(selected.status)}</Badge>
                 {locked && <Badge tone="neutral"><Icon name="lock" size={12} /> Locked</Badge>}
-                {showing?.url && <a className="dr-icon-link" href={showing.url} download={showing.fileName} aria-label="Download file" title="Download"><Icon name="download" size={17} /></a>}
+                {showing?.url && <a className="dr-icon-link" href={fileLink(showing.url, showing.fileName, true)} aria-label="Download file" title="Download"><Icon name="download" size={17} /></a>}
               </div>
             </div>
 
@@ -338,12 +356,18 @@ export function DocumentReview() {
               <div className="dr-note is-danger">
                 <Icon name="circle-x" size={16} />
                 <div><strong>Rejected. Waiting on the forwarder to replace this file.</strong>
-                  <span>“{selected.rejectionReason}” · {selected.reviewedBy} · {formatWhen(selected.reviewedAt)}</span></div>
-                <Button size="sm" variant="ghost" icon="flask-conical" disabled={busy} onClick={() => simulate({ jobId: job.id, documentId: selected.id }).unwrap().then(() => showToast('Forwarder uploaded a replacement (prototype).', { tone: 'info' })).catch(failed)} title="Prototype only: acts as the forwarder replacing this file">Simulate replacement</Button>
+                  <span>“{selected.rejectionReason}” · {selected.reviewedBy || '—'} · {formatWhen(selected.reviewedAt)}</span></div>
+              </div>
+            )}
+            {selected.status === DOC_STATUS.MISSING && (
+              <div className="dr-note is-info">
+                <Icon name="file-question" size={16} />
+                <div><strong>Not uploaded yet</strong>
+                  <span>The forwarder still has to upload the {docDescription(selected.type)} for {selected.unitLabel}. You can review it once it arrives.</span></div>
               </div>
             )}
 
-            {selected.status === DOC_STATUS.PENDING && !locked && (
+            {canAct && (
               <div className="dr-check" aria-label="What to check">
                 <span className="dr-check-label"><Icon name="scan-search" size={14} />Check the file shows</span>
                 <span className="dr-check-chip"><small>{kind === 'rack' ? 'Rack' : 'Container'}</small><b>{selected.unitLabel}</b></span>
@@ -354,8 +378,8 @@ export function DocumentReview() {
             <div className="dr-canvas">
               {viewVersion != null && <span className="dr-canvas-flag">Viewing v{viewVersion} (rejected)</span>}
               {showing?.url
-                ? (/^image\//.test(showing.mimeType || '') ? <img src={showing.url} alt={`${docDescription(selected.type)} for ${selected.unitLabel}`} /> : <iframe src={showing.url} title={`${docDescription(selected.type)} for ${selected.unitLabel}`} referrerPolicy="no-referrer" />)
-                : <div className="dr-canvas-empty"><Icon name="file-x" size={40} /><strong>No preview available</strong><span>The file can’t be shown here.</span></div>}
+                ? (/^image\//.test(showing.mimeType || '') ? <img src={fileLink(showing.url, showing.fileName)} alt={`${docDescription(selected.type)} for ${selected.unitLabel}`} /> : <iframe src={fileLink(showing.url, showing.fileName)} title={`${docDescription(selected.type)} for ${selected.unitLabel}`} referrerPolicy="no-referrer" />)
+                : <div className="dr-canvas-empty"><Icon name="file-x" size={40} /><strong>{selected.status === DOC_STATUS.MISSING ? 'Not uploaded yet' : 'No preview available'}</strong><span>{selected.status === DOC_STATUS.MISSING ? 'There is no file to show.' : 'The file can’t be shown here.'}</span></div>}
             </div>
 
             <footer className="dr-footer">
@@ -378,22 +402,22 @@ export function DocumentReview() {
                   <div className="dr-reject-actions">
                     <span className="dr-hint"><kbd>⌘</kbd><kbd>↵</kbd> send · <kbd>Esc</kbd> cancel</span>
                     <Button variant="outline" onClick={() => { setRejecting(false); setReason(''); }}>Cancel</Button>
-                    <Button type="submit" variant="danger" icon="circle-x" disabled={!reason.trim() || busy} style={{ background: reason.trim() ? 'var(--tk-danger)' : undefined, color: reason.trim() ? '#fff' : undefined }}>{rejectState.isLoading ? 'Rejecting…' : 'Reject document'}</Button>
+                    <Button type="submit" variant="danger" icon="circle-x" disabled={!reason.trim() || Boolean(busy)} style={{ background: reason.trim() ? 'var(--tk-danger)' : undefined, color: reason.trim() ? '#fff' : undefined }}>{busy === 'reject' ? 'Rejecting…' : 'Reject document'}</Button>
                   </div>
                 </form>
               ) : (
                 <>
                   <dl className="dr-meta">
-                    <div><dt>File</dt><dd title={showing?.fileName}>{showing?.fileName || '—'}{fileSize(showing?.sizeBytes) ? <small> · {fileSize(showing.sizeBytes)}</small> : null}</dd></div>
+                    <div><dt>File</dt><dd title={showing?.fileName ?? undefined}>{showing?.fileName || '—'}{shownSize ? <small> · {shownSize}</small> : null}</dd></div>
                     <div><dt>Uploaded</dt><dd>{showing?.uploadedBy || '—'} · {formatWhen(showing?.uploadedAt)}</dd></div>
-                    {selected.status === DOC_STATUS.APPROVED && <div><dt>Approved</dt><dd>{selected.reviewedBy} · {formatWhen(selected.reviewedAt)}</dd></div>}
+                    {selected.status === DOC_STATUS.APPROVED && <div><dt>Approved</dt><dd>{selected.reviewedBy || '—'} · {formatWhen(selected.reviewedAt)}</dd></div>}
                   </dl>
                   <div className="dr-actions">
-                    {selected.status === DOC_STATUS.PENDING && !locked ? (
+                    {canAct ? (
                       <>
-                        <Button variant="danger" icon="circle-x" disabled={busy} onClick={openReject}>Reject <kbd className="dr-kbd">R</kbd></Button>
-                        <Button icon={isFinalApproval ? 'shield-check' : 'circle-check'} disabled={busy || viewVersion != null} onClick={() => doApprove(selected)}>
-                          {approveState.isLoading ? 'Approving…' : isFinalApproval ? 'Approve & validate job' : 'Approve'} <kbd className="dr-kbd is-light">A</kbd>
+                        <Button variant="danger" icon="circle-x" disabled={Boolean(busy)} onClick={openReject}>Reject <kbd className="dr-kbd">R</kbd></Button>
+                        <Button icon={isFinalApproval ? 'shield-check' : 'circle-check'} disabled={Boolean(busy) || viewVersion != null} onClick={() => doApprove(selected)}>
+                          {busy === 'approve' ? 'Approving…' : isFinalApproval ? 'Approve & validate job' : 'Approve'} <kbd className="dr-kbd is-light">A</kbd>
                         </Button>
                       </>
                     ) : counts.pending > 0 ? (
@@ -415,8 +439,8 @@ export function DocumentReview() {
         title="Approve and validate this job?"
         description={confirmFinal ? `${rejectionPrefix(confirmFinal)} is the last document on ${job.jobNumber}.` : ''}
         footer={<>
-          <Button variant="outline" disabled={busy} onClick={() => setConfirmFinal(null)}>Not yet</Button>
-          <Button icon="shield-check" disabled={busy} onClick={() => doApprove(confirmFinal, { confirmed: true })} autoFocus>{busy ? 'Validating…' : 'Approve & validate'}</Button>
+          <Button variant="outline" disabled={Boolean(busy)} onClick={() => setConfirmFinal(null)}>Not yet</Button>
+          <Button icon="shield-check" disabled={Boolean(busy)} onClick={() => doApprove(confirmFinal, { confirmed: true })} autoFocus>{busy ? 'Validating…' : 'Approve & validate'}</Button>
         </>}
       >
         <ul className="dr-confirm-list">
@@ -429,13 +453,13 @@ export function DocumentReview() {
   );
 }
 
-function ReviewSkeleton() {
+export function ReviewSkeleton() {
   return (
     <div className="dr-screen" role="status" aria-busy="true" aria-label="Loading documents">
       <div className="dr-jobbar"><Skeleton width={260} height={28} /><Skeleton width={320} height={40} /></div>
       <div className="dr-workspace">
         <aside className="dr-rail" style={{ padding: 16, display: 'grid', gap: 12, alignContent: 'start' }}>{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} height={i % 4 === 0 ? 18 : 34} />)}</aside>
-        <section className="dr-main" style={{ padding: 20 }}><Skeleton height="100%" /></section>
+        <section className="dr-main" style={{ padding: 20 }}><Skeleton height={420} /></section>
       </div>
     </div>
   );
