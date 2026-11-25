@@ -29,7 +29,7 @@ import { UserManagement } from './screens/UserManagement.jsx';
 import { OperationsOverview } from './screens/OperationsOverview.jsx';
 import { UsersOverview } from './screens/UsersOverview.jsx';
 import { RolesPermissions } from './screens/RolesPermissions.jsx';
-import { SupportTickets } from './screens/SupportTickets.jsx';
+import { SupportInbox } from './screens/support/SupportInbox.jsx';
 import { KnowledgeBase } from './screens/KnowledgeBase.jsx';
 import { Feedback } from './screens/Feedback.jsx';
 import { RatingsReviews } from './screens/RatingsReviews.jsx';
@@ -77,7 +77,7 @@ const screens = {
   'operations-overview': OperationsOverview,
   'users-overview': UsersOverview,
   roles: RolesPermissions,
-  tickets: SupportTickets,
+  tickets: SupportInbox,
   'knowledge-base': KnowledgeBase,
   feedback: Feedback,
   reviews: RatingsReviews,
