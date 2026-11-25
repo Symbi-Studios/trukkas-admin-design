@@ -83,7 +83,7 @@ export const hoursLabel = (hours) => typeof hours !== 'number' || !Number.isFini
 export const STATUS_TONE = { Open: 'info', 'In Progress': 'purple', Pending: 'warning', Escalated: 'danger', Resolved: 'success', Closed: 'neutral' };
 export const PRIORITY_ICON = { Urgent: 'chevrons-up', High: 'chevron-up', Medium: 'equal', Low: 'chevron-down' };
 
-const ROLE_LABEL = { DRIVER: 'Driver', TRUCKER: 'Trucker', FORWARDER: 'Forwarder', EXPORTER: 'Exporter' };
+const ROLE_LABEL = { DRIVER: 'Driver', TRUCKER: 'Trucker', FORWARDER: 'Forwarder', EXPORTER: 'Forwarder' };
 export const customerRoleLabel = (role) => ROLE_LABEL[role] || null;
 export function customerProfileUrl(ticket) {
   if (!ticket.userId) return null;

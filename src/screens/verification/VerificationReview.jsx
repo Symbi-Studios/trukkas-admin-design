@@ -20,7 +20,7 @@ import { REQUIREMENT_TONE, STATUS_TONE, expiryLabel, profileUrl, subjectLabel, w
 import styles from './Verification.module.css';
 
 const REQ_ICON = { success: 'circle-check', danger: 'circle-x', warning: 'circle-dashed', info: 'circle-dot', neutral: 'circle' };
-const ROLE_LABEL = { TRUCKER: 'Trucker', DRIVER: 'Driver', FORWARDER: 'Forwarder', EXPORTER: 'Exporter' };
+const ROLE_LABEL = { TRUCKER: 'Trucker', DRIVER: 'Driver', FORWARDER: 'Forwarder', EXPORTER: 'Forwarder' };
 const CASE_MANAGERS = ['SUPER_ADMIN', 'OPS_ADMIN'];
 const sentence = (value) => { const t = typeof value === 'string' ? value.trim() : ''; return t ? t.charAt(0).toUpperCase() + t.slice(1) : null; };
 const actorName = (actor) => (actor?.type === 'SYSTEM' ? 'System' : actor?.name || null);

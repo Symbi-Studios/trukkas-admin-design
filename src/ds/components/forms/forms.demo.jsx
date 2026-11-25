@@ -21,7 +21,7 @@ function Demo() {
         <TextField label="Document No." error="This reference is already in use." defaultValue="CAC/RC/1234567" style={{ width: 220 }} />
       </div>
       <div className="grp"><span className="cap">Search & filters</span>
-        <SearchField variant="global" placeholder="Search jobs, trucks, companies, exporters..." style={{ width: 320 }} />
+        <SearchField variant="global" placeholder="Search jobs, trucks, companies, forwarders..." style={{ width: 320 }} />
         <FilterSelect label="All Status" /><FilterSelect label="All Types" />
         <FilterSelect label="More Filters" icon="sliders-horizontal" active />
       </div>

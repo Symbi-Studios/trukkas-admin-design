@@ -83,7 +83,7 @@ export const NAV = [
 ];
 
 export const SEARCH_PLACEHOLDER = {
-  dashboard: "Search jobs, trucks, companies, exporters...",
+  dashboard: "Search jobs, trucks, companies, forwarders...",
   "operations-overview": "Search jobs, trips, bids, documents...",
   jobs: "Search jobs, routes, cargo, companies...",
   trips: "Search by Trip ID, Job ID, Container, Truck, Driver...",
@@ -94,12 +94,11 @@ export const SEARCH_PLACEHOLDER = {
   maintenance: "Search maintenance, trucks, service centers...",
   "users-overview": "Search drivers, companies, forwarders...",
   drivers: "Search drivers by name, license, phone...",
-  companies: "Search jobs, trucks, companies, exporters...",
+  companies: "Search jobs, trucks, companies, forwarders...",
   cargo: "Search cargo records, jobs, containers...",
   "cargo-types": "Search cargo types...",
   calculator: "Search saved calculations...",
   forwarders: "Search forwarders, RC number, email...",
-  exporters: "Search exporters, RC number, email...",
   pricing: "Search by service, route, truck type, location...",
   "finance-overview": "Search payouts, transactions, escrow...",
   wallets: "Search by job ID, Trip ID, customer, truck, or reference...",
@@ -110,7 +109,7 @@ export const SEARCH_PLACEHOLDER = {
   revenue: "Search fees collected...",
   rates: "Search platform rates...",
   documents: "Search jobs, documents, companies, routes...",
-  verification: "Search forwarders, exporters, RC number, email...",
+  verification: "Search forwarders, companies, RC number, email...",
   audit: "Search audit log by user, action, entity...",
   reports: "Search reports and saved analyses...",
   users: "Search admin users by name or email...",

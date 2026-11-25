@@ -127,7 +127,6 @@ export function ForwarderNoteModal({
 export const KYC_REQUEST_OPTIONS = [
   { key: 'nin', checkType: 'NATIONAL_ID', icon: 'id-card', label: 'National ID (NIN)', hint: 'Re-check the NIN against their details' },
   { key: 'address', checkType: 'ADDRESS', icon: 'map-pin', label: 'Proof of Address', hint: 'Ask for a new utility bill or bank statement' },
-  { key: 'license', checkType: 'EXPORT_LICENSE', icon: 'file-badge', label: 'Forwarding License', hint: 'Ask for a current license document' },
   { key: 'passport', checkType: 'PASSPORT_PHOTO', icon: 'image', label: 'Passport Photograph', hint: 'Ask the forwarder to replace their profile photo' },
   { key: 'bank', checkType: 'BANK_ACCOUNT', icon: 'landmark', label: 'Bank Account', hint: 'Ask the forwarder to update their withdrawal account' },
 ];
@@ -227,7 +226,7 @@ export function ForwarderBulkVerifyModal({
       display: 'grid',
       gap: 12
     }}><SaveError state={save} />
-      <p className="tk-meta">Approves submitted exporter licenses and address documents waiting for human review. National ID and BVN results remain with the verification provider.</p>
+      <p className="tk-meta">Approves submitted address documents waiting for human review. National ID and BVN results remain with the verification provider.</p>
       {result ? result.map(row => <div key={row.userId} className="fd-row"><span style={{
           flex: 1
         }}>{forwarders.find(item => item.id === row.userId)?.name || row.userId}</span><span>{row.outcome.replaceAll('_', ' ')}{row.error ? ' · ' + userFacingMessage(row.error, 'Verification failed') : ''}</span></div>) : <><SearchField placeholder="Search forwarders..." value={search} disabled={locked} onChange={event => setSearch(event.target.value)} /><span className="tk-meta">{selected.length} / 100 selected</span><div style={{

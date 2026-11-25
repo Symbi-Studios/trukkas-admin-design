@@ -485,9 +485,11 @@ export function Dashboard() {
           direction="up"
         />
         <StatCard
-          icon="box"
-          label="Exporters"
-          value={overview?.users.forwarders.exporterCount ?? "—"}
+          icon="briefcase"
+          label="Active Jobs"
+          value={overview?.jobs.active ?? "—"}
+          delta={overview?.jobs.activeTrendPercent != null ? `${Math.abs(overview.jobs.activeTrendPercent)}%` : undefined}
+          direction={(overview?.jobs.activeTrendPercent ?? 0) < 0 ? "down" : "up"}
         />
         <StatCard
           icon="truck"
@@ -675,7 +677,7 @@ function DashboardLoading() {
     ["user-round", "Total Drivers"],
     ["building-2", "Trucking Companies"],
     ["users-round", "Forwarders"],
-    ["box", "Exporters"],
+    ["briefcase", "Active Jobs"],
     ["truck", "Trucks & Fleet"],
     ["route", "Active Trips"],
     ["circle-check", "Completed Jobs"],

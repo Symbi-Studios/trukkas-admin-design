@@ -109,9 +109,6 @@ export function ForwarderJobModal({
   }, ...(fields.cargoType === 'BULK_BREAK' ? [{
     value: 'BULK_BREAK',
     label: 'Bulk Break'
-  }] : []), ...(forwarder.exporterLicenseStatus === 'VERIFIED' ? [{
-    value: 'EXPORT',
-    label: 'Export'
   }] : [])];
   return <Modal open title="Create Job for this Forwarder" description={forwarder.name} width={800} onClose={close} footer={<><Button variant="outline" disabled={busy} onClick={close}>Cancel</Button><Button type="submit" form="forwarder-job-form" disabled={disabled || !options || optionsQuery.isFetching || Boolean(optionsQuery.error) || Boolean(terminalsQuery.error) || fields.movementType === 'PORT_TO_PORT' && Boolean(dropoffQuery.error)}>{busy ? 'Creating…' : 'Create Job'}</Button></>}>
     <form id="forwarder-job-form" onSubmit={submit} style={{

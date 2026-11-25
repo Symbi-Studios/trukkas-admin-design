@@ -54,7 +54,7 @@ export function adaptReportOverview(value, empty, metric) {
     }
   }
   const entities = Array.isArray(dto.topEntities) ? dto.topEntities : [];
-  const types = { FORWARDER: 'Forwarder', EXPORTER: 'Exporter', TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company' };
+  const types = { FORWARDER: 'Forwarder', EXPORTER: 'Forwarder', TRUCKER: 'Trucker', TRUCKING_COMPANY: 'Truck Company' };
   empty.topPerformingEntities = entities.filter(row => row && typeof row === 'object' && !Array.isArray(row)).map((row, index) => ({
     _key: reportText(row.entityId) || String(index), rank: metricCount(row.rank) ?? '—', entity: reportText(row.entityName) || '—', entityType: types[row.entityType] || reportText(row.entityType) || '—',
     jobs: formattedCount(row.jobs), revenue: metricNumber(row.revenue), growth: metricPercent(row.growth),
