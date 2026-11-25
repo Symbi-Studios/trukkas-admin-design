@@ -12,7 +12,7 @@ const sessionError = () => failure('The admin session changed. Sign in and revie
 function guarded(handler) {
   return async (args, api, _options, baseQuery) => {
     const role = api.getState().auth.admin?.role;
-    const active = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken && args.owner && api.getState().auth.admin?.id === args.owner && api.getState().auth.admin?.role === role && ADMIN_ROLES.includes(role));
+    const active = () => !api.signal.aborted && Boolean(api.getState().auth.signedIn && args.owner && api.getState().auth.admin?.id === args.owner && api.getState().auth.admin?.role === role && ADMIN_ROLES.includes(role));
     if (!active()) return sessionError();
     const result = await handler(args, baseQuery, active, role);
     return active() ? result : sessionError();

@@ -23,9 +23,9 @@ function settingsError(result) {
 }
 function sessionGuard(api, owner) {
   const actor = api.getState().auth.admin;
-  if (!actor?.id || actor.id !== owner || !api.getState().auth.accessToken) throw new Error('Please sign in again before using Settings.');
+  if (!actor?.id || actor.id !== owner || !api.getState().auth.signedIn) throw new Error('Please sign in again before using Settings.');
   return () => {
-    if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.accessToken) throw new Error('The admin session changed. Reload before continuing.');
+    if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.signedIn) throw new Error('The admin session changed. Reload before continuing.');
   };
 }
 function key() {

@@ -7,7 +7,7 @@ const amount=v=>num(v)!=null&&num(v)>=0?num(v):null;
 const fail=error=>({status:'CUSTOM_ERROR',error});
 const roles=new Set(['SUPER_ADMIN','OPS_ADMIN','FINANCE_ADMIN']);
 const userPath=id=>'/admin/users/'+encodeURIComponent(id);
-function current(api,owner,role){const a=api.getState().auth;return !api.signal.aborted&&Boolean(a.accessToken)&&a.admin?.id===owner&&a.admin?.role===role&&roles.has(role);}
+function current(api,owner,role){const a=api.getState().auth;return !api.signal.aborted&&Boolean(a.signedIn)&&a.admin?.id===owner&&a.admin?.role===role&&roles.has(role);}
 function transport(api,baseQuery,owner,role){return async request=>{if(!current(api,owner,role))throw fail('The session changed. Reopen Companies before continuing.');const result=await baseQuery(request);if(!current(api,owner,role))throw fail('The session changed. Reopen Companies before continuing.');if(result.error)throw result.error;return unwrapApiResponseData(result.data);};}
 async function all(run,url,keys,params={},idKey='id'){
   const rows=[],seen=new Set();let pages=1,total=null;

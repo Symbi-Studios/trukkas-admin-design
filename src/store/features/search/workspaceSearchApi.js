@@ -17,7 +17,7 @@ const globalSearchApi = baseApi.injectEndpoints({
   endpoints: builder => ({
     getAdminWorkspaceSearch: builder.query({
       async queryFn({ owner, role, search }, api, _options, baseQuery) {
-        const current = () => !api.signal.aborted && !!api.getState().auth.accessToken && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const current = () => !api.signal.aborted && !!api.getState().auth.signedIn && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
         if (!current() || !text(search)) return { error: { status: 'CUSTOM_ERROR', error: 'Search is unavailable. Please try again.' } };
         const allowed = definitions.filter(def => !def.roles || def.roles.includes(role));
         const responses = await Promise.allSettled(allowed.map(def => baseQuery({ url: def.path, params: { ...def.params, search: search.trim(), page: 1, limit: 4 } })));

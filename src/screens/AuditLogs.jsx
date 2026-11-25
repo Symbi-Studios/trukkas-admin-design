@@ -90,7 +90,7 @@ function AuditDrawer({ audit, loading, onClose, onNavigate, onNotify, onCopy }) 
 }
 
 export function AuditLogs() {
-  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.signedIn)].join(':'));
   return <AuditLogsScreen key={scope} />;
 }
 
@@ -100,7 +100,7 @@ function AuditLogsScreen() {
   const navigate = useNavigate();
   const role = useSelector((state) => state.auth.admin?.role);
   const owner = useSelector((state) => state.auth.admin?.id);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const canView = authenticated && Boolean(owner) && role === 'SUPER_ADMIN';
   const [tab, setTab] = useState('All Logs');
   const [query, setQuery] = usePageSearchState('', () => setPage(1));

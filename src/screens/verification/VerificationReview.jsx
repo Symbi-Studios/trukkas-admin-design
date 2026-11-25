@@ -28,7 +28,7 @@ const actorName = (actor) => (actor?.type === 'SYSTEM' ? 'System' : actor?.name 
 export function VerificationReview() {
   const { verificationId } = useParams();
   const search = useSearchParams();
-  const scope = useSelector((state) => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  const scope = useSelector((state) => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.signedIn)].join(':'));
   return <ReviewScreen key={[scope, search.get('id') || verificationId, search.get('source')].join(':')} />;
 }
 

@@ -158,13 +158,13 @@ function CompanyDrawer({ company: c, canManage, resetting, onClose, onOpen, onOp
 export function TruckCompanies() {
   const owner = useSelector(state => state.auth.admin?.id);
   const role = useSelector(state => state.auth.admin?.role);
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   return <CompaniesDirectory key={String(owner) + ':' + String(role) + ':' + authenticated} />;
 }
 
 function CompaniesDirectory() {
   const navigate = useNavigate();
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const owner = useSelector(state => state.auth.admin?.id);
   const role = useSelector(state => state.auth.admin?.role);
   const canManage = ['SUPER_ADMIN', 'OPS_ADMIN'].includes(role);

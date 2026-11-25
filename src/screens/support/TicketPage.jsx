@@ -12,7 +12,7 @@ import { ticketLabel } from './supportInbox.js';
 export function TicketPage() {
   const params = useParams(), search = useSearchParams(), navigate = useNavigate();
   const ticketId = params.ticketId || search.get('ticketId') || '';
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const detail = useGetAdminSupportTicketDetailQuery(ticketId, { skip: !authenticated || !ticketId });
   const directory = useGetAdminSupportTicketDirectoryQuery(undefined, { skip: !authenticated });
   const label = detail.currentData ? ticketLabel(detail.currentData) : 'Ticket';

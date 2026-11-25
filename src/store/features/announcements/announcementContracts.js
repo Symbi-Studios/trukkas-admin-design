@@ -39,13 +39,21 @@ export function adaptBroadcast(value) {
     type: type || '—', typeKnown: Boolean(type), icon: icons[type] || 'megaphone', aud: audience || '—', audienceKnown: Boolean(audience), statusCode: status, st: labels[status] || '—',
     d: display.d, tm: display.tm, displayAt: timestamp(status === 'SCHEDULED' ? dto.scheduledFor : dto.publishedAt), v: count(dto.seenCount ?? dto.viewCount), sentCount: count(dto.sentCount), acknowledgedCount: count(dto.acknowledgedCount), createdAt: timestamp(dto.createdAt), priority: priority || '—', pinned, acknowledgement, channels,
     version: timestamp(dto.version) == null ? null : dto.version,
+    delivery: deliveryReport(dto.deliveryReport),
     form: { title, message, type: type || null, audience: mode ? audienceNames[mode] : null, targeting,
+      channels: channels || ['in-app'], audienceMode: mode,
       schedule: status === 'SCHEDULED' ? 'Schedule for Later' : status ? 'Publish Now' : null,
       scheduleDate: schedule.inputDate, scheduleTime: schedule.inputTime, priority: priority || null, pinned, acknowledgement, expiry: expiry.inputDate },
-    state: { title, message, type: dto.type, priority: dto.priority, pinned, acknowledgement, audienceMode: mode, targeting, channels,
+    state: { title, message: typeof dto.message === 'string' ? message : null, type: dto.type, priority: dto.priority, pinned, acknowledgement, audienceMode: mode, targeting, channels,
       publishedAt: dto.publishedAt, unpublishedAt: dto.unpublishedAt, archivedAt: dto.archivedAt,
       scheduledFor: Object.hasOwn(dto, 'scheduledFor') ? dto.scheduledFor : undefined, expiresAt: Object.hasOwn(dto, 'expiresAt') ? dto.expiresAt : undefined },
   };
+}
+function deliveryReport(value) {
+  const dto = record(value);
+  if (!Object.keys(dto).length) return null;
+  const channel = (key) => { const c = record(dto[key]); return Object.keys(c).length ? { delivered: count(c.delivered ?? c.sent), failed: count(c.failed) } : null; };
+  return { recipients: count(dto.recipients), inApp: channel('inApp'), push: channel('push'), email: channel('email') };
 }
 export function unwrapBroadcast(response, expectedId) {
   const dto = record(unwrapApiResponseData(response)), raw = dto.id ? dto : record(dto.broadcast), adapted = adaptBroadcast(raw);
@@ -56,6 +64,7 @@ function option(value) {
   const dto = record(value), id = text(dto.id), label = text(dto.label);
   return id && label ? { id, label } : null;
 }
+export const CHANNELS = ['in-app', 'push', 'email'];
 export function adaptOptions(response) {
   const dto = record(unwrapApiResponseData(response));
   const modes = Array.isArray(dto.audienceModes) ? dto.audienceModes.filter((mode) => Object.hasOwn(audienceNames, mode?.mode)) : [];
@@ -68,6 +77,9 @@ export function adaptOptions(response) {
         options: mode.requires === audienceKeys[mode.mode] && complete ? choices : [] };
     }),
     limits: { titleMax: count(dto.limits?.titleMax), messageMax: count(dto.limits?.messageMax), customUsersMax: count(dto.limits?.customUsersMax) },
+    descriptions: Object.fromEntries(modes.map((mode) => [mode.mode, text(mode.description)])),
+    channels: Array.isArray(dto.channels) && dto.channels.every((c) => CHANNELS.includes(c)) ? dto.channels : null,
+    defaultChannels: Object.fromEntries(Object.entries(record(dto.defaultChannels)).filter(([, list]) => Array.isArray(list) && list.every((c) => CHANNELS.includes(c)))),
   };
 }
 export function adaptStats(response) {
@@ -109,6 +121,9 @@ export function prepareForm(form, original, mode, options, creating = false) {
       body[key] = selected;
     }
   }
+  const channels = Array.isArray(form.channels) ? [...new Set(form.channels)] : null;
+  if (!channels?.length || channels.some((c) => !(options.channels || CHANNELS).includes(c))) throw new Error('Choose at least one supported delivery channel.');
+  if (creating || !same([...channels].sort(), [...(original?.state.channels || [])].sort())) body.channels = channels;
   const schedulingChanged = creating || form.schedule !== original?.form.schedule || form.scheduleDate !== original?.form.scheduleDate || form.scheduleTime !== original?.form.scheduleTime;
   if (mode === 'Draft') body.saveAsDraft = true;
   else if (form.schedule === 'Schedule for Later' && schedulingChanged) {
@@ -126,7 +141,7 @@ export function prepareForm(form, original, mode, options, creating = false) {
   if (!creating) {
     for (const key of ['title', 'message', 'type', 'priority', 'pinned', 'acknowledgement']) if (same(body[key], original.state[key])) delete body[key];
     if (mode === 'Draft' && original.statusCode === 'DRAFT') delete body.saveAsDraft;
-    if (original.statusCode === 'PUBLISHED' && (body.saveAsDraft || body.audienceMode || body.scheduledFor)) throw new Error('Published announcements cannot change audience, channels or scheduling, or become drafts. Duplicate instead.');
+    if (original.statusCode === 'PUBLISHED' && (body.saveAsDraft || body.audienceMode || body.scheduledFor || body.channels)) throw new Error('Published announcements cannot change audience, channels or scheduling, or become drafts. Duplicate instead.');
     if (original.statusCode === 'SCHEDULED' && mode !== 'Draft' && form.schedule === 'Publish Now') body.scheduledFor = null;
   }
   return body;
@@ -140,6 +155,8 @@ export function matchesFields(saved, fields) {
       const actual = key === 'channels' ? state.channels : state.targeting[key];
       return Array.isArray(actual) && actual.length === value.length && value.every((id) => actual.includes(id));
     }
+    // Some responses (detail, PATCH) omit the message; the follow-up read fills it in from the list.
+    if (key === 'message' && state.message == null) return true;
     return same(state[key], value);
   });
 }

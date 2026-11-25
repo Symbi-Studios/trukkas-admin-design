@@ -42,7 +42,7 @@ const PERIOD_KEY = "1m";
 
 export function FinanceOverview() {
   const navigate = useNavigate();
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const [periodKey, setPeriodKey] = useState(PERIOD_KEY);
   const period = statsPeriod(periodKey);
   const range = useMemo(() => statsPeriodRange(periodKey), [periodKey]);

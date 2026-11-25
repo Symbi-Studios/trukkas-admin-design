@@ -41,7 +41,7 @@ const statusTone = (status) => TK_STATUS[status] || { Suspended: "danger", Banne
 const TX_TONE = { Completed: "success", Successful: "success", Pending: "warning", Processing: "warning", Failed: "danger", Reversed: "neutral" };
 
 export function UserWallets() {
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const [role, setRole] = useState("FORWARDER");
   const [status, setStatus] = useState("All");
   const [page, setPage] = useState(1);

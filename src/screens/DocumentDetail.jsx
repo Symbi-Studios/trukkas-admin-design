@@ -34,7 +34,7 @@ export function DocumentDetail() {
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId');
   const documentId = searchParams.get('documentId') || params.documentId;
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const { currentData: job, isLoading, isFetching, error, refetch } = useGetAdminDocReviewDetailQuery(jobId, {
     skip: !jobId || !authenticated,
     refetchOnMountOrArgChange: true,

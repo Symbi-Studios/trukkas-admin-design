@@ -7,10 +7,10 @@ const fieldTag = ({ owner, entity }) => ({ type: 'AdminRegistrationFields', id: 
 const summaryTag = ({ owner }) => ({ type: 'AdminRegistrationFields', id: `${owner}:summary` });
 function guard(api, owner, write = false) {
   const actor = api.getState().auth.admin;
-  if (!actor?.id || actor.id !== owner || !api.getState().auth.accessToken) throw new Error('Please sign in again before using Settings.');
+  if (!actor?.id || actor.id !== owner || !api.getState().auth.signedIn) throw new Error('Please sign in again before using Settings.');
   if (write && actor.role !== 'SUPER_ADMIN') throw new Error('Only Super Admins can change registration fields.');
   return () => {
-    if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.accessToken) throw new Error('The admin session changed. Reload before continuing.');
+    if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.signedIn) throw new Error('The admin session changed. Reload before continuing.');
   };
 }
 const read = (path, adapt) => async (args, api, _options, baseQuery) => {

@@ -186,7 +186,7 @@ export function validFeeValue(rule, value) {
   return parsed != null && parsed >= 0 && maximum != null && parsed <= maximum && /^\d+(?:\.\d{1,2})?$/.test(String(parsed));
 }
 export const editableFeeRule = (rule) => Boolean(rule?.id && rule.editable === true && ['ACTIVE', 'INACTIVE'].includes(rule.statusCode) && validFeeValue(rule, rule.numericValue) && (rule.calculationType === 'PERCENTAGE' || rule.calculationType === 'FLAT' && rule.currency === 'NGN'));
-const canManage = (api) => Boolean(api.getState().auth.accessToken && api.getState().auth.admin?.id && ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(api.getState().auth.admin?.role));
+const canManage = (api) => Boolean(api.getState().auth.signedIn && api.getState().auth.admin?.id && ['SUPER_ADMIN', 'FINANCE_ADMIN'].includes(api.getState().auth.admin?.role));
 const ruleMatches = (fresh, original) => fresh?.id === original?.id && fresh?.calculationType === original?.calculationType && fresh?.currency === original?.currency && fresh?.numericValue === original?.numericValue && fresh?.statusCode === original?.statusCode;
 async function readRule(baseQuery, id) {
   if (!text(id)) return failure('Select a valid fee rule.');
@@ -267,7 +267,7 @@ async function download(baseQuery, api, url, format, filters = {}, fallback = 'f
   if (!['csv', 'pdf'].includes(format)) return failure('Unsupported fee export format.');
   if (filters.status && !['ACTIVE', 'INACTIVE'].includes(filters.status)) return failure('Draft fee rules are not available.');
   const admin = api.getState().auth.admin;
-  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && admin?.id && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  const sameSession = () => !api.signal.aborted && api.getState().auth.signedIn && admin?.id && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
   if (!sameSession()) return failure('Sign in before downloading fee documents.');
   const result = await baseQuery({ url, params: { ...filters, format }, headers: { Accept: format === 'pdf' ? 'application/pdf' : 'text/csv' }, responseHandler: async (response) => {
     if (response.ok) return response.blob();

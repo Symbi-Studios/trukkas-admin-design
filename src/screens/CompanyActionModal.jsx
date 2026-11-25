@@ -6,7 +6,7 @@ import { companyError, useGetAdminCompanyInfoQuery, useReviewAdminCompanyMutatio
 import './CompanyDetail.css';
 
 export function CompanyActionModal({ action, onClose, onDone }) {
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const owner = useSelector(state => state.auth.admin?.id);
   const submitting = useRef(false);
   const [reason, setReason] = useState(''), [error, setError] = useState(null);

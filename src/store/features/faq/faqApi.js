@@ -96,7 +96,7 @@ export const faqApi = taggedApi.injectEndpoints({
         const owner = api.getState().auth.admin?.id;
         const body = { category: fields.category.trim(), question: fields.question.trim(), answer: fields.answer.trim() };
         if (fields.sortOrder !== '') body.sortOrder = Number(fields.sortOrder);
-        if (!owner || !api.getState().auth.accessToken || !body.category || !body.question || !body.answer || body.category.length > 100 || body.question.length > 300 || body.answer.length > 5000 || ('sortOrder' in body && (!Number.isInteger(body.sortOrder) || body.sortOrder < 0 || body.sortOrder > 10000))) return failure('Please enter valid FAQ details.');
+        if (!owner || !api.getState().auth.signedIn || !body.category || !body.question || !body.answer || body.category.length > 100 || body.question.length > 300 || body.answer.length > 5000 || ('sortOrder' in body && (!Number.isInteger(body.sortOrder) || body.sortOrder < 0 || body.sortOrder > 10000))) return failure('Please enter valid FAQ details.');
         const result = await baseQuery({ url: '/admin/faq', method: 'POST', body });
         if (result.error) return result;
         if (api.signal.aborted || api.getState().auth.admin?.id !== owner) return failure('The session changed. Check the FAQ list before trying again.');
@@ -109,7 +109,7 @@ export const faqApi = taggedApi.injectEndpoints({
     getAdminFaqDirectory: builder.query({
       async queryFn({ owner }, api, options, baseQuery) {
         const account = api.getState().auth.admin;
-        const owned = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken)
+        const owned = () => !api.signal.aborted && Boolean(api.getState().auth.signedIn)
           && Boolean(owner) && api.getState().auth.admin?.id === owner
           && api.getState().auth.admin?.role === account?.role && ADMIN_ROLES.has(account?.role);
         if (!owned()) return failure('An active admin session is required to read FAQs.');
@@ -126,7 +126,7 @@ export const faqApi = taggedApi.injectEndpoints({
     getAdminFaqHelpLinks: builder.query({
       async queryFn({ owner }, api, _options, baseQuery) {
         const account = api.getState().auth.admin;
-        const owned = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken) && Boolean(owner)
+        const owned = () => !api.signal.aborted && Boolean(api.getState().auth.signedIn) && Boolean(owner)
           && api.getState().auth.admin === account && account?.id === owner && ADMIN_ROLES.has(account?.role);
         if (!owned()) return failure('An active admin session is required to load FAQ help links.');
         const result = await baseQuery({ url: '/admin/faq/help-links' });

@@ -16,7 +16,7 @@ const EMPTY = [];
 /** /knowledge-base: the help articles the apps show as guides, grouped by the apps' seven topics. */
 export function HelpArticles() {
   const navigate = useNavigate();
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const directory = useGetAdminKnowledgeArticleDirectoryQuery({}, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const stats = useGetAdminKnowledgeStatsQuery(undefined, { skip: !authenticated });
   const [topic, setTopic] = React.useState(null);

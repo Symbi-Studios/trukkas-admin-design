@@ -11,7 +11,7 @@ import {
   TopBar,
 } from "./ds.js";
 import { NAV, SEARCH_PLACEHOLDER } from "./nav.js";
-import { useLogoutAdminMutation } from "./store/features/auth/authApi.js";
+import { logoutAction } from "./lib/auth/actions";
 import { useGetAdminNotificationsQuery } from "./store/features/notifications/notificationsApi.js";
 import { clearSession } from "./store/features/auth/authSlice.js";
 import { baseApi } from "./store/api/baseApi.js";
@@ -41,7 +41,6 @@ function AdminShellContent({ children }) {
   const [loggingOut, setLoggingOut] = React.useState(false);
   const admin = useSelector((state) => state.auth.admin);
   const dispatch = useDispatch();
-  const [logoutAdmin] = useLogoutAdminMutation();
   const { data: notificationData } = useGetAdminNotificationsQuery(
     { page: 1, limit: 20, tab: "all" },
     { skip: !mounted || !admin || loggingOut },
@@ -101,8 +100,8 @@ function AdminShellContent({ children }) {
     setLoggingOut(true);
     let confirmedByServer = false;
     try {
-      await logoutAdmin().unwrap();
-      confirmedByServer = true;
+      // runs on the Next.js server: tells the backend, then clears the session cookies
+      confirmedByServer = (await logoutAction()).serverConfirmed;
     } catch {
       // Clear this device's session even when server logout cannot be confirmed.
     } finally {

@@ -98,7 +98,7 @@ function scopedReportQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
     const next = api.getState().auth;
-    return !api.signal.aborted && Boolean(next.accessToken && owner) && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
+    return !api.signal.aborted && Boolean(next.signedIn && owner) && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
   };
   return async request => {
     if (!current()) return reportFailure('Your session changed. Reopen Reports before continuing.');
@@ -132,7 +132,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
       serializeQueryArgs: serializeReportQuery,
       async queryFn(args, api, _options, baseQuery) {
         baseQuery = scopedReportQuery(baseQuery, api, args);
-        if (args.owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return reportFailure('Sign in to preview a report.');
+        if (args.owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return reportFailure('Sign in to preview a report.');
         if (args.configuration.reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
         if (!args.metadata?.reportTypes?.includes(args.configuration.reportType) || !args.metadata.formats?.includes(args.configuration.format) || args.configuration.columns.some(key => !args.metadata.columns?.includes(key))) return reportFailure('The selected report configuration is not supported by the current metadata.');
         const result = await baseQuery({ url: '/admin/reports/preview', method: 'POST', body: { ...args.configuration, page: args.page, limit: args.limit } });
@@ -145,7 +145,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
     createAdminReportExport: builder.mutation({
       async queryFn({ configuration, owner, role }, api, _options, baseQuery) {
         baseQuery = scopedReportQuery(baseQuery, api, { owner, role });
-        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return reportFailure('Your session changed. Reload before exporting.');
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return reportFailure('Your session changed. Reload before exporting.');
         if (configuration.reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
         const result = await baseQuery({ url: '/admin/reports/exports', method: 'POST', body: { configuration } });
         if (result.error) return result;
@@ -156,7 +156,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
     saveAdminReportTemplate: builder.mutation({
       async queryFn({ name, configuration, owner, role }, api, _options, baseQuery) {
         baseQuery = scopedReportQuery(baseQuery, api, { owner, role });
-        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken || !reportText(name)) return reportFailure('Sign in and enter a template name.');
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn || !reportText(name)) return reportFailure('Sign in and enter a template name.');
         if (configuration.reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
         const result = await baseQuery({ url: '/admin/reports/templates', method: 'POST', body: { name: name.trim(), configuration } });
         if (result.error) return result;
@@ -167,7 +167,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
     scheduleAdminReport: builder.mutation({
       async queryFn({ name, reportType, frequency, recipients, configuration, owner, role }, api, _options, baseQuery) {
         baseQuery = scopedReportQuery(baseQuery, api, { owner, role });
-        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return reportFailure('Your session changed. Reload before scheduling.');
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return reportFailure('Your session changed. Reload before scheduling.');
         if (reportType === 'audit' && api.getState().auth.admin?.role !== 'SUPER_ADMIN') return reportFailure('Audit reports require Super Admin access.');
         if (!reportText(name) || !['DAILY', 'WEEKLY', 'MONTHLY'].includes(frequency) || !validReportEmails(recipients)) return reportFailure('Choose a supported frequency and valid email recipients.');
         const result = await baseQuery({ url: '/admin/reports/schedules', method: 'POST', body: { name, reportType, frequency, recipients, timezone: 'Africa/Lagos', configuration } });
@@ -181,7 +181,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
       serializeQueryArgs: serializeReportQuery,
       async queryFn({ file, owner, role }, api, _options, baseQuery) {
         baseQuery = scopedReportQuery(baseQuery, api, { owner, role });
-        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken || !reportText(file?.id) || file.status !== 'COMPLETED') return reportFailure('A completed report export is required.');
+        if (owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn || !reportText(file?.id) || file.status !== 'COMPLETED') return reportFailure('A completed report export is required.');
         const result = await baseQuery({ url: '/admin/reports/exports/' + encodeURIComponent(file.id) + '/download', responseHandler: async (response) => {
           if (response.ok) return response.blob();
           try { return JSON.parse(await response.text()); } catch { return { message: 'Unable to download the report. It may have expired.' }; }
@@ -210,7 +210,7 @@ export const reportsApi = baseApi.enhanceEndpoints({ addTagTypes: reportTags }).
       serializeQueryArgs: serializeReportQuery,
       async queryFn(args, api, _options, baseQuery) {
         baseQuery = scopedReportQuery(baseQuery, api, args);
-        if (args?.owner !== api.getState().auth.admin?.id || !api.getState().auth.accessToken) return directoryError();
+        if (args?.owner !== api.getState().auth.admin?.id || !api.getState().auth.signedIn) return directoryError();
         const [forwarders, truckers] = await Promise.all([
           readDirectory(baseQuery, '/admin/users/forwarders', {}, api),
           readDirectory(baseQuery, '/admin/users/truckers', { truckerType: 'COMPANY' }, api),

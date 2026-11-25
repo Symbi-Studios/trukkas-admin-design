@@ -209,7 +209,7 @@ export const companiesApi = baseApi.injectEndpoints({
     getAdminCompanyPerformance: builder.query({
       serializeQueryArgs: serializeCompanyQuery,
       async queryFn({ owner, role, all = false }, api, _options, baseQuery) {
-        const current = () => !api.signal.aborted && Boolean(owner && api.getState().auth.accessToken) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const current = () => !api.signal.aborted && Boolean(owner && api.getState().auth.signedIn) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
         const rows = [], seen = new Set(), limit = all ? 100 : 5;
         let total = null, pages = 1;
         try {

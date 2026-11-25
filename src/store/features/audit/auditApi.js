@@ -25,7 +25,7 @@ function scopedAuditQuery(baseQuery, api, args = {}) {
   const auth = api.getState().auth, owner = auth.admin?.id, role = auth.admin?.role;
   const current = () => {
     const next = api.getState().auth;
-    return !api.signal.aborted && Boolean(next.accessToken && owner) && role === 'SUPER_ADMIN' && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
+    return !api.signal.aborted && Boolean(next.signedIn && owner) && role === 'SUPER_ADMIN' && next.admin?.id === owner && next.admin?.role === role && (args.owner == null || args.owner === owner) && (args.role == null || args.role === role);
   };
   return async request => {
     if (!current()) return permissionError();

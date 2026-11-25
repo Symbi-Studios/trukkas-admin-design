@@ -29,7 +29,7 @@ function points(value, minimum = 1) {
 const ids = (value) => Array.isArray(value) && value.every((id) => text(id)) && new Set(value).size === value.length ? value : null;
 function sessionCheck(api) {
   const account = api.getState().auth.admin;
-  return () => Boolean(account?.id) && !api.signal.aborted && Boolean(api.getState().auth.accessToken)
+  return () => Boolean(account?.id) && !api.signal.aborted && Boolean(api.getState().auth.signedIn)
     && api.getState().auth.admin === account;
 }
 function overview(response) {

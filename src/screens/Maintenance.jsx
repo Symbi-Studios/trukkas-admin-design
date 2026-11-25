@@ -20,7 +20,7 @@ import "./Maintenance.css";
  * servicing; admins approve requests, verify completions and own exceptions.
  */
 export function Maintenance() {
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const owner = useSelector((state) => state.auth.admin?.id);
   const role = useSelector((state) => state.auth.admin?.role);
   const canWrite = ["SUPER_ADMIN", "OPS_ADMIN"].includes(role);

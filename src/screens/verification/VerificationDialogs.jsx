@@ -20,7 +20,7 @@ const toLocalInput = (raw) => {
 };
 
 function useAdmins() {
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const me = useSelector((state) => state.auth.admin?.id);
   const query = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated });
   const admins = (query.currentData || []).filter((agent) => agent.isActive !== false);

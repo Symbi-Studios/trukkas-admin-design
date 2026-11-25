@@ -7,7 +7,7 @@ import { getApiErrorMessage } from '../../api/getApiErrorMessage.js';
 
 export function useRoleOperations() {
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const owner = admin?.id;
   const canRead = Boolean(owner && authenticated && ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(admin?.role));
   const access = useGetAdminRoleAccessLevelsQuery({ owner }, { skip: !canRead, refetchOnMountOrArgChange: true });

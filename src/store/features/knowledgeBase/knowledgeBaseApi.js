@@ -157,7 +157,7 @@ export const knowledgeBaseApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminK
   endpoints: (builder) => ({
     getAdminKnowledgeAnalytics: builder.query({
       async queryFn({ owner, role, period = 'thisMonth', interval = 'day' }, api, _options, baseQuery) {
-        const current = () => !api.signal.aborted && Boolean(owner && api.getState().auth.accessToken) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const current = () => !api.signal.aborted && Boolean(owner && api.getState().auth.signedIn) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
         if (!current()) return failure('The session changed. Reload before continuing.');
         if (!KNOWLEDGE_ANALYTICS_PERIODS.some(option => option.value === period) || !KNOWLEDGE_ANALYTICS_INTERVALS.some(option => option.value === interval)) return failure('Choose a supported analytics period and interval.');
         const result = await baseQuery({ url: '/admin/knowledge-base/analytics', params: { period, interval } });
