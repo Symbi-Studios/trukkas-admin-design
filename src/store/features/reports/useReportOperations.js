@@ -9,7 +9,7 @@ import { useCreateAdminReportExportMutation, useSaveAdminReportTemplateMutation,
 
 export function useReportSession() {
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const role = admin?.role, key = [admin?.id, role, authenticated].join(':');
   return { admin, owner: admin?.id, role, authenticated, key };
 }

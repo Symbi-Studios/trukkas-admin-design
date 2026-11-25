@@ -14,7 +14,7 @@ import './Support.css';
 const blank={title:'',category:'',subcategory:'',status:'Draft',summary:'',content:'',visibility:null,featured:null,feedback:null,related:null,seoTitle:'',metaDescription:'',tags:[],attachments:[]};
 export function KnowledgeArticleForm({editing=false}){
  const navigate=useNavigate();const params=useParams();const search=useSearchParams();const articleId=search.get('articleId')||params.articleId;
- const admin=useSelector(state=>state.auth.admin);const authenticated=useSelector(state=>Boolean(state.auth.accessToken));
+ const admin=useSelector(state=>state.auth.admin);const authenticated=useSelector(state=>Boolean(state.auth.signedIn));
  const detail=useGetAdminKnowledgeArticleDetailQuery(articleId,{skip:!editing||!authenticated||!articleId});const existing=authenticated&&!detail.error?detail.currentData:undefined;
  const [createArticle]=useCreateAdminKnowledgeArticleMutation();const [updateArticle]=useUpdateAdminKnowledgeArticleMutation();const [uploadAttachments,{isLoading:uploading}]=useUploadAdminKnowledgeAttachmentsMutation();const [tagDraft,setTagDraft]=useState('');const fileInput=useRef(null);const contentInput=useRef(null);const uploadLock=useRef(false);const baseline=useRef(null);
  const [conflict,setConflict]=useState(false);const [editor,setForm]=useState(()=>editing?knowledgeEditorValues(emptyKnowledgeArticle):blank);const [saving,setSaving]=useState(false);const [toast,setToast]=useState('');const initialized=useRef(null);const saveLock=useRef(false);const currentId=useRef(articleId);currentId.current=articleId;

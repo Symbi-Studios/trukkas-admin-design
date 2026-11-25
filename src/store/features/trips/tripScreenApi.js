@@ -10,7 +10,7 @@ const arrivals = new Set(['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKUP_COMPLETED
 const path = (id) => '/admin/trips/' + encodeURIComponent(id);
 function current(api, owner, role) {
   const auth = api.getState().auth;
-  return !api.signal.aborted && Boolean(auth.accessToken) && auth.admin?.id === owner && auth.admin?.role === role && allowed.has(role);
+  return !api.signal.aborted && Boolean(auth.signedIn) && auth.admin?.id === owner && auth.admin?.role === role && allowed.has(role);
 }
 function transport(api, baseQuery, owner, role) {
   return async (request) => {

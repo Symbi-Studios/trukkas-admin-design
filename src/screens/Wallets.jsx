@@ -25,13 +25,13 @@ const EMPTY = [];
 
 export function Wallets() {
   const owner = useSelector((state) => state.auth.admin?.id), role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   return <EscrowScreen key={String(owner) + ":" + String(role) + ":" + authenticated} />;
 }
 
 function EscrowScreen() {
   const role = useSelector((state) => state.auth.admin?.role), owner = useSelector((state) => state.auth.admin?.id);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);
   const overviewQuery = useGetAdminEscrowOverviewQuery({ owner, role, ...statsRange }, { skip: !authenticated, refetchOnMountOrArgChange: true });

@@ -7,7 +7,7 @@ import { companyError } from '../store/features/companies/companiesApi.js';
 import { useGetAdminCompanyDocumentPreviewQuery, useReviewAdminCompanyDocumentMutation } from '../store/features/companies/companyDocumentsApi.js';
 export function CompanyDocumentDialog({ companyId, document, onClose, onDone }) {
   const owner = useSelector(state => state.auth.admin?.id), role = useSelector(state => state.auth.admin?.role);
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const preview = useGetAdminCompanyDocumentPreviewQuery({ companyId, id: document.id, url: document.url, owner }, { skip: !authenticated || !owner || !document.url });
   const previewUrl = preview.error ? null : preview.currentData?.url;
   const [review, state] = useReviewAdminCompanyDocumentMutation();

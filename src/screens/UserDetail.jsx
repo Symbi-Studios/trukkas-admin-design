@@ -38,7 +38,7 @@ export function UserDetail() {
   const source = search.get('source') || 'user';
   const admin = useSelector((state) => state.auth.admin);
   const role = admin?.role;
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const navigate = useNavigate();
   const permitted = source !== 'admin' || role === 'SUPER_ADMIN';
   const query = useGetManagedUserProfileQuery({ id, source, owner: admin?.id }, { skip: !authenticated || !id || !permitted, refetchOnMountOrArgChange: true });

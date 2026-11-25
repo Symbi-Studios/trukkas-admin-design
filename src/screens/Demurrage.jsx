@@ -35,13 +35,13 @@ const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos",
 
 export function Demurrage() {
   const owner = useSelector((state) => state.auth.admin?.id), role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   return <DemurrageScreen key={String(owner) + ":" + String(role) + ":" + authenticated} />;
 }
 
 function DemurrageScreen() {
   const owner = useSelector((state) => state.auth.admin?.id), role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const scope = { owner, role }, active = useRef(true);
   const navigate = useNavigate();
   const directoryQuery = useGetAdminDemurrageDirectoryQuery(scope, { skip: !authenticated });

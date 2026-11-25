@@ -38,7 +38,7 @@ function exportCsv(rows){const head=['Title','Category','Author','Status','Views
 export function KnowledgeBase(){
   const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
- const navigate=useNavigate();const authenticated=useSelector(state=>Boolean(state.auth.accessToken));const tab = 'All Articles';const [q,setQ]=usePageSearchState('', () => setPage(1));const [category,setCategory]=useState('All');const [status,setStatus]=useState('All');const [author,setAuthor]=useState('All');const [page,setPage]=useState(1);const [tip,setTip]=useState(true);const [selected,setSelected]=useState([]);
+ const navigate=useNavigate();const authenticated=useSelector(state=>Boolean(state.auth.signedIn));const tab = 'All Articles';const [q,setQ]=usePageSearchState('', () => setPage(1));const [category,setCategory]=useState('All');const [status,setStatus]=useState('All');const [author,setAuthor]=useState('All');const [page,setPage]=useState(1);const [tip,setTip]=useState(true);const [selected,setSelected]=useState([]);
  const [search,setSearch]=useState('');
  useEffect(()=>{const timer=setTimeout(()=>setSearch(q.trim()),250);return ()=>clearTimeout(timer)},[q]);
  const directory=useGetAdminKnowledgeArticleDirectoryQuery(undefined,{skip:!authenticated});

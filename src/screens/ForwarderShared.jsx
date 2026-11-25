@@ -87,7 +87,7 @@ export function JobStatusFilter({ value, onChange }) {
 export function ForwarderJobDrawer({ job, onClose, onOpen }) {
   const owner = useSelector((state) => state.auth.admin?.id);
   const role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const detailQuery = useGetAdminJobScreenQuery({ id: job.detailId, owner, role }, { skip: !authenticated || !job.detailId, refetchOnMountOrArgChange: true });
   const detail = detailQuery.error ? null : detailQuery.currentData;
   const loading = detailQuery.isFetching && !detail;

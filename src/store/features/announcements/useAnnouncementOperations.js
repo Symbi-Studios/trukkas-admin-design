@@ -3,7 +3,7 @@ import { useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { useChangeAdminAnnouncementMutation } from './announcementsApi.js';
 export function useAnnouncementOperations() {
-  const admin = useSelector((state) => state.auth.admin), authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const admin = useSelector((state) => state.auth.admin), authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const [change, mutation] = useChangeAdminAnnouncementMutation();
   const pending = useRef(false), uncertain = useRef(false), current = useRef(admin); current.current = admin;
   async function perform(args) {

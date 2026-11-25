@@ -8,7 +8,7 @@ import { useLazyGetAdminVerificationDownloadQuery, saveVerificationDocument, can
 export function useVerificationOperations() {
   const owner = useSelector((state) => state.auth.admin?.id);
   const role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const [requestDownload, downloadState] = useLazyGetAdminVerificationDownloadQuery();
   const scope = [owner, role, authenticated].join(':');
   const pending = useRef(false), currentScope = useRef(scope), active = useRef(true);

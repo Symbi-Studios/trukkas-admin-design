@@ -222,7 +222,7 @@ function ActivityTab({ user, canRead }) {
 
 export function AdminProfile() {
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const canRead = authenticated && Boolean(admin?.id);
   const query = useGetAdminSelfProfileQuery({ owner: admin?.id }, { skip: !authenticated || !admin?.id });
   const options = { skip: !authenticated || !admin?.id };

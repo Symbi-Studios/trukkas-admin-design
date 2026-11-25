@@ -54,7 +54,7 @@ export function SupportTickets() {
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const searchParams = useSearchParams();
   const assignedTo = searchParams.get('assignedTo') === 'me' ? 'me' : undefined;
   const [q, setQ] = usePageSearchState("", () => setPage(1));

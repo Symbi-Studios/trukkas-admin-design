@@ -12,7 +12,7 @@ import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 import './Engagement.css';
 export function AnnouncementDetail(){
  const navigate=useNavigate(),params=useParams(),search=useSearchParams(),announcementId=search.get('announcementId')||params.announcementId;
- const owner=useSelector(state=>state.auth.admin?.id),authenticated=useSelector(state=>Boolean(state.auth.accessToken));
+ const owner=useSelector(state=>state.auth.admin?.id),authenticated=useSelector(state=>Boolean(state.auth.signedIn));
  const query=useGetAdminAnnouncementQuery({id:announcementId,owner},{skip:!authenticated,refetchOnMountOrArgChange:true});
  const a=authenticated&&!query.error?query.currentData:null;
  const operations=useAnnouncementOperations(),publication={isLoading:operations.saving};

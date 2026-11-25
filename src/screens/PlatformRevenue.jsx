@@ -27,7 +27,7 @@ const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos",
 
 export function PlatformRevenue() {
   const owner = useSelector((state) => state.auth.admin?.id);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const operations = useFeeOperations();
   const [statsPeriodKey, setStatsPeriodKey] = useState(DEFAULT_STATS_PERIOD);
   const statsRange = useMemo(() => statsPeriodRange(statsPeriodKey), [statsPeriodKey]);

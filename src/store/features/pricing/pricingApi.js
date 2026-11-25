@@ -161,7 +161,7 @@ async function changePricingRecord({ row, action, reason }, api, baseQuery) {
   const admin = api.getState().auth.admin;
   if (!canChangePricing(row, action, admin)) return { error: { status: 'CUSTOM_ERROR', error: 'Your role or this pricing status does not allow this action.' } };
   if (action === 'reject' && (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500)) return { error: { status: 'CUSTOM_ERROR', error: 'Enter a reason of up to 500 characters.' } };
-  const sameSession = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
+  const sameSession = () => !api.signal.aborted && api.getState().auth.signedIn && api.getState().auth.admin?.id === admin.id && api.getState().auth.admin?.role === admin.role;
   if (!sameSession()) return { error: { status: 'CUSTOM_ERROR', error: 'The session changed. Refresh before continuing.' } };
   const path = '/admin/pricing/' + row.entity + '/' + encodeURIComponent(row.id);
   const before = await pricingRecordSnapshot(row.entity, row.id, baseQuery, api.signal);
@@ -309,7 +309,7 @@ async function savePricingSetting(source, args, api, baseQuery) {
     const admin = api.getState().auth.admin;
     const check = () => {
       const auth = api.getState().auth;
-      if (api.signal.aborted || !admin?.id || !auth.accessToken || auth.admin?.id !== admin.id || auth.admin?.role !== admin.role) throw new Error('The session changed. Refresh before continuing.');
+      if (api.signal.aborted || !admin?.id || !auth.signedIn || auth.admin?.id !== admin.id || auth.admin?.role !== admin.role) throw new Error('The session changed. Refresh before continuing.');
     };
     check();
     if (source === 'config' && admin.role !== 'SUPER_ADMIN') return failed('Only Super Admins can change platform pricing settings.');
@@ -384,7 +384,7 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
     }),
     getAdminPricingServiceFormOptions: builder.query({
       async queryFn({ owner, role }, api, _options, baseQuery) {
-        const current = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken && owner) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const current = () => !api.signal.aborted && Boolean(api.getState().auth.signedIn && owner) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
         try {
           if (!current()) throw new Error('The session changed. Reopen Pricing before continuing.');
           const result = await baseQuery({ url: '/admin/pricing/options' });
@@ -396,7 +396,7 @@ export const pricingApi = baseApi.enhanceEndpoints({ addTagTypes: ['AdminPricing
     }),
     saveAdminPricingService: builder.mutation({
       async queryFn({ owner, role, id, fields, expectedUpdatedAt }, api, _options, baseQuery) {
-        const current = () => !api.signal.aborted && Boolean(api.getState().auth.accessToken && owner) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
+        const current = () => !api.signal.aborted && Boolean(api.getState().auth.signedIn && owner) && api.getState().auth.admin?.id === owner && api.getState().auth.admin?.role === role;
         const fail = error => ({ error: { status: 'CUSTOM_ERROR', error } });
         try {
           if (!current() || !pricingServiceRoles.has(role)) return fail('Your session or admin role cannot save service pricing.');

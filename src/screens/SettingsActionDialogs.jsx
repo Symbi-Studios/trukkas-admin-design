@@ -81,7 +81,7 @@ export function SettingsEventsDialog({ admin, type, onClose }) {
 export function SettingsSystemLogsDialog({ admin, onClose }) {
   const [page, setPage] = useState(1);
   const activeAdmin = useSelector(state => state.auth.admin);
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const currentSession = activeAdmin === admin && authenticated;
   const query = useGetAdminSettingsSystemLogsQuery({ owner: admin.id, page, limit: 20 }, { skip: !currentSession, refetchOnMountOrArgChange: true });
   const data = currentSession && !query.error ? query.currentData : null;

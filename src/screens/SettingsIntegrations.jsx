@@ -9,7 +9,7 @@ import { useGetAdminSettingsIntegrationsQuery } from '../store/features/settings
 
 export function SettingsIntegrations() {
   const owner = useSelector(state => state.auth.admin?.id);
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const skip = !owner || !authenticated;
   const query = useGetAdminSettingsIntegrationsQuery({ owner }, { skip, refetchOnMountOrArgChange: true });
   const rows = skip || query.error ? null : query.currentData;

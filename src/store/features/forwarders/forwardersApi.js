@@ -131,13 +131,13 @@ function confirmedProfileUpdate(dto, id, changes, expectedVersion) {
 const unconfirmed = message => ({ error: { status: 'CUSTOM_ERROR', error: message, saveUnconfirmed: true } });
 async function writeForwarder(baseQuery, api, request, confirm) {
   const auth = api.getState().auth, owner = auth.admin?.id;
-  if (!auth.accessToken || !owner || api.signal.aborted) return failure('An active admin session is required.');
+  if (!auth.signedIn || !owner || api.signal.aborted) return failure('An active admin session is required.');
   const result = await baseQuery(request);
   if (result.error) {
     const uncertain = ['FETCH_ERROR', 'TIMEOUT_ERROR', 'PARSING_ERROR'].includes(result.error.status) || Number(result.error.status) >= 500;
     return { error: { ...result.error, ...(uncertain ? { saveUnconfirmed: true } : {}) } };
   }
-  if (api.signal.aborted || api.getState().auth.admin?.id !== owner || !api.getState().auth.accessToken) return unconfirmed('The session changed after saving. Close this form and refresh before trying again.');
+  if (api.signal.aborted || api.getState().auth.admin?.id !== owner || !api.getState().auth.signedIn) return unconfirmed('The session changed after saving. Close this form and refresh before trying again.');
   const dto = unwrapApiResponseData(result.data);
   return confirm(dto) ? { data: dto } : unconfirmed('The request was sent, but the saved result could not be confirmed. Close this form and refresh before trying again.');
 }
@@ -231,7 +231,7 @@ export const forwardersApi = baseApi.injectEndpoints({
     }),
     downloadAdminForwarderReport: builder.query({
       async queryFn({ owner } = {}, api, _options, baseQuery) {
-        const sameSession = () => !api.signal.aborted && owner && api.getState().auth.admin?.id === owner && api.getState().auth.accessToken;
+        const sameSession = () => !api.signal.aborted && owner && api.getState().auth.admin?.id === owner && api.getState().auth.signedIn;
         if (!sameSession()) return failure('Sign in before downloading the forwarders report.');
         const result = await baseQuery({ url: '/admin/users/forwarders/report', params: { format: 'pdf' }, headers: { Accept: 'application/pdf' }, responseHandler: async response => {
           if (response.ok) return response.blob();

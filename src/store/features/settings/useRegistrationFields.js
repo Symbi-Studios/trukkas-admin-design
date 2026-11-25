@@ -8,7 +8,7 @@ import { registrationFieldsError } from './registrationFieldsContracts.js';
 const EMPTY = [];
 export function useRegistrationFields(entity) {
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const owner = admin?.id, skip = !owner || !authenticated;
   const options = { skip, refetchOnMountOrArgChange: true };
   const list = useGetAdminRegistrationFieldsQuery({ owner, entity }, options);

@@ -81,7 +81,7 @@ export function MaintenanceDetail() {
   const params = useParams();
   const search = useSearchParams();
   const maintenanceId = search.get("id") || params.maintenanceId;
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const owner = useSelector(state => state.auth.admin?.id);
   const role = useSelector(state => state.auth.admin?.role);
   const canWrite = ["SUPER_ADMIN", "OPS_ADMIN"].includes(role);

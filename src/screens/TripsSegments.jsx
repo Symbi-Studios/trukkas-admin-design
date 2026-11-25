@@ -95,7 +95,7 @@ function TripScreenMenu({ anchor, items, onClose }) {
 
 export function TripsSegments() {
   const owner = useSelector((s) => s.auth.admin?.id), role = useSelector((s) => s.auth.admin?.role);
-  const authenticated = useSelector((s) => Boolean(s.auth.accessToken && s.auth.admin?.id));
+  const authenticated = useSelector((s) => Boolean(s.auth.signedIn && s.auth.admin?.id));
   return <TripsSegmentsContent key={[owner, role, authenticated].join(":")} owner={owner} role={role} authenticated={authenticated} />;
 }
 function TripsSegmentsContent({ owner, role, authenticated }) {

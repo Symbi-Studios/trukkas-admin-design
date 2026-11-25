@@ -21,7 +21,7 @@ function savedOnlyNotice(result) {
 
 export function useSettingsEditor(page) {
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const owner = admin?.id, role = admin?.role, personal = page === 'notifications';
   const skip = !owner || !authenticated;
   const navigate = useNavigate();

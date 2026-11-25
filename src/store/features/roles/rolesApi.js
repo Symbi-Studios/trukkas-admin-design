@@ -5,7 +5,7 @@ export { roleSummary, emptyRoleDetail, roleCount } from './roleContracts.js';
 export const ROLE_CAPABILITIES = Object.freeze({ create: true, edit: true, duplicate: true, delete: true, matrix: true, preview: true });
 const admins = ['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'];
 const writers = ['SUPER_ADMIN', 'OPS_ADMIN'];
-const owned = (api, owner, account) => Boolean(owner && api.getState().auth.admin?.id === owner && api.getState().auth.accessToken && admins.includes(api.getState().auth.admin?.role) && !api.signal.aborted && api.getState().auth.admin === account);
+const owned = (api, owner, account) => Boolean(owner && api.getState().auth.admin?.id === owner && api.getState().auth.signedIn && admins.includes(api.getState().auth.admin?.role) && !api.signal.aborted && api.getState().auth.admin === account);
 const sessionError = () => roleFailure('An active admin session is required. Sign in again.');
 const path = (id) => '/admin/roles/' + encodeURIComponent(id);
 const signature = (catalog) => JSON.stringify(catalog.modules.map((m) => [m.key, m.uiGroupKey, m.actions.map((a) => a.key)]));

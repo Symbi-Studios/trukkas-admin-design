@@ -24,7 +24,7 @@ export function TicketDetail(){
   const ticketId = route.ticketId || search.get('ticketId') || '';
   const navigate = useNavigate();
   const admin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const query = useGetAdminSupportTicketDetailQuery(ticketId, { skip: !authenticated || !ticketId, refetchOnMountOrArgChange: true });
   const agentsQuery = useGetAdminTicketAgentsQuery(undefined, { skip: !authenticated });
   const agents = useMemo(() => authenticated && !agentsQuery.error ? agentsQuery.currentData || [] : [], [authenticated, agentsQuery.currentData, agentsQuery.error]);

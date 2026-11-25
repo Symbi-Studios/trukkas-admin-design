@@ -276,7 +276,7 @@ function JobDrawer({ job, onClose, onAction, canDeliver, actionBusy }) {
   const navigate = useNavigate();
   const owner = useSelector((state) => state.auth.admin?.id);
   const role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const detailQuery = useGetAdminJobScreenQuery({ id: job.id, owner, role }, { skip: !authenticated || !job.id, refetchOnMountOrArgChange: true });
   const detail = detailQuery.error ? null : detailQuery.currentData;
   const company = job.truckingCompany || job.truckCompany || detail?.truckingCompany || null;

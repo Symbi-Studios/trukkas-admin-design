@@ -125,7 +125,7 @@ export function Forwarders() {
   const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
   const [tableView, setTableView] = useState('list');
   const navigate = useNavigate();
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const owner = useSelector(state => state.auth.admin?.id);
   const directoryQuery = useGetAdminForwarderDirectoryQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });
   const statsQuery = useGetAdminForwarderStatsQuery(owner, { skip: !authenticated, refetchOnMountOrArgChange: true });

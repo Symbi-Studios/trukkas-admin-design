@@ -23,7 +23,7 @@ import './Engagement.css';
 const PAGE_SIZE=8,TYPE_TONE={Praise:'success',Suggestion:'info',Issue:'danger',Other:'neutral'},TYPE_ICON={Praise:'message-square',Suggestion:'lightbulb',Issue:'triangle-alert',Other:'circle-help'};
 export function Feedback(){
   const [hideEmptyColumns, setHideEmptyColumns] = useState(false);
-  const [tableView, setTableView] = useState('list');const navigate=useNavigate();const owner=useSelector(state=>state.auth.admin?.id),authenticated=useSelector(state=>Boolean(state.auth.accessToken));const tab = 'All Feedback',[q,setQ]=usePageSearchState('', () => setPage(1)),[status,setStatus]=useState('All'),[type,setType]=useState('All'),[channel,setChannel]=useState('All'),[date,setDate]=useState(EMPTY_RANGE),[page,setPage]=useState(1),[period,setPeriod]=useState('Last 30 days'),[provide,setProvide]=useState(false),[form,setForm]=useState({title:'',body:'',type:'Suggestion'}),[toast,setToast]=useState('');
+  const [tableView, setTableView] = useState('list');const navigate=useNavigate();const owner=useSelector(state=>state.auth.admin?.id),authenticated=useSelector(state=>Boolean(state.auth.signedIn));const tab = 'All Feedback',[q,setQ]=usePageSearchState('', () => setPage(1)),[status,setStatus]=useState('All'),[type,setType]=useState('All'),[channel,setChannel]=useState('All'),[date,setDate]=useState(EMPTY_RANGE),[page,setPage]=useState(1),[period,setPeriod]=useState('Last 30 days'),[provide,setProvide]=useState(false),[form,setForm]=useState({title:'',body:'',type:'Suggestion'}),[toast,setToast]=useState('');
  const operations=useFeedbackOperations();
  const provideRequested=useSearchParams().get('action')==='provide';
  const [settings,setSettings]=useState(false);

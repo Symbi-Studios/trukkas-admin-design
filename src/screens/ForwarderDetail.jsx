@@ -51,7 +51,7 @@ export function ForwarderDetail() {
   const navigate = useNavigate(), params = useParams(), search = useSearchParams();
   const id = search.get('id') || params.forwarderId || '';
   const requestedTab = search.get('tab');
-  const authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const authenticated = useSelector(state => Boolean(state.auth.signedIn));
   const owner = useSelector(state => state.auth.admin?.id);
   const canViewActivity = useSelector((state) => state.auth.admin?.role) === 'SUPER_ADMIN';
   const [tab, setTab] = useState('Overview');

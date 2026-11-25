@@ -2,32 +2,18 @@ import { configureStore } from '@reduxjs/toolkit';
 import { baseApi } from './api/baseApi.js';
 import { authReducer } from './features/auth/authSlice.js';
 import { reportsReducer } from './features/reports/reportsSlice.js';
-import { persistAuth, readStoredAuth } from './features/auth/authStorage.js';
 
 // The App Router renders on the server too, so create a store per layout instance.
-export function makeStore() {
-  const storedAuth = readStoredAuth();
-  const store = configureStore({
+// `initialAdmin` comes from the httpOnly cookie, read by the root layout on the Next.js server.
+export function makeStore(initialAdmin = null) {
+  return configureStore({
     reducer: {
       auth: authReducer,
       reports: reportsReducer,
       [baseApi.reducerPath]: baseApi.reducer,
     },
-    preloadedState: storedAuth ? { auth: storedAuth } : undefined,
+    preloadedState: initialAdmin ? { auth: { admin: initialAdmin, signedIn: true } } : undefined,
     middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware),
-    // Keep tokens out of Redux DevTools history; persistence is handled below.
     devTools: false,
   });
-
-  if (typeof window !== 'undefined') {
-    let previousAuth = store.getState().auth;
-    store.subscribe(() => {
-      const nextAuth = store.getState().auth;
-      if (nextAuth === previousAuth) return;
-      previousAuth = nextAuth;
-      persistAuth(nextAuth);
-    });
-  }
-
-  return store;
 }

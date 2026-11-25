@@ -144,7 +144,7 @@ export function JobDetail({ jobId: requestedId }) {
   const params = useParams();
   const owner = useSelector((state) => state.auth.admin?.id);
   const role = useSelector((state) => state.auth.admin?.role);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken && state.auth.admin?.id));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn && state.auth.admin?.id));
   const jobId = typeof (requestedId ?? params.jobId) === "string" ? (requestedId ?? params.jobId).trim() : "";
   return <JobDetailContent key={[owner, role, jobId, authenticated].join(":")} jobId={jobId} owner={owner} role={role} authenticated={authenticated} />;
 }

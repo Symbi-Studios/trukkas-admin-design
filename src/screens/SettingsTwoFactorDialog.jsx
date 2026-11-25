@@ -8,7 +8,7 @@ import { getApiErrorMessage } from '../store/api/getApiErrorMessage.js';
 
 export function SettingsTwoFactorDialog({ admin, onClose }) {
   const activeAdmin = useSelector((state) => state.auth.admin);
-  const authenticated = useSelector((state) => Boolean(state.auth.accessToken));
+  const authenticated = useSelector((state) => Boolean(state.auth.signedIn));
   const allowed = activeAdmin === admin && authenticated;
   const query = useGetAdminTwoFactorQuery({ owner: admin.id }, { skip: !allowed, refetchOnMountOrArgChange: true });
   const [change] = useChangeAdminTwoFactorMutation();

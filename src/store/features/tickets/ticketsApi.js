@@ -165,7 +165,7 @@ async function readAll(baseQuery, url, collection, params = {}) {
 }
 const path = (id) => `/admin/support/threads/${encodeURIComponent(id)}`;
 const account = (api) => api.getState().auth.admin;
-const owns = (api, owner) => !api.signal.aborted && Boolean(api.getState().auth.accessToken && owner?.id && account(api)?.id === owner.id && account(api)?.role === owner.role);
+const owns = (api, owner) => !api.signal.aborted && Boolean(api.getState().auth.signedIn && owner?.id && account(api)?.id === owner.id && account(api)?.role === owner.role);
 const sessionError = () => failure('The admin session changed. Sign in and review the ticket again.', 401);
 async function readTicket(id, baseQuery) {
   if (!text(id)) return failure('A ticket ID is required.');

@@ -9,7 +9,7 @@ import { SERVICE_MOVEMENTS, SERVICE_CRITERIA, serviceFormFields, pricingServiceR
 import { usePublishPricing } from '../store/features/pricing/usePublishPricing.js';
 
 export function PricingServiceForm({ id, onClose, onDone }) {
-  const admin = useSelector(state => state.auth.admin), authenticated = useSelector(state => Boolean(state.auth.accessToken));
+  const admin = useSelector(state => state.auth.admin), authenticated = useSelector(state => Boolean(state.auth.signedIn));
   return <PricingServiceEditor key={[id, admin?.id, admin?.role, authenticated].join(':')} id={id} admin={admin} authenticated={authenticated} onClose={onClose} onDone={onDone} />;
 }
 

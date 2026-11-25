@@ -31,7 +31,7 @@ export function jobScreenDocumentUrl(v) {
 }
 function session(api, owner, role) {
   const auth = api.getState().auth;
-  return !api.signal.aborted && Boolean(auth.accessToken) && auth.admin?.id === owner && auth.admin?.role === role && roles.has(role);
+  return !api.signal.aborted && Boolean(auth.signedIn) && auth.admin?.id === owner && auth.admin?.role === role && roles.has(role);
 }
 function transport(api, baseQuery, owner, role) {
   return async (request) => {

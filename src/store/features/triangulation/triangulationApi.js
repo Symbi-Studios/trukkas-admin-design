@@ -155,7 +155,7 @@ export const triangulationApi = baseApi.injectEndpoints({
     reviewAdminTriangulationOpportunity: builder.mutation({
       async queryFn({ id, action, radiusKm, expectedVersion, reason, note }, api, _options, baseQuery) {
         const auth = api.getState().auth;
-        const current = () => !api.signal.aborted && api.getState().auth.accessToken && api.getState().auth.admin?.id === auth.admin?.id && api.getState().auth.admin?.role === auth.admin?.role;
+        const current = () => !api.signal.aborted && api.getState().auth.signedIn && api.getState().auth.admin?.id === auth.admin?.id && api.getState().auth.admin?.role === auth.admin?.role;
         const fail = (message) => ({ error: { status: 'CUSTOM_ERROR', error: message } });
         if (!current() || !['SUPER_ADMIN', 'OPS_ADMIN'].includes(auth.admin?.role)) return fail('This action is unavailable for your account.');
         if (!text(id) || !text(expectedVersion) || !['propose', 'reject'].includes(action)) return fail('Refresh the opportunity before continuing.');

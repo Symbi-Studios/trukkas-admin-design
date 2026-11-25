@@ -121,7 +121,7 @@ function BidsMetricsLoading() {
 
 export function BidsOffers() {
   const owner=useSelector((s)=>s.auth.admin?.id),role=useSelector((s)=>s.auth.admin?.role);
-  const authenticated=useSelector((s)=>Boolean(s.auth.accessToken&&s.auth.admin?.id));
+  const authenticated=useSelector((s)=>Boolean(s.auth.signedIn&&s.auth.admin?.id));
   return <BidsOffersContent key={[owner,role,authenticated].join(":")} owner={owner} role={role} authenticated={authenticated}/>;
 }
 function BidsOffersContent({owner,role,authenticated}) {

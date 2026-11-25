@@ -25,7 +25,7 @@ const STAGE_PILL = {
 export function VerificationDetail() {
   const { verificationId } = useParams();
   const search = useSearchParams();
-  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.signedIn)].join(':'));
   return <VerificationDetailScreen key={[scope, search.get('id') || verificationId, search.get('source')].join(':')} />;
 }
 

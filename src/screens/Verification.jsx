@@ -68,7 +68,7 @@ function FilterButton({ value, options, active, onChange }) {
 }
 
 export function Verification() {
-  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.accessToken)].join(':'));
+  const scope = useSelector(state => [state.auth.admin?.id, state.auth.admin?.role, Boolean(state.auth.signedIn)].join(':'));
   return <VerificationScreen key={scope} />;
 }
 

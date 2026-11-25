@@ -9,8 +9,8 @@ export const announcementUnavailable = (action) => window.alert(action + ' is no
 const failure = (message, status = 'CUSTOM_ERROR', writeSent = false) => ({ error: { status, error: message, data: { message, writeSent } } });
 function guard(api, owner) {
   const actor = api.getState().auth.admin;
-  if (!actor?.id || actor.id !== owner || !api.getState().auth.accessToken || !['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(actor.role)) throw new Error('Admin access is required. Reload after changing accounts.');
-  return () => { if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.accessToken) throw new Error('The admin session changed. Reload before continuing.'); };
+  if (!actor?.id || actor.id !== owner || !api.getState().auth.signedIn || !['SUPER_ADMIN', 'OPS_ADMIN', 'FINANCE_ADMIN'].includes(actor.role)) throw new Error('Admin access is required. Reload after changing accounts.');
+  return () => { if (api.signal.aborted || api.getState().auth.admin !== actor || !api.getState().auth.signedIn) throw new Error('The admin session changed. Reload before continuing.'); };
 }
 async function readDetail(baseQuery, id, check) {
   const result = await baseQuery({ url: ROOT + '/' + encodeURIComponent(id) }); check();
