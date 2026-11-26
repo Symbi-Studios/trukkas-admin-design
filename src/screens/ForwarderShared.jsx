@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import { Avatar, Badge, Banner, Button, CopyableId, DataTable, DrawerFacts, DrawerSection, DropdownMenu, EmptyState, FilterSelect, Icon, IconButton, RouteStack, SideDrawer, Skeleton, Timeline } from '../ds.js';
 import { forwarderMoney } from '../store/features/forwarders/forwardersApi.js';
 import { useGetAdminJobScreenQuery } from '../store/features/jobs/jobDetailApi.js';
-import { statusTone } from './JobDetail.jsx';
+import { statusTone } from '../domain/jobStatus';
 
 export const FORWARDER_STATUS_TONE = { Active: 'success', Pending: 'warning', Suspended: 'danger', Banned: 'danger' };
 export const VERIFICATION_TONE = { Verified: 'success', Pending: 'warning', Rejected: 'danger' };

@@ -6,7 +6,6 @@ import { FleetManagement } from './screens/FleetManagement.jsx';
 import { VerificationQueue } from './screens/verification/VerificationQueue.jsx';
 import { Wallets } from './screens/Wallets.jsx';
 import { Announcements } from './screens/Announcements.jsx';
-import { JobsTrips } from './screens/JobsTrips.jsx';
 import { TripsSegments } from './screens/TripsSegments.jsx';
 import { BidsOffers } from './screens/BidsOffers.jsx';
 import { DispatchCenter } from './screens/DispatchCenter.jsx';
@@ -60,7 +59,6 @@ const screens = {
   revenue: PlatformRevenue,
   rates: PlatformRates,
   announcements: Announcements,
-  jobs: JobsTrips,
   trips: TripsSegments,
   bids: BidsOffers,
   dispatch: DispatchCenter,

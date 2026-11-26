@@ -185,7 +185,8 @@ export function Documents({ query, queue, stats, error }: DocumentsProps) {
   const emptyKey: QueueTab = query.search ? "all" : query.tab;
 
   return (
-    <div className="documents-screen" style={{ opacity: pending ? 0.7 : 1, transition: "opacity 120ms" }}>
+    <div className="documents-screen">
+      <div className="tk-sr-only" role="status" aria-live="polite">{pending ? "Loading documents…" : ""}</div>
       <PageHeader
         crumbs={[{ label: "Operations" }, { label: "Documents" }]}
         title="Documents"
@@ -219,7 +220,9 @@ export function Documents({ query, queue, stats, error }: DocumentsProps) {
           search={<SearchField value={search} onChange={(event: { target: { value: string } }) => setSearch(event.target.value)} placeholder="Search documents…" title="Search by job number, route, company or file name" />}
           onClear={search ? () => { setSearch(""); go({ search: "", page: 1 }); } : undefined}
         />
-        {jobs.length ? (
+        {pending ? (
+          <RowsSkeleton />
+        ) : jobs.length ? (
           <DataTable columns={columns} rows={jobs} rowKey={(job: ReviewJobSummary) => job.id} onRowClick={open} tableLayout="fixed" />
         ) : (
           <EmptyState icon={query.tab === "awaiting" && !query.search ? "check-check" : "file-text"} {...EMPTY[emptyKey]} />
@@ -233,6 +236,19 @@ export function Documents({ query, queue, stats, error }: DocumentsProps) {
           onPageSize={(value: number) => go({ limit: value, page: 1 })}
         />
       </Card>
+    </div>
+  );
+}
+
+/** Grey rows where the table will be, while a tab, a search or a page change is loading */
+function RowsSkeleton() {
+  return (
+    <div aria-hidden="true" style={{ display: "grid", gap: 18, padding: "var(--tk-space-4) var(--tk-card-pad-tight)" }}>
+      {Array.from({ length: 8 }, (_, row) => (
+        <div key={row} style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 16 }}>
+          {Array.from({ length: 6 }, (_, cell) => <Skeleton key={cell} height={12} width={`${50 + ((row * 7 + cell * 13) % 40)}%`} />)}
+        </div>
+      ))}
     </div>
   );
 }

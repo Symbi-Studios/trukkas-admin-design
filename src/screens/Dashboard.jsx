@@ -20,7 +20,7 @@ import {
 } from "../ds.js";
 import { formatNaira } from "../mock/format.js";
 import { formatNairaShort } from "../lib/money.js";
-import { statusTone } from "./JobDetail.jsx";
+import { statusTone } from "../domain/jobStatus";
 import { useGetAdminOverviewQuery } from "../store/features/overview/overviewApi.js";
 import styles from "./Dashboard.module.css";
 

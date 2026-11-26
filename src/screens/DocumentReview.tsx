@@ -128,10 +128,15 @@ export function DocumentReview({ job, error, jobId, requestedDoc, nextJob }: Doc
   }, [units, select]);
 
   // A failed action means the screen may be out of date: show the reason and ask the server for fresh data.
+  // A 409 means someone else got there first (another admin, or the forwarder uploaded a new file).
+  // The backend's message says which; nothing was saved, so we drop what was typed for the old file.
   const failed = (problem?: ApiError | null) => {
-    setActionError(problem?.code === 'DOCUMENTS_LOCKED'
-      ? 'These documents are locked because the job is already validated.'
-      : problem?.message || 'The review couldn’t be saved. Try again.');
+    setActionError(problem?.message || 'The review couldn’t be saved. Try again.');
+    if (problem?.status === 409) {
+      setRejecting(false);
+      setReason('');
+      setViewVersion(null);
+    }
     router.refresh();
   };
 
@@ -142,7 +147,7 @@ export function DocumentReview({ job, error, jobId, requestedDoc, nextJob }: Doc
     if (isFinal && !confirmed) { setConfirmFinal(doc); return; }
     setBusy('approve');
     try {
-      const result = await approveDocumentAction({ jobId: job.id, documentId: doc.id });
+      const result = await approveDocumentAction({ jobId: job.id, documentId: doc.id, version: doc.version });
       setConfirmFinal(null);
       if (!result.ok) { failed(result.error); return; }
       if (isFinal) {
@@ -166,7 +171,7 @@ export function DocumentReview({ job, error, jobId, requestedDoc, nextJob }: Doc
     const doc = selected;
     setBusy('reject');
     try {
-      const result = await rejectDocumentAction({ jobId: job.id, documentId: doc.id, reason: fullReason });
+      const result = await rejectDocumentAction({ jobId: job.id, documentId: doc.id, reason: fullReason, version: doc.version });
       if (!result.ok) { failed(result.error); return; }
       showToast(`${rejectionPrefix(doc)} rejected. The forwarder will see your reason.`, { tone: 'info' });
       setRejecting(false);
@@ -248,7 +253,7 @@ export function DocumentReview({ job, error, jobId, requestedDoc, nextJob }: Doc
               {counts.missing > 0 && <span className="is-rejected">{counts.missing} not uploaded</span>}
             </small>
           </div>
-          <Button variant="outline" size="sm" iconRight="arrow-up-right" onClick={() => navigate(`/jobs/detail?id=${encodeURIComponent(job.id)}`)}>Open job</Button>
+          <Button variant="outline" size="sm" iconRight="arrow-up-right" onClick={() => navigate(`/jobs/${encodeURIComponent(job.id)}`)}>Open job</Button>
         </div>
       </header>
 

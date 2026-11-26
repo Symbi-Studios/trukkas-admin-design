@@ -21,7 +21,7 @@ import {
 } from "../ds.js";
 import { formatNaira } from "../mock/format.js";
 import { DEFAULT_STATS_PERIOD, statsPeriod, statsPeriodRange } from "../domain/statsPeriod.js";
-import { statusTone } from "./JobDetail.jsx";
+import { statusTone } from "../domain/jobStatus";
 import { useGetAdminOverviewQuery } from "../store/features/overview/overviewApi.js";
 import { useGetAdminJobStatsQuery } from "../store/features/jobs/jobsApi.js";
 import { useGetAdminTripStatsQuery } from "../store/features/trips/tripsApi.js";
