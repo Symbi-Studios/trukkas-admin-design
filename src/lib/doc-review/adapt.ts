@@ -1,6 +1,7 @@
 // Turns the backend's document-review responses into the shape the screens use.
 // Pure functions, no network: easy to test.
 import { UNIT_DOCUMENTS, countDocuments, reviewStatusFor } from '@/domain/containerReview';
+import { movementLabel } from '@/domain/movement';
 import type {
   BackendDocument,
   BackendItemGroup,
@@ -39,8 +40,9 @@ function unitLabel(item: BackendItemRef | null | undefined, fallback: string): s
   return item?.containerNumber || item?.rackNumber || item?.label || fallback;
 }
 
-function movementOf(dto: { movementType?: BackendMovement | null; jobType?: { label: string } | null }): string {
-  return dto.movementType?.label ?? dto.jobType?.label ?? '';
+function movementOf(dto: { movementType?: BackendMovement | null; jobType?: { code?: string; label: string } | null }): string {
+  const movement = dto.movementType ?? dto.jobType ?? null;
+  return movement ? movementLabel(movement.code, movement.label) : '';
 }
 
 // The backend sends earlier versions newest first. The screens want oldest first.

@@ -12,6 +12,8 @@ interface ApiOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined | null>;
+  /** "text" for CSV exports: the data is the raw text, not JSON */
+  as?: 'json' | 'text';
 }
 
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<ApiResult<T>> {
@@ -32,6 +34,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
       cache: 'no-store', // admin data is per person and must always be fresh
       headers: {
         Authorization: `Bearer ${token}`,
+        ...(options.as === 'text' ? { Accept: 'text/csv' } : {}),
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -43,7 +46,17 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   // proxy.ts refreshes the token before a page renders, so a 401 here means the session is really over.
   if (res.status === 401) redirect('/login');
 
-  const json = await res.json().catch(() => null);
+  const raw = await res.text().catch(() => '');
+  if (res.ok && options.as === 'text') {
+    if (process.env.API_LOGGING === 'true') console.info(`[API] ${method} ${url} -> ${res.status} (${raw.length} characters of text)`);
+    return { ok: true, data: raw as T };
+  }
+  let json: unknown = null;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    json = null;
+  }
 
   if (process.env.API_LOGGING === 'true') {
     console.info(`[API] ${method} ${url} -> ${res.status}`, json);

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import './TriangulationGoogleMap.css';
-import { hasGoogleMapsApiKey, loadGoogleMaps } from '../lib/googleMaps.js';
+import { hasGoogleMapsApiKey, loadGoogleMaps } from '../lib/googleMaps';
 
 const EMPTY_MAP_DATA = Object.freeze([]);
 
