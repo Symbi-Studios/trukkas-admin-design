@@ -1,5 +1,16 @@
 // Shared navigation model. `id` doubles as the route path segment.
-export const NAV = [
+export interface NavItem {
+  id: string;
+  icon: string;
+  label: string;
+}
+
+export interface NavSection {
+  section: string;
+  items: NavItem[];
+}
+
+export const NAV: NavSection[] = [
   {
     section: "Overview",
     items: [{ id: "dashboard", icon: "layout-dashboard", label: "Dashboard" }],
@@ -10,7 +21,8 @@ export const NAV = [
       { id: "operations-overview", icon: "chart-pie", label: "Overview" },
       { id: "jobs", icon: "package", label: "Jobs" },
       { id: "trips", icon: "route", label: "Trips" },
-      { id: "bids", icon: "radio-tower", label: "Bids & Offers" },
+      // Parked: admin bids are view-only (job detail → Bids tab shows how a job was bid).
+      // { id: "bids", icon: "radio-tower", label: "Bids & Offers" },
       { id: "documents", icon: "file-text", label: "Documents" },
       // { id: "triangulation", icon: "boxes", label: "Container Triangulation" },
     ],
@@ -81,7 +93,7 @@ export const NAV = [
   },
 ];
 
-export const SEARCH_PLACEHOLDER = {
+export const SEARCH_PLACEHOLDER: Record<string, string> = {
   dashboard: "Search jobs, trucks, companies, forwarders...",
   "operations-overview": "Search jobs, trips, bids, documents...",
   jobs: "Search jobs, routes, cargo, companies...",

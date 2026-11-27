@@ -115,7 +115,7 @@ export function adaptJobsPage(dto: BackendJobsList, asked: { page: number; limit
   };
 }
 
-function adaptCard(card: { value?: number | null; changePercent?: number | null; trend?: string | null } | undefined): JobStatCard {
+export function adaptCard(card: { value?: number | null; changePercent?: number | null; trend?: string | null } | undefined): JobStatCard {
   const trend = card?.trend;
   return {
     value: num(card?.value),

@@ -75,11 +75,21 @@ export interface BackendDetailPricing extends BackendPricing {
   paidAt?: string | null;
 }
 
+export type EditPhase = 'BEFORE_ACCEPTANCE' | 'AFTER_ACCEPTANCE';
+
+/** One field an admin changed: what it was and what it became */
+export interface BackendLogChange {
+  field?: string | null;
+  from?: unknown;
+  to?: unknown;
+}
+
 export interface BackendDetailLogEntry {
   at?: string | null;
   category?: string | null;
   action?: string | null;
   description?: string | null;
+  changes?: BackendLogChange[] | null;
   actor?: { type?: string | null; id?: string | null; name?: string | null } | null;
 }
 
@@ -112,7 +122,15 @@ export interface BackendJobDetailDto extends BackendDetailSummary {
   statusLabel?: string | null;
   version?: string | null;
   updatedAt?: string | null;
-  adminActions?: { canEdit?: boolean; canDuplicate?: boolean; canMarkInTransit?: boolean; canMarkDelivered?: boolean } | null;
+  adminActions?: {
+    canEdit?: boolean;
+    /** which fields the Edit form may offer: all six before an offer is accepted, two after, none once the job is finished */
+    editPhase?: EditPhase | null;
+    editableFields?: string[] | null;
+    canDuplicate?: boolean;
+    canMarkInTransit?: boolean;
+    canMarkDelivered?: boolean;
+  } | null;
   cargoContents?: string | null;
   documents?: { approvalStatus?: string | null } | null;
   reviewFlag?: { reason?: string | null; version?: string | null } | null;
@@ -359,6 +377,9 @@ export interface TripCounts {
 
 export interface AdminActionFlags {
   canEdit: boolean;
+  editPhase: EditPhase | null;
+  /** the PATCH body keys the Edit form may offer (tdoDate, cargoDescription, specialInstructions, pickupAddress, deliveryAddress, containerReturnAddress) */
+  editableFields: string[];
   canMarkInTransit: boolean;
   canMarkDelivered: boolean;
   canDuplicate: boolean;

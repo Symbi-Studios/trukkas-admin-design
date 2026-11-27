@@ -20,6 +20,7 @@ import type {
   BackendDetailContainer,
   BackendDetailRack,
   BackendItemAssignment,
+  BackendLogChange,
   DetailAssignment,
   BackendJobDetailDto,
   DetailCancellation,
@@ -334,6 +335,26 @@ export function adaptTransaction(payment: BackendPayment): JobTransaction {
   };
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  tdoDate: 'TDO date',
+  cargoDescription: 'Cargo description',
+  specialInstructions: 'Special instructions',
+  pickupAddress: 'Pickup address',
+  deliveryAddress: 'Delivery address',
+  containerReturnAddress: 'Container return address',
+};
+
+/** "TDO date: 30 Dec 2027, 23:59 → 31 Dec 2027, 10:00" for one changed field */
+function describeChange(change: BackendLogChange): string | null {
+  const field = text(change?.field);
+  if (!field) return null;
+  const value = (raw: unknown): string => {
+    const formatted = field === 'tdoDate' ? formatDateTime(raw) : DASH;
+    return formatted !== DASH ? formatted : shown(raw);
+  };
+  return `${FIELD_LABELS[field] ?? titleCase(field)}: ${value(change.from)} → ${value(change.to)}`;
+}
+
 function adaptActivity(dto: BackendJobDetailDto): ActivityEntry[] {
   return (dto.activityLog ?? []).filter(Boolean).map((entry, index) => ({
     id: `${dto.id}:activity:${index}`,
@@ -342,7 +363,7 @@ function adaptActivity(dto: BackendJobDetailDto): ActivityEntry[] {
     actorId: text(entry.actor?.id),
     role: titleCase(entry.actor?.type),
     action: titleCase(entry.action),
-    details: shown(entry.description),
+    details: [text(entry.description), ...(entry.changes ?? []).map(describeChange)].filter(Boolean).join(' · ') || DASH,
   }));
 }
 
@@ -402,6 +423,8 @@ export function adaptJobDetail({ dto, review, rejectedDocuments, bids, trips, pa
     version: text(dto.version),
     adminActions: {
       canEdit: dto.adminActions?.canEdit === true,
+      editPhase: dto.adminActions?.editPhase === 'BEFORE_ACCEPTANCE' || dto.adminActions?.editPhase === 'AFTER_ACCEPTANCE' ? dto.adminActions.editPhase : null,
+      editableFields: (dto.adminActions?.editableFields ?? []).filter((field): field is string => typeof field === 'string'),
       canMarkInTransit: dto.adminActions?.canMarkInTransit === true,
       canMarkDelivered: dto.adminActions?.canMarkDelivered === true,
       canDuplicate: dto.adminActions?.canDuplicate === true,

@@ -17,8 +17,6 @@ import {
   DataTable,
   DrawerFacts,
   DrawerSection,
-  DropdownMenu,
-  FilterSelect,
   Icon,
   IconButton,
   Modal,
@@ -34,7 +32,10 @@ import {
   TextField,
 } from "../ds.js";
 import { statsPeriod } from "../domain/statsPeriod.js";
-import { JOBS_DEFAULT_PERIOD } from "@/lib/jobs/query";
+import { FilterControl } from "./FilterControl";
+import { TableSkeleton } from "./TableSkeleton";
+import { DEFAULT_PERIOD } from "@/lib/dateRange";
+import { csvCell, downloadCsv, formatDateTime, naira, today } from "@/lib/format";
 import { CARGO_KIND_OPTIONS } from "@/domain/cargo";
 import { MOVEMENT_FILTER_OPTIONS } from "@/domain/movement";
 import { statusTone } from "@/domain/jobStatus";
@@ -113,79 +114,6 @@ const BOARD_COLUMNS: [string, string, BadgeTone][] = [
   ["flagged", "Flagged", "danger"],
   ["rejected", "Rejected", "danger"],
 ];
-
-const naira = (value: number | null): string =>
-  value == null ? "—" : `₦${value.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Always Lagos time, so the server and the browser print the same text.
-function formatDateTime(value: string | null): string {
-  if (!value || !Number.isFinite(Date.parse(value))) return "—";
-  return new Intl.DateTimeFormat("en-NG", {
-    timeZone: "Africa/Lagos",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value)).replace(" at ", ", ");
-}
-
-// A cell that starts with = + - or @ would run as a formula in Excel, so it gets a leading apostrophe.
-function csvCell(value: unknown): string {
-  const text = String(value ?? "");
-  return `"${/^[=+\-@\t\r]/.test(text) ? "'" : ""}${text.replaceAll('"', '""')}"`;
-}
-
-function downloadCsv(csv: string, filename: string) {
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-const today = () => new Date().toISOString().slice(0, 10);
-
-interface FilterControlProps {
-  name: string;
-  icon: string;
-  value: string;
-  allValue: string;
-  options: string[];
-  menu: string | null;
-  setMenu: (next: string | null) => void;
-  onChange: (label: string) => void;
-}
-
-function FilterControl({ name, icon, value, allValue, options, menu, setMenu, onChange }: FilterControlProps) {
-  return (
-    <span className={styles.filterWrap}>
-      <FilterSelect
-        icon={icon}
-        prefix={name}
-        label={value}
-        active={value !== allValue}
-        onClick={() => setMenu(menu === name ? null : name)}
-        onClear={() => { onChange(allValue); setMenu(null); }}
-      />
-      {menu === name && (
-        <span className={styles.menuPopover}>
-          <DropdownMenu
-            width={216}
-            items={options.map((option) => ({
-              label: option,
-              icon: option === value ? "check" : undefined,
-              onClick: () => { onChange(option); setMenu(null); },
-            }))}
-          />
-        </span>
-      )}
-    </span>
-  );
-}
 
 function AssigneeCell({ job, size = 32 }: { job: JobRow; size?: number }) {
   if (!job.truckingCompany) return <span className="tk-meta">Unassigned</span>;
@@ -373,21 +301,6 @@ function JobDrawer({ job, drawer, onRetry, onClose, onAction, canDeliver, busy }
   );
 }
 
-const SKELETON_CELL_WIDTHS = ["68%", "84%", "54%", "78%", "60%", "72%", "56%", "66%", "62%", "48%"];
-
-/** Grey rows where the table will be: shown on first load and while a filter, a search or a page change is loading */
-function TableSkeleton({ rows = 8 }: { rows?: number }) {
-  return (
-    <div className={styles.loadingTable} aria-hidden="true">
-      {Array.from({ length: rows }, (_, rowIndex) => (
-        <div className={styles.loadingRow} key={rowIndex}>
-          {SKELETON_CELL_WIDTHS.map((width, columnIndex) => <Skeleton key={columnIndex} width={width} height={11} />)}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function JobsLoading() {
   const cards: [string, string, StatTint][] = [
     ["clipboard-list", "Total Jobs", "blue"],
@@ -485,7 +398,7 @@ export function JobsTrips({ query, jobs, stats, ports, pending, error, warnings,
     if (next.page > 1) params.set("page", String(next.page));
     if (next.limit !== 10) params.set("limit", String(next.limit));
     if (next.view === "board") params.set("view", "board");
-    if (next.period !== JOBS_DEFAULT_PERIOD) params.set("period", next.period);
+    if (next.period !== DEFAULT_PERIOD) params.set("period", next.period);
     const text = params.toString();
     startTransition(() => router.push(text ? `/jobs?${text}` : "/jobs"));
   };
@@ -528,11 +441,11 @@ export function JobsTrips({ query, jobs, stats, ports, pending, error, warnings,
   const movementLabel = MOVEMENT_OPTIONS.find((item) => item.value === query.type)?.label ?? ALL_MOVEMENTS;
   const cargoLabel = CARGO_KIND_OPTIONS.find((item) => item.value === query.cargoKind)?.label ?? ALL_CARGO;
   const dateRange = { from: query.from, to: query.to };
-  const filtersActive = query.tab !== "all" || query.period !== JOBS_DEFAULT_PERIOD || Boolean(query.type || query.cargoKind || query.port || (query.from && query.to) || query.search);
+  const filtersActive = query.tab !== "all" || query.period !== DEFAULT_PERIOD || Boolean(query.type || query.cargoKind || query.port || (query.from && query.to) || query.search);
 
   const resetFilters = () => {
     setSearch("");
-    go({ tab: "all", type: "", cargoKind: "", port: "", from: "", to: "", period: JOBS_DEFAULT_PERIOD, search: "" });
+    go({ tab: "all", type: "", cargoKind: "", port: "", from: "", to: "", period: DEFAULT_PERIOD, search: "" });
   };
 
   const hasRange = Boolean(query.from && query.to);

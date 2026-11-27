@@ -279,10 +279,14 @@ export function JobDetail({ detail, error, role, initialTab, initialTripId }: Jo
     return void run(() => editJobAction({
       jobId: id, expectedVersion: detail.version, reason, tdoDate: editDate, cargoDescription: editCargo,
       specialInstructions: editInstructions, pickupAddress: editPickup, deliveryAddress: editDelivery, containerReturnAddress: editReturn,
-    }), "Job updated.");
+    }), "Job updated.", (result) => {
+      const told = [result.forwarderNotified ? "the forwarder" : null, result.truckingSideNotified ? `${result.truckingSideNotified} on the trucking side` : null].filter(Boolean).join(" and ");
+      notify("success", told ? `Job updated. Told ${told}.` : "Job updated.");
+    });
   }
 
   const reasonTooShort = reason.trim().length < 3;
+  const editable = new Set(detail.adminActions.editableFields);
   const nothingToEdit = !editDate && ![editCargo, editInstructions, editPickup, editDelivery, editReturn].some((v) => v.trim());
   const confirmDisabled = busy
     || (dialog === "deliver" ? false : reasonTooShort)
@@ -316,7 +320,7 @@ export function JobDetail({ detail, error, role, initialTab, initialTripId }: Jo
   const headerActions = (
     <>
       <Button variant="outline" icon="arrow-left" onClick={() => navigate("/jobs")}>Back to Jobs</Button>
-      {canOps && detail.adminActions.canEdit && detail.version && <Button variant="outline" icon="pencil" onClick={() => openDialog("edit")}>Edit</Button>}
+      {canOps && detail.adminActions.canEdit && detail.adminActions.editableFields.length > 0 && detail.version && <Button variant="outline" icon="pencil" onClick={() => openDialog("edit")}>Edit</Button>}
       {canFlag && !terminal && !(detail.reviewFlag && !detail.reviewFlag.version) && (
         <Button variant="outline" icon="flag" onClick={() => openDialog("flag")}>{detail.reviewFlag ? "Update flag" : "Flag for review"}</Button>
       )}
@@ -866,13 +870,17 @@ export function JobDetail({ detail, error, role, initialTab, initialTripId }: Jo
         )}
         {dialog === "edit" && (
           <div className="jd-form-grid">
-            <p className="tk-meta">Enter only the fields you want to change. Route changes are unavailable while bids are pending and do not recalculate the price.</p>
-            <TextField label="TDO date and time" type="datetime-local" value={editDate} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditDate(event.target.value)} />
-            <TextField label="Cargo description" value={editCargo} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditCargo(event.target.value)} />
-            <TextField label="Special instructions" value={editInstructions} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditInstructions(event.target.value)} />
-            <TextField label="Pickup address (export)" value={editPickup} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditPickup(event.target.value)} />
-            <TextField label="Delivery address" value={editDelivery} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditDelivery(event.target.value)} />
-            <TextField label="Container return address" value={editReturn} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditReturn(event.target.value)} />
+            <p className="tk-meta">
+              {detail.adminActions.editPhase === "AFTER_ACCEPTANCE"
+                ? "An offer has been accepted, so only the cargo description and special instructions can change. The forwarder, the trucking company and the drivers are told."
+                : "Enter only the fields you want to change. Route changes are unavailable while offers are open and do not recalculate the price. The forwarder is told, and so are truckers with an open offer if the TDO date changes."}
+            </p>
+            {editable.has("tdoDate") && <TextField label="TDO date and time" type="datetime-local" value={editDate} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditDate(event.target.value)} />}
+            {editable.has("cargoDescription") && <TextField label="Cargo description" value={editCargo} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditCargo(event.target.value)} />}
+            {editable.has("specialInstructions") && <TextField label="Special instructions" value={editInstructions} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditInstructions(event.target.value)} />}
+            {editable.has("pickupAddress") && <TextField label="Pickup address" value={editPickup} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditPickup(event.target.value)} />}
+            {editable.has("deliveryAddress") && <TextField label="Delivery address" value={editDelivery} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditDelivery(event.target.value)} />}
+            {editable.has("containerReturnAddress") && <TextField label="Container return address" value={editReturn} onChange={(event: ChangeEvent<HTMLInputElement>) => setEditReturn(event.target.value)} />}
           </div>
         )}
         <div className="jd-form-grid">

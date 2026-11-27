@@ -1,4 +1,4 @@
-import { NAV } from './nav.js';
+import { NAV } from './nav';
 import { announcements } from './mock/fixtures/announcements.js';
 import { companies } from './mock/fixtures/companies.js';
 import { demurrageRecords } from './mock/fixtures/demurrage.js';

@@ -86,7 +86,10 @@ function futureDate(value: string): string | null {
   return Number.isFinite(time) && time >= Date.now() + DAY_MS ? new Date(time).toISOString() : null;
 }
 
-export async function editJobAction(input: EditJobInput): Promise<ApiResult<null>> {
+/** Who the backend told about the edit */
+export interface EditJobResult { forwarderNotified: boolean; truckingSideNotified: number }
+
+export async function editJobAction(input: EditJobInput): Promise<ApiResult<EditJobResult>> {
   if (!(await mayDo(OPS_ROLES))) return fail('This action is not available for your account.', 403);
   const checked = checkReason(input?.reason);
   if ('error' in checked) return checked.error;
@@ -104,13 +107,14 @@ export async function editJobAction(input: EditJobInput): Promise<ApiResult<null
     fields.tdoDate = iso;
   }
   if (!Object.keys(fields).length) return fail('Enter at least one change.');
-  const result = await apiFetch<unknown>(`/admin/jobs/${encodeURIComponent(input.jobId)}`, {
+  const result = await apiFetch<{ notified?: { forwarder?: unknown; truckingSide?: unknown } | null }>(`/admin/jobs/${encodeURIComponent(input.jobId)}`, {
     method: 'PATCH',
     body: { ...fields, expectedVersion: input.expectedVersion, reason: checked.reason },
   });
   if (!result.ok) return result;
   refresh(input.jobId);
-  return { ok: true, data: null };
+  const notified = result.data?.notified;
+  return { ok: true, data: { forwarderNotified: Boolean(notified?.forwarder), truckingSideNotified: Array.isArray(notified?.truckingSide) ? notified.truckingSide.length : 0 } };
 }
 
 // ---------- bids ----------

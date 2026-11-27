@@ -6,7 +6,6 @@ import { FleetManagement } from './screens/FleetManagement.jsx';
 import { VerificationQueue } from './screens/verification/VerificationQueue.jsx';
 import { Wallets } from './screens/Wallets.jsx';
 import { Announcements } from './screens/Announcements.jsx';
-import { TripsSegments } from './screens/TripsSegments.jsx';
 import { BidsOffers } from './screens/BidsOffers.jsx';
 import { DispatchCenter } from './screens/DispatchCenter.jsx';
 import { Documents } from './screens/Documents';
@@ -25,7 +24,6 @@ import { Transactions } from './screens/Transactions.jsx';
 import { RequestedPayouts } from './screens/RequestedPayouts.jsx';
 import { ReportsAnalytics } from './screens/ReportsAnalytics.jsx';
 import { UserManagement } from './screens/UserManagement.jsx';
-import { OperationsOverview } from './screens/OperationsOverview.jsx';
 import { UsersOverview } from './screens/UsersOverview.jsx';
 import { RolesPermissions } from './screens/RolesPermissions.jsx';
 import { SupportInbox } from './screens/support/SupportInbox.jsx';
@@ -59,10 +57,8 @@ const screens = {
   revenue: PlatformRevenue,
   rates: PlatformRates,
   announcements: Announcements,
-  trips: TripsSegments,
   bids: BidsOffers,
   dispatch: DispatchCenter,
-  tracking: TripsSegments,
   documents: Documents,
   triangulation: ContainerTriangulation,
   drivers: Drivers,
@@ -72,7 +68,6 @@ const screens = {
   'cargo-types': CargoTypes,
   calculator: TruckCalculator,
   users: UserManagement,
-  'operations-overview': OperationsOverview,
   'users-overview': UsersOverview,
   roles: RolesPermissions,
   tickets: SupportInbox,

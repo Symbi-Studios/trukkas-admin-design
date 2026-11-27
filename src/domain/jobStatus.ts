@@ -49,8 +49,8 @@ export const ACTIVE_TRIP_STATUSES = new Set([
   'DEMURRAGE_IN_PROGRESS', 'OFFLOADING', 'OFFLOAD_COMPLETED', 'CONTAINER_RETURNED',
 ]);
 
-/** Trips that can be marked "at delivery" */
-export const ARRIVAL_TRIP_STATUSES = new Set(['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'PICKUP_COMPLETED', 'IN_TRANSIT']);
+/** Trips that can be marked "at delivery". DRIVER_EN_ROUTE is where an individual trucker's trip starts (no driver is assigned). */
+export const ARRIVAL_TRIP_STATUSES = new Set(['DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE', 'DRIVER_ARRIVED', 'PICKUP_COMPLETED', 'IN_TRANSIT']);
 
 export const TERMINAL_JOB_STATUSES = new Set(['COMPLETED', 'CANCELLED']);
 
