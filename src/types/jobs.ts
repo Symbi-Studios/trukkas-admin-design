@@ -187,7 +187,8 @@ export interface PendingUploads {
 
 /** What the backend list endpoint accepts (statusFilter is `status` here) */
 export interface JobsQuery {
-  status?: JobTab;
+  /** a tab, or "active": jobs where bidding has started and that are not finished (Bidding, Assigned, In Transit) */
+  status?: JobTab | 'active';
   search?: string;
   /** PORT_TO_DESTINATION | PORT_TO_PORT | BULK_BREAK | EXPORT */
   movementType?: string;

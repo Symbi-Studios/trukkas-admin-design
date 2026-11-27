@@ -10,7 +10,7 @@ import {
   SidebarSectionLabel,
   TopBar,
 } from "./ds.js";
-import { NAV, SEARCH_PLACEHOLDER } from "./nav.js";
+import { NAV, SEARCH_PLACEHOLDER } from "./nav";
 import { logoutAction } from "./lib/auth/actions";
 import { useGetAdminNotificationsQuery } from "./store/features/notifications/notificationsApi.js";
 import { clearSession } from "./store/features/auth/authSlice.js";

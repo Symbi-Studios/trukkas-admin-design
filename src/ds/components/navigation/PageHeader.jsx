@@ -2,7 +2,7 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import { Breadcrumbs } from './Breadcrumbs.jsx';
-import { NAV } from '../../../nav.js';
+import { NAV } from '../../../nav';
 
 const NAV_PAGES = NAV.flatMap((group) => group.items.map((item) => ({ ...item, section: group.section, path: '/' + item.id })));
 const labelOf = (crumb) => (typeof crumb === 'string' ? crumb : crumb?.label) || '';

@@ -2,7 +2,7 @@
 import React from 'react';
 import { Icon } from '../../assets/icons/Icon.jsx';
 import { Link } from '../../../router.js';
-import { NAV } from '../../../nav.js';
+import { NAV } from '../../../nav';
 
 const PAGE_PATHS = new Map(NAV.flatMap((group) => group.items.map((item) => [item.label.toLowerCase(), '/' + item.id])));
 

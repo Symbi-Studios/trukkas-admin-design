@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { JobsTrips, type JobsScreenQuery } from '@/screens/JobsTrips';
 import { getAdmin } from '@/lib/auth/session';
 import { getJobs, getJobStats, getPendingUploads, getPorts } from '@/lib/jobs/data';
-import { isJobsPeriod, JOBS_DEFAULT_PERIOD, toJobsQuery } from '@/lib/jobs/query';
+import { DEFAULT_PERIOD, isStatsPeriod } from '@/lib/dateRange';
+import { toJobsQuery } from '@/lib/jobs/query';
 import { CARGO_KIND_OPTIONS } from '@/domain/cargo';
 import { MOVEMENT_FILTER_OPTIONS } from '@/domain/movement';
 import type { JobTab } from '@/types/jobs';
@@ -50,7 +51,7 @@ export default async function JobsPage({ searchParams }: { searchParams: SearchP
     page: whole(params.page, 1, 1, 100000),
     limit: whole(params.limit, 10, 1, 100),
     view: first(params.view) === 'board' ? 'board' : 'list',
-    period: isJobsPeriod(period) ? period : JOBS_DEFAULT_PERIOD,
+    period: isStatsPeriod(period) ? period : DEFAULT_PERIOD,
   };
 
   const board = query.view === 'board';
